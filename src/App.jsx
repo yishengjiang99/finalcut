@@ -1,0 +1,416 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { tools, systemPrompt } from './tools.js';
+import { toolFunctions } from './toolFunctions.js';
+import VideoPreview from './VideoPreview.jsx';
+
+export default function App() {
+  const [showLanding, setShowLanding] = useState(true); // Show landing page initially
+  const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
+  const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
+  const videoRef = useRef(null);
+  const messageRef = useRef(null);
+  const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: 0 }]);
+  const [chatInput, setChatInput] = useState('');
+  const [videoFileData, setVideoFileData] = useState(null);
+  const [fileType, setFileType] = useState('video'); // 'video' or 'audio'
+  const [fileMimeType, setFileMimeType] = useState(''); // Store MIME type for proper detection
+  const messageIdCounterRef = useRef(1); // Counter for unique message IDs
+  const chatWindowRef = useRef(null);
+
+  useEffect(() => {
+    if (chatWindowRef.current) {
+      chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // Check if user is returning from successful payment
+  useEffect(() => {
+    const verifyPayment = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionId = urlParams.get('session_id');
+      
+      if (sessionId && window.location.pathname === '/success') {
+        try {
+          // Verify the session with the backend
+          const response = await fetch('/api/verify-checkout-session', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sessionId })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.verified && data.paymentStatus === 'paid') {
+              // Hide landing page and show editor after verified payment
+              setShowLanding(false);
+              // Clean up the URL without reloading the page
+              window.history.replaceState({}, '', '/');
+            }
+          }
+        } catch (error) {
+          console.error('Error verifying payment:', error);
+        }
+      }
+    };
+
+    verifyPayment();
+  }, []);
+
+  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null) => {
+    const id = messageIdCounterRef.current++;
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id }]);
+  };
+
+  const getVideoTitle = (videoType) => {
+    return videoType === 'original' ? 'Original Video' : 'Processed Video';
+  };
+
+  const callAPI = async (currentMessages) => {
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'grok-beta',
+          messages: currentMessages,
+          tools: tools,
+          tool_choice: 'auto'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0]) {
+        throw new Error('Invalid response format from API');
+      }
+
+      const msg = data.choices[0].message;
+
+      // Add content to UI if it exists
+      if (msg.content) {
+        addMessage(msg.content, false);
+      }
+
+      // Add assistant message to history (with both content and tool_calls if present)
+      if (msg.content || msg.tool_calls) {
+        const assistantMessage = {
+          role: 'assistant',
+          content: msg.content || null,
+          id: messageIdCounterRef.current++
+        };
+        
+        if (msg.tool_calls) {
+          assistantMessage.tool_calls = msg.tool_calls;
+        }
+        
+        currentMessages.push(assistantMessage);
+      }
+
+      if (msg.tool_calls) {
+        // Server-side processing - show spinner during ffmpeg processing
+        setProcessing(true);
+        
+        try {
+          for (const call of msg.tool_calls) {
+            const funcName = call.function.name;
+            const args = JSON.parse(call.function.arguments);
+            const result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage);
+            currentMessages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              name: funcName,
+              content: result,
+              id: messageIdCounterRef.current++
+            });
+          }
+          await callAPI(currentMessages);
+        } finally {
+          setProcessing(false);
+        }
+      }
+    } catch (error) {
+      addMessage('Error communicating with xAI API: ' + error.message, false);
+    }
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      // Determine if it's audio or video
+      const isAudio = file.type.startsWith('audio/');
+      const isVideo = file.type.startsWith('video/');
+
+      if (!isAudio && !isVideo) {
+        addMessage('Error: Please upload a valid audio or video file.', false);
+        return;
+      }
+
+      setFileType(isAudio ? 'audio' : 'video');
+      setFileMimeType(file.type); // Store MIME type for later use
+
+      // Show uploading status
+      const uploadingMessage = { role: 'user', content: `Uploading ${isAudio ? 'audio' : 'video'}...`, id: messageIdCounterRef.current++ };
+      setMessages(prev => [...prev, uploadingMessage]);
+
+      // Read file as array buffer for server-side processing
+      const arrayBuffer = await file.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      setVideoFileData(data);
+      const url = URL.createObjectURL(file);
+
+      // Show selected video on user (right) side
+      const uploadedMessage = { role: 'user', content: `Selected ${isAudio ? 'audio' : 'video'}:`, videoUrl: url, videoType: 'original', mimeType: file.type, id: messageIdCounterRef.current++ };
+      const userMessage = { role: 'user', content: `${isAudio ? 'Audio' : 'Video'} uploaded and ready for editing.`, id: messageIdCounterRef.current++ };
+
+      // Build complete message history for API call
+      // Since messages is the state before any updates in this function, we include all three new messages
+      const messagesForAPI = [...messages, uploadingMessage, uploadedMessage, userMessage];
+
+      // Update UI state with the remaining two messages (uploadingMessage was already added)
+      setMessages(prev => [...prev, uploadedMessage, userMessage]);
+
+      await callAPI(messagesForAPI);
+    } catch (error) {
+      addMessage('Error uploading file: ' + error.message, false);
+    }
+  };
+
+  const handleSend = async () => {
+    const text = chatInput.trim();
+    if (!text || !videoFileData) {
+      if (!videoFileData) alert('Please upload a video or audio file first.');
+      return;
+    }
+    setChatInput('');
+    const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
+    const newMessages = [...messages, newMessage];
+    setMessages(newMessages);
+    await callAPI(newMessages);
+  };
+
+  const handleGetStarted = async () => {
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          priceId: 'price_1StDJe4OymfcnKESq2dIraNE',
+          successUrl: window.location.origin + '/success?session_id={CHECKOUT_SESSION_ID}',
+          cancelUrl: window.location.origin
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create checkout session');
+      }
+
+      const data = await response.json();
+      
+      // Redirect to Stripe checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received from server');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('Failed to start checkout. Please try again.');
+    }
+  };
+
+  const loadSampleVideo = async () => {
+    setShowLanding(false);
+    // Sample video path - using BigBuckBunny.mp4 as specified
+    const sampleVideoUrl = '/BigBuckBunny.mp4';
+    
+    try {
+      // Fetch the sample video
+      const response = await fetch(sampleVideoUrl);
+      if (!response.ok) {
+        // If sample video doesn't exist, just show a message
+        addMessage('Sample video not available. Please upload your own video.', false);
+        return;
+      }
+      
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      setVideoFileData(data);
+      const url = URL.createObjectURL(blob);
+      
+      setFileType('video');
+      setFileMimeType('video/mp4');
+      
+      // Show selected video
+      const uploadedMessage = { role: 'user', content: 'Selected sample video:', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', id: messageIdCounterRef.current++ };
+      const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', id: messageIdCounterRef.current++ };
+      
+      const messagesForAPI = [...messages, uploadedMessage, userMessage];
+      setMessages(prev => [...prev, uploadedMessage, userMessage]);
+      
+      await callAPI(messagesForAPI);
+    } catch (error) {
+      addMessage('Error loading sample video. Please upload your own video.', false);
+    }
+  };
+
+  // Landing page component
+  if (showLanding) {
+    const primaryButtonStyle = {
+      padding: '15px 40px',
+      fontSize: '18px',
+      fontWeight: 'bold',
+      backgroundColor: '#1f6feb',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      width: '300px',
+      transition: 'background-color 0.2s'
+    };
+
+    const secondaryButtonStyle = {
+      padding: '12px 40px',
+      fontSize: '16px',
+      backgroundColor: '#21262d',
+      color: '#c9d1d9',
+      border: '1px solid #30363d',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      width: '300px',
+      transition: 'background-color 0.2s'
+    };
+
+    return (
+      <div style={{ fontFamily: 'Arial, sans-serif', margin: 0, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0d1117', overflow: 'hidden' }}>
+        <div style={{ maxWidth: '800px', width: '100%', height: '100%', padding: '20px', color: '#c9d1d9', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflowY: 'auto' }}>
+          <h1 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '10px', color: '#ffffff', textAlign: 'center' }}>
+            FinalCut Video Editor
+          </h1>
+          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center', color: '#8b949e' }}>
+            AI-powered video and audio editing at your fingertips
+          </p>
+
+          <div style={{ marginBottom: '15px' }}>
+            <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#ffffff' }}>Available Tools</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
+              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>✂️ Video Editing</h3>
+                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Trim, crop, resize, and rotate</p>
+              </div>
+              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎨 Visual Effects</h3>
+                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Brightness, hue, saturation, text</p>
+              </div>
+              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎵 Audio Tools</h3>
+                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Volume, fade, equalizer, filters</p>
+              </div>
+              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>⚡ Speed Control</h3>
+                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Speed up or slow down media</p>
+              </div>
+              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>📱 Social Media</h3>
+                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Instagram, TikTok, YouTube presets</p>
+              </div>
+              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🔄 Format Conversion</h3>
+                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Convert MP4, WebM, MOV formats</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', marginTop: '15px' }}>
+            <button 
+              onClick={handleGetStarted}
+              style={primaryButtonStyle}
+            >
+              Get Started
+            </button>
+            <button 
+              onClick={loadSampleVideo}
+              style={secondaryButtonStyle}
+            >
+              Try with Sample Video
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', margin: 0, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#0d1117' }}>
+      <main style={{ width: '100%', maxWidth: '100vw', height: '100vh', backgroundColor: '#0d1117', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {/* Processing Spinner Overlay */}
+        {processing && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(13, 17, 23, 0.8)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              width: '50px',
+              height: '50px',
+              border: '4px solid #30363d',
+              borderTop: '4px solid #1f6feb',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <p style={{ color: '#c9d1d9', marginTop: '20px', fontSize: '16px' }}>Processing video with ffmpeg...</p>
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
+        <div ref={chatWindowRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px', paddingTop: '50px', WebkitOverflowScrolling: 'touch' }}>
+          {messages.slice(1).map((msg) => (
+            <div key={msg.id} style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '8px', maxWidth: '80%', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', marginLeft: msg.role === 'user' ? 'auto' : 0, marginRight: msg.role === 'user' ? 0 : 'auto', backgroundColor: msg.role === 'user' ? '#d0d0d0' : '#21262d', color: msg.role === 'user' ? '#000000' : '#c9d1d9', wordWrap: 'break-word' }}>
+              <p style={{ margin: 0 }}>{msg.content}</p>
+              {msg.videoUrl && (
+                <div style={{ marginTop: '8px' }}>
+                  {msg.videoUrl}
+                  <VideoPreview
+                    key={`preview-${msg.id}`}
+                    videoUrl={msg.videoUrl}
+                    title={getVideoTitle(msg.videoType)}
+                    mimeType={msg.mimeType}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', gap: '8px', borderTop: '1px solid #30363d', backgroundColor: '#161b22' }}>
+          <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" capture="environment" style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
+          <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Describe the video edit..." style={{ width: '100%', padding: '10px', border: '1px solid #30363d', borderRadius: '4px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9' }} />
+          <button onClick={handleSend} disabled={!videoFileData} style={{ padding: '10px 16px', backgroundColor: videoFileData ? '#1f6feb' : '#21262d', color: videoFileData ? '#ffffff' : '#6e7681', border: 'none', borderRadius: '4px', cursor: videoFileData ? 'pointer' : 'not-allowed', fontSize: '16px', WebkitTapHighlightColor: 'transparent' }}>Send</button>
+        </div>
+      </main>
+    </div>
+  );
+}
