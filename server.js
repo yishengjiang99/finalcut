@@ -26,11 +26,17 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
+const SESSION_SECRET = process.env.SESSION_SECRET;
 
 if (!XAI_API_TOKEN) {
   console.error('ERROR: XAI_API_TOKEN environment variable is not set');
   console.error('Please create a .env file with XAI_API_TOKEN=your_token_here');
+  process.exit(1);
+}
+
+if (!SESSION_SECRET) {
+  console.error('ERROR: SESSION_SECRET environment variable is not set');
+  console.error('Please set SESSION_SECRET to a secure random string');
   process.exit(1);
 }
 
@@ -87,6 +93,13 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         const email = profile.emails?.[0]?.value;
         if (email) {
           user = await findUserByEmail(email);
+          
+          // If user exists but doesn't have google_id, update it
+          if (user && !user.google_id) {
+            const pool = (await import('./src/db.js')).getPool();
+            await pool.query('UPDATE users SET google_id = ? WHERE id = ?', [profile.id, user.id]);
+            user.google_id = profile.id;
+          }
         }
         
         if (!user) {
@@ -157,6 +170,12 @@ app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   async (req, res) => {
     try {
+      // Check if Stripe is available
+      if (!stripe) {
+        console.error('Stripe not configured but user needs subscription');
+        return res.redirect('/?error=payment_unavailable');
+      }
+      
       // Check if user has subscription
       if (!req.user.has_subscription) {
         // Redirect to Stripe subscription page if no subscription
@@ -574,17 +593,13 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         
         // Update user subscription status
         if (session.customer_email) {
-          try {
-            const { updateUserSubscription } = await import('./src/db.js');
-            await updateUserSubscription(
-              session.customer_email,
-              true,
-              session.subscription || session.id
-            );
-            console.log(`Updated subscription for ${session.customer_email}`);
-          } catch (dbError) {
-            console.error('Error updating user subscription:', dbError);
-          }
+          const { updateUserSubscription } = await import('./src/db.js');
+          await updateUserSubscription(
+            session.customer_email,
+            true,
+            session.subscription || session.id
+          );
+          console.log(`Updated subscription for ${session.customer_email}`);
         }
         break;
 
@@ -594,15 +609,11 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         
         // Update user subscription status to false
         if (subscription.customer) {
-          try {
-            const customer = await stripe.customers.retrieve(subscription.customer);
-            if (customer.email) {
-              const { updateUserSubscription } = await import('./src/db.js');
-              await updateUserSubscription(customer.email, false, null);
-              console.log(`Removed subscription for ${customer.email}`);
-            }
-          } catch (dbError) {
-            console.error('Error removing user subscription:', dbError);
+          const customer = await stripe.customers.retrieve(subscription.customer);
+          if (customer.email) {
+            const { updateUserSubscription } = await import('./src/db.js');
+            await updateUserSubscription(customer.email, false, null);
+            console.log(`Removed subscription for ${customer.email}`);
           }
         }
         break;
@@ -625,6 +636,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
     res.json({ received: true });
   } catch (error) {
     console.error('Error handling webhook event:', error);
+    // Return error so Stripe will retry
     res.status(500).json({ error: 'Webhook handler failed' });
   }
 });

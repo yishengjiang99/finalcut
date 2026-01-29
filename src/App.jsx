@@ -30,9 +30,13 @@ export default function App() {
         const response = await fetch('/api/auth/status');
         if (response.ok) {
           const data = await response.json();
-          if (data.authenticated && data.user.hasSubscription) {
-            // User is authenticated and has subscription, show editor
-            setShowLanding(false);
+          if (data.authenticated) {
+            // Only hide landing page if user has subscription
+            if (data.user && data.user.hasSubscription) {
+              setShowLanding(false);
+            }
+            // If authenticated but no subscription, keep showing landing page
+            // (user will be redirected to Stripe when they try to access)
           }
         }
       } catch (error) {

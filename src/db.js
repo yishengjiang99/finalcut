@@ -29,9 +29,18 @@ export async function initDatabase() {
       password: dbConfig.password
     });
 
-    // Create database if it doesn't exist
-    await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
-    await connection.end();
+    // Validate database name to prevent SQL injection
+    const dbName = dbConfig.database;
+    if (!/^[a-zA-Z0-9_]+$/.test(dbName)) {
+      throw new Error('Invalid database name. Only alphanumeric characters and underscores are allowed.');
+    }
+
+    try {
+      // Create database if it doesn't exist (using validated identifier)
+      await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+    } finally {
+      await connection.end();
+    }
 
     // Now create tables using the pool
     const pool = getPool();
