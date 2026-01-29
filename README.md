@@ -4,10 +4,12 @@ A React-based video editing application with AI chat capabilities using xAI's Gr
 
 ## Features
 
+- **Google OAuth Authentication** - Secure login with Google accounts
+- **Subscription Management** - Stripe integration for subscription payments
 - Upload and edit videos in the browser
 - AI-powered video editing through natural language chat
 - **Server-side FFmpeg processing** for reliable video operations
-- **Stripe payment integration** for accepting payments
+- **MySQL Database** - User and subscription data storage
 - Video operations:
   - Resize video
   - Crop video
@@ -40,8 +42,10 @@ A React-based video editing application with AI chat capabilities using xAI's Gr
 - Node.js 18 or higher
 - npm
 - **FFmpeg installed on the system** (for server-side processing)
+- **MySQL server** (for user authentication and subscription management)
 - xAI API token (get one from https://console.x.ai/)
-- (Optional) Stripe API keys for payment processing
+- Google OAuth credentials (from Google Cloud Console)
+- Stripe API keys for subscription processing
 
 ### FFmpeg Installation
 
@@ -67,23 +71,41 @@ npm install
 
 ### Configuration
 
+#### Quick Setup
+
+For a step-by-step quick start guide, see **[docs/QUICKSTART.md](./docs/QUICKSTART.md)**.
+
+For detailed authentication setup, see **[docs/GOOGLE_AUTH_SETUP.md](./docs/GOOGLE_AUTH_SETUP.md)**.
+
+#### Manual Configuration
+
 1. Copy the example environment file:
 ```bash
 cp .env.example .env
 ```
 
-2. Edit `.env` and add your xAI API token:
+2. Edit `.env` and add your credentials:
 ```bash
+# Required
 XAI_API_TOKEN=your_actual_token_here
-```
+SESSION_SECRET=generate_random_32_char_string
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 
-3. (Optional) Add Stripe API keys for payment processing:
-```bash
+# MySQL Database
+MYSQL_HOST=localhost
+MYSQL_USER=root
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DATABASE=finalcut
+
+# Stripe
 STRIPE_SECRET_KEY=sk_test_your_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+STRIPE_SUBSCRIPTION_PRICE_ID=price_your_price_id
 ```
 
 See [docs/STRIPE.md](./docs/STRIPE.md) for detailed Stripe integration documentation.
+See [docs/GOOGLE_AUTH_SETUP.md](./docs/GOOGLE_AUTH_SETUP.md) for Google OAuth setup.
 
 **Important**: Never commit your `.env` file to version control. It's already included in `.gitignore`.
 
@@ -123,11 +145,25 @@ Run tests with Vitest.
 
 ## Usage
 
-1. Start the server (which serves both the API proxy and handles video processing)
-2. Upload a video file or use the "Try with Sample Video" button
-3. Describe the edits you want in natural language
-4. The AI will apply the appropriate filters and transformations using server-side FFmpeg
-5. A spinner will display while ffmpeg is processing your video
+### First Time Setup
+
+1. Complete the configuration steps above
+2. Ensure MySQL server is running
+3. Start the server (it will automatically initialize the database)
+
+### Running the Application
+
+1. Start the server (which serves both the API proxy and handles video processing):
+   ```bash
+   npm run server
+   ```
+2. Open your browser to `http://localhost:3001`
+3. Click "Get Started" and sign in with your Google account
+4. Complete the subscription payment (use test card in test mode)
+5. Upload a video file or use the "Try with Sample Video" button
+6. Describe the edits you want in natural language
+7. The AI will apply the appropriate filters and transformations using server-side FFmpeg
+8. A spinner will display while ffmpeg is processing your video
 
 ### Sample Video
 
@@ -170,6 +206,9 @@ Video files are processed on the server and immediately cleaned up after process
 - **React 18** - UI framework
 - **Vite** - Build tool and dev server
 - **Node.js + Express** - Server and API
+- **Passport.js** - Google OAuth authentication
+- **MySQL** - User and subscription data storage
+- **Stripe** - Subscription payment processing
 - **FFmpeg (native)** - Server-side video processing via fluent-ffmpeg
 - **Multer** - File upload handling
 - **xAI Grok API** - AI-powered editing assistance
@@ -183,11 +222,17 @@ finalcut/
 ├── src/
 │   ├── App.jsx           # Main React component
 │   ├── main.jsx          # Application entry point
-│   ├── ffmpeg.js         # FFmpeg initialization and utilities
+│   ├── db.js             # Database connection and user operations
 │   ├── tools.js          # Tool definitions for AI
 │   ├── toolFunctions.js  # Video editing function implementations
 │   └── test/             # Test files
+├── docs/
+│   ├── QUICKSTART.md         # Quick setup guide
+│   ├── GOOGLE_AUTH_SETUP.md  # Detailed auth documentation
+│   ├── STRIPE.md             # Stripe integration guide
+│   └── DEPLOYMENT.md         # Production deployment guide
 ├── index.html            # HTML entry point
+├── server.js             # Express server with auth and API routes
 ├── package.json          # Dependencies and scripts
 └── vite.config.js        # Vite configuration
 ```
