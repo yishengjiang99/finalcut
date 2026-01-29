@@ -214,7 +214,7 @@ app.get('/auth/logout', (req, res) => {
   });
 });
 
-app.get('/api/auth/status', (req, res) => {
+app.get('/api/auth/status', apiLimiter, (req, res) => {
   if (req.isAuthenticated()) {
     res.json({
       authenticated: true,
