@@ -8,6 +8,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import Stripe from 'stripe';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import session from 'express-session';
+import { initDatabase, findUserByGoogleId, findUserByEmail, createUser } from './src/db.js';
 
 dotenv.config();
 
@@ -19,6 +23,10 @@ const PORT = process.env.PORT || 3001;
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
 
 if (!XAI_API_TOKEN) {
   console.error('ERROR: XAI_API_TOKEN environment variable is not set');
@@ -31,8 +39,87 @@ if (!STRIPE_SECRET_KEY) {
   console.warn('Stripe payment endpoints will not be available');
 }
 
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+  console.warn('WARNING: Google OAuth credentials not set');
+  console.warn('Google login will not be available');
+}
+
 // Initialize Stripe only if the secret key is available
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+
+// Initialize database
+try {
+  await initDatabase();
+} catch (error) {
+  console.warn('WARNING: Could not initialize database. Google login features may not work.');
+  console.warn('Error:', error.message);
+}
+
+// Configure session middleware
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Configure Google OAuth Strategy
+if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({
+    clientID: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET,
+    callbackURL: GOOGLE_CALLBACK_URL
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      // Check if user exists by Google ID
+      let user = await findUserByGoogleId(profile.id);
+      
+      if (!user) {
+        // Check if user exists by email
+        const email = profile.emails?.[0]?.value;
+        if (email) {
+          user = await findUserByEmail(email);
+        }
+        
+        if (!user) {
+          // Create new user
+          user = await createUser({
+            email: email || `${profile.id}@google.com`,
+            google_id: profile.id,
+            name: profile.displayName,
+            has_subscription: false
+          });
+        }
+      }
+      
+      return done(null, user);
+    } catch (error) {
+      return done(error, null);
+    }
+  }));
+
+  passport.serializeUser((user, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id, done) => {
+    try {
+      const pool = (await import('./src/db.js')).getPool();
+      const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+      done(null, rows[0] || null);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+}
 
 // Rate limiting for API endpoints
 const apiLimiter = rateLimit({
@@ -60,6 +147,68 @@ const upload = multer({
 //     : ['http://localhost:5173', 'http://localhost:3000']
 // }));
 app.use(express.json({ limit: '950mb' }));
+
+// Authentication routes
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/' }),
+  async (req, res) => {
+    try {
+      // Check if user has subscription
+      if (!req.user.has_subscription) {
+        // Redirect to Stripe subscription page if no subscription
+        const session = await stripe.checkout.sessions.create({
+          customer_email: req.user.email,
+          payment_method_types: ['card'],
+          line_items: [
+            {
+              price: process.env.STRIPE_SUBSCRIPTION_PRICE_ID || 'price_1StDJe4OymfcnKESq2dIraNE',
+              quantity: 1,
+            },
+          ],
+          mode: 'subscription',
+          success_url: `${req.protocol}://${req.get('host')}/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${req.protocol}://${req.get('host')}/`,
+        });
+        
+        return res.redirect(session.url);
+      }
+      
+      // User has subscription, redirect to app
+      res.redirect('/');
+    } catch (error) {
+      console.error('Error in auth callback:', error);
+      res.redirect('/');
+    }
+  }
+);
+
+app.get('/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+    }
+    res.redirect('/');
+  });
+});
+
+app.get('/api/auth/status', (req, res) => {
+  if (req.isAuthenticated()) {
+    res.json({
+      authenticated: true,
+      user: {
+        email: req.user.email,
+        name: req.user.name,
+        hasSubscription: req.user.has_subscription
+      }
+    });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
 
 // Proxy endpoint for xAI API
 app.post('/api/chat', apiLimiter, async (req, res) => {
@@ -422,20 +571,50 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
       case 'checkout.session.completed':
         const session = event.data.object;
         console.log('Payment successful:', session.id);
-        // TODO: Fulfill the order, grant access, etc.
-        // You can access session.customer_email, session.amount_total, etc.
+        
+        // Update user subscription status
+        if (session.customer_email) {
+          try {
+            const { updateUserSubscription } = await import('./src/db.js');
+            await updateUserSubscription(
+              session.customer_email,
+              true,
+              session.subscription || session.id
+            );
+            console.log(`Updated subscription for ${session.customer_email}`);
+          } catch (dbError) {
+            console.error('Error updating user subscription:', dbError);
+          }
+        }
+        break;
+
+      case 'customer.subscription.deleted':
+        const subscription = event.data.object;
+        console.log('Subscription cancelled:', subscription.id);
+        
+        // Update user subscription status to false
+        if (subscription.customer) {
+          try {
+            const customer = await stripe.customers.retrieve(subscription.customer);
+            if (customer.email) {
+              const { updateUserSubscription } = await import('./src/db.js');
+              await updateUserSubscription(customer.email, false, null);
+              console.log(`Removed subscription for ${customer.email}`);
+            }
+          } catch (dbError) {
+            console.error('Error removing user subscription:', dbError);
+          }
+        }
         break;
 
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object;
         console.log('PaymentIntent successful:', paymentIntent.id);
-        // TODO: Handle successful payment
         break;
 
       case 'payment_intent.payment_failed':
         const failedPayment = event.data.object;
         console.log('Payment failed:', failedPayment.id);
-        // TODO: Handle failed payment
         break;
 
       default:
