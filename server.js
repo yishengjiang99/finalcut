@@ -572,6 +572,30 @@ app.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
 
     // Verify the session is valid and payment was successful
     if (session && session.payment_status === 'paid') {
+      // Update the user's subscription in the database
+      if (session.customer_email) {
+        try {
+          const { updateUserSubscription } = await import('./src/db.js');
+          await updateUserSubscription(
+            session.customer_email,
+            true,
+            session.subscription || session.id
+          );
+          console.log(`Updated subscription for ${session.customer_email} via payment verification`);
+          
+          // Update current session for immediate consistency
+          // Note: This only affects the current request. On subsequent requests,
+          // Passport will deserialize the user from the database with the updated subscription status.
+          if (req.isAuthenticated() && req.user && req.user.email === session.customer_email) {
+            req.user.has_subscription = true;
+            req.user.subscription_id = session.subscription || session.id;
+          }
+        } catch (dbError) {
+          console.error('Error updating subscription in database:', dbError);
+          // Continue anyway - webhook will handle it as fallback
+        }
+      }
+      
       res.json({ 
         verified: true, 
         paymentStatus: session.payment_status,
