@@ -92,6 +92,12 @@ export async function createUser(userData) {
   
   // Fetch the complete user record from database to ensure consistency
   const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
+  
+  // Verify the user was actually inserted
+  if (!rows || !rows[0]) {
+    throw new Error('Failed to fetch user record after insertion');
+  }
+  
   return rows[0];
 }
 

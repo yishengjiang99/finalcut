@@ -11,10 +11,18 @@ describe('Authentication Database Operations', () => {
       await initDatabase();
       dbAvailable = true;
       
-      // Clean up test users before each test
+      // Clean up test users before each test - using specific test email pattern
       const { getPool } = await import('../db.js');
       const pool = getPool();
-      await pool.query('DELETE FROM users WHERE email LIKE ?', ['test%@example.com']);
+      // Only delete test emails that match our test pattern exactly
+      await pool.query(
+        'DELETE FROM users WHERE email IN (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          'test1@example.com', 'test2@example.com', 'test3@example.com',
+          'test4@example.com', 'test5@example.com', 'test6@example.com',
+          'test7@example.com', 'test_new@example.com', 'test_existing@example.com'
+        ]
+      );
     } catch (error) {
       console.log('Database not available for testing:', error.message);
       dbAvailable = false;
@@ -23,10 +31,18 @@ describe('Authentication Database Operations', () => {
 
   afterEach(async () => {
     if (dbAvailable) {
-      // Clean up test users after each test
+      // Clean up test users after each test - using specific test email pattern
       const { getPool } = await import('../db.js');
       const pool = getPool();
-      await pool.query('DELETE FROM users WHERE email LIKE ?', ['test%@example.com']);
+      // Only delete test emails that match our test pattern exactly
+      await pool.query(
+        'DELETE FROM users WHERE email IN (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          'test1@example.com', 'test2@example.com', 'test3@example.com',
+          'test4@example.com', 'test5@example.com', 'test6@example.com',
+          'test7@example.com', 'test_new@example.com', 'test_existing@example.com'
+        ]
+      );
     }
   });
 

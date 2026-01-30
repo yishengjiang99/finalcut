@@ -103,8 +103,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         }
         
         if (!user) {
-          // Create new user
-          const email = profile.emails?.[0]?.value;
+          // Create new user (reuse email variable from above)
           user = await createUser({
             email: email || `${profile.id}@google.com`,
             google_id: profile.id,
