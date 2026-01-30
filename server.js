@@ -130,6 +130,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
   }));
 
   passport.serializeUser((user, done) => {
+    // Ensure user has a valid ID before serializing
+    if (!user || !user.id) {
+      console.error('Attempting to serialize user without valid ID:', user);
+      return done(new Error('User object missing ID'), null);
+    }
     done(null, user.id);
   });
 
