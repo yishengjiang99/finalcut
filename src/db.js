@@ -90,13 +90,15 @@ export async function createUser(userData) {
     [email, google_id, name, has_subscription]
   );
   
-  return {
-    id: result.insertId,
-    email,
-    google_id,
-    name,
-    has_subscription
-  };
+  // Fetch the complete user record from database to ensure consistency
+  const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
+  
+  // Verify the user was actually inserted
+  if (!rows || !rows[0]) {
+    throw new Error('Failed to fetch user record after insertion');
+  }
+  
+  return rows[0];
 }
 
 export async function updateUserSubscription(email, hasSubscription, subscriptionId = null) {

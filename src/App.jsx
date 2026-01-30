@@ -228,6 +228,8 @@ export default function App() {
   };
 
   const loadSampleVideo = async () => {
+    // Note: This bypasses authentication for demo purposes
+    // In production, consider requiring authentication
     setShowLanding(false);
     // Sample video path - using BigBuckBunny.mp4 as specified
     const sampleVideoUrl = '/BigBuckBunny.mp4';

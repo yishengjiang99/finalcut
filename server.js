@@ -103,23 +103,37 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         }
         
         if (!user) {
-          // Create new user
+          // Create new user (reuse email variable from above)
           user = await createUser({
             email: email || `${profile.id}@google.com`,
             google_id: profile.id,
             name: profile.displayName,
             has_subscription: false
           });
+          
+          // Verify user was created successfully
+          if (!user || !user.id) {
+            console.error('Failed to create user in database');
+            return done(new Error('Failed to create user'), null);
+          }
+          
+          console.log(`New user created: ${user.email} (ID: ${user.id})`);
         }
       }
       
       return done(null, user);
     } catch (error) {
+      console.error('Error in Google OAuth strategy:', error);
       return done(error, null);
     }
   }));
 
   passport.serializeUser((user, done) => {
+    // Ensure user has a valid ID before serializing
+    if (!user || !user.id) {
+      console.error('Attempting to serialize user without valid ID:', user);
+      return done(new Error('User object missing ID'), null);
+    }
     done(null, user.id);
   });
 
@@ -127,8 +141,15 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     try {
       const pool = (await import('./src/db.js')).getPool();
       const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
-      done(null, rows[0] || null);
+      const user = rows[0] || null;
+      
+      if (!user) {
+        console.error(`User with id ${id} not found in database during deserialization`);
+      }
+      
+      done(null, user);
     } catch (error) {
+      console.error('Error deserializing user:', error);
       done(error, null);
     }
   });
@@ -216,6 +237,16 @@ app.get('/auth/logout', (req, res) => {
 
 app.get('/api/auth/status', apiLimiter, (req, res) => {
   if (req.isAuthenticated()) {
+    // Verify user object exists and has required fields
+    if (!req.user || !req.user.id) {
+      console.error('User is authenticated but user object is invalid:', req.user);
+      // Clear the invalid session
+      req.logout((err) => {
+        if (err) console.error('Error logging out invalid user:', err);
+      });
+      return res.json({ authenticated: false });
+    }
+    
     res.json({
       authenticated: true,
       user: {
