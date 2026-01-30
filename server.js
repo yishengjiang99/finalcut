@@ -583,14 +583,16 @@ app.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
           );
           console.log(`Updated subscription for ${session.customer_email} via payment verification`);
           
-          // Also update the session if user is authenticated
+          // Update current session for immediate consistency
+          // Note: This only affects the current request. On subsequent requests,
+          // Passport will deserialize the user from the database with the updated subscription status.
           if (req.isAuthenticated() && req.user && req.user.email === session.customer_email) {
             req.user.has_subscription = true;
             req.user.subscription_id = session.subscription || session.id;
           }
         } catch (dbError) {
           console.error('Error updating subscription in database:', dbError);
-          // Continue anyway - webhook will handle it
+          // Continue anyway - webhook will handle it as fallback
         }
       }
       
