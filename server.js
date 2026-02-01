@@ -191,6 +191,15 @@ app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   async (req, res) => {
     try {
+      // Validate user object
+      if (!req.user || !req.user.email) {
+        console.error('Invalid user object after authentication:', req.user);
+        return res.redirect('/?error=invalid_user');
+      }
+      
+      console.log(`Google auth callback for user: ${req.user.email}`);
+      console.log(`User has subscription: ${req.user.has_subscription}`);
+      
       // Check if Stripe is available
       if (!stripe) {
         console.error('Stripe not configured but user needs subscription');
@@ -198,7 +207,13 @@ app.get('/auth/google/callback',
       }
 
       // Check if user has subscription
-      if (!req.user.has_subscription) {
+      // Convert to boolean to handle MySQL TINYINT(1) return values
+      const hasSubscription = Boolean(req.user.has_subscription);
+      console.log(`Converted has_subscription to boolean: ${hasSubscription}`);
+      
+      if (!hasSubscription) {
+        console.log('Creating Stripe checkout session for user:', req.user.email);
+        
         // Redirect to Stripe subscription page if no subscription
         const session = await stripe.checkout.sessions.create({
           customer_email: req.user.email,
@@ -214,14 +229,18 @@ app.get('/auth/google/callback',
           cancel_url: `${req.protocol}://${req.get('host')}/`,
         });
 
+        console.log('Stripe session created, redirecting to:', session.url);
         return res.redirect(session.url);
       }
 
       // User has subscription, redirect to app
+      console.log('User has subscription, redirecting to app');
       res.redirect('/');
     } catch (error) {
       console.error('Error in auth callback:', error);
-      res.redirect('/');
+      console.error('Error stack:', error.stack);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      res.redirect('/?error=auth_failed');
     }
   }
 );
