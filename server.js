@@ -19,6 +19,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Trust proxy headers (required when behind nginx/reverse proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 const PORT = process.env.PORT || 3001;
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
