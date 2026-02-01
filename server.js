@@ -127,6 +127,9 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           }
         }
 
+        // Normalize boolean fields from MySQL TINYINT(1) to JavaScript boolean
+        user.has_subscription = Boolean(user.has_subscription);
+
         return done(null, user);
       } catch (error) {
         console.error('Error in Google OAuth strategy:', error);
@@ -151,7 +154,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
       if (!user) {
         console.error(`User with id ${id} not found in database during deserialization`);
+        return done(null, null);
       }
+
+      // Normalize boolean fields from MySQL TINYINT(1) to JavaScript boolean
+      user.has_subscription = Boolean(user.has_subscription);
 
       done(null, user);
     } catch (error) {
@@ -213,11 +220,7 @@ app.get('/auth/google/callback',
       }
 
       // Check if user has subscription
-      // Convert to boolean to handle MySQL TINYINT(1) return values
-      const hasSubscription = Boolean(req.user.has_subscription);
-      console.log(`Converted has_subscription to boolean: ${hasSubscription}`);
-      
-      if (!hasSubscription) {
+      if (!req.user.has_subscription) {
         console.log('Creating Stripe checkout session for user:', req.user.email);
         
         // Redirect to Stripe subscription page if no subscription
@@ -244,8 +247,9 @@ app.get('/auth/google/callback',
       res.redirect('/');
     } catch (error) {
       console.error('Error in auth callback:', error);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
       console.error('Error stack:', error.stack);
-      console.error('Error details:', JSON.stringify(error, null, 2));
       res.redirect('/?error=auth_failed');
     }
   }
