@@ -83,50 +83,50 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     clientSecret: GOOGLE_CLIENT_SECRET,
     callbackURL: GOOGLE_CALLBACK_URL
   },
-  async (accessToken, refreshToken, profile, done) => {
-    try {
-      // Check if user exists by Google ID
-      let user = await findUserByGoogleId(profile.id);
-      
-      if (!user) {
-        // Check if user exists by email
-        const email = profile.emails?.[0]?.value;
-        if (email) {
-          user = await findUserByEmail(email);
-          
-          // If user exists but doesn't have google_id, update it
-          if (user && !user.google_id) {
-            const pool = (await import('./src/db.js')).getPool();
-            await pool.query('UPDATE users SET google_id = ? WHERE id = ?', [profile.id, user.id]);
-            user.google_id = profile.id;
-          }
-        }
-        
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        // Check if user exists by Google ID
+        let user = await findUserByGoogleId(profile.id);
+
         if (!user) {
-          // Create new user (reuse email variable from above)
-          user = await createUser({
-            email: email || `${profile.id}@google.com`,
-            google_id: profile.id,
-            name: profile.displayName,
-            has_subscription: false
-          });
-          
-          // Verify user was created successfully
-          if (!user || !user.id) {
-            console.error('Failed to create user in database');
-            return done(new Error('Failed to create user'), null);
+          // Check if user exists by email
+          const email = profile.emails?.[0]?.value;
+          if (email) {
+            user = await findUserByEmail(email);
+
+            // If user exists but doesn't have google_id, update it
+            if (user && !user.google_id) {
+              const pool = (await import('./src/db.js')).getPool();
+              await pool.query('UPDATE users SET google_id = ? WHERE id = ?', [profile.id, user.id]);
+              user.google_id = profile.id;
+            }
           }
-          
-          console.log(`New user created: ${user.email} (ID: ${user.id})`);
+
+          if (!user) {
+            // Create new user (reuse email variable from above)
+            user = await createUser({
+              email: email || `${profile.id}@google.com`,
+              google_id: profile.id,
+              name: profile.displayName,
+              has_subscription: false
+            });
+
+            // Verify user was created successfully
+            if (!user || !user.id) {
+              console.error('Failed to create user in database');
+              return done(new Error('Failed to create user'), null);
+            }
+
+            console.log(`New user created: ${user.email} (ID: ${user.id})`);
+          }
         }
+
+        return done(null, user);
+      } catch (error) {
+        console.error('Error in Google OAuth strategy:', error);
+        return done(error, null);
       }
-      
-      return done(null, user);
-    } catch (error) {
-      console.error('Error in Google OAuth strategy:', error);
-      return done(error, null);
-    }
-  }));
+    }));
 
   passport.serializeUser((user, done) => {
     // Ensure user has a valid ID before serializing
@@ -142,11 +142,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       const pool = (await import('./src/db.js')).getPool();
       const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
       const user = rows[0] || null;
-      
+
       if (!user) {
         console.error(`User with id ${id} not found in database during deserialization`);
       }
-      
+
       done(null, user);
     } catch (error) {
       console.error('Error deserializing user:', error);
@@ -196,7 +196,7 @@ app.get('/auth/google/callback',
         console.error('Stripe not configured but user needs subscription');
         return res.redirect('/?error=payment_unavailable');
       }
-      
+
       // Check if user has subscription
       if (!req.user.has_subscription) {
         // Redirect to Stripe subscription page if no subscription
@@ -213,10 +213,10 @@ app.get('/auth/google/callback',
           success_url: `${req.protocol}://${req.get('host')}/success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${req.protocol}://${req.get('host')}/`,
         });
-        
+
         return res.redirect(session.url);
       }
-      
+
       // User has subscription, redirect to app
       res.redirect('/');
     } catch (error) {
@@ -246,7 +246,7 @@ app.get('/api/auth/status', apiLimiter, (req, res) => {
       });
       return res.json({ authenticated: false });
     }
-    
+
     res.json({
       authenticated: true,
       user: {
@@ -526,8 +526,8 @@ app.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
     const { priceId, successUrl, cancelUrl } = req.body;
 
     if (!priceId || !successUrl || !cancelUrl) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: priceId, successUrl, and cancelUrl are required' 
+      return res.status(400).json({
+        error: 'Missing required fields: priceId, successUrl, and cancelUrl are required'
       });
     }
 
@@ -540,7 +540,7 @@ app.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
           quantity: 1,
         },
       ],
-      mode: 'payment',
+      mode: 'subscription',
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
@@ -562,8 +562,8 @@ app.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
     const { sessionId } = req.body;
 
     if (!sessionId) {
-      return res.status(400).json({ 
-        error: 'Missing required field: sessionId' 
+      return res.status(400).json({
+        error: 'Missing required field: sessionId'
       });
     }
 
@@ -582,7 +582,7 @@ app.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
             session.subscription || session.id
           );
           console.log(`Updated subscription for ${session.customer_email} via payment verification`);
-          
+
           // Update current session for immediate consistency
           // Note: This only affects the current request. On subsequent requests,
           // Passport will deserialize the user from the database with the updated subscription status.
@@ -595,16 +595,16 @@ app.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
           // Continue anyway - webhook will handle it as fallback
         }
       }
-      
-      res.json({ 
-        verified: true, 
+
+      res.json({
+        verified: true,
         paymentStatus: session.payment_status,
-        customerEmail: session.customer_email 
+        customerEmail: session.customer_email
       });
     } else {
-      res.json({ 
-        verified: false, 
-        paymentStatus: session?.payment_status || 'unknown' 
+      res.json({
+        verified: false,
+        paymentStatus: session?.payment_status || 'unknown'
       });
     }
   } catch (error) {
@@ -645,7 +645,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
       case 'checkout.session.completed':
         const session = event.data.object;
         console.log('Payment successful:', session.id);
-        
+
         // Update user subscription status
         if (session.customer_email) {
           const { updateUserSubscription } = await import('./src/db.js');
@@ -661,7 +661,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
       case 'customer.subscription.deleted':
         const subscription = event.data.object;
         console.log('Subscription cancelled:', subscription.id);
-        
+
         // Update user subscription status to false
         if (subscription.customer) {
           const customer = await stripe.customers.retrieve(subscription.customer);
