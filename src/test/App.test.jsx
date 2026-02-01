@@ -63,6 +63,12 @@ describe('App Component', () => {
     expect(screen.getByText('Try with Sample Video')).toBeInTheDocument();
   });
 
+  it('renders footer on landing page', () => {
+    render(<App />);
+    expect(screen.getByText('© 2026 FinalCut Video Editor. All rights reserved.')).toBeInTheDocument();
+    expect(screen.getByText('AI-powered video editing made simple')).toBeInTheDocument();
+  });
+
   it('does not expose token in client-side code', () => {
     const { container } = render(<App />);
     const html = container.innerHTML;
