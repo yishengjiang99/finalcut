@@ -34,7 +34,8 @@ export default function App() {
         
         if (errorParam) {
           const errorMessages = {
-            'payment_unavailable': 'Payment system is currently unavailable. Please try again later.',
+            'payment_not_configured': 'Subscription service is not configured. Please contact support.',
+            'payment_unavailable': 'Payment system is temporarily unavailable. Please try again later.',
             'auth_failed': 'Authentication failed. Please try again.',
             'invalid_user': 'User authentication failed. Please try again.'
           };

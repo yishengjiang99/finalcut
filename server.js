@@ -21,7 +21,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Trust proxy headers (required when behind nginx/reverse proxy)
-if (process.env.NODE_ENV === 'production') {
+// Enable for production or when TRUST_PROXY environment variable is set
+if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
   app.set('trust proxy', 1);
 }
 
@@ -154,7 +155,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
       if (!user) {
         console.error(`User with id ${id} not found in database during deserialization`);
-        return done(null, null);
+        return done(new Error('User not found'), null);
       }
 
       // Normalize boolean fields from MySQL TINYINT(1) to JavaScript boolean
@@ -215,8 +216,8 @@ app.get('/auth/google/callback',
       
       // Check if Stripe is available
       if (!stripe) {
-        console.error('Stripe not configured but user needs subscription');
-        return res.redirect('/?error=payment_unavailable');
+        console.error('Stripe not configured - subscription signup not available');
+        return res.redirect('/?error=payment_not_configured');
       }
 
       // Check if user has subscription
