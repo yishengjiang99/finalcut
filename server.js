@@ -19,6 +19,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Trust proxy headers (required when behind nginx/reverse proxy)
+// Enable for production or when TRUST_PROXY environment variable is set
+if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 const PORT = process.env.PORT || 3001;
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
@@ -121,6 +128,9 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           }
         }
 
+        // Normalize boolean fields from MySQL TINYINT(1) to JavaScript boolean
+        user.has_subscription = Boolean(user.has_subscription);
+
         return done(null, user);
       } catch (error) {
         console.error('Error in Google OAuth strategy:', error);
@@ -145,7 +155,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
       if (!user) {
         console.error(`User with id ${id} not found in database during deserialization`);
+        return done(new Error('User not found'), null);
       }
+
+      // Normalize boolean fields from MySQL TINYINT(1) to JavaScript boolean
+      user.has_subscription = Boolean(user.has_subscription);
 
       done(null, user);
     } catch (error) {
@@ -191,14 +205,25 @@ app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   async (req, res) => {
     try {
+      // Validate user object
+      if (!req.user || !req.user.email) {
+        console.error('Invalid user object after authentication:', req.user);
+        return res.redirect('/?error=invalid_user');
+      }
+      
+      console.log(`Google auth callback for user: ${req.user.email}`);
+      console.log(`User has subscription: ${req.user.has_subscription}`);
+      
       // Check if Stripe is available
       if (!stripe) {
-        console.error('Stripe not configured but user needs subscription');
-        return res.redirect('/?error=payment_unavailable');
+        console.error('Stripe not configured - subscription signup not available');
+        return res.redirect('/?error=payment_not_configured');
       }
 
       // Check if user has subscription
       if (!req.user.has_subscription) {
+        console.log('Creating Stripe checkout session for user:', req.user.email);
+        
         // Redirect to Stripe subscription page if no subscription
         const session = await stripe.checkout.sessions.create({
           customer_email: req.user.email,
@@ -214,14 +239,19 @@ app.get('/auth/google/callback',
           cancel_url: `${req.protocol}://${req.get('host')}/`,
         });
 
+        console.log('Stripe session created, redirecting to:', session.url);
         return res.redirect(session.url);
       }
 
       // User has subscription, redirect to app
+      console.log('User has subscription, redirecting to app');
       res.redirect('/');
     } catch (error) {
       console.error('Error in auth callback:', error);
-      res.redirect('/');
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      res.redirect('/?error=auth_failed');
     }
   }
 );

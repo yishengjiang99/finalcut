@@ -7,6 +7,7 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true); // Show landing page initially
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
   const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
+  const [authError, setAuthError] = useState(null); // Track authentication errors
   const videoRef = useRef(null);
   const messageRef = useRef(null);
   const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: 0 }]);
@@ -27,6 +28,25 @@ export default function App() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // Check for error parameters in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const errorParam = urlParams.get('error');
+        
+        if (errorParam) {
+          const errorMessages = {
+            'payment_not_configured': 'Subscription service is not configured. Please contact support.',
+            'payment_unavailable': 'Payment system is temporarily unavailable. Please try again later.',
+            'auth_failed': 'Authentication failed. Please try again.',
+            'invalid_user': 'User authentication failed. Please try again.'
+          };
+          
+          setAuthError(errorMessages[errorParam] || 'An error occurred. Please try again.');
+          
+          // Clean up the URL
+          window.history.replaceState({}, '', '/');
+          return;
+        }
+        
         const response = await fetch('/api/auth/status');
         if (response.ok) {
           const data = await response.json();
@@ -301,6 +321,20 @@ export default function App() {
           <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center', color: '#8b949e' }}>
             AI-powered video and audio editing at your fingertips
           </p>
+          
+          {authError && (
+            <div style={{ 
+              padding: '15px', 
+              marginBottom: '20px', 
+              backgroundColor: '#3c1e1e', 
+              border: '1px solid #f85149', 
+              borderRadius: '6px',
+              color: '#f85149',
+              textAlign: 'center'
+            }}>
+              {authError}
+            </div>
+          )}
 
           <div style={{ marginBottom: '15px' }}>
             <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#ffffff' }}>Available Tools</h2>
