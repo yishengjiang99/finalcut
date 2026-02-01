@@ -313,81 +313,94 @@ export default function App() {
     };
 
     return (
-      <div style={{ fontFamily: 'Arial, sans-serif', margin: 0, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0d1117', overflow: 'hidden' }}>
-        <div style={{ maxWidth: '800px', width: '100%', height: '100%', padding: '20px', color: '#c9d1d9', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflowY: 'auto' }}>
-          <h1 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '10px', color: '#ffffff', textAlign: 'center' }}>
-            FinalCut Video Editor
-          </h1>
-          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center', color: '#8b949e' }}>
-            AI-powered video and audio editing at your fingertips
-          </p>
-          
-          {authError && (
-            <div style={{ 
-              padding: '15px', 
-              marginBottom: '20px', 
-              backgroundColor: '#3c1e1e', 
-              border: '1px solid #f85149', 
-              borderRadius: '6px',
-              color: '#f85149',
-              textAlign: 'center'
-            }}>
-              {authError}
-            </div>
-          )}
+      <div style={{ fontFamily: 'Arial, sans-serif', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#0d1117' }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+          <div style={{ maxWidth: '800px', width: '100%', color: '#c9d1d9', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <h1 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '10px', color: '#ffffff', textAlign: 'center' }}>
+              FinalCut Video Editor
+            </h1>
+            <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center', color: '#8b949e' }}>
+              AI-powered video and audio editing at your fingertips
+            </p>
+            
+            {authError && (
+              <div style={{ 
+                padding: '15px', 
+                marginBottom: '20px', 
+                backgroundColor: '#3c1e1e', 
+                border: '1px solid #f85149', 
+                borderRadius: '6px',
+                color: '#f85149',
+                textAlign: 'center'
+              }}>
+                {authError}
+              </div>
+            )}
 
-          <div style={{ marginBottom: '15px' }}>
-            <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#ffffff' }}>Available Tools</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
-              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>✂️ Video Editing</h3>
-                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Trim, crop, resize, and rotate</p>
-              </div>
-              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎨 Visual Effects</h3>
-                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Brightness, hue, saturation, text</p>
-              </div>
-              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎵 Audio Tools</h3>
-                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Volume, fade, equalizer, filters</p>
-              </div>
-              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>⚡ Speed Control</h3>
-                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Speed up or slow down media</p>
-              </div>
-              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>📱 Social Media</h3>
-                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Instagram, TikTok, YouTube presets</p>
-              </div>
-              <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🔄 Format Conversion</h3>
-                <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Convert MP4, WebM, MOV formats</p>
+            <div style={{ marginBottom: '15px' }}>
+              <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#ffffff' }}>Available Tools</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>✂️ Video Editing</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Trim, crop, resize, and rotate</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎨 Visual Effects</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Brightness, hue, saturation, text</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎵 Audio Tools</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Volume, fade, equalizer, filters</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>⚡ Speed Control</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Speed up or slow down media</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>📱 Social Media</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Instagram, TikTok, YouTube presets</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🔄 Format Conversion</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Convert MP4, WebM, MOV formats</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', marginTop: '15px' }}>
-            <button 
-              onClick={handleGetStarted}
-              style={primaryButtonStyle}
-            >
-              Get Started
-            </button>
-            <button 
-              onClick={loadSampleVideo}
-              style={secondaryButtonStyle}
-            >
-              Try with Sample Video
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', marginTop: '15px' }}>
+              <button 
+                onClick={handleGetStarted}
+                style={primaryButtonStyle}
+              >
+                Get Started
+              </button>
+              <button 
+                onClick={loadSampleVideo}
+                style={secondaryButtonStyle}
+              >
+                Try with Sample Video
+              </button>
+            </div>
           </div>
         </div>
+        <footer style={{ 
+          padding: '20px', 
+          textAlign: 'center', 
+          borderTop: '1px solid #30363d', 
+          backgroundColor: '#161b22',
+          color: '#8b949e',
+          fontSize: '14px'
+        }}>
+          <p style={{ margin: '0 0 8px 0' }}>© 2026 FinalCut Video Editor. All rights reserved.</p>
+          <p style={{ margin: 0, fontSize: '12px' }}>AI-powered video editing made simple</p>
+        </footer>
       </div>
     );
   }
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', margin: 0, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#0d1117' }}>
-      <main style={{ width: '100%', maxWidth: '100vw', height: '100vh', backgroundColor: '#0d1117', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <main style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', backgroundColor: '#0d1117', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Processing Spinner Overlay */}
         {processing && (
           <div style={{
@@ -443,6 +456,16 @@ export default function App() {
           <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Describe the video edit..." style={{ width: '100%', padding: '10px', border: '1px solid #30363d', borderRadius: '4px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9' }} />
           <button onClick={handleSend} disabled={!videoFileData} style={{ padding: '10px 16px', backgroundColor: videoFileData ? '#1f6feb' : '#21262d', color: videoFileData ? '#ffffff' : '#6e7681', border: 'none', borderRadius: '4px', cursor: videoFileData ? 'pointer' : 'not-allowed', fontSize: '16px', WebkitTapHighlightColor: 'transparent' }}>Send</button>
         </div>
+        <footer style={{ 
+          padding: '12px', 
+          textAlign: 'center', 
+          borderTop: '1px solid #30363d', 
+          backgroundColor: '#161b22',
+          color: '#8b949e',
+          fontSize: '12px'
+        }}>
+          <p style={{ margin: 0 }}>© 2026 FinalCut Video Editor. All rights reserved.</p>
+        </footer>
       </main>
     </div>
   );
