@@ -8,6 +8,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
   const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
   const [authError, setAuthError] = useState(null); // Track authentication errors
+  const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
   const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: 0 }]);
@@ -112,6 +113,7 @@ export default function App() {
   };
 
   const callAPI = async (currentMessages) => {
+    setIsCallingAPI(true); // Set loading state before API call
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -182,6 +184,8 @@ export default function App() {
       }
     } catch (error) {
       addMessage('Error communicating with xAI API: ' + error.message, false);
+    } finally {
+      setIsCallingAPI(false); // Clear loading state after API call completes
     }
   };
 
@@ -453,8 +457,45 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', gap: '8px', borderTop: '1px solid #30363d', backgroundColor: '#161b22' }}>
           <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" capture="environment" style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
-          <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Describe the video edit..." style={{ width: '100%', padding: '10px', border: '1px solid #30363d', borderRadius: '4px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9' }} />
-          <button onClick={handleSend} disabled={!videoFileData} style={{ padding: '10px 16px', backgroundColor: videoFileData ? '#1f6feb' : '#21262d', color: videoFileData ? '#ffffff' : '#6e7681', border: 'none', borderRadius: '4px', cursor: videoFileData ? 'pointer' : 'not-allowed', fontSize: '16px', WebkitTapHighlightColor: 'transparent' }}>Send</button>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input 
+              type="text" 
+              value={chatInput} 
+              onChange={(e) => setChatInput(e.target.value)} 
+              onKeyPress={(e) => e.key === 'Enter' && handleSend()} 
+              placeholder="Describe the video edit..." 
+              disabled={isCallingAPI}
+              style={{ 
+                width: '100%', 
+                padding: '16px', 
+                paddingRight: isCallingAPI ? '50px' : '16px',
+                border: '2px solid #1f6feb', 
+                borderRadius: '8px', 
+                fontSize: '18px', 
+                fontWeight: '500',
+                backgroundColor: '#0d1117', 
+                color: '#c9d1d9',
+                outline: 'none',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+                boxShadow: '0 0 0 3px rgba(31, 111, 235, 0.1)'
+              }} 
+            />
+            {isCallingAPI && (
+              <div style={{
+                position: 'absolute',
+                right: '16px',
+                width: '24px',
+                height: '24px',
+                border: '3px solid #30363d',
+                borderTop: '3px solid #1f6feb',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }}></div>
+            )}
+          </div>
+          <button onClick={handleSend} disabled={!videoFileData || isCallingAPI} style={{ padding: '12px 16px', backgroundColor: (videoFileData && !isCallingAPI) ? '#1f6feb' : '#21262d', color: (videoFileData && !isCallingAPI) ? '#ffffff' : '#6e7681', border: 'none', borderRadius: '4px', cursor: (videoFileData && !isCallingAPI) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
+            {isCallingAPI ? 'Sending...' : 'Send'}
+          </button>
         </div>
         <footer style={{ 
           padding: '12px', 
