@@ -14,6 +14,7 @@ export default function App() {
   const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: 0 }]);
   const [chatInput, setChatInput] = useState('');
   const [videoFileData, setVideoFileData] = useState(null);
+  const [uploadedVideos, setUploadedVideos] = useState([]); // Array of {data: Uint8Array, url: string, name: string, mimeType: string}
   const [fileType, setFileType] = useState('video'); // 'video' or 'audio'
   const [fileMimeType, setFileMimeType] = useState(''); // Store MIME type for proper detection
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
@@ -168,7 +169,15 @@ export default function App() {
           for (const call of msg.tool_calls) {
             const funcName = call.function.name;
             const args = JSON.parse(call.function.arguments);
-            const result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage);
+            
+            // Pass uploadedVideos only to functions that need it
+            let result;
+            if (funcName === 'add_video_transition') {
+              result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage, uploadedVideos);
+            } else {
+              result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage);
+            }
+            
             currentMessages.push({
               role: 'tool',
               tool_call_id: call.id,
@@ -190,47 +199,94 @@ export default function App() {
   };
 
   const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (!files || files.length === 0) return;
 
     try {
-      // Determine if it's audio or video
-      const isAudio = file.type.startsWith('audio/');
-      const isVideo = file.type.startsWith('video/');
+      const newVideos = [];
+      let hasError = false;
 
-      if (!isAudio && !isVideo) {
-        addMessage('Error: Please upload a valid audio or video file.', false);
+      // Show uploading status
+      const uploadingMessage = { 
+        role: 'user', 
+        content: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`, 
+        id: messageIdCounterRef.current++ 
+      };
+      setMessages(prev => [...prev, uploadingMessage]);
+
+      // Process all files
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Determine if it's audio or video
+        const isAudio = file.type.startsWith('audio/');
+        const isVideo = file.type.startsWith('video/');
+
+        if (!isAudio && !isVideo) {
+          addMessage(`Error: File "${file.name}" is not a valid audio or video file.`, false);
+          hasError = true;
+          continue;
+        }
+
+        // Read file as array buffer for server-side processing
+        const arrayBuffer = await file.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        const url = URL.createObjectURL(file);
+
+        // Store the file data
+        newVideos.push({
+          data: data,
+          url: url,
+          name: file.name,
+          mimeType: file.type,
+          isAudio: isAudio
+        });
+
+        // For the first file, set it as the main video for backward compatibility
+        if (i === 0) {
+          setVideoFileData(data);
+          setFileType(isAudio ? 'audio' : 'video');
+          setFileMimeType(file.type);
+        }
+      }
+
+      if (newVideos.length === 0) {
+        addMessage('Error: No valid files were uploaded.', false);
         return;
       }
 
-      setFileType(isAudio ? 'audio' : 'video');
-      setFileMimeType(file.type); // Store MIME type for later use
+      // Update the uploaded videos list
+      setUploadedVideos(prev => [...prev, ...newVideos]);
 
-      // Show uploading status
-      const uploadingMessage = { role: 'user', content: `Uploading ${isAudio ? 'audio' : 'video'}...`, id: messageIdCounterRef.current++ };
-      setMessages(prev => [...prev, uploadingMessage]);
+      // Show all uploaded files in the chat
+      const uploadedMessages = newVideos.map((video, index) => ({
+        role: 'user',
+        content: `Uploaded ${video.isAudio ? 'audio' : 'video'}: ${video.name}`,
+        videoUrl: video.url,
+        videoType: 'original',
+        mimeType: video.mimeType,
+        id: messageIdCounterRef.current++
+      }));
 
-      // Read file as array buffer for server-side processing
-      const arrayBuffer = await file.arrayBuffer();
-      const data = new Uint8Array(arrayBuffer);
-      setVideoFileData(data);
-      const url = URL.createObjectURL(file);
-
-      // Show selected video on user (right) side
-      const uploadedMessage = { role: 'user', content: `Selected ${isAudio ? 'audio' : 'video'}:`, videoUrl: url, videoType: 'original', mimeType: file.type, id: messageIdCounterRef.current++ };
-      const userMessage = { role: 'user', content: `${isAudio ? 'Audio' : 'Video'} uploaded and ready for editing.`, id: messageIdCounterRef.current++ };
+      const summaryMessage = { 
+        role: 'user', 
+        content: `${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}.`, 
+        id: messageIdCounterRef.current++ 
+      };
 
       // Build complete message history for API call
-      // Since messages is the state before any updates in this function, we include all three new messages
-      const messagesForAPI = [...messages, uploadingMessage, uploadedMessage, userMessage];
+      const messagesForAPI = [...messages, uploadingMessage, ...uploadedMessages, summaryMessage];
 
-      // Update UI state with the remaining two messages (uploadingMessage was already added)
-      setMessages(prev => [...prev, uploadedMessage, userMessage]);
+      // Update UI state with uploaded messages
+      setMessages(prev => [...prev, ...uploadedMessages, summaryMessage]);
 
       await callAPI(messagesForAPI);
     } catch (error) {
-      addMessage('Error uploading file: ' + error.message, false);
+      addMessage('Error uploading files: ' + error.message, false);
     }
+
+    // Clear the input so the same files can be uploaded again if needed
+    e.target.value = '';
   };
 
   const handleSend = async () => {
@@ -456,7 +512,7 @@ export default function App() {
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', gap: '8px', borderTop: '1px solid #30363d', backgroundColor: '#161b22' }}>
-          <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" capture="environment" style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
+          <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" capture="environment" multiple style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input 
               type="text" 
