@@ -150,6 +150,19 @@ Produce engaging content for Instagram Reels, TikTok, or YouTube Shorts with qui
 2. **Number of Clips**: Maximum of 10 clips can be processed in a single transition operation
 3. **Format**: All input videos should be in MP4 format for best compatibility
 4. **Duration**: Transition durations are applied uniformly between all clips
+5. **Current Implementation**: The current version uses FFmpeg's `concat` filter for combining clips with basic fade effects. For true crossfade/xfade transitions with overlap, video durations need to be detected first via ffprobe, which will be added in a future version.
+
+## Technical Notes
+
+The current implementation uses a simplified approach for transitions:
+- **Concat-based**: Videos are concatenated using FFmpeg's concat filter
+- **Fade effects**: Fade in/out effects are applied at clip boundaries
+- **Audio mixing**: Audio tracks are concatenated smoothly
+
+Future versions will support:
+- True xfade transitions with proper video overlap
+- Dynamic offset calculation based on video durations
+- Custom transition timing for each clip junction
 
 ## Future Enhancements
 

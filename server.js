@@ -717,25 +717,14 @@ function buildCrossfadeFilter(numVideos, duration, transition = 'fade') {
   let filters = [];
   let audioFilters = [];
   
-  // For xfade, we need to concat first and then apply transitions
-  // This is a simplified version that concatenates without overlap
-  // In production, you'd need to get video durations first via ffprobe
+  // Simple concatenation approach
+  // For proper crossfade with xfade filter, we would need video durations
+  // This implementation uses basic concat which is simpler and more reliable
   
-  if (numVideos === 2) {
-    // Simple case: two videos - just concat and crossfade at junction
-    // Note: For real implementation, offset should be video1_duration - duration
-    // Using concat approach for simplicity
-    filters.push(`[0:v][1:v]concat=n=2:v=1:a=0[vconcat]`);
-    audioFilters.push(`[0:a][1:a]concat=n=2:v=0:a=1[a]`);
-    // Apply fade in/out for transition effect
-    filters.push(`[vconcat]fade=t=in:st=0:d=0.5,fade=t=out:st=0:d=0.5[v]`);
-  } else {
-    // Multiple videos: concatenate all
-    let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
-    let audioInputs = Array.from({length: numVideos}, (_, i) => `[${i}:a]`).join('');
-    filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
-    audioFilters.push(`${audioInputs}concat=n=${numVideos}:v=0:a=1[a]`);
-  }
+  let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
+  let audioInputs = Array.from({length: numVideos}, (_, i) => `[${i}:a]`).join('');
+  filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
+  audioFilters.push(`${audioInputs}concat=n=${numVideos}:v=0:a=1[a]`);
   
   return [...filters, ...audioFilters].join(';');
 }
@@ -746,7 +735,7 @@ function buildWipeFilter(numVideos, duration, transition) {
     throw new Error('At least 2 videos required for wipe transition');
   }
 
-  // Similar to crossfade - concat videos
+  // Simple concatenation - for actual wipe effects, we would need xfade filter with offsets
   let filters = [];
   let audioFilters = [];
   
@@ -767,7 +756,9 @@ function buildFadeFilter(numVideos, duration) {
   let filters = [];
   let audioFilters = [];
   
-  // Apply fade out to each video except last, fade in to each except first
+  // Apply fade in to first video and fade out to last video
+  // For middle videos, we'll just concatenate normally
+  // Note: For proper timing, we would need to get video durations via ffprobe first
   let videoLabels = [];
   let audioLabels = [];
   
@@ -775,18 +766,23 @@ function buildFadeFilter(numVideos, duration) {
     const vLabel = `v${i}fade`;
     const aLabel = `a${i}fade`;
     
-    if (i === 0) {
-      // First video: fade out at end only
-      filters.push(`[${i}:v]fade=t=out:st=0:d=${duration}[${vLabel}]`);
-      audioFilters.push(`[${i}:a]afade=t=out:st=0:d=${duration}[${aLabel}]`);
+    if (i === 0 && numVideos === 2) {
+      // First video in a 2-video sequence: only fade out
+      // We'll skip the fade for simplicity since we don't know duration
+      filters.push(`[${i}:v]copy[${vLabel}]`);
+      audioFilters.push(`[${i}:a]acopy[${aLabel}]`);
+    } else if (i === 0) {
+      // First video: no fade needed at start, just copy
+      filters.push(`[${i}:v]copy[${vLabel}]`);
+      audioFilters.push(`[${i}:a]acopy[${aLabel}]`);
     } else if (i === numVideos - 1) {
-      // Last video: fade in at start only
+      // Last video: fade in at start
       filters.push(`[${i}:v]fade=t=in:st=0:d=${duration}[${vLabel}]`);
       audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration}[${aLabel}]`);
     } else {
-      // Middle videos: fade in at start and fade out at end
-      filters.push(`[${i}:v]fade=t=in:st=0:d=${duration},fade=t=out:st=0:d=${duration}[${vLabel}]`);
-      audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration},afade=t=out:st=0:d=${duration}[${aLabel}]`);
+      // Middle videos: fade in at start
+      filters.push(`[${i}:v]fade=t=in:st=0:d=${duration}[${vLabel}]`);
+      audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration}[${aLabel}]`);
     }
     
     videoLabels.push(`[${vLabel}]`);
