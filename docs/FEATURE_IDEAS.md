@@ -512,11 +512,11 @@ This document outlines potential features and enhancements for the FinalCut vide
 - Consistent output quality
 
 **Presets:**
-- **YouTube 1080p**: 1920x1080, H.264, 8Mbps
-- **YouTube 4K**: 3840x2160, H.264, 35Mbps
-- **Instagram Reel**: 1080x1920 (9:16), H.264, 5Mbps
-- **Instagram Post**: 1080x1080 (1:1), H.264, 5Mbps
-- **TikTok**: 1080x1920 (9:16), H.264, 5Mbps
+- **YouTube 1080p**: 1920x1080, H.264, 10-12Mbps (30fps) / 12-15Mbps (60fps)
+- **YouTube 4K**: 3840x2160, H.265, 55-68Mbps (30fps) / 70-85Mbps (60fps)
+- **Instagram Reel**: 1080x1920 (9:16), H.264, 8Mbps
+- **Instagram Post**: 1080x1080 (1:1), H.264, 8Mbps
+- **TikTok**: 1080x1920 (9:16), H.264, 8Mbps
 - **Twitter**: 1280x720, H.264, 5Mbps
 - **Facebook**: 1920x1080, H.264, 8Mbps
 - **High Quality**: Original resolution, H.265, 20Mbps
@@ -1068,9 +1068,9 @@ This document outlines potential features and enhancements for the FinalCut vide
 - **CDN**: Template delivery, asset hosting
 
 ### Performance Targets
-- **Preview Latency**: < 100ms for basic effects
-- **Export Speed**: Real-time or faster for 1080p
-- **UI Responsiveness**: 60 FPS interface
+- **Preview Playback**: Smooth frame-accurate playback with minimal buffering (targeting 1-2 frame latency for basic effects)
+- **Export Speed**: Real-time or faster for 1080p content
+- **UI Responsiveness**: 60 FPS for UI controls and interactions (video preview plays at source framerate)
 - **Memory Usage**: < 2GB for typical projects
 - **File Size**: Efficient project file storage < 1MB
 
