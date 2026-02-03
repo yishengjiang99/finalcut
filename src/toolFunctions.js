@@ -474,6 +474,51 @@ export const toolFunctions = {
     }
   },
   
+  add_video_transition: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      // Validate inputs
+      if (!args.videos || !Array.isArray(args.videos) || args.videos.length < 2) {
+        throw new Error('At least two video clips are required for transitions');
+      }
+      if (!args.transition) {
+        throw new Error('Transition type is required');
+      }
+
+      const formData = new FormData();
+      
+      // Add all video files
+      args.videos.forEach((videoData, index) => {
+        const videoBlob = new Blob([videoData], { type: 'video/mp4' });
+        formData.append('videos', videoBlob, `input-${index}.mp4`);
+      });
+      
+      formData.append('transition', args.transition);
+      formData.append('duration', args.duration || 1);
+      
+      const response = await fetch('/api/transition-videos', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Server processing failed');
+      }
+      
+      // Get the processed video as array buffer
+      const arrayBuffer = await response.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      
+      setVideoFileData(data); // Update video data for subsequent edits
+      const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+      addMessage(`Processed video with ${args.transition} transition:`, false, videoUrl, 'processed', 'video/mp4');
+      return `Video transition (${args.transition}) applied successfully.`;
+    } catch (error) {
+      addMessage('Error applying video transition: ' + error.message, false);
+      return 'Failed to apply video transition: ' + error.message;
+    }
+  },
+  
   // Aliases for backward compatibility with tests
   adjust_audio_volume: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.adjust_volume(args, videoFileData, setVideoFileData, addMessage),

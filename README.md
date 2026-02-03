@@ -17,6 +17,14 @@ A React-based video editing application with AI chat capabilities using xAI's Gr
   - Add text overlays
   - Trim video
   - Adjust playback speed
+- **Transitions Between Clips**:
+  - Crossfade - Smooth blend between clips
+  - Fade - Fade to black between clips
+  - Dissolve - Gradual transition effect
+  - Wipe (left, right, up, down) - Directional wipe transitions
+  - Slide (left, right, up, down) - Sliding transitions
+  - Multi-clip support for creating montages
+  - Customizable transition duration
 - Audio filters:
   - Adjust audio volume
   - Audio fade in/out effects

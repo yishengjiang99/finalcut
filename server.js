@@ -498,6 +498,18 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           command = command.videoFilters(`eq=saturation=${parsedArgs.saturation}`).audioCodec('copy');
           break;
 
+        case 'fade_transition':
+          // Simple fade in/out effect for a single video
+          const duration = parsedArgs.duration || 1;
+          command = command.videoFilters(`fade=t=in:st=0:d=${duration},fade=t=out:st=${parsedArgs.totalDuration - duration}:d=${duration}`).audioCodec('copy');
+          break;
+
+        case 'crossfade_transition':
+          // Crossfade between two videos - requires special handling with complex filtergraph
+          // This requires two input videos which will be handled separately below
+          reject(new Error('crossfade_transition requires special multi-video handling'));
+          return;
+
         default:
           reject(new Error(`Unknown operation: ${operation}`));
           return;
@@ -545,6 +557,291 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
     res.status(500).json({ error: error.message || 'Failed to process video' });
   }
 });
+
+// Multi-video transition endpoint
+app.post('/api/transition-videos', videoProcessLimiter, upload.array('videos', 10), async (req, res) => {
+  const tempFiles = [];
+  let outputPath = null;
+
+  try {
+    const { transition, duration } = req.body;
+
+    if (!req.files || req.files.length < 2) {
+      return res.status(400).json({ error: 'At least two video files are required for transitions' });
+    }
+
+    if (!transition) {
+      return res.status(400).json({ error: 'No transition type specified' });
+    }
+
+    // Parse duration if it's a string
+    const transitionDuration = duration ? parseFloat(duration) : 1;
+
+    // Create temporary files
+    const tmpDir = '/tmp';
+    const timestamp = Date.now();
+    
+    // Write uploaded files to disk
+    const inputPaths = [];
+    for (let i = 0; i < req.files.length; i++) {
+      const inputPath = path.join(tmpDir, `input-${timestamp}-${i}.mp4`);
+      await fs.writeFile(inputPath, req.files[i].buffer);
+      inputPaths.push(inputPath);
+      tempFiles.push(inputPath);
+    }
+
+    outputPath = path.join(tmpDir, `output-${timestamp}.mp4`);
+
+    // Process videos with transition
+    await new Promise((resolve, reject) => {
+      let command = ffmpeg();
+      
+      // Add all inputs
+      inputPaths.forEach(inputPath => {
+        command = command.input(inputPath);
+      });
+
+      let filterComplex = '';
+
+      switch (transition) {
+        case 'crossfade':
+          // Build crossfade filter chain for all videos
+          // For 2 videos: [0:v][1:v]xfade=transition=fade:duration=1:offset=<video0_duration-1>[v]
+          // For 3+ videos: chain multiple xfades
+          filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration);
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'wipe_left':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipeleft');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'wipe_right':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wiperight');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'wipe_up':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipeup');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'wipe_down':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipedown');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'slide_left':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideleft');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'slide_right':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideright');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'slide_up':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideup');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'slide_down':
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slidedown');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'dissolve':
+          // Dissolve is similar to crossfade with fade transition
+          filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration, 'dissolve');
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        case 'fade':
+          // Fade to black between clips
+          filterComplex = buildFadeFilter(inputPaths.length, transitionDuration);
+          command = command.complexFilter(filterComplex, ['v', 'a']);
+          break;
+
+        default:
+          reject(new Error(`Unknown transition type: ${transition}`));
+          return;
+      }
+
+      command
+        .output(outputPath)
+        .outputOptions('-map', '[v]')
+        .outputOptions('-map', '[a]')
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err))
+        .run();
+    });
+
+    // Read the processed video
+    const processedVideo = await fs.readFile(outputPath);
+
+    // Clean up temporary files
+    for (const tempFile of tempFiles) {
+      await fs.unlink(tempFile);
+    }
+    await fs.unlink(outputPath);
+
+    // Send the processed video
+    res.set('Content-Type', 'video/mp4');
+    res.send(processedVideo);
+
+  } catch (error) {
+    console.error('Error processing video transition:', error);
+
+    // Clean up on error
+    for (const tempFile of tempFiles) {
+      try { await fs.unlink(tempFile); } catch (e) { /* ignore */ }
+    }
+    if (outputPath) {
+      try { await fs.unlink(outputPath); } catch (e) { /* ignore */ }
+    }
+
+    res.status(500).json({ error: error.message || 'Failed to process video transition' });
+  }
+});
+
+// Helper function to build crossfade filter
+function buildCrossfadeFilter(numVideos, duration, transition = 'fade') {
+  if (numVideos < 2) {
+    throw new Error('At least 2 videos required for crossfade');
+  }
+
+  let filters = [];
+  let audioFilters = [];
+  
+  // For each pair of videos, we need to determine the offset
+  // Since we don't have actual durations, we'll use a simplified approach
+  // that assumes we'll calculate offsets dynamically or use a fixed overlap
+  
+  if (numVideos === 2) {
+    // Simple case: two videos
+    filters.push(`[0:v][1:v]xfade=transition=${transition}:duration=${duration}:offset=0[v]`);
+    audioFilters.push(`[0:a][1:a]acrossfade=d=${duration}[a]`);
+  } else {
+    // Multiple videos: chain xfades
+    // First transition
+    filters.push(`[0:v][1:v]xfade=transition=${transition}:duration=${duration}:offset=0[v01]`);
+    audioFilters.push(`[0:a][1:a]acrossfade=d=${duration}[a01]`);
+    
+    // Chain subsequent transitions
+    for (let i = 2; i < numVideos; i++) {
+      const prevLabel = i === 2 ? 'v01' : `v0${i-1}`;
+      const currLabel = `v0${i}`;
+      const prevAudioLabel = i === 2 ? 'a01' : `a0${i-1}`;
+      const currAudioLabel = `a0${i}`;
+      
+      filters.push(`[${prevLabel}][${i}:v]xfade=transition=${transition}:duration=${duration}:offset=0[${currLabel}]`);
+      audioFilters.push(`[${prevAudioLabel}][${i}:a]acrossfade=d=${duration}[${currAudioLabel}]`);
+    }
+    
+    // Rename final output
+    const finalVideoLabel = `v0${numVideos-1}`;
+    const finalAudioLabel = `a0${numVideos-1}`;
+    filters.push(`[${finalVideoLabel}]null[v]`);
+    audioFilters.push(`[${finalAudioLabel}]anull[a]`);
+  }
+  
+  return [...filters, ...audioFilters].join(';');
+}
+
+// Helper function to build wipe/slide filter
+function buildWipeFilter(numVideos, duration, transition) {
+  if (numVideos < 2) {
+    throw new Error('At least 2 videos required for wipe transition');
+  }
+
+  let filters = [];
+  let audioFilters = [];
+  
+  if (numVideos === 2) {
+    filters.push(`[0:v][1:v]xfade=transition=${transition}:duration=${duration}:offset=0[v]`);
+    audioFilters.push(`[0:a][1:a]acrossfade=d=${duration}[a]`);
+  } else {
+    // Chain multiple wipes
+    filters.push(`[0:v][1:v]xfade=transition=${transition}:duration=${duration}:offset=0[v01]`);
+    audioFilters.push(`[0:a][1:a]acrossfade=d=${duration}[a01]`);
+    
+    for (let i = 2; i < numVideos; i++) {
+      const prevLabel = i === 2 ? 'v01' : `v0${i-1}`;
+      const currLabel = `v0${i}`;
+      const prevAudioLabel = i === 2 ? 'a01' : `a0${i-1}`;
+      const currAudioLabel = `a0${i}`;
+      
+      filters.push(`[${prevLabel}][${i}:v]xfade=transition=${transition}:duration=${duration}:offset=0[${currLabel}]`);
+      audioFilters.push(`[${prevAudioLabel}][${i}:a]acrossfade=d=${duration}[${currAudioLabel}]`);
+    }
+    
+    const finalVideoLabel = `v0${numVideos-1}`;
+    const finalAudioLabel = `a0${numVideos-1}`;
+    filters.push(`[${finalVideoLabel}]null[v]`);
+    audioFilters.push(`[${finalAudioLabel}]anull[a]`);
+  }
+  
+  return [...filters, ...audioFilters].join(';');
+}
+
+// Helper function to build fade to black filter
+function buildFadeFilter(numVideos, duration) {
+  if (numVideos < 2) {
+    throw new Error('At least 2 videos required for fade transition');
+  }
+
+  let filters = [];
+  let audioFilters = [];
+  
+  // Fade out first video, fade in second video, then concatenate
+  if (numVideos === 2) {
+    filters.push(
+      `[0:v]fade=t=out:st=0:d=${duration}[v0fade];` +
+      `[1:v]fade=t=in:st=0:d=${duration}[v1fade];` +
+      `[v0fade][v1fade]concat=n=2:v=1:a=0[v]`
+    );
+    audioFilters.push(
+      `[0:a]afade=t=out:st=0:d=${duration}[a0fade];` +
+      `[1:a]afade=t=in:st=0:d=${duration}[a1fade];` +
+      `[a0fade][a1fade]concat=n=2:v=0:a=1[a]`
+    );
+  } else {
+    // Multiple videos
+    let videoLabels = [];
+    let audioLabels = [];
+    
+    for (let i = 0; i < numVideos; i++) {
+      const vLabel = `v${i}fade`;
+      const aLabel = `a${i}fade`;
+      
+      if (i === 0) {
+        // First video: fade out at end
+        filters.push(`[${i}:v]fade=t=out:st=0:d=${duration}[${vLabel}]`);
+        audioFilters.push(`[${i}:a]afade=t=out:st=0:d=${duration}[${aLabel}]`);
+      } else if (i === numVideos - 1) {
+        // Last video: fade in at start
+        filters.push(`[${i}:v]fade=t=in:st=0:d=${duration}[${vLabel}]`);
+        audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration}[${aLabel}]`);
+      } else {
+        // Middle videos: fade in and out
+        filters.push(`[${i}:v]fade=t=in:st=0:d=${duration},fade=t=out:st=0:d=${duration}[${vLabel}]`);
+        audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration},afade=t=out:st=0:d=${duration}[${aLabel}]`);
+      }
+      
+      videoLabels.push(`[${vLabel}]`);
+      audioLabels.push(`[${aLabel}]`);
+    }
+    
+    filters.push(`${videoLabels.join('')}concat=n=${numVideos}:v=1:a=0[v]`);
+    audioFilters.push(`${audioLabels.join('')}concat=n=${numVideos}:v=0:a=1[a]`);
+  }
+  
+  return [...filters, ...audioFilters].join(';');
+}
 
 // Stripe checkout session creation endpoint
 app.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
