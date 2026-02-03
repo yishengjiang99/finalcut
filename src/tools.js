@@ -471,18 +471,10 @@ export const tools = [
     type: 'function',
     function: {
       name: 'add_video_transition',
-      description: 'Add professional transitions between multiple video clips. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions.',
+      description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos.',
       parameters: {
         type: 'object',
         properties: {
-          videos: {
-            type: 'array',
-            description: 'Array of video data (Uint8Array) for each clip. At least 2 clips are required.',
-            items: {
-              type: 'object',
-              description: 'Video clip data'
-            }
-          },
           transition: {
             type: 'string',
             description: 'Type of transition to apply between clips.',
@@ -494,7 +486,7 @@ export const tools = [
             default: 1
           }
         },
-        required: ['videos', 'transition']
+        required: ['transition']
       }
     }
   }

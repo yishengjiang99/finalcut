@@ -474,12 +474,21 @@ export const toolFunctions = {
     }
   },
   
-  add_video_transition: async (args, videoFileData, setVideoFileData, addMessage) => {
+  add_video_transition: async (args, videoFileData, setVideoFileData, addMessage, uploadedVideos) => {
     try {
-      // Validate inputs
-      if (!args.videos || !Array.isArray(args.videos) || args.videos.length < 2) {
-        throw new Error('At least two video clips are required for transitions');
+      // Use uploaded videos if available, otherwise expect videos in args
+      let videosToProcess = [];
+      
+      if (uploadedVideos && uploadedVideos.length >= 2) {
+        // Use the uploaded videos from the UI
+        videosToProcess = uploadedVideos.map(v => v.data);
+      } else if (args.videos && Array.isArray(args.videos) && args.videos.length >= 2) {
+        // Fallback to videos passed in args (for testing or direct calls)
+        videosToProcess = args.videos;
+      } else {
+        throw new Error('At least two video clips are required for transitions. Please upload multiple videos first.');
       }
+      
       if (!args.transition) {
         throw new Error('Transition type is required');
       }
@@ -487,7 +496,7 @@ export const toolFunctions = {
       const formData = new FormData();
       
       // Add all video files
-      args.videos.forEach((videoData, index) => {
+      videosToProcess.forEach((videoData, index) => {
         const videoBlob = new Blob([videoData], { type: 'video/mp4' });
         formData.append('videos', videoBlob, `input-${index}.mp4`);
       });
@@ -511,8 +520,8 @@ export const toolFunctions = {
       
       setVideoFileData(data); // Update video data for subsequent edits
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-      addMessage(`Processed video with ${args.transition} transition:`, false, videoUrl, 'processed', 'video/mp4');
-      return `Video transition (${args.transition}) applied successfully.`;
+      addMessage(`Processed video with ${args.transition} transition between ${videosToProcess.length} clips:`, false, videoUrl, 'processed', 'video/mp4');
+      return `Video transition (${args.transition}) applied successfully to ${videosToProcess.length} clips.`;
     } catch (error) {
       addMessage('Error applying video transition: ' + error.message, false);
       return 'Failed to apply video transition: ' + error.message;

@@ -78,7 +78,7 @@ describe('Video Transitions', () => {
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toBe('Video transition (crossfade) applied successfully.');
+      expect(result).toContain('Video transition (crossfade) applied successfully');
       expect(mockSetVideoFileData).toHaveBeenCalled();
       expect(mockAddMessage).toHaveBeenCalledWith(
         expect.stringContaining('crossfade transition'),
@@ -103,7 +103,7 @@ describe('Video Transitions', () => {
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toBe('Video transition (fade) applied successfully.');
+      expect(result).toContain('Video transition (fade) applied successfully');
     });
 
     it('should successfully apply wipe_left transition', async () => {
@@ -117,7 +117,7 @@ describe('Video Transitions', () => {
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toBe('Video transition (wipe_left) applied successfully.');
+      expect(result).toContain('Video transition (wipe_left) applied successfully');
     });
 
     it('should successfully apply slide_right transition', async () => {
@@ -130,7 +130,7 @@ describe('Video Transitions', () => {
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toBe('Video transition (slide_right) applied successfully.');
+      expect(result).toContain('Video transition (slide_right) applied successfully');
     });
 
     it('should successfully apply dissolve transition', async () => {
@@ -143,7 +143,7 @@ describe('Video Transitions', () => {
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toBe('Video transition (dissolve) applied successfully.');
+      expect(result).toContain('Video transition (dissolve) applied successfully');
     });
 
     it('should handle multiple videos (more than 2)', async () => {
@@ -158,7 +158,7 @@ describe('Video Transitions', () => {
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toBe('Video transition (crossfade) applied successfully.');
+      expect(result).toContain('Video transition (crossfade) applied successfully');
     });
 
     it('should use default duration of 1 second if not specified', async () => {
@@ -225,7 +225,7 @@ describe('Video Transitions', () => {
           mockAddMessage
         );
         
-        expect(result).toBe(`Video transition (${transition}) applied successfully.`);
+        expect(result).toContain(`Video transition (${transition}) applied successfully`);
       }
     });
   });
