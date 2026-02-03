@@ -169,7 +169,15 @@ export default function App() {
           for (const call of msg.tool_calls) {
             const funcName = call.function.name;
             const args = JSON.parse(call.function.arguments);
-            const result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage, uploadedVideos);
+            
+            // Pass uploadedVideos only to functions that need it
+            let result;
+            if (funcName === 'add_video_transition') {
+              result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage, uploadedVideos);
+            } else {
+              result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage);
+            }
+            
             currentMessages.push({
               role: 'tool',
               tool_call_id: call.id,
@@ -253,7 +261,7 @@ export default function App() {
       // Show all uploaded files in the chat
       const uploadedMessages = newVideos.map((video, index) => ({
         role: 'user',
-        content: `${index === 0 ? 'Selected' : 'Also selected'} ${video.isAudio ? 'audio' : 'video'}: ${video.name}`,
+        content: `Uploaded ${video.isAudio ? 'audio' : 'video'}: ${video.name}`,
         videoUrl: video.url,
         videoType: 'original',
         mimeType: video.mimeType,
