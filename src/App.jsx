@@ -512,7 +512,7 @@ export default function App() {
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', gap: '8px', borderTop: '1px solid #30363d', backgroundColor: '#161b22' }}>
-          <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" capture="environment" multiple style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
+          <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" multiple style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input 
               type="text" 
