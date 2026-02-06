@@ -11,7 +11,16 @@ export default function App() {
   const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
-  const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: 0 }]);
+  
+  // Create welcome message with sample links
+  const welcomeMessage = {
+    role: 'assistant',
+    content: 'Welcome to FinalCut! Upload a video or audio file to get started. Try these sample commands:',
+    id: 0,
+    showSampleLinks: true
+  };
+  
+  const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: -1 }, welcomeMessage]);
   const [chatInput, setChatInput] = useState('');
   const [videoFileData, setVideoFileData] = useState(null);
   const [uploadedVideos, setUploadedVideos] = useState([]); // Array of {data: Uint8Array, url: string, name: string, mimeType: string}
@@ -104,9 +113,9 @@ export default function App() {
     verifyPayment();
   }, []);
 
-  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null) => {
+  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null, showSampleLinks = false) => {
     const id = messageIdCounterRef.current++;
-    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id }]);
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, showSampleLinks }]);
   };
 
   const getVideoTitle = (videoType) => {
@@ -373,17 +382,25 @@ export default function App() {
     e.target.value = '';
   };
 
-  const handleSend = async () => {
-    const text = chatInput.trim();
+  const handleSend = async (textOverride = null) => {
+    const text = (textOverride || chatInput).trim();
     if (!text || !videoFileData) {
       if (!videoFileData) alert('Please upload a video or audio file first.');
       return;
     }
-    setChatInput('');
+    if (!textOverride) setChatInput('');
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
     await callAPI(newMessages);
+  };
+
+  const handleSampleClick = (sampleText) => {
+    if (!videoFileData) {
+      alert('Please upload a video or audio file first.');
+      return;
+    }
+    handleSend(sampleText);
   };
 
   const handleGetStarted = () => {
@@ -581,6 +598,136 @@ export default function App() {
           {messages.slice(1).map((msg) => (
             <div key={msg.id} style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '8px', maxWidth: '80%', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', marginLeft: msg.role === 'user' ? 'auto' : 0, marginRight: msg.role === 'user' ? 0 : 'auto', backgroundColor: msg.role === 'user' ? '#d0d0d0' : '#21262d', color: msg.role === 'user' ? '#000000' : '#c9d1d9', wordWrap: 'break-word' }}>
               <p style={{ margin: 0 }}>{msg.content}</p>
+              {msg.showSampleLinks && (
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <button 
+                    onClick={() => handleSampleClick('Resize this video to 1280x720')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    📐 Resize this video to 1280x720
+                  </button>
+                  <button 
+                    onClick={() => handleSampleClick('Add text "Hello World" at the center of the video')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    ✏️ Add text "Hello World" at the center
+                  </button>
+                  <button 
+                    onClick={() => handleSampleClick('Trim the video to keep only seconds 5 to 15')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    ✂️ Trim video from 5 to 15 seconds
+                  </button>
+                  <button 
+                    onClick={() => handleSampleClick('Make the video play at 2x speed')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    ⚡ Make video play at 2x speed
+                  </button>
+                  <button 
+                    onClick={() => handleSampleClick('Increase the brightness by 0.3')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    💡 Increase brightness by 0.3
+                  </button>
+                  <button 
+                    onClick={() => handleSampleClick('Adjust audio volume to 150%')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    🔊 Adjust audio volume to 150%
+                  </button>
+                  <button 
+                    onClick={() => handleSampleClick('Convert this video to 9:16 aspect ratio for Instagram')}
+                    style={{ 
+                      padding: '8px 12px', 
+                      backgroundColor: '#1f6feb', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                  >
+                    📱 Convert to 9:16 for Instagram/TikTok
+                  </button>
+                </div>
+              )}
               {msg.videoUrl && (
                 <div style={{ marginTop: '8px' }}>
                   {msg.videoUrl}
