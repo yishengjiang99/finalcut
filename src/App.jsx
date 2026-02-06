@@ -3,6 +3,30 @@ import { tools, systemPrompt } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 
+// Sample button style constant
+const sampleButtonStyle = { 
+  padding: '8px 12px', 
+  backgroundColor: '#1f6feb', 
+  color: '#ffffff', 
+  border: 'none', 
+  borderRadius: '6px', 
+  cursor: 'pointer',
+  fontSize: '14px',
+  textAlign: 'left',
+  transition: 'background-color 0.2s'
+};
+
+// Sample commands for quick access
+const sampleCommands = [
+  { icon: '📐', text: 'Resize this video to 1280x720' },
+  { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
+  { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15' },
+  { icon: '⚡', text: 'Make the video play at 2x speed' },
+  { icon: '💡', text: 'Increase the brightness by 0.3' },
+  { icon: '🔊', text: 'Adjust audio volume to 150%' },
+  { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
+];
+
 export default function App() {
   const [showLanding, setShowLanding] = useState(true); // Show landing page initially
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
@@ -28,30 +52,6 @@ export default function App() {
   const [fileMimeType, setFileMimeType] = useState(''); // Store MIME type for proper detection
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const chatWindowRef = useRef(null);
-
-  // Sample button style constant
-  const sampleButtonStyle = { 
-    padding: '8px 12px', 
-    backgroundColor: '#1f6feb', 
-    color: '#ffffff', 
-    border: 'none', 
-    borderRadius: '6px', 
-    cursor: 'pointer',
-    fontSize: '14px',
-    textAlign: 'left',
-    transition: 'background-color 0.2s'
-  };
-  
-  // Sample commands for quick access
-  const sampleCommands = [
-    { icon: '📐', text: 'Resize this video to 1280x720' },
-    { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
-    { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15' },
-    { icon: '⚡', text: 'Make the video play at 2x speed' },
-    { icon: '💡', text: 'Increase the brightness by 0.3' },
-    { icon: '🔊', text: 'Adjust audio volume to 150%' },
-    { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
-  ];
 
   useEffect(() => {
     if (chatWindowRef.current) {
@@ -590,6 +590,9 @@ export default function App() {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .sample-button:hover {
+          background-color: #1a5fc9 !important;
+        }
       `}</style>
       <main style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', backgroundColor: '#0d1117', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Processing Spinner Overlay */}
@@ -629,8 +632,7 @@ export default function App() {
                       key={idx}
                       onClick={() => handleSampleClick(cmd.text)}
                       style={sampleButtonStyle}
-                      onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
-                      onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                      className="sample-button"
                     >
                       {cmd.icon} {cmd.text}
                     </button>
