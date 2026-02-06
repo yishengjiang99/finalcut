@@ -420,10 +420,6 @@ export default function App() {
   };
 
   const handleSampleClick = (sampleText) => {
-    if (!videoFileData) {
-      alert('Please upload a video or audio file first.');
-      return;
-    }
     handleSend(sampleText);
   };
 
