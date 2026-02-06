@@ -290,7 +290,7 @@ app.get('/api/auth/status', apiLimiter, (req, res) => {
   }
 });
 
-// Proxy endpoint for xAI API
+// Proxy endpoint for xAI API with streaming support
 app.post('/api/chat', apiLimiter, async (req, res) => {
   try {
     // Basic request validation
@@ -302,7 +302,7 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid messages format' });
     }
 
-    // Update the model to grok-3
+    // Enable streaming for xAI API
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -311,7 +311,8 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
       },
       body: JSON.stringify({
         ...req.body,
-        model: 'grok-3' // Specify the new model here
+        model: 'grok-3', // Specify the new model here
+        stream: true // Enable streaming
       })
     });
 
@@ -320,8 +321,29 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
       return res.status(response.status).json({ error: error.message });
     }
 
-    const data = await response.json();
-    res.json(data);
+    // Set headers for Server-Sent Events (SSE)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Stream the response chunks to the client
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Decode the chunk and send it to the client
+        const chunk = decoder.decode(value, { stream: true });
+        res.write(chunk);
+      }
+      res.end();
+    } catch (streamError) {
+      console.error('Error streaming response:', streamError);
+      res.end();
+    }
   } catch (error) {
     console.error('Error in /api/chat:', error);
     res.status(500).json({ error: 'Internal server error' });
