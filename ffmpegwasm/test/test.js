@@ -91,7 +91,7 @@ function toArgsNL(argsArray) {
 
 async function loadFFmpegModule() {
     // ffmpeg.js is an ES module default-exporting the factory (MODULARIZE=1, EXPORT_ES6=1).
-    const createModule = (await import("../dist/ffmpeg.js")).default;
+    const createModule = (await import("../ffmpeg.js")).default;
 
     // locateFile controls where ffmpeg.wasm is loaded from.
     const mod = await createModule({

@@ -1,8 +1,8 @@
 all:
-	make clean; make build; cp dist/* ../public
+	make clean; make build; cp ffmpeg.* ../public
 		
 clean:
-	rm -f ./dist/*
+	rm -f ffmpeg.js ffmpeg.wasm
 
 build:
-	docker build --output ./dist .
+	docker build --target build --output . .

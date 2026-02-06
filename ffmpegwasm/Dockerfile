@@ -87,6 +87,10 @@ RUN emconfigure ./configure \
 
 # ---- Copy wrapper ----
 WORKDIR /src
+COPY package*.json /src/
+
+
+COPY . /src/
 COPY wrapper.c .
 
 # ---- Link final wasm module (size-optimized) ----
@@ -96,6 +100,7 @@ COPY wrapper.c .
 # - --closure 1 minifies JS glue (no npm)
 # - EXPORT_NAME makes module name stable
 # - ASSERTIONS=0 for size
+
 RUN emcc wrapper.c \
     -I${PREFIX}/include \
     -L${PREFIX}/lib \
