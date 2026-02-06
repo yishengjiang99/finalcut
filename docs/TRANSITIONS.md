@@ -152,12 +152,23 @@ Produce engaging content for Instagram Reels, TikTok, or YouTube Shorts with qui
 4. **Duration**: Transition durations are applied uniformly between all clips
 5. **Current Implementation**: The current version uses FFmpeg's `concat` filter for combining clips with basic fade effects. For true crossfade/xfade transitions with overlap, video durations need to be detected first via ffprobe, which will be added in a future version.
 
+## Audio Handling
+
+The transition system intelligently handles videos with and without audio streams:
+
+- **All videos have audio**: Audio streams are concatenated along with video
+- **No videos have audio**: Only video streams are concatenated (no audio output)
+- **Mixed (some have audio, some don't)**: Silent audio tracks are automatically added to videos without audio before concatenation, ensuring smooth audio transitions
+
+This ensures that transitions work correctly even when combining videos from different sources that may or may not have audio tracks.
+
 ## Technical Notes
 
 The current implementation uses a simplified approach for transitions:
 - **Concat-based**: Videos are concatenated using FFmpeg's concat filter
 - **Fade effects**: Fade in/out effects are applied at clip boundaries
-- **Audio mixing**: Audio tracks are concatenated smoothly
+- **Audio mixing**: Audio tracks are concatenated smoothly with automatic silent audio generation when needed
+- **Audio stream detection**: Uses ffprobe to detect which videos have audio streams before building the filter graph
 
 Future versions will support:
 - True xfade transitions with proper video overlap
