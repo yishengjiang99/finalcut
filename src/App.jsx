@@ -27,6 +27,14 @@ const sampleCommands = [
   { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
 ];
 
+// Welcome message with sample links
+const welcomeMessage = {
+  role: 'assistant',
+  content: 'Welcome to FinalCut! Upload a video or audio file to get started. Try these sample commands:',
+  id: 0,
+  showSampleLinks: true
+};
+
 export default function App() {
   const [showLanding, setShowLanding] = useState(true); // Show landing page initially
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
@@ -35,14 +43,6 @@ export default function App() {
   const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
-  
-  // Create welcome message with sample links
-  const welcomeMessage = {
-    role: 'assistant',
-    content: 'Welcome to FinalCut! Upload a video or audio file to get started. Try these sample commands:',
-    id: 0,
-    showSampleLinks: true
-  };
   
   const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: -1 }, welcomeMessage]);
   const [chatInput, setChatInput] = useState('');
