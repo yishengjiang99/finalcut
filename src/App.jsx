@@ -3,6 +3,38 @@ import { tools, systemPrompt } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 
+// Sample button style constant
+const sampleButtonStyle = { 
+  padding: '8px 12px', 
+  backgroundColor: '#1f6feb', 
+  color: '#ffffff', 
+  border: 'none', 
+  borderRadius: '6px', 
+  cursor: 'pointer',
+  fontSize: '14px',
+  textAlign: 'left',
+  transition: 'background-color 0.2s'
+};
+
+// Sample commands for quick access
+const sampleCommands = [
+  { icon: '📐', text: 'Resize this video to 1280x720' },
+  { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
+  { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15' },
+  { icon: '⚡', text: 'Make the video play at 2x speed' },
+  { icon: '💡', text: 'Increase the brightness by 0.3' },
+  { icon: '🔊', text: 'Adjust audio volume to 150%' },
+  { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
+];
+
+// Welcome message with sample links
+const welcomeMessage = {
+  role: 'assistant',
+  content: 'Welcome to FinalCut! Upload a video or audio file to get started. Try these sample commands:',
+  id: 0,
+  showSampleLinks: true
+};
+
 export default function App() {
   const [showLanding, setShowLanding] = useState(true); // Show landing page initially
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
@@ -11,7 +43,8 @@ export default function App() {
   const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
-  const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: 0 }]);
+  
+  const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: -1 }, welcomeMessage]);
   const [chatInput, setChatInput] = useState('');
   const [videoFileData, setVideoFileData] = useState(null);
   const [uploadedVideos, setUploadedVideos] = useState([]); // Array of {data: Uint8Array, url: string, name: string, mimeType: string}
@@ -104,9 +137,9 @@ export default function App() {
     verifyPayment();
   }, []);
 
-  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null) => {
+  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null, showSampleLinks = false) => {
     const id = messageIdCounterRef.current++;
-    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id }]);
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, showSampleLinks }]);
   };
 
   const getVideoTitle = (videoType) => {
@@ -373,17 +406,21 @@ export default function App() {
     e.target.value = '';
   };
 
-  const handleSend = async () => {
-    const text = chatInput.trim();
+  const handleSend = async (textOverride = null) => {
+    const text = (textOverride || chatInput).trim();
     if (!text || !videoFileData) {
       if (!videoFileData) alert('Please upload a video or audio file first.');
       return;
     }
-    setChatInput('');
+    if (!textOverride) setChatInput('');
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
     await callAPI(newMessages);
+  };
+
+  const handleSampleClick = (sampleText) => {
+    handleSend(sampleText);
   };
 
   const handleGetStarted = () => {
@@ -549,6 +586,9 @@ export default function App() {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .sample-button:hover {
+          background-color: #1a5fc9 !important;
+        }
       `}</style>
       <main style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', backgroundColor: '#0d1117', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Processing Spinner Overlay */}
@@ -581,6 +621,20 @@ export default function App() {
           {messages.slice(1).map((msg) => (
             <div key={msg.id} style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '8px', maxWidth: '80%', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', marginLeft: msg.role === 'user' ? 'auto' : 0, marginRight: msg.role === 'user' ? 0 : 'auto', backgroundColor: msg.role === 'user' ? '#d0d0d0' : '#21262d', color: msg.role === 'user' ? '#000000' : '#c9d1d9', wordWrap: 'break-word' }}>
               <p style={{ margin: 0 }}>{msg.content}</p>
+              {msg.showSampleLinks && (
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {sampleCommands.map((cmd, idx) => (
+                    <button 
+                      key={idx}
+                      onClick={() => handleSampleClick(cmd.text)}
+                      style={sampleButtonStyle}
+                      className="sample-button"
+                    >
+                      {cmd.icon} {cmd.text}
+                    </button>
+                  ))}
+                </div>
+              )}
               {msg.videoUrl && (
                 <div style={{ marginTop: '8px' }}>
                   {msg.videoUrl}
