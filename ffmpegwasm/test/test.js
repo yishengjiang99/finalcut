@@ -89,22 +89,24 @@ function toArgsNL(argsArray) {
     return ["ffmpeg", ...argsArray].join("\n");
 }
 
+// test.js
+
 async function loadFFmpegModule() {
-    // ffmpeg.js is an ES module default-exporting the factory (MODULARIZE=1, EXPORT_ES6=1).
-    const createModule = (await import("../ffmpeg.js")).default;
+    // Import from dist folder
+    const { default: FFmpegWasm } = await import("../dist/ffmpeg.js");
 
-    // locateFile controls where ffmpeg.wasm is loaded from.
-    const mod = await createModule({
-        locateFile: (p) => (p.endsWith(".wasm") ? "../" + p : p),
+    const mod = await FFmpegWasm({
+        locateFile(path) {
+            // Ensures ffmpeg.wasm is loaded from dist/
+            if (path.endsWith(".wasm")) {
+                return "../dist/" + path;
+            }
+            return path;
+        }
     });
-
-    // Create a working directory to keep tests clean.
-    try { mod.FS.mkdir("/work"); } catch { }
-    mod.FS.chdir("/work");
 
     return mod;
 }
-
 async function runAll() {
     statusEl.textContent = "Initializing ffmpeg module…";
     const mod = await loadFFmpegModule();
