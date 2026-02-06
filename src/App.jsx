@@ -138,7 +138,7 @@ export default function App() {
       const decoder = new TextDecoder();
       let buffer = '';
       let streamedContent = '';
-      let streamedToolCalls = [];
+      let streamedToolCalls = {}; // Use object instead of array to handle non-sequential indices
       let currentMessageId = null;
 
       while (true) {
@@ -216,6 +216,9 @@ export default function App() {
         }
       }
 
+      // Convert tool calls object to array
+      const toolCallsArray = Object.values(streamedToolCalls);
+
       // Mark the streaming message as complete
       if (currentMessageId !== null) {
         setMessages(prev => prev.map(msg => 
@@ -225,29 +228,29 @@ export default function App() {
         ));
       }
 
-      // Prepare the final message for history
-      const finalMessage = {
-        role: 'assistant',
-        content: streamedContent || null,
-        id: currentMessageId || messageIdCounterRef.current++
-      };
+      // Only prepare final message if we have content or tool calls
+      if (streamedContent || toolCallsArray.length > 0) {
+        const finalMessage = {
+          role: 'assistant',
+          content: streamedContent || null,
+          id: currentMessageId !== null ? currentMessageId : messageIdCounterRef.current++
+        };
 
-      if (streamedToolCalls.length > 0) {
-        finalMessage.tool_calls = streamedToolCalls;
-      }
+        if (toolCallsArray.length > 0) {
+          finalMessage.tool_calls = toolCallsArray;
+        }
 
-      // Add assistant message to history
-      if (finalMessage.content || finalMessage.tool_calls) {
+        // Add assistant message to history
         currentMessages.push(finalMessage);
       }
 
       // Process tool calls if any
-      if (streamedToolCalls.length > 0) {
+      if (toolCallsArray.length > 0) {
         // Server-side processing - show spinner during ffmpeg processing
         setProcessing(true);
         
         try {
-          for (const call of streamedToolCalls) {
+          for (const call of toolCallsArray) {
             const funcName = call.function.name;
             const args = JSON.parse(call.function.arguments);
             
