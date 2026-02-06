@@ -1,12 +1,3 @@
-# Makefile for ffmpeg-wasm build/test workflow (no npm)
-# Assumes:
-#   - Dockerfile (multi-stage artifact output)
-#   - wrapper.c
-#   - tests/ (optional)
-# Produces:
-#   dist/ffmpeg.js
-#   dist/ffmpeg.wasm
-
 SHELL := /bin/bash
 
 IMAGE      ?= ffmpeg-wasm
@@ -18,16 +9,15 @@ DIST_DIR   ?= dist
 DOCKER_BUILDKIT ?= 1
 export DOCKER_BUILDKIT
 
-.PHONY: help build dev release clean dist serve test logs shell
+.PHONY: help build dev release clean dist serve test
 
 help:
 	@echo "Targets:"
 	@echo "  make dev        # fast build (no LTO/closure)"
 	@echo "  make release    # smaller wasm (LTO + closure)"
 	@echo "  make build      # build with BUILD_MODE=$(BUILD_MODE)"
-	@echo "  make serve      # serve current dir on http://localhost:$(PORT)"
-	@echo "  make test       # build (dev) then serve (manual open tests page)"
-	@echo "  make clean      # remove dist/ outputs"
+	@echo "  make serve      # serve dist/ on http://localhost:$(PORT)"
+	@echo "  make clean      # remove dist outputs"
 	@echo ""
 	@echo "Vars:"
 	@echo "  BUILD_MODE=dev|release"
@@ -39,7 +29,7 @@ help:
 dist:
 	@mkdir -p "$(DIST_DIR)"
 
-# Build artifacts directly into dist/ using BuildKit --output (no docker create/cp)
+# Build artifacts directly into dist/ (no docker create/cp)
 build: dist
 	@echo "==> Building $(IMAGE) (mode=$(BUILD_MODE), ref=$(FFMPEG_REF))"
 	@docker build \
@@ -60,20 +50,10 @@ clean:
 	@rmdir "$(DIST_DIR)" 2>/dev/null || true
 
 serve:
-	@echo "==> Serving http://localhost:$(PORT)"
-	@echo "   Open: http://localhost:$(PORT)/tests/test.html"
-	@cd . && python3 -m http.server "$(PORT)"
+	@echo "==> Serving dist/ at http://localhost:$(PORT)"
+	@cd "$(DIST_DIR)" && python3 -m http.server "$(PORT)"
 
-# Convenience: build dev + serve (you still open the page manually)
+# Optional convenience: build dev + serve
 test:
 	@$(MAKE) dev
 	@$(MAKE) serve
-
-# Optional helpers (only useful if you keep the image tagged)
-logs:
-	@echo "No runtime logs (artifact image). Use build output logs in docker build."
-
-shell:
-	@echo "This image is an artifact (scratch). Use the build stage if you want a shell:"
-	@echo "  docker build --target build -t $(IMAGE)-build ."
-	@echo "  docker run -it --rm $(IMAGE)-build bash"

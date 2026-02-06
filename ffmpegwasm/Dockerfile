@@ -4,13 +4,10 @@ FROM emscripten/emsdk:3.1.64 AS build
 
 ARG FFMPEG_REF=n6.1.1
 ARG BUILD_MODE=dev
-# BUILD_MODE=dev  -> fast iteration (no LTO, no closure)
-# BUILD_MODE=release -> smaller wasm (LTO + closure)
 
 ENV PREFIX=/opt/ffmpeg-wasm
 ENV CCACHE_DIR=/ccache
 
-# ---- deps (cached) ----
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -19,31 +16,24 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 WORKDIR /src
 
-# ---- FFmpeg source (cached by layer) ----
 RUN git clone https://github.com/FFmpeg/FFmpeg.git FFmpeg \
  && cd FFmpeg \
  && git checkout "${FFMPEG_REF}"
 
 WORKDIR /src/FFmpeg
 
-# ---- ccache wiring for emcc/em++ ----
-# We route compilation through ccache by setting CC/CXX to "ccache emcc" etc.
-# This gives huge speedups on rebuilds (especially if only wrapper changes).
 ENV CC="ccache emcc"
 ENV CXX="ccache em++"
 ENV AR="emar"
 ENV RANLIB="emranlib"
 
-# Common size+compile flags; dev keeps it fast, release adds LTO at link time.
-ENV COMMON_CFLAGS="-O3 -DNDEBUG -ffunction-sections -fdata-sections"
-ENV COMMON_LDFLAGS="-O3 -Wl,--gc-sections"
+ENV COMMON_FLAGS="-O3 -DNDEBUG -ffunction-sections -fdata-sections"
 
-# ---- Configure + Build FFmpeg libs (expensive step; cached + ccache) ----
 RUN --mount=type=cache,target=/ccache,sharing=locked \
     bash -lc '\
-      export CFLAGS="${COMMON_CFLAGS}"; \
-      export CXXFLAGS="${COMMON_CFLAGS}"; \
-      export LDFLAGS="${COMMON_LDFLAGS}"; \
+      export CFLAGS="${COMMON_FLAGS}"; \
+      export CXXFLAGS="${COMMON_FLAGS}"; \
+      export LDFLAGS="-Wl,--gc-sections"; \
       emconfigure ./configure \
         --prefix="${PREFIX}" \
         --enable-cross-compile \
@@ -59,15 +49,10 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
         --disable-runtime-cpudetect \
         --disable-autodetect \
         \
-        --disable-programs \
         --disable-network \
         --disable-devices \
-        --disable-indevs \
-        --disable-outdevs \
-        --disable-postproc \
         --disable-hwaccels \
-        --disable-filters \
-        --disable-bsfs \
+        --disable-postproc \
         --disable-iconv \
         \
         --disable-asm \
@@ -78,35 +63,34 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
         --disable-shared \
         \
         --disable-everything \
-        --enable-avutil \
+        \
         --enable-avcodec \
         --enable-avformat \
+        --enable-avutil \
         --enable-swresample \
         \
         --enable-protocol=file \
         \
+        --enable-ffmpeg \
+        \
         --enable-demuxer=wav,mp3,ogg,flac \
-        --enable-decoder=pcm_s16le,pcm_s16be,pcm_u8,pcm_f32le,mp3,vorbis,opus,flac \
+        --enable-muxer=wav,mp3,ogg \
+        \
+        --enable-decoder=pcm_s16le,pcm_s16be,pcm_u8,mp3,vorbis,opus,flac \
+        --enable-encoder=pcm_s16le \
       && emmake make -j"$(nproc)" \
       && emmake make install \
-      && ccache -s \
     '
 
-# ---- Link stage (fast to iterate) ----
 WORKDIR /src
-COPY wrapper.c .
 
-# Link flags differ for dev/release
 RUN bash -lc '\
   if [ "${BUILD_MODE}" = "release" ]; then \
-    export LINK_EXTRA="-flto -Oz --closure 1 -sASSERTIONS=0"; \
+    export LINK="-flto -Oz --closure 1 -sASSERTIONS=0"; \
   else \
-    export LINK_EXTRA="-O2 -sASSERTIONS=1"; \
+    export LINK="-O2 -sASSERTIONS=1"; \
   fi; \
-  emcc wrapper.c \
-    -I${PREFIX}/include \
-    -L${PREFIX}/lib \
-    -lavformat -lavcodec -lavutil -lswresample \
+  emcc /opt/ffmpeg-wasm/bin/ffmpeg \
     -o ffmpeg.js \
     \
     -sWASM=1 \
@@ -116,10 +100,11 @@ RUN bash -lc '\
     -sENVIRONMENT=web,worker \
     -sALLOW_MEMORY_GROWTH=1 \
     -sFILESYSTEM=1 \
-    -sERROR_ON_UNDEFINED_SYMBOLS=1 \
-    -sEXPORTED_FUNCTIONS='\''["_wav_to_pcm16le_fs","_wasm_malloc","_wasm_free"]'\'' \
-    -sEXPORTED_RUNTIME_METHODS='\''["ccall","cwrap","FS"]'\'' \
-    ${LINK_EXTRA} \
+    \
+    -sEXPORTED_FUNCTIONS='["_main"]' \
+    -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap","FS"]' \
+    \
+    ${LINK} \
 '
 
 FROM scratch AS artifact
