@@ -29,6 +29,30 @@ export default function App() {
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const chatWindowRef = useRef(null);
 
+  // Sample button style constant
+  const sampleButtonStyle = { 
+    padding: '8px 12px', 
+    backgroundColor: '#1f6feb', 
+    color: '#ffffff', 
+    border: 'none', 
+    borderRadius: '6px', 
+    cursor: 'pointer',
+    fontSize: '14px',
+    textAlign: 'left',
+    transition: 'background-color 0.2s'
+  };
+  
+  // Sample commands for quick access
+  const sampleCommands = [
+    { icon: '📐', text: 'Resize this video to 1280x720' },
+    { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
+    { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15' },
+    { icon: '⚡', text: 'Make the video play at 2x speed' },
+    { icon: '💡', text: 'Increase the brightness by 0.3' },
+    { icon: '🔊', text: 'Adjust audio volume to 150%' },
+    { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
+  ];
+
   useEffect(() => {
     if (chatWindowRef.current) {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
@@ -598,45 +622,21 @@ export default function App() {
           {messages.slice(1).map((msg) => (
             <div key={msg.id} style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '8px', maxWidth: '80%', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', marginLeft: msg.role === 'user' ? 'auto' : 0, marginRight: msg.role === 'user' ? 0 : 'auto', backgroundColor: msg.role === 'user' ? '#d0d0d0' : '#21262d', color: msg.role === 'user' ? '#000000' : '#c9d1d9', wordWrap: 'break-word' }}>
               <p style={{ margin: 0 }}>{msg.content}</p>
-              {msg.showSampleLinks && (() => {
-                const sampleButtonStyle = { 
-                  padding: '8px 12px', 
-                  backgroundColor: '#1f6feb', 
-                  color: '#ffffff', 
-                  border: 'none', 
-                  borderRadius: '6px', 
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  textAlign: 'left',
-                  transition: 'background-color 0.2s'
-                };
-                
-                const sampleCommands = [
-                  { icon: '📐', text: 'Resize this video to 1280x720' },
-                  { icon: '✏️', text: 'Add text "Hello World" at the center of the video', label: 'Add text "Hello World" at the center' },
-                  { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15', label: 'Trim video from 5 to 15 seconds' },
-                  { icon: '⚡', text: 'Make the video play at 2x speed', label: 'Make video play at 2x speed' },
-                  { icon: '💡', text: 'Increase the brightness by 0.3', label: 'Increase brightness by 0.3' },
-                  { icon: '🔊', text: 'Adjust audio volume to 150%' },
-                  { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram', label: 'Convert to 9:16 for Instagram/TikTok' }
-                ];
-                
-                return (
-                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {sampleCommands.map((cmd, idx) => (
-                      <button 
-                        key={idx}
-                        onClick={() => handleSampleClick(cmd.text)}
-                        style={sampleButtonStyle}
-                        onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
-                        onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
-                      >
-                        {cmd.icon} {cmd.label || cmd.text}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
+              {msg.showSampleLinks && (
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {sampleCommands.map((cmd, idx) => (
+                    <button 
+                      key={idx}
+                      onClick={() => handleSampleClick(cmd.text)}
+                      style={sampleButtonStyle}
+                      onMouseOver={(e) => e.target.style.backgroundColor = '#1a5fc9'}
+                      onMouseOut={(e) => e.target.style.backgroundColor = '#1f6feb'}
+                    >
+                      {cmd.icon} {cmd.text}
+                    </button>
+                  ))}
+                </div>
+              )}
               {msg.videoUrl && (
                 <div style={{ marginTop: '8px' }}>
                   {msg.videoUrl}
