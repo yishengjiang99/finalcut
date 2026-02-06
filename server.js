@@ -614,6 +614,11 @@ app.post('/api/transition-videos', videoProcessLimiter, upload.array('videos', 1
 
     outputPath = path.join(tmpDir, `output-${timestamp}.mp4`);
 
+    // Check which videos have audio streams
+    const hasAudio = await Promise.all(
+      inputPaths.map(inputPath => checkHasAudioStream(inputPath))
+    );
+
     // Process videos with transition
     await new Promise((resolve, reject) => {
       let command = ffmpeg();
@@ -624,66 +629,78 @@ app.post('/api/transition-videos', videoProcessLimiter, upload.array('videos', 1
       });
 
       let filterComplex = '';
+      let outputLabels = [];
 
       switch (transition) {
         case 'crossfade':
           // Build crossfade filter chain for all videos
           // For 2 videos: [0:v][1:v]xfade=transition=fade:duration=1:offset=<video0_duration-1>[v]
           // For 3+ videos: chain multiple xfades
-          filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration);
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration, hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'wipe_left':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipeleft');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipeleft', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'wipe_right':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wiperight');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wiperight', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'wipe_up':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipeup');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipeup', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'wipe_down':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipedown');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'wipedown', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'slide_left':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideleft');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideleft', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'slide_right':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideright');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideright', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'slide_up':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideup');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slideup', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'slide_down':
-          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slidedown');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildWipeFilter(inputPaths.length, transitionDuration, 'slidedown', hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'dissolve':
           // Dissolve is similar to crossfade with fade transition
-          filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration, 'dissolve');
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration, hasAudio, 'dissolve');
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         case 'fade':
           // Fade to black between clips
-          filterComplex = buildFadeFilter(inputPaths.length, transitionDuration);
-          command = command.complexFilter(filterComplex, ['v', 'a']);
+          filterComplex = buildFadeFilter(inputPaths.length, transitionDuration, hasAudio);
+          outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
+          command = command.complexFilter(filterComplex, outputLabels);
           break;
 
         default:
@@ -693,10 +710,15 @@ app.post('/api/transition-videos', videoProcessLimiter, upload.array('videos', 1
 
       command
         .output(outputPath)
-        .outputOptions('-map', '[v]')
-        .outputOptions('-map', '[a]')
+        .outputOptions('-map', '[v]');
+      
+      // Only map audio if at least one video has audio
+      if (hasAudio.some(h => h)) {
+        command.outputOptions('-map', '[a]').audioCodec('aac');
+      }
+      
+      command
         .videoCodec('libx264')
-        .audioCodec('aac')
         .on('end', () => resolve())
         .on('error', (err) => reject(err))
         .run();
@@ -730,8 +752,25 @@ app.post('/api/transition-videos', videoProcessLimiter, upload.array('videos', 1
   }
 });
 
+// Helper function to check if a video has audio stream
+async function checkHasAudioStream(inputPath) {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(inputPath, (err, metadata) => {
+      if (err) {
+        // If ffprobe fails, assume no audio
+        resolve(false);
+        return;
+      }
+      
+      // Check if there's any audio stream
+      const hasAudio = metadata.streams && metadata.streams.some(stream => stream.codec_type === 'audio');
+      resolve(hasAudio);
+    });
+  });
+}
+
 // Helper function to build crossfade filter
-function buildCrossfadeFilter(numVideos, duration, transition = 'fade') {
+function buildCrossfadeFilter(numVideos, duration, hasAudio, transition = 'fade') {
   if (numVideos < 2) {
     throw new Error('At least 2 videos required for crossfade');
   }
@@ -743,16 +782,43 @@ function buildCrossfadeFilter(numVideos, duration, transition = 'fade') {
   // For proper crossfade with xfade filter, we would need video durations
   // This implementation uses basic concat which is simpler and more reliable
   
-  let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
-  let audioInputs = Array.from({length: numVideos}, (_, i) => `[${i}:a]`).join('');
-  filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
-  audioFilters.push(`${audioInputs}concat=n=${numVideos}:v=0:a=1[a]`);
+  // Check if any video has audio
+  const anyHasAudio = hasAudio.some(h => h);
+  
+  if (anyHasAudio) {
+    // If some videos have audio and some don't, add silent audio to those without
+    const allHasAudio = hasAudio.every(h => h);
+    
+    if (!allHasAudio) {
+      // Generate silent audio for videos without audio
+      for (let i = 0; i < numVideos; i++) {
+        if (!hasAudio[i]) {
+          // Add silent audio track
+          filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[silent${i}]`);
+        }
+      }
+    }
+    
+    // Build video concat
+    let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
+    filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
+    
+    // Build audio concat with proper audio sources
+    let audioInputs = Array.from({length: numVideos}, (_, i) => {
+      return hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
+    }).join('');
+    audioFilters.push(`${audioInputs}concat=n=${numVideos}:v=0:a=1[a]`);
+  } else {
+    // No videos have audio - only concat video streams
+    let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
+    filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
+  }
   
   return [...filters, ...audioFilters].join(';');
 }
 
 // Helper function to build wipe/slide filter
-function buildWipeFilter(numVideos, duration, transition) {
+function buildWipeFilter(numVideos, duration, transition, hasAudio) {
   if (numVideos < 2) {
     throw new Error('At least 2 videos required for wipe transition');
   }
@@ -761,16 +827,43 @@ function buildWipeFilter(numVideos, duration, transition) {
   let filters = [];
   let audioFilters = [];
   
-  let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
-  let audioInputs = Array.from({length: numVideos}, (_, i) => `[${i}:a]`).join('');
-  filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
-  audioFilters.push(`${audioInputs}concat=n=${numVideos}:v=0:a=1[a]`);
+  // Check if any video has audio
+  const anyHasAudio = hasAudio.some(h => h);
+  
+  if (anyHasAudio) {
+    // If some videos have audio and some don't, add silent audio to those without
+    const allHasAudio = hasAudio.every(h => h);
+    
+    if (!allHasAudio) {
+      // Generate silent audio for videos without audio
+      for (let i = 0; i < numVideos; i++) {
+        if (!hasAudio[i]) {
+          // Add silent audio track
+          filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[silent${i}]`);
+        }
+      }
+    }
+    
+    // Build video concat
+    let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
+    filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
+    
+    // Build audio concat with proper audio sources
+    let audioInputs = Array.from({length: numVideos}, (_, i) => {
+      return hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
+    }).join('');
+    audioFilters.push(`${audioInputs}concat=n=${numVideos}:v=0:a=1[a]`);
+  } else {
+    // No videos have audio - only concat video streams
+    let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
+    filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
+  }
   
   return [...filters, ...audioFilters].join(';');
 }
 
 // Helper function to build fade to black filter
-function buildFadeFilter(numVideos, duration) {
+function buildFadeFilter(numVideos, duration, hasAudio) {
   if (numVideos < 2) {
     throw new Error('At least 2 videos required for fade transition');
   }
@@ -784,6 +877,18 @@ function buildFadeFilter(numVideos, duration) {
   let videoLabels = [];
   let audioLabels = [];
   
+  // Check if any video has audio
+  const anyHasAudio = hasAudio.some(h => h);
+  
+  // If some videos have audio and some don't, add silent audio to those without
+  if (anyHasAudio && !hasAudio.every(h => h)) {
+    for (let i = 0; i < numVideos; i++) {
+      if (!hasAudio[i]) {
+        filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[silent${i}]`);
+      }
+    }
+  }
+  
   for (let i = 0; i < numVideos; i++) {
     const vLabel = `v${i}fade`;
     const aLabel = `a${i}fade`;
@@ -792,27 +897,43 @@ function buildFadeFilter(numVideos, duration) {
       // First video in a 2-video sequence: only fade out
       // We'll skip the fade for simplicity since we don't know duration
       filters.push(`[${i}:v]copy[${vLabel}]`);
-      audioFilters.push(`[${i}:a]acopy[${aLabel}]`);
+      if (anyHasAudio) {
+        const audioSource = hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
+        audioFilters.push(`${audioSource}acopy[${aLabel}]`);
+      }
     } else if (i === 0) {
       // First video: no fade needed at start, just copy
       filters.push(`[${i}:v]copy[${vLabel}]`);
-      audioFilters.push(`[${i}:a]acopy[${aLabel}]`);
+      if (anyHasAudio) {
+        const audioSource = hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
+        audioFilters.push(`${audioSource}acopy[${aLabel}]`);
+      }
     } else if (i === numVideos - 1) {
       // Last video: fade in at start
       filters.push(`[${i}:v]fade=t=in:st=0:d=${duration}[${vLabel}]`);
-      audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration}[${aLabel}]`);
+      if (anyHasAudio) {
+        const audioSource = hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
+        audioFilters.push(`${audioSource}afade=t=in:st=0:d=${duration}[${aLabel}]`);
+      }
     } else {
       // Middle videos: fade in at start
       filters.push(`[${i}:v]fade=t=in:st=0:d=${duration}[${vLabel}]`);
-      audioFilters.push(`[${i}:a]afade=t=in:st=0:d=${duration}[${aLabel}]`);
+      if (anyHasAudio) {
+        const audioSource = hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
+        audioFilters.push(`${audioSource}afade=t=in:st=0:d=${duration}[${aLabel}]`);
+      }
     }
     
     videoLabels.push(`[${vLabel}]`);
-    audioLabels.push(`[${aLabel}]`);
+    if (anyHasAudio) {
+      audioLabels.push(`[${aLabel}]`);
+    }
   }
   
   filters.push(`${videoLabels.join('')}concat=n=${numVideos}:v=1:a=0[v]`);
-  audioFilters.push(`${audioLabels.join('')}concat=n=${numVideos}:v=0:a=1[a]`);
+  if (anyHasAudio) {
+    audioFilters.push(`${audioLabels.join('')}concat=n=${numVideos}:v=0:a=1[a]`);
+  }
   
   return [...filters, ...audioFilters].join(';');
 }
