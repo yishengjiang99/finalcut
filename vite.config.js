@@ -11,6 +11,7 @@ export default defineConfig({
     // Sometimes helps sourcemap stability (tradeoff: slightly slower transforms)
     sourcemap: 'inline',
   },
+  mode: 'production',
   base: '/', // Ensure assets are served from the root `/`
   server: {
     headers: {
