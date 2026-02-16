@@ -407,6 +407,10 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           command = command.videoFilters(`rotate=${parsedArgs.angle}*PI/180`).audioCodec('copy');
           break;
 
+        case 'flip_video_horizontal':
+          command = command.videoFilters('hflip').audioCodec('copy');
+          break;
+
         case 'add_text':
           const escapedText = parsedArgs.text
             .replace(/\\/g, '\\\\')

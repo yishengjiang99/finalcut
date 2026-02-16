@@ -96,6 +96,19 @@ export const toolFunctions = {
     }
   },
   
+  flip_video_horizontal: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      const data = await processVideoOnServer('flip_video_horizontal', args, videoFileData);
+      setVideoFileData(data); // Update video data for subsequent edits
+      const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+      addMessage('Processed video (flipped horizontally):', false, videoUrl, 'processed', 'video/mp4');
+      return 'Video flipped horizontally successfully.';
+    } catch (error) {
+      addMessage('Error flipping video horizontally: ' + error.message, false);
+      return 'Failed to flip video horizontally: ' + error.message;
+    }
+  },
+  
   add_text: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       // Validate inputs - explicitly reject empty strings along with null/undefined
