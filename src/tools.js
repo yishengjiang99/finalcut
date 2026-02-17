@@ -48,6 +48,18 @@ export const tools = [
   {
     type: 'function',
     function: {
+      name: 'flip_video_horizontal',
+      description: 'Flip the video horizontally (mirror effect). This creates a mirror image of the video along the vertical axis.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'add_text',
       description: 'Overlay text on the video at a specified position with customizable size and color. Note: This assumes a default font is available in FFmpeg.',
       parameters: {

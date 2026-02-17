@@ -136,6 +136,45 @@ describe('toolFunctions', () => {
     });
   });
 
+  describe('flip_video_horizontal', () => {
+    it('should flip video horizontally without parameters', async () => {
+      const result = await toolFunctions.flip_video_horizontal(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Video flipped horizontally successfully.');
+      expect(mockSetVideoFileData).toHaveBeenCalled();
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        'Processed video (flipped horizontally):',
+        false,
+        'mock-url',
+        'processed',
+        'video/mp4'
+      );
+    });
+
+    it('should handle server errors gracefully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Server error' })
+      });
+
+      const result = await toolFunctions.flip_video_horizontal(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to flip video horizontally');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Error flipping video horizontally'),
+        false
+      );
+    });
+  });
+
   describe('add_text', () => {
     it('should validate text parameter is provided', async () => {
       const result = await toolFunctions.add_text(
