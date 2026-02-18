@@ -6,9 +6,9 @@ import VideoPreview from './VideoPreview.jsx';
 // Sample button style constant
 const sampleButtonStyle = { 
   padding: '8px 12px', 
-  backgroundColor: '#1f6feb', 
-  color: '#ffffff', 
-  border: 'none', 
+  backgroundColor: '#2a2f3a',
+  color: '#d8dee9',
+  border: '1px solid #3a4250',
   borderRadius: '6px', 
   cursor: 'pointer',
   fontSize: '14px',
@@ -519,9 +519,9 @@ export default function App() {
       padding: '15px 40px',
       fontSize: '18px',
       fontWeight: 'bold',
-      backgroundColor: '#1f6feb',
-      color: '#ffffff',
-      border: 'none',
+      backgroundColor: '#2f3644',
+      color: '#e6edf3',
+      border: '1px solid #424a59',
       borderRadius: '8px',
       cursor: 'pointer',
       width: '300px',
@@ -569,27 +569,27 @@ export default function App() {
               <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#ffffff' }}>Available Tools</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>✂️ Video Editing</h3>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>✂️ Video Editing</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Trim, crop, resize, and rotate</p>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎨 Visual Effects</h3>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>🎨 Visual Effects</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Brightness, hue, saturation, text</p>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🎵 Audio Tools</h3>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>🎵 Audio Tools</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Volume, fade, equalizer, filters</p>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>⚡ Speed Control</h3>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>⚡ Speed Control</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Speed up or slow down media</p>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>📱 Social Media</h3>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>📱 Social Media</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Instagram, TikTok, YouTube presets</p>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#58a6ff' }}>🔄 Format Conversion</h3>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>🔄 Format Conversion</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Convert MP4, WebM, MOV formats</p>
                 </div>
               </div>
@@ -634,7 +634,7 @@ export default function App() {
           100% { transform: rotate(360deg); }
         }
         .sample-button:hover {
-          background-color: #1a5fc9 !important;
+          background-color: #353d4a !important;
         }
       `}</style>
       <main style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', backgroundColor: '#0d1117', display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -657,7 +657,7 @@ export default function App() {
               width: '50px',
               height: '50px',
               border: '4px solid #30363d',
-              borderTop: '4px solid #1f6feb',
+              borderTop: '4px solid #8b949e',
               borderRadius: '50%',
               animation: 'spin 1s linear infinite'
             }}></div>
@@ -710,7 +710,7 @@ export default function App() {
                 width: '100%', 
                 padding: '16px', 
                 paddingRight: isCallingAPI ? '50px' : '16px',
-                border: '2px solid #1f6feb', 
+                border: '2px solid #3b4452',
                 borderRadius: '8px', 
                 fontSize: '18px', 
                 fontWeight: '500',
@@ -718,7 +718,7 @@ export default function App() {
                 color: '#c9d1d9',
                 outline: 'none',
                 transition: 'border-color 0.2s, box-shadow 0.2s',
-                boxShadow: '0 0 0 3px rgba(31, 111, 235, 0.1)'
+                boxShadow: '0 0 0 3px rgba(110, 118, 129, 0.18)'
               }} 
             />
             {isCallingAPI && (
@@ -728,13 +728,13 @@ export default function App() {
                 width: '24px',
                 height: '24px',
                 border: '3px solid #30363d',
-                borderTop: '3px solid #1f6feb',
+                borderTop: '3px solid #8b949e',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite'
               }}></div>
             )}
           </div>
-          <button onClick={handleSend} disabled={!videoFileData || isCallingAPI} style={{ padding: '12px 16px', backgroundColor: (videoFileData && !isCallingAPI) ? '#1f6feb' : '#21262d', color: (videoFileData && !isCallingAPI) ? '#ffffff' : '#6e7681', border: 'none', borderRadius: '4px', cursor: (videoFileData && !isCallingAPI) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
+          <button onClick={handleSend} disabled={!videoFileData || isCallingAPI} style={{ padding: '12px 16px', backgroundColor: (videoFileData && !isCallingAPI) ? '#2f3644' : '#21262d', color: (videoFileData && !isCallingAPI) ? '#e6edf3' : '#6e7681', border: '1px solid #424a59', borderRadius: '4px', cursor: (videoFileData && !isCallingAPI) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
             {isCallingAPI ? 'Sending...' : 'Send'}
           </button>
         </div>

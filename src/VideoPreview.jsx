@@ -130,9 +130,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           style={{
             padding: '4px 12px',
             fontSize: '12px',
-            backgroundColor: '#1f6feb',
-            color: '#ffffff',
-            border: 'none',
+            backgroundColor: '#2a2f3a',
+            color: '#d8dee9',
+            border: '1px solid #3a4250',
             borderRadius: '4px',
             cursor: 'pointer',
             WebkitTapHighlightColor: 'transparent'
@@ -182,7 +182,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           style={{
             width: '100%',
             cursor: 'pointer',
-            accentColor: '#1f6feb'
+            accentColor: '#8b949e'
           }}
         />
       </div>
@@ -237,9 +237,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             style={{
               padding: '8px 12px',
               fontSize: '14px',
-              backgroundColor: currentTime <= 0 ? '#21262d' : '#238636',
-              color: currentTime <= 0 ? '#6e7681' : '#ffffff',
-              border: 'none',
+              backgroundColor: currentTime <= 0 ? '#21262d' : '#2f3644',
+              color: currentTime <= 0 ? '#6e7681' : '#e6edf3',
+              border: '1px solid #424a59',
               borderRadius: '4px',
               cursor: currentTime <= 0 ? 'not-allowed' : 'pointer',
               WebkitTapHighlightColor: 'transparent'
@@ -254,9 +254,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           style={{
             padding: '8px 16px',
             fontSize: '14px',
-            backgroundColor: '#1f6feb',
-            color: '#ffffff',
-            border: 'none',
+            backgroundColor: '#2a2f3a',
+            color: '#e6edf3',
+            border: '1px solid #3a4250',
             borderRadius: '4px',
             cursor: 'pointer',
             WebkitTapHighlightColor: 'transparent'
@@ -272,9 +272,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             style={{
               padding: '8px 12px',
               fontSize: '14px',
-              backgroundColor: currentTime >= duration ? '#21262d' : '#238636',
-              color: currentTime >= duration ? '#6e7681' : '#ffffff',
-              border: 'none',
+              backgroundColor: currentTime >= duration ? '#21262d' : '#2f3644',
+              color: currentTime >= duration ? '#6e7681' : '#e6edf3',
+              border: '1px solid #424a59',
               borderRadius: '4px',
               cursor: currentTime >= duration ? 'not-allowed' : 'pointer',
               WebkitTapHighlightColor: 'transparent'
