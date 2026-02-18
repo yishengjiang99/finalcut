@@ -407,13 +407,12 @@ export default function App() {
   };
 
   const handleSend = async (textOverride = null) => {
-    const hasStringOverride = typeof textOverride === 'string';
-    const text = (hasStringOverride ? textOverride : chatInput).trim();
+    const text = (textOverride || chatInput).trim();
     if (!text || !videoFileData) {
       if (!videoFileData) alert('Please upload a video or audio file first.');
       return;
     }
-    if (!hasStringOverride) setChatInput('');
+    if (!textOverride) setChatInput('');
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);

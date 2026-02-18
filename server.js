@@ -6,7 +6,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
 import rateLimit from 'express-rate-limit';
 import Stripe from 'stripe';
 import passport from 'passport';
@@ -35,7 +34,6 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback';
 const SESSION_SECRET = process.env.SESSION_SECRET;
-const APP_BASE_URL = process.env.APP_BASE_URL;
 
 if (!XAI_API_TOKEN) {
   console.error('ERROR: XAI_API_TOKEN environment variable is not set');
@@ -61,16 +59,6 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
 
 // Initialize Stripe only if the secret key is available
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
-const defaultStripePriceId = process.env.STRIPE_SUBSCRIPTION_PRICE_ID || 'price_1StDJe4OymfcnKESq2dIraNE';
-const allowedStripePriceIds = new Set(
-  [
-    defaultStripePriceId,
-    ...(process.env.STRIPE_ALLOWED_PRICE_IDS || '')
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean),
-  ]
-);
 
 // Initialize database
 try {
@@ -194,114 +182,11 @@ const videoProcessLimiter = rateLimit({
   message: 'Too many video processing requests, please try again later.'
 });
 
-function requireAuthenticatedUser(req, res, next) {
-  if (!req.isAuthenticated || !req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  if (!req.user || !req.user.id) {
-    return res.status(401).json({ error: 'Invalid user session' });
-  }
-  next();
-}
-
-function requireActiveSubscription(req, res, next) {
-  if (!req.user?.has_subscription) {
-    return res.status(403).json({ error: 'Active subscription required' });
-  }
-  next();
-}
-
-function getBaseUrlFromRequest(req) {
-  if (APP_BASE_URL) {
-    return APP_BASE_URL.replace(/\/+$/, '');
-  }
-  return `${req.protocol}://${req.get('host')}`;
-}
-
 // Configure multer for file uploads (store in memory)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
-});
-
-// Stripe webhook endpoint for handling payment events
-// Must be mounted before JSON body parsing so Stripe signature verification receives the raw body.
-app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (!stripe) {
-    return res.status(503).json({ error: 'Stripe is not configured on this server' });
-  }
-
-  const sig = req.headers['stripe-signature'];
-
-  if (!STRIPE_WEBHOOK_SECRET) {
-    console.warn('WARNING: STRIPE_WEBHOOK_SECRET is not set, skipping signature verification');
-    return res.status(400).json({ error: 'Webhook secret not configured' });
-  }
-
-  let event;
-
-  try {
-    // Verify the webhook signature
-    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).json({ error: `Webhook Error: ${err.message}` });
-  }
-
-  // Handle the event
-  try {
-    switch (event.type) {
-      case 'checkout.session.completed':
-        const session = event.data.object;
-        console.log('Payment successful:', session.id);
-
-        // Update user subscription status
-        if (session.customer_email) {
-          const { updateUserSubscription } = await import('./src/db.js');
-          await updateUserSubscription(
-            session.customer_email,
-            true,
-            session.subscription || session.id
-          );
-          console.log(`Updated subscription for ${session.customer_email}`);
-        }
-        break;
-
-      case 'customer.subscription.deleted':
-        const subscription = event.data.object;
-        console.log('Subscription cancelled:', subscription.id);
-
-        // Update user subscription status to false
-        if (subscription.customer) {
-          const customer = await stripe.customers.retrieve(subscription.customer);
-          if (customer.email) {
-            const { updateUserSubscription } = await import('./src/db.js');
-            await updateUserSubscription(customer.email, false, null);
-            console.log(`Removed subscription for ${customer.email}`);
-          }
-        }
-        break;
-
-      case 'payment_intent.succeeded':
-        const paymentIntent = event.data.object;
-        console.log('PaymentIntent successful:', paymentIntent.id);
-        break;
-
-      case 'payment_intent.payment_failed':
-        const failedPayment = event.data.object;
-        console.log('Payment failed:', failedPayment.id);
-        break;
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    console.error('Error handling webhook event:', error);
-    res.status(500).json({ error: 'Webhook handler failed' });
-  }
 });
 
 // app.use(cors({
@@ -406,7 +291,7 @@ app.get('/api/auth/status', apiLimiter, (req, res) => {
 });
 
 // Proxy endpoint for xAI API with streaming support
-app.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+app.post('/api/chat', apiLimiter, async (req, res) => {
   try {
     // Basic request validation
     if (!req.body || typeof req.body !== 'object') {
@@ -466,7 +351,7 @@ app.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscri
 });
 
 // Video processing endpoint
-app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, upload.single('video'), async (req, res) => {
+app.post('/api/process-video', videoProcessLimiter, upload.single('video'), async (req, res) => {
   let inputPath = null;
   let outputPath = null;
 
@@ -486,8 +371,9 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
 
     // Create temporary files
     const tmpDir = '/tmp';
-    inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
-    outputPath = path.join(tmpDir, `output-${randomUUID()}.mp4`);
+    const timestamp = Date.now();
+    inputPath = path.join(tmpDir, `input-${timestamp}.mp4`);
+    outputPath = path.join(tmpDir, `output-${timestamp}.mp4`);
 
     // Write uploaded file to disk
     await fs.writeFile(inputPath, req.file.buffer);
@@ -804,7 +690,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
 });
 
 // Multi-video transition endpoint
-app.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, upload.array('videos', 10), async (req, res) => {
+app.post('/api/transition-videos', videoProcessLimiter, upload.array('videos', 10), async (req, res) => {
   const tempFiles = [];
   let outputPath = null;
 
@@ -824,17 +710,18 @@ app.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedUser
 
     // Create temporary files
     const tmpDir = '/tmp';
+    const timestamp = Date.now();
     
     // Write uploaded files to disk
     const inputPaths = [];
     for (let i = 0; i < req.files.length; i++) {
-      const inputPath = path.join(tmpDir, `input-${randomUUID()}-${i}.mp4`);
+      const inputPath = path.join(tmpDir, `input-${timestamp}-${i}.mp4`);
       await fs.writeFile(inputPath, req.files[i].buffer);
       inputPaths.push(inputPath);
       tempFiles.push(inputPath);
     }
 
-    outputPath = path.join(tmpDir, `output-${randomUUID()}.mp4`);
+    outputPath = path.join(tmpDir, `output-${timestamp}.mp4`);
 
     // Check which videos have audio streams
     const hasAudio = await Promise.all(
@@ -1167,25 +1054,20 @@ app.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
   }
 
   try {
-    const { priceId } = req.body || {};
-    const selectedPriceId = priceId || defaultStripePriceId;
+    const { priceId, successUrl, cancelUrl } = req.body;
 
-    if (!allowedStripePriceIds.has(selectedPriceId)) {
+    if (!priceId || !successUrl || !cancelUrl) {
       return res.status(400).json({
-        error: 'Invalid priceId'
+        error: 'Missing required fields: priceId, successUrl, and cancelUrl are required'
       });
     }
-
-    const baseUrl = getBaseUrlFromRequest(req);
-    const successUrl = `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${baseUrl}/`;
 
     // Create a Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
-          price: selectedPriceId,
+          price: priceId,
           quantity: 1,
         },
       ],
@@ -1259,6 +1141,89 @@ app.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
   } catch (error) {
     console.error('Error verifying checkout session:', error);
     res.status(500).json({ error: error.message || 'Failed to verify checkout session' });
+  }
+});
+
+// Stripe webhook endpoint for handling payment events
+// This endpoint needs to be registered in your Stripe dashboard
+app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe) {
+    return res.status(503).json({ error: 'Stripe is not configured on this server' });
+  }
+
+  const sig = req.headers['stripe-signature'];
+
+  if (!STRIPE_WEBHOOK_SECRET) {
+    console.warn('WARNING: STRIPE_WEBHOOK_SECRET is not set, skipping signature verification');
+    // In development, you might want to process webhooks without verification
+    // In production, this should always be verified
+    return res.status(400).json({ error: 'Webhook secret not configured' });
+  }
+
+  let event;
+
+  try {
+    // Verify the webhook signature
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+  }
+
+  // Handle the event
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        console.log('Payment successful:', session.id);
+
+        // Update user subscription status
+        if (session.customer_email) {
+          const { updateUserSubscription } = await import('./src/db.js');
+          await updateUserSubscription(
+            session.customer_email,
+            true,
+            session.subscription || session.id
+          );
+          console.log(`Updated subscription for ${session.customer_email}`);
+        }
+        break;
+
+      case 'customer.subscription.deleted':
+        const subscription = event.data.object;
+        console.log('Subscription cancelled:', subscription.id);
+
+        // Update user subscription status to false
+        if (subscription.customer) {
+          const customer = await stripe.customers.retrieve(subscription.customer);
+          if (customer.email) {
+            const { updateUserSubscription } = await import('./src/db.js');
+            await updateUserSubscription(customer.email, false, null);
+            console.log(`Removed subscription for ${customer.email}`);
+          }
+        }
+        break;
+
+      case 'payment_intent.succeeded':
+        const paymentIntent = event.data.object;
+        console.log('PaymentIntent successful:', paymentIntent.id);
+        break;
+
+      case 'payment_intent.payment_failed':
+        const failedPayment = event.data.object;
+        console.log('Payment failed:', failedPayment.id);
+        break;
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    // Return a response to acknowledge receipt of the event
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Error handling webhook event:', error);
+    // Return error so Stripe will retry
+    res.status(500).json({ error: 'Webhook handler failed' });
   }
 });
 
