@@ -10,6 +10,17 @@ const ASPECT_RATIO_PRESETS = {
   '3:2': { width: 1620, height: 1080, description: 'Classic photography, Landscape' }
 };
 
+let sampleModeEnabled = false;
+let sampleModeAccessToken = null;
+
+export function setSampleModeEnabled(enabled) {
+  sampleModeEnabled = Boolean(enabled);
+}
+
+export function setSampleModeAccessToken(token) {
+  sampleModeAccessToken = typeof token === 'string' && token ? token : null;
+}
+
 // Helper function to call server API
 async function processVideoOnServer(operation, args, videoFileData) {
   const formData = new FormData();
@@ -22,6 +33,10 @@ async function processVideoOnServer(operation, args, videoFileData) {
   
   const response = await fetch('/api/process-video', {
     method: 'POST',
+    headers: sampleModeEnabled ? {
+      'x-finalcut-sample-mode': 'true',
+      ...(sampleModeAccessToken ? { 'x-finalcut-sample-token': sampleModeAccessToken } : {})
+    } : undefined,
     body: formData
   });
   
@@ -519,6 +534,10 @@ export const toolFunctions = {
       
       const response = await fetch('/api/transition-videos', {
         method: 'POST',
+        headers: sampleModeEnabled ? {
+          'x-finalcut-sample-mode': 'true',
+          ...(sampleModeAccessToken ? { 'x-finalcut-sample-token': sampleModeAccessToken } : {})
+        } : undefined,
         body: formData
       });
       

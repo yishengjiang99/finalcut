@@ -6,7 +6,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import rateLimit from 'express-rate-limit';
 import Stripe from 'stripe';
 import passport from 'passport';
@@ -36,6 +36,8 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback';
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const APP_BASE_URL = process.env.APP_BASE_URL;
+const ALLOW_UNAUTH_SAMPLE_MODE = process.env.ALLOW_UNAUTH_SAMPLE_MODE !== 'false';
+const SAMPLE_TOKEN_TTL_MS = Math.max(60_000, Number(process.env.SAMPLE_TOKEN_TTL_MS || 10 * 60 * 1000));
 
 if (!XAI_API_TOKEN) {
   console.error('ERROR: XAI_API_TOKEN environment variable is not set');
@@ -71,6 +73,44 @@ const allowedStripePriceIds = new Set(
       .filter(Boolean),
   ]
 );
+const sampleAccessTokens = new Map();
+
+function issueSampleAccessToken() {
+  const token = randomBytes(32).toString('hex');
+  sampleAccessTokens.set(token, Date.now() + SAMPLE_TOKEN_TTL_MS);
+  return token;
+}
+
+function validateSampleAccessToken(token) {
+  if (typeof token !== 'string' || token.length < 32) {
+    return false;
+  }
+  const expiresAt = sampleAccessTokens.get(token);
+  if (!expiresAt || expiresAt < Date.now()) {
+    sampleAccessTokens.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function isValidSampleModeRequest(req) {
+  if (!ALLOW_UNAUTH_SAMPLE_MODE) return false;
+  if (req.headers['x-finalcut-sample-mode'] !== 'true') return false;
+  return validateSampleAccessToken(req.headers['x-finalcut-sample-token']);
+}
+
+const sampleTokenCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [token, expiresAt] of sampleAccessTokens.entries()) {
+    if (expiresAt < now) {
+      sampleAccessTokens.delete(token);
+    }
+  }
+}, 60_000);
+
+if (typeof sampleTokenCleanupTimer.unref === 'function') {
+  sampleTokenCleanupTimer.unref();
+}
 
 // Initialize database
 try {
@@ -195,6 +235,12 @@ const videoProcessLimiter = rateLimit({
 });
 
 function requireAuthenticatedUser(req, res, next) {
+  if (isValidSampleModeRequest(req)) {
+    return next();
+  }
+  if (req.headers['x-finalcut-sample-mode'] === 'true') {
+    return res.status(401).json({ error: 'Invalid or expired sample access token' });
+  }
   if (!req.isAuthenticated || !req.isAuthenticated()) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -205,6 +251,9 @@ function requireAuthenticatedUser(req, res, next) {
 }
 
 function requireActiveSubscription(req, res, next) {
+  if (isValidSampleModeRequest(req)) {
+    return next();
+  }
   if (!req.user?.has_subscription) {
     return res.status(403).json({ error: 'Active subscription required' });
   }
@@ -310,6 +359,14 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
 //     : ['http://localhost:5173', 'http://localhost:3000']
 // }));
 app.use(express.json({ limit: '950mb' }));
+
+app.get('/api/sample-access-token', apiLimiter, (req, res) => {
+  if (!ALLOW_UNAUTH_SAMPLE_MODE) {
+    return res.status(403).json({ error: 'Sample mode is disabled' });
+  }
+  const token = issueSampleAccessToken();
+  res.json({ token, expiresInMs: SAMPLE_TOKEN_TTL_MS });
+});
 
 // Authentication routes
 app.get('/auth/google',

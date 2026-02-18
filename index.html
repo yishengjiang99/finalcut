@@ -18,6 +18,12 @@
 </head>
 <body>
     <div id="root"></div>
+    <script>
+      window.__FINALCUT_SAMPLE_TOKEN_PROMISE__ = fetch('/api/sample-access-token')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => data && data.token ? data.token : null)
+        .catch(() => null);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
