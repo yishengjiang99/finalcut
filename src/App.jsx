@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { tools, systemPrompt } from './tools.js';
-import { toolFunctions } from './toolFunctions.js';
+import { toolFunctions, setSampleModeAccessToken, setSampleModeEnabled } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 
 // Sample button style constant
@@ -50,6 +50,8 @@ export default function App() {
   const [uploadedVideos, setUploadedVideos] = useState([]); // Array of {data: Uint8Array, url: string, name: string, mimeType: string}
   const [fileType, setFileType] = useState('video'); // 'video' or 'audio'
   const [fileMimeType, setFileMimeType] = useState(''); // Store MIME type for proper detection
+  const [isSampleMode, setIsSampleMode] = useState(false);
+  const [sampleAccessToken, setSampleAccessTokenState] = useState(null);
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const chatWindowRef = useRef(null);
 
@@ -58,6 +60,42 @@ export default function App() {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    setSampleModeEnabled(isSampleMode);
+  }, [isSampleMode]);
+
+  useEffect(() => {
+    setSampleModeAccessToken(sampleAccessToken);
+  }, [sampleAccessToken]);
+
+  const getSampleAccessToken = async () => {
+    if (sampleAccessToken) return sampleAccessToken;
+
+    if (window.__FINALCUT_SAMPLE_TOKEN_PROMISE__) {
+      try {
+        const token = await window.__FINALCUT_SAMPLE_TOKEN_PROMISE__;
+        if (token) {
+          setSampleAccessTokenState(token);
+          return token;
+        }
+      } catch (error) {
+        // Fall through to direct API request
+      }
+    }
+
+    const response = await fetch('/api/sample-access-token');
+    if (!response.ok) {
+      throw new Error('Failed to initialize sample access token');
+    }
+    const data = await response.json();
+    const token = data?.token;
+    if (!token) {
+      throw new Error('Sample access token missing in response');
+    }
+    setSampleAccessTokenState(token);
+    return token;
+  };
 
   // Check if user is authenticated and has subscription
   useEffect(() => {
@@ -152,7 +190,11 @@ export default function App() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(isSampleMode ? {
+            'x-finalcut-sample-mode': 'true',
+            ...(sampleAccessToken ? { 'x-finalcut-sample-token': sampleAccessToken } : {})
+          } : {})
         },
         body: JSON.stringify({
           model: 'grok-beta',
@@ -374,6 +416,7 @@ export default function App() {
 
       // Update the uploaded videos list
       setUploadedVideos(prev => [...prev, ...newVideos]);
+      setIsSampleMode(false);
 
       // Show all uploaded files in the chat
       const uploadedMessages = newVideos.map((video, index) => ({
@@ -407,12 +450,13 @@ export default function App() {
   };
 
   const handleSend = async (textOverride = null) => {
-    const text = (textOverride || chatInput).trim();
+    const hasStringOverride = typeof textOverride === 'string';
+    const text = (hasStringOverride ? textOverride : chatInput).trim();
     if (!text || !videoFileData) {
       if (!videoFileData) alert('Please upload a video or audio file first.');
       return;
     }
-    if (!textOverride) setChatInput('');
+    if (!hasStringOverride) setChatInput('');
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
@@ -436,6 +480,8 @@ export default function App() {
     const sampleVideoUrl = '/BigBuckBunny.mp4';
     
     try {
+      await getSampleAccessToken();
+
       // Fetch the sample video
       const response = await fetch(sampleVideoUrl);
       if (!response.ok) {
@@ -449,6 +495,7 @@ export default function App() {
       const data = new Uint8Array(arrayBuffer);
       setVideoFileData(data);
       const url = URL.createObjectURL(blob);
+      setIsSampleMode(true);
       
       setFileType('video');
       setFileMimeType('video/mp4');
