@@ -515,64 +515,64 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
         case 'audio_chorus':
           const chorusInGain = parsedArgs.in_gain ?? 0.5;
           const chorusOutGain = parsedArgs.out_gain ?? 0.9;
-          const chorusDelays = parsedArgs.delays || '40|60|80';
-          const chorusDecays = parsedArgs.decays || '0.4|0.5|0.6';
-          const chorusSpeeds = parsedArgs.speeds || '0.5|0.6|0.7';
-          const chorusDepths = parsedArgs.depths || '0.25|0.4|0.35';
+          const chorusDelays = parsedArgs.delays ?? '40|60|80';
+          const chorusDecays = parsedArgs.decays ?? '0.4|0.5|0.6';
+          const chorusSpeeds = parsedArgs.speeds ?? '0.5|0.6|0.7';
+          const chorusDepths = parsedArgs.depths ?? '0.25|0.4|0.35';
           // 't' at the end sets triangular modulation waveform (alternative is 's' for sinusoidal)
           command = command.audioFilters(`chorus=${chorusInGain}:${chorusOutGain}:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
           break;
 
         case 'audio_flanger':
-          const flangerDelay = parsedArgs.delay || 0;
-          const flangerDepth = parsedArgs.depth || 2;
-          const flangerRegen = parsedArgs.regen || 0;
-          const flangerWidth = parsedArgs.width || 71;
-          const flangerSpeed = parsedArgs.speed || 0.5;
+          const flangerDelay = parsedArgs.delay ?? 0;
+          const flangerDepth = parsedArgs.depth ?? 2;
+          const flangerRegen = parsedArgs.regen ?? 0;
+          const flangerWidth = parsedArgs.width ?? 71;
+          const flangerSpeed = parsedArgs.speed ?? 0.5;
           command = command.audioFilters(`flanger=delay=${flangerDelay}:depth=${flangerDepth}:regen=${flangerRegen}:width=${flangerWidth}:speed=${flangerSpeed}`).videoCodec('copy');
           break;
 
         case 'audio_phaser':
-          const phaserInGain = parsedArgs.in_gain || 0.4;
-          const phaserOutGain = parsedArgs.out_gain || 0.74;
-          const phaserDelay = parsedArgs.delay || 3;
-          const phaserDecay = parsedArgs.decay || 0.4;
-          const phaserSpeed = parsedArgs.speed || 0.5;
+          const phaserInGain = parsedArgs.in_gain ?? 0.4;
+          const phaserOutGain = parsedArgs.out_gain ?? 0.74;
+          const phaserDelay = parsedArgs.delay ?? 3;
+          const phaserDecay = parsedArgs.decay ?? 0.4;
+          const phaserSpeed = parsedArgs.speed ?? 0.5;
           command = command.audioFilters(`aphaser=in_gain=${phaserInGain}:out_gain=${phaserOutGain}:delay=${phaserDelay}:decay=${phaserDecay}:speed=${phaserSpeed}`).videoCodec('copy');
           break;
 
         case 'audio_vibrato':
-          const vibratoFreq = parsedArgs.frequency || 5;
-          const vibratoDepth = parsedArgs.depth || 0.5;
+          const vibratoFreq = parsedArgs.frequency ?? 5;
+          const vibratoDepth = parsedArgs.depth ?? 0.5;
           command = command.audioFilters(`vibrato=f=${vibratoFreq}:d=${vibratoDepth}`).videoCodec('copy');
           break;
 
         case 'audio_tremolo':
-          const tremoloFreq = parsedArgs.frequency || 5;
-          const tremoloDepth = parsedArgs.depth || 0.5;
+          const tremoloFreq = parsedArgs.frequency ?? 5;
+          const tremoloDepth = parsedArgs.depth ?? 0.5;
           command = command.audioFilters(`tremolo=f=${tremoloFreq}:d=${tremoloDepth}`).videoCodec('copy');
           break;
 
         case 'audio_compressor':
-          const compThreshold = parsedArgs.threshold || 0;
-          const compRatio = parsedArgs.ratio || 4;
-          const compAttack = parsedArgs.attack || 20;
-          const compRelease = parsedArgs.release || 250;
+          const compThreshold = parsedArgs.threshold ?? 0;
+          const compRatio = parsedArgs.ratio ?? 4;
+          const compAttack = parsedArgs.attack ?? 20;
+          const compRelease = parsedArgs.release ?? 250;
           command = command.audioFilters(`acompressor=threshold=${compThreshold}dB:ratio=${compRatio}:attack=${compAttack}:release=${compRelease}`).videoCodec('copy');
           break;
 
         case 'audio_gate':
-          const gateThreshold = parsedArgs.threshold || -50;
-          const gateRatio = parsedArgs.ratio || 2;
-          const gateAttack = parsedArgs.attack || 20;
-          const gateRelease = parsedArgs.release || 250;
+          const gateThreshold = parsedArgs.threshold ?? -50;
+          const gateRatio = parsedArgs.ratio ?? 2;
+          const gateAttack = parsedArgs.attack ?? 20;
+          const gateRelease = parsedArgs.release ?? 250;
           command = command.audioFilters(`agate=threshold=${gateThreshold}dB:ratio=${gateRatio}:attack=${gateAttack}:release=${gateRelease}`).videoCodec('copy');
           break;
 
         case 'audio_stereo_widen':
-          const stereoDelay = parsedArgs.delay || 20;
-          const stereoFeedback = parsedArgs.feedback || 0.3;
-          const stereoCrossfeed = parsedArgs.crossfeed || 0.3;
+          const stereoDelay = parsedArgs.delay ?? 20;
+          const stereoFeedback = parsedArgs.feedback ?? 0.3;
+          const stereoCrossfeed = parsedArgs.crossfeed ?? 0.3;
           command = command.audioFilters(`stereowiden=delay=${stereoDelay}:feedback=${stereoFeedback}:crossfeed=${stereoCrossfeed}`).videoCodec('copy');
           break;
 
@@ -581,18 +581,18 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           break;
 
         case 'audio_limiter':
-          const limiterLevel = parsedArgs.level || 1.0;
-          const limiterAttack = parsedArgs.attack || 5;
-          const limiterRelease = parsedArgs.release || 50;
-          // level_in=1 keeps input at unity, level_out controls output level, limit sets the ceiling
+          const limiterLevel = parsedArgs.level ?? 1.0;
+          const limiterAttack = parsedArgs.attack ?? 5;
+          const limiterRelease = parsedArgs.release ?? 50;
+          // level_in=1 keeps input at unity, limit sets the ceiling to prevent clipping
           command = command.audioFilters(`alimiter=level_in=1:level_out=1:limit=${limiterLevel}:attack=${limiterAttack}:release=${limiterRelease}`).videoCodec('copy');
           break;
 
         case 'audio_silence_remove':
-          const startThreshold = parsedArgs.start_threshold || -50;
-          const startDuration = parsedArgs.start_duration || 0.5;
-          const stopThreshold = parsedArgs.stop_threshold || -50;
-          const stopDuration = parsedArgs.stop_duration || 0.5;
+          const startThreshold = parsedArgs.start_threshold ?? -50;
+          const startDuration = parsedArgs.start_duration ?? 0.5;
+          const stopThreshold = parsedArgs.stop_threshold ?? -50;
+          const stopDuration = parsedArgs.stop_duration ?? 0.5;
           command = command.audioFilters(`silenceremove=start_periods=1:start_threshold=${startThreshold}dB:start_duration=${startDuration}:stop_periods=-1:stop_threshold=${stopThreshold}dB:stop_duration=${stopDuration}`).videoCodec('copy');
           break;
 
