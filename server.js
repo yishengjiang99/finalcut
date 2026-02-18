@@ -519,6 +519,7 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           const chorusDecays = parsedArgs.decays || '0.4|0.5|0.6';
           const chorusSpeeds = parsedArgs.speeds || '0.5|0.6|0.7';
           const chorusDepths = parsedArgs.depths || '0.25|0.4|0.35';
+          // 't' at the end sets triangular modulation waveform (alternative is 's' for sinusoidal)
           command = command.audioFilters(`chorus=${chorusInGain}:${chorusOutGain}:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
           break;
 
@@ -583,7 +584,8 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           const limiterLevel = parsedArgs.level || 1.0;
           const limiterAttack = parsedArgs.attack || 5;
           const limiterRelease = parsedArgs.release || 50;
-          command = command.audioFilters(`alimiter=level_in=1:level_out=${limiterLevel}:limit=${limiterLevel}:attack=${limiterAttack}:release=${limiterRelease}`).videoCodec('copy');
+          // level_in=1 keeps input at unity, level_out controls output level, limit sets the ceiling
+          command = command.audioFilters(`alimiter=level_in=1:level_out=1:limit=${limiterLevel}:attack=${limiterAttack}:release=${limiterRelease}`).videoCodec('copy');
           break;
 
         case 'audio_silence_remove':
