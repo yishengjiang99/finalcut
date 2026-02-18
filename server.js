@@ -597,7 +597,7 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           break;
 
         case 'audio_pan':
-          const panValue = parsedArgs.pan ?? 0;
+          const panValue = parsedArgs.pan;
           // Convert -1 to 1 range to FFmpeg pan filter format
           // For stereo output: pan=stereo|c0=c0*left_factor+c1*cross_factor|c1=c1*right_factor+c0*cross_factor
           let leftGain, rightGain;
