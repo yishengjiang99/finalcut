@@ -512,6 +512,107 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           command = command.audioFilters(`adelay=${parsedArgs.delay}|${parsedArgs.delay}`).videoCodec('copy');
           break;
 
+        case 'audio_chorus':
+          const chorusDelays = parsedArgs.delays || '40|60|80';
+          const chorusDecays = parsedArgs.decays || '0.4|0.5|0.6';
+          const chorusSpeeds = parsedArgs.speeds || '0.5|0.6|0.7';
+          const chorusDepths = parsedArgs.depths || '0.25|0.4|0.35';
+          command = command.audioFilters(`chorus=0.5:0.9:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
+          break;
+
+        case 'audio_flanger':
+          const flangerDelay = parsedArgs.delay || 0;
+          const flangerDepth = parsedArgs.depth || 2;
+          const flangerRegen = parsedArgs.regen || 0;
+          const flangerWidth = parsedArgs.width || 71;
+          const flangerSpeed = parsedArgs.speed || 0.5;
+          command = command.audioFilters(`flanger=delay=${flangerDelay}:depth=${flangerDepth}:regen=${flangerRegen}:width=${flangerWidth}:speed=${flangerSpeed}`).videoCodec('copy');
+          break;
+
+        case 'audio_phaser':
+          const phaserInGain = parsedArgs.in_gain || 0.4;
+          const phaserOutGain = parsedArgs.out_gain || 0.74;
+          const phaserDelay = parsedArgs.delay || 3;
+          const phaserDecay = parsedArgs.decay || 0.4;
+          const phaserSpeed = parsedArgs.speed || 0.5;
+          command = command.audioFilters(`aphaser=in_gain=${phaserInGain}:out_gain=${phaserOutGain}:delay=${phaserDelay}:decay=${phaserDecay}:speed=${phaserSpeed}`).videoCodec('copy');
+          break;
+
+        case 'audio_vibrato':
+          const vibratoFreq = parsedArgs.frequency || 5;
+          const vibratoDepth = parsedArgs.depth || 0.5;
+          command = command.audioFilters(`vibrato=f=${vibratoFreq}:d=${vibratoDepth}`).videoCodec('copy');
+          break;
+
+        case 'audio_tremolo':
+          const tremoloFreq = parsedArgs.frequency || 5;
+          const tremoloDepth = parsedArgs.depth || 0.5;
+          command = command.audioFilters(`tremolo=f=${tremoloFreq}:d=${tremoloDepth}`).videoCodec('copy');
+          break;
+
+        case 'audio_compressor':
+          const compThreshold = parsedArgs.threshold || 0;
+          const compRatio = parsedArgs.ratio || 4;
+          const compAttack = parsedArgs.attack || 20;
+          const compRelease = parsedArgs.release || 250;
+          command = command.audioFilters(`acompressor=threshold=${compThreshold}dB:ratio=${compRatio}:attack=${compAttack}:release=${compRelease}`).videoCodec('copy');
+          break;
+
+        case 'audio_gate':
+          const gateThreshold = parsedArgs.threshold || -50;
+          const gateRatio = parsedArgs.ratio || 2;
+          const gateAttack = parsedArgs.attack || 20;
+          const gateRelease = parsedArgs.release || 250;
+          command = command.audioFilters(`agate=threshold=${gateThreshold}dB:ratio=${gateRatio}:attack=${gateAttack}:release=${gateRelease}`).videoCodec('copy');
+          break;
+
+        case 'audio_stereo_widen':
+          const stereoDelay = parsedArgs.delay || 20;
+          const stereoFeedback = parsedArgs.feedback || 0.3;
+          const stereoCrossfeed = parsedArgs.crossfeed || 0.3;
+          command = command.audioFilters(`stereowiden=delay=${stereoDelay}:feedback=${stereoFeedback}:crossfeed=${stereoCrossfeed}`).videoCodec('copy');
+          break;
+
+        case 'audio_reverse':
+          command = command.audioFilters('areverse').videoCodec('copy');
+          break;
+
+        case 'audio_limiter':
+          const limiterLevel = parsedArgs.level || 1.0;
+          const limiterAttack = parsedArgs.attack || 5;
+          const limiterRelease = parsedArgs.release || 50;
+          command = command.audioFilters(`alimiter=level_in=1:level_out=${limiterLevel}:limit=${limiterLevel}:attack=${limiterAttack}:release=${limiterRelease}`).videoCodec('copy');
+          break;
+
+        case 'audio_silence_remove':
+          const startThreshold = parsedArgs.start_threshold || -50;
+          const startDuration = parsedArgs.start_duration || 0.5;
+          const stopThreshold = parsedArgs.stop_threshold || -50;
+          const stopDuration = parsedArgs.stop_duration || 0.5;
+          command = command.audioFilters(`silenceremove=start_periods=1:start_threshold=${startThreshold}dB:start_duration=${startDuration}:stop_periods=-1:stop_threshold=${stopThreshold}dB:stop_duration=${stopDuration}`).videoCodec('copy');
+          break;
+
+        case 'audio_pan':
+          const panValue = parsedArgs.pan || 0;
+          // Convert -1 to 1 range to FFmpeg pan filter format
+          // For stereo output: pan=stereo|c0=c0*left_factor+c1*cross_factor|c1=c1*right_factor+c0*cross_factor
+          let leftGain, rightGain;
+          if (panValue < 0) {
+            // Pan left: reduce right channel
+            leftGain = 1.0;
+            rightGain = 1.0 + panValue;  // panValue is negative, so this reduces right
+          } else if (panValue > 0) {
+            // Pan right: reduce left channel
+            leftGain = 1.0 - panValue;
+            rightGain = 1.0;
+          } else {
+            // Center
+            leftGain = 1.0;
+            rightGain = 1.0;
+          }
+          command = command.audioFilters(`pan=stereo|c0=${leftGain}*c0|c1=${rightGain}*c1`).videoCodec('copy');
+          break;
+
         case 'adjust_brightness':
           command = command.videoFilters(`eq=brightness=${parsedArgs.brightness}`).audioCodec('copy');
           break;
