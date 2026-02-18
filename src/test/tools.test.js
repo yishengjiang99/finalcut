@@ -118,6 +118,79 @@ describe('Tools Module', () => {
     expect(delayTool.function.parameters.required).toContain('delay');
   });
 
+  it('has audio_chorus tool', () => {
+    const chorusTool = tools.find(t => t.function.name === 'audio_chorus');
+    expect(chorusTool).toBeDefined();
+    expect(chorusTool.function.description).toContain('chorus');
+  });
+
+  it('has audio_flanger tool', () => {
+    const flangerTool = tools.find(t => t.function.name === 'audio_flanger');
+    expect(flangerTool).toBeDefined();
+    expect(flangerTool.function.description).toContain('flanger');
+  });
+
+  it('has audio_phaser tool', () => {
+    const phaserTool = tools.find(t => t.function.name === 'audio_phaser');
+    expect(phaserTool).toBeDefined();
+    expect(phaserTool.function.description).toContain('phaser');
+  });
+
+  it('has audio_vibrato tool', () => {
+    const vibratoTool = tools.find(t => t.function.name === 'audio_vibrato');
+    expect(vibratoTool).toBeDefined();
+    expect(vibratoTool.function.description).toContain('vibrato');
+  });
+
+  it('has audio_tremolo tool', () => {
+    const tremoloTool = tools.find(t => t.function.name === 'audio_tremolo');
+    expect(tremoloTool).toBeDefined();
+    expect(tremoloTool.function.description).toContain('tremolo');
+  });
+
+  it('has audio_compressor tool', () => {
+    const compressorTool = tools.find(t => t.function.name === 'audio_compressor');
+    expect(compressorTool).toBeDefined();
+    expect(compressorTool.function.description).toContain('compression');
+  });
+
+  it('has audio_gate tool', () => {
+    const gateTool = tools.find(t => t.function.name === 'audio_gate');
+    expect(gateTool).toBeDefined();
+    expect(gateTool.function.description).toContain('gate');
+  });
+
+  it('has audio_stereo_widen tool', () => {
+    const stereoTool = tools.find(t => t.function.name === 'audio_stereo_widen');
+    expect(stereoTool).toBeDefined();
+    expect(stereoTool.function.description).toContain('stereo');
+  });
+
+  it('has audio_reverse tool', () => {
+    const reverseTool = tools.find(t => t.function.name === 'audio_reverse');
+    expect(reverseTool).toBeDefined();
+    expect(reverseTool.function.description.toLowerCase()).toContain('reverse');
+  });
+
+  it('has audio_limiter tool', () => {
+    const limiterTool = tools.find(t => t.function.name === 'audio_limiter');
+    expect(limiterTool).toBeDefined();
+    expect(limiterTool.function.description).toContain('limiter');
+  });
+
+  it('has audio_silence_remove tool', () => {
+    const silenceTool = tools.find(t => t.function.name === 'audio_silence_remove');
+    expect(silenceTool).toBeDefined();
+    expect(silenceTool.function.description).toContain('silence');
+  });
+
+  it('has audio_pan tool', () => {
+    const panTool = tools.find(t => t.function.name === 'audio_pan');
+    expect(panTool).toBeDefined();
+    expect(panTool.function.parameters.required).toContain('pan');
+    expect(panTool.function.description.toLowerCase()).toContain('pan');
+  });
+
   it('has resize_video_preset tool', () => {
     const presetTool = tools.find(t => t.function.name === 'resize_video_preset');
     expect(presetTool).toBeDefined();

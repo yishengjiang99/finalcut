@@ -36,6 +36,18 @@ A React-based video editing application with AI chat capabilities using xAI's Gr
   - Parametric equalizer
   - Audio normalization
   - Audio delay/sync
+  - Chorus effect (rich, layered sound)
+  - Flanger effect (sweeping whoosh sound)
+  - Phaser effect (sweeping phase-shift sound)
+  - Vibrato (pitch modulation)
+  - Tremolo (volume modulation)
+  - Compressor (dynamic range compression)
+  - Gate (noise reduction)
+  - Stereo widener (enhance stereo image)
+  - Reverse audio (play backwards)
+  - Limiter (prevent clipping)
+  - Silence removal (trim silent parts)
+  - Pan (stereo positioning)
 - Video filters:
   - Adjust brightness
   - Adjust hue

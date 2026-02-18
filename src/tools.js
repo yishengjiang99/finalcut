@@ -331,6 +331,355 @@ export const tools = [
   {
     type: 'function',
     function: {
+      name: 'audio_chorus',
+      description: 'Add a chorus effect to the audio. Creates a richer sound by adding slightly delayed and pitch-modulated copies of the signal.',
+      parameters: {
+        type: 'object',
+        properties: {
+          in_gain: {
+            type: 'number',
+            description: 'Input gain. Range: 0.0-1.0. Default: 0.5.',
+            default: 0.5
+          },
+          out_gain: {
+            type: 'number',
+            description: 'Output gain. Range: 0.0-1.0. Default: 0.9.',
+            default: 0.9
+          },
+          delays: {
+            type: 'string',
+            description: 'Delay times in milliseconds, separated by |. Default: "40|60|80".',
+            default: '40|60|80'
+          },
+          decays: {
+            type: 'string',
+            description: 'Decay factors (0.0 to 1.0), separated by |. Default: "0.4|0.5|0.6".',
+            default: '0.4|0.5|0.6'
+          },
+          speeds: {
+            type: 'string',
+            description: 'Modulation speeds in Hz, separated by |. Default: "0.5|0.6|0.7".',
+            default: '0.5|0.6|0.7'
+          },
+          depths: {
+            type: 'string',
+            description: 'Modulation depths (0.0 to 1.0), separated by |. Default: "0.25|0.4|0.35".',
+            default: '0.25|0.4|0.35'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_flanger',
+      description: 'Apply a flanger effect to the audio. Creates a sweeping, whooshing sound effect.',
+      parameters: {
+        type: 'object',
+        properties: {
+          delay: {
+            type: 'number',
+            description: 'Base delay in milliseconds. Typical values: 0-10 ms. Default: 0.',
+            default: 0
+          },
+          depth: {
+            type: 'number',
+            description: 'Depth of the sweep in milliseconds. Typical values: 2-5 ms. Default: 2.',
+            default: 2
+          },
+          regen: {
+            type: 'number',
+            description: 'Regeneration (feedback) percentage. Range: -95 to 95. Default: 0.',
+            default: 0
+          },
+          width: {
+            type: 'number',
+            description: 'Percentage of delayed signal mixed with original. Range: 0-100. Default: 71.',
+            default: 71
+          },
+          speed: {
+            type: 'number',
+            description: 'Sweep speed in Hz. Typical values: 0.1-10 Hz. Default: 0.5.',
+            default: 0.5
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_phaser',
+      description: 'Apply a phaser effect to the audio. Creates a sweeping sound by phase-shifting.',
+      parameters: {
+        type: 'object',
+        properties: {
+          in_gain: {
+            type: 'number',
+            description: 'Input gain. Range: 0.0-1.0. Default: 0.4.',
+            default: 0.4
+          },
+          out_gain: {
+            type: 'number',
+            description: 'Output gain. Range: 0.0-1.0. Default: 0.74.',
+            default: 0.74
+          },
+          delay: {
+            type: 'number',
+            description: 'Delay in milliseconds. Typical values: 1-10 ms. Default: 3.',
+            default: 3
+          },
+          decay: {
+            type: 'number',
+            description: 'Decay of delayed signal. Range: 0.0-0.99. Default: 0.4.',
+            default: 0.4
+          },
+          speed: {
+            type: 'number',
+            description: 'Modulation speed in Hz. Typical values: 0.1-2 Hz. Default: 0.5.',
+            default: 0.5
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_vibrato',
+      description: 'Apply vibrato effect to the audio. Creates a periodic pitch variation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          frequency: {
+            type: 'number',
+            description: 'Modulation frequency in Hz. Typical values: 5-14 Hz. Default: 5.',
+            default: 5
+          },
+          depth: {
+            type: 'number',
+            description: 'Depth of modulation. Range: 0.0-1.0. Default: 0.5.',
+            default: 0.5
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_tremolo',
+      description: 'Apply tremolo effect to the audio. Creates a periodic volume variation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          frequency: {
+            type: 'number',
+            description: 'Modulation frequency in Hz. Typical values: 0.1-20 Hz. Default: 5.',
+            default: 5
+          },
+          depth: {
+            type: 'number',
+            description: 'Depth of modulation. Range: 0.0-1.0. Default: 0.5.',
+            default: 0.5
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_compressor',
+      description: 'Apply dynamic range compression to the audio. Reduces the volume of loud sounds and amplifies quiet ones.',
+      parameters: {
+        type: 'object',
+        properties: {
+          threshold: {
+            type: 'number',
+            description: 'Threshold level in dB. Signals above this level will be compressed. Default: 0.',
+            default: 0
+          },
+          ratio: {
+            type: 'number',
+            description: 'Compression ratio. Higher values = more compression. Typical values: 2-20. Default: 4.',
+            default: 4
+          },
+          attack: {
+            type: 'number',
+            description: 'Attack time in milliseconds. How quickly compression starts. Default: 20.',
+            default: 20
+          },
+          release: {
+            type: 'number',
+            description: 'Release time in milliseconds. How quickly compression stops. Default: 250.',
+            default: 250
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_gate',
+      description: 'Apply a noise gate to the audio. Reduces or eliminates audio below a threshold level.',
+      parameters: {
+        type: 'object',
+        properties: {
+          threshold: {
+            type: 'number',
+            description: 'Threshold level in dB. Signals below this level will be reduced. Default: -50.',
+            default: -50
+          },
+          ratio: {
+            type: 'number',
+            description: 'Reduction ratio. Higher values = more reduction. Default: 2.',
+            default: 2
+          },
+          attack: {
+            type: 'number',
+            description: 'Attack time in milliseconds. Default: 20.',
+            default: 20
+          },
+          release: {
+            type: 'number',
+            description: 'Release time in milliseconds. Default: 250.',
+            default: 250
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_stereo_widen',
+      description: 'Widen or narrow the stereo image of audio. Makes stereo sound wider or more mono.',
+      parameters: {
+        type: 'object',
+        properties: {
+          delay: {
+            type: 'number',
+            description: 'Delay in milliseconds for stereo widening. Higher = wider. Range: 1-100. Default: 20.',
+            default: 20
+          },
+          feedback: {
+            type: 'number',
+            description: 'Feedback amount. Range: 0.0-0.9. Default: 0.3.',
+            default: 0.3
+          },
+          crossfeed: {
+            type: 'number',
+            description: 'Crossfeed amount. Range: 0.0-0.8. Default: 0.3.',
+            default: 0.3
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_reverse',
+      description: 'Reverse the audio track. Plays audio backwards.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_limiter',
+      description: 'Apply a limiter to prevent audio from exceeding a specified level. Protects against clipping.',
+      parameters: {
+        type: 'object',
+        properties: {
+          level: {
+            type: 'number',
+            description: 'Maximum output level. Range: 0.5-1.0. Default: 1.0 (no limiting).',
+            default: 1.0
+          },
+          attack: {
+            type: 'number',
+            description: 'Attack time in milliseconds. Default: 5.',
+            default: 5
+          },
+          release: {
+            type: 'number',
+            description: 'Release time in milliseconds. Default: 50.',
+            default: 50
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_silence_remove',
+      description: 'Remove silence from the beginning and/or end of audio. Useful for trimming silent parts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          start_threshold: {
+            type: 'number',
+            description: 'Threshold for detecting silence at start, in dB. Default: -50.',
+            default: -50
+          },
+          start_duration: {
+            type: 'number',
+            description: 'Minimum duration of silence to remove from start, in seconds. Default: 0.5.',
+            default: 0.5
+          },
+          stop_threshold: {
+            type: 'number',
+            description: 'Threshold for detecting silence at end, in dB. Default: -50.',
+            default: -50
+          },
+          stop_duration: {
+            type: 'number',
+            description: 'Minimum duration of silence to remove from end, in seconds. Default: 0.5.',
+            default: 0.5
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'audio_pan',
+      description: 'Pan audio between left and right channels. Controls stereo positioning.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pan: {
+            type: 'number',
+            description: 'Pan position. Range: -1.0 (full left) to 1.0 (full right). 0 = center.'
+          }
+        },
+        required: ['pan']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'resize_video_preset',
       description: 'Resize video to a preset aspect ratio optimized for specific social media platforms and use cases. The video will be scaled to fit the preset dimensions while maintaining aspect ratio, with padding added if needed.',
       parameters: {
