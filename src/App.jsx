@@ -464,7 +464,7 @@ export default function App() {
   };
 
   const handleSampleClick = (sampleText) => {
-    handleSend(sampleText);
+    setChatInput(sampleText);
   };
 
   const handleGetStarted = () => {
