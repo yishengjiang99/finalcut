@@ -336,6 +336,16 @@ export const tools = [
       parameters: {
         type: 'object',
         properties: {
+          in_gain: {
+            type: 'number',
+            description: 'Input gain. Range: 0.0-1.0. Default: 0.5.',
+            default: 0.5
+          },
+          out_gain: {
+            type: 'number',
+            description: 'Output gain. Range: 0.0-1.0. Default: 0.9.',
+            default: 0.9
+          },
           delays: {
             type: 'string',
             description: 'Delay times in milliseconds, separated by |. Default: "40|60|80".',
@@ -660,8 +670,7 @@ export const tools = [
         properties: {
           pan: {
             type: 'number',
-            description: 'Pan position. Range: -1.0 (full left) to 1.0 (full right). 0 = center. Default: 0.',
-            default: 0
+            description: 'Pan position. Range: -1.0 (full left) to 1.0 (full right). 0 = center.'
           }
         },
         required: ['pan']

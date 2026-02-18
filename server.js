@@ -513,11 +513,13 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           break;
 
         case 'audio_chorus':
+          const chorusInGain = parsedArgs.in_gain ?? 0.5;
+          const chorusOutGain = parsedArgs.out_gain ?? 0.9;
           const chorusDelays = parsedArgs.delays || '40|60|80';
           const chorusDecays = parsedArgs.decays || '0.4|0.5|0.6';
           const chorusSpeeds = parsedArgs.speeds || '0.5|0.6|0.7';
           const chorusDepths = parsedArgs.depths || '0.25|0.4|0.35';
-          command = command.audioFilters(`chorus=0.5:0.9:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
+          command = command.audioFilters(`chorus=${chorusInGain}:${chorusOutGain}:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
           break;
 
         case 'audio_flanger':
@@ -593,7 +595,7 @@ app.post('/api/process-video', videoProcessLimiter, upload.single('video'), asyn
           break;
 
         case 'audio_pan':
-          const panValue = parsedArgs.pan || 0;
+          const panValue = parsedArgs.pan ?? 0;
           // Convert -1 to 1 range to FFmpeg pan filter format
           // For stereo output: pan=stereo|c0=c0*left_factor+c1*cross_factor|c1=c1*right_factor+c0*cross_factor
           let leftGain, rightGain;
