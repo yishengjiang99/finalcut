@@ -938,9 +938,15 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         }
 
         case 'convert_audio_format': {
+          const supportedAudioFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'];
+          if (!parsedArgs.format || !supportedAudioFormats.includes(parsedArgs.format)) {
+            reject(new Error(`Invalid or unsupported audio format: ${parsedArgs.format}`));
+            return;
+          }
           const audioBitrate = parsedArgs.bitrate || '192k';
           command = command.noVideo().toFormat(parsedArgs.format).audioBitrate(audioBitrate);
           break;
+        }
         }
 
         case 'extract_audio': {
