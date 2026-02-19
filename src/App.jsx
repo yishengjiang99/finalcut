@@ -194,14 +194,20 @@ export default function App() {
     return videoType === 'original' ? 'Original Video' : 'Processed Video';
   };
 
-  const callAPI = async (currentMessages) => {
+  const callAPI = async (currentMessages, options = {}) => {
+    const forcedSampleToken = options.sampleAccessToken || null;
+    const shouldUseSampleAuth = Boolean(forcedSampleToken || (isSampleMode && sampleAccessToken));
+    const authHeaders = shouldUseSampleAuth
+      ? { 'sample-access-token': forcedSampleToken || sampleAccessToken }
+      : {};
+
     setIsCallingAPI(true); // Set loading state before API call
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getSampleAuthHeaders()
+          ...authHeaders
         },
         body: JSON.stringify({
           model: 'grok-beta',
@@ -487,7 +493,7 @@ export default function App() {
     const sampleVideoUrl = '/BigBuckBunny.mp4';
     
     try {
-      await getSampleAccessToken();
+      const token = await getSampleAccessToken();
 
       // Fetch the sample video
       const response = await fetch(sampleVideoUrl);
@@ -514,7 +520,7 @@ export default function App() {
       const messagesForAPI = [...messages, uploadedMessage, userMessage];
       setMessages(prev => [...prev, uploadedMessage, userMessage]);
       
-      await callAPI(messagesForAPI);
+      await callAPI(messagesForAPI, { sampleAccessToken: token });
     } catch (error) {
       addMessage('Error loading sample video. Please upload your own video.', false);
     }
