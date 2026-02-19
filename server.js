@@ -267,6 +267,43 @@ function getBaseUrlFromRequest(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+function parseAudioDataUri(audioFile) {
+  const match = audioFile.match(/^data:audio\/([a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!match) return null;
+
+  const [, mimeSubtype, base64Data] = match;
+  return {
+    extension: mimeSubtype.split('+')[0].replace(/^x-/, '').replace(/[^a-zA-Z0-9]/g, '') || 'audio',
+    buffer: Buffer.from(base64Data.replace(/\s+/g, ''), 'base64')
+  };
+}
+
+function parseAudioInput(audioFile) {
+  if (typeof audioFile !== 'string') {
+    throw new Error('audioFile must be a base64-encoded string');
+  }
+
+  const trimmed = audioFile.trim();
+  if (!trimmed) {
+    throw new Error('audioFile cannot be empty');
+  }
+
+  const parsedDataUri = parseAudioDataUri(trimmed);
+  if (parsedDataUri) {
+    return parsedDataUri;
+  }
+
+  const sanitizedBase64 = trimmed.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/=]+$/.test(sanitizedBase64)) {
+    throw new Error('audioFile is not valid base64 data');
+  }
+
+  return {
+    extension: 'audio',
+    buffer: Buffer.from(sanitizedBase64, 'base64')
+  };
+}
+
 // Configure multer for file uploads (store in memory)
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -526,6 +563,7 @@ app.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscri
 app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, upload.single('video'), async (req, res) => {
   let inputPath = null;
   let outputPath = null;
+  let audioInputPath = null;
 
   try {
     const { operation, args } = req.body;
@@ -549,9 +587,22 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     // Write uploaded file to disk
     await fs.writeFile(inputPath, req.file.buffer);
 
+    if (operation === 'add_audio_track') {
+      const parsedAudio = parseAudioInput(parsedArgs.audioFile);
+      audioInputPath = path.join(tmpDir, `audio-${randomUUID()}.${parsedAudio.extension}`);
+      await fs.writeFile(audioInputPath, parsedAudio.buffer);
+    }
+
+    const sourceHasAudio = operation === 'add_audio_track'
+      ? await checkHasAudioStream(inputPath)
+      : false;
+
     // Process video based on operation
     const result = await new Promise((resolve, reject) => {
       let command = ffmpeg(inputPath);
+      if (audioInputPath) {
+        command = command.input(audioInputPath);
+      }
 
       // Special handling for get_video_info
       if (operation === 'get_video_info') {
@@ -638,6 +689,52 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         case 'adjust_volume':
           command = command.audioFilters(`volume=${parsedArgs.volume}`).videoCodec('copy');
           break;
+
+        case 'add_audio_track': {
+          const mode = parsedArgs.mode || 'replace';
+          const volume = parsedArgs.volume ?? 1.0;
+
+          if (!audioInputPath) {
+            reject(new Error('No audio track provided'));
+            return;
+          }
+          if (mode !== 'replace' && mode !== 'mix') {
+            reject(new Error('Mode must be either "replace" or "mix"'));
+            return;
+          }
+          if (typeof volume !== 'number' || Number.isNaN(volume) || volume < 0 || volume > 2) {
+            reject(new Error('Volume must be between 0.0 and 2.0'));
+            return;
+          }
+
+          if (mode === 'mix' && sourceHasAudio) {
+            command = command
+              .complexFilter([
+                `[1:a]volume=${volume}[newaudio]`,
+                '[0:a][newaudio]amix=inputs=2:duration=first:dropout_transition=2[mixedaudio]'
+              ], ['mixedaudio'])
+              .outputOptions([
+                '-map 0:v:0',
+                '-map [mixedaudio]',
+                '-c:v copy',
+                '-c:a aac',
+                '-shortest'
+              ]);
+          } else {
+            command = command
+              .complexFilter([
+                `[1:a]volume=${volume}[newaudio]`
+              ], ['newaudio'])
+              .outputOptions([
+                '-map 0:v:0',
+                '-map [newaudio]',
+                '-c:v copy',
+                '-c:a aac',
+                '-shortest'
+              ]);
+          }
+          break;
+        }
 
         case 'audio_fade':
           let fadeFilter = '';
@@ -828,6 +925,9 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     if (result && result.isMetadata) {
       // Clean up input file
       await fs.unlink(inputPath);
+      if (audioInputPath) {
+        await fs.unlink(audioInputPath);
+      }
 
       // Send metadata as JSON
       res.json(result.metadata);
@@ -840,6 +940,9 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     // Clean up temporary files
     await fs.unlink(inputPath);
     await fs.unlink(outputPath);
+    if (audioInputPath) {
+      await fs.unlink(audioInputPath);
+    }
 
     // Send the processed video
     res.set('Content-Type', 'video/mp4');
@@ -854,6 +957,9 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     }
     if (outputPath) {
       try { await fs.unlink(outputPath); } catch (e) { /* ignore */ }
+    }
+    if (audioInputPath) {
+      try { await fs.unlink(audioInputPath); } catch (e) { /* ignore */ }
     }
 
     res.status(500).json({ error: error.message || 'Failed to process video' });

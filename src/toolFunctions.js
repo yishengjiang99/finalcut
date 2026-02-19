@@ -21,6 +21,31 @@ export function setSampleModeAccessToken(token) {
   sampleModeAccessToken = typeof token === 'string' && token ? token : null;
 }
 
+function normalizeAudioFileInput(audioFile) {
+  if (typeof audioFile === 'string') {
+    const trimmed = audioFile.trim();
+    if (!trimmed) {
+      throw new Error('audioFile cannot be empty');
+    }
+    return trimmed;
+  }
+
+  if (audioFile instanceof Uint8Array) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < audioFile.length; i += chunkSize) {
+      binary += String.fromCharCode(...audioFile.subarray(i, i + chunkSize));
+    }
+    return `data:audio/mpeg;base64,${btoa(binary)}`;
+  }
+
+  if (audioFile instanceof ArrayBuffer) {
+    return normalizeAudioFileInput(new Uint8Array(audioFile));
+  }
+
+  throw new Error('audioFile must be a base64 string, Uint8Array, or ArrayBuffer');
+}
+
 // Helper function to call server API
 async function processVideoOnServer(operation, args, videoFileData) {
   const formData = new FormData();
@@ -456,9 +481,30 @@ export const toolFunctions = {
   
   add_audio_track: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // This needs multipart upload handling on server
-      addMessage('Adding audio track is not yet implemented on server-side', false);
-      return 'Feature not yet available with server-side processing';
+      if (args.audioFile === null || args.audioFile === undefined) {
+        throw new Error('audioFile is required');
+      }
+
+      const mode = args.mode || 'replace';
+      if (mode !== 'replace' && mode !== 'mix') {
+        throw new Error('Mode must be either "replace" or "mix"');
+      }
+
+      const volume = args.volume ?? 1.0;
+      if (typeof volume !== 'number' || Number.isNaN(volume) || volume < 0 || volume > 2) {
+        throw new Error('Volume must be between 0.0 and 2.0');
+      }
+
+      const normalizedAudioFile = normalizeAudioFileInput(args.audioFile);
+      const data = await processVideoOnServer('add_audio_track', {
+        audioFile: normalizedAudioFile,
+        mode,
+        volume
+      }, videoFileData);
+      setVideoFileData(data);
+      const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+      addMessage(`Processed video (audio track ${mode === 'mix' ? 'mixed' : 'replaced'}):`, false, videoUrl, 'processed', 'video/mp4');
+      return mode === 'mix' ? 'Audio track mixed successfully.' : 'Audio track replaced successfully.';
     } catch (error) {
       addMessage('Error adding audio track: ' + error.message, false);
       return 'Failed to add audio track: ' + error.message;
