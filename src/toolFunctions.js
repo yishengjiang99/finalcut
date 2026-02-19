@@ -572,6 +572,7 @@ export const toolFunctions = {
       const mimeType = AUDIO_MIME_TYPES[args.format] || 'audio/mpeg';
 
       const data = await processVideoOnServer('convert_audio_format', args, videoFileData);
+      setVideoFileData(data);
       const audioUrl = URL.createObjectURL(new Blob([data.buffer], { type: mimeType }));
       addMessage(`Converted audio to ${args.format.toUpperCase()} format:`, false, audioUrl, 'processed', mimeType);
       return `Audio converted to ${args.format} successfully.`;
@@ -591,6 +592,7 @@ export const toolFunctions = {
       const mimeType = AUDIO_MIME_TYPES[format] || 'audio/mpeg';
 
       const data = await processVideoOnServer('extract_audio', { ...args, format }, videoFileData);
+      setVideoFileData(data);
       const audioUrl = URL.createObjectURL(new Blob([data.buffer], { type: mimeType }));
       addMessage(`Extracted audio as ${format.toUpperCase()}:`, false, audioUrl, 'processed', mimeType);
       return `Audio extracted as ${format} successfully.`;
