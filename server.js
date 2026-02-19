@@ -920,7 +920,12 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           break;
 
         case 'convert_video_format': {
+          const supportedVideoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'];
           const targetFormat = parsedArgs.format;
+          if (!targetFormat || !supportedVideoFormats.includes(targetFormat)) {
+            reject(new Error(`Invalid or unsupported video format: ${targetFormat}`));
+            return;
+          }
           const codec = parsedArgs.codec && parsedArgs.codec !== 'auto' ? parsedArgs.codec : null;
           if (codec) {
             command = command.videoCodec(codec).audioCodec('copy');
@@ -929,6 +934,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           }
           command = command.toFormat(targetFormat);
           break;
+        }
         }
 
         case 'convert_audio_format': {
