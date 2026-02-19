@@ -273,7 +273,7 @@ function parseAudioDataUri(audioFile) {
 
   const [, mimeSubtype, base64Data] = match;
   return {
-    extension: mimeSubtype.split('+')[0].replace(/[^a-zA-Z0-9]/g, '') || 'audio',
+    extension: mimeSubtype.split('+')[0].replace(/^x-/, '').replace(/[^a-zA-Z0-9]/g, '') || 'audio',
     buffer: Buffer.from(base64Data.replace(/\s+/g, ''), 'base64')
   };
 }
