@@ -944,9 +944,16 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         }
 
         case 'extract_audio': {
+          const supportedExtractFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
+          const format = parsedArgs.format || 'mp3';
+          if (!supportedExtractFormats.includes(format)) {
+            reject(new Error(`Invalid or unsupported extract format: ${format}`));
+            return;
+          }
           const extractBitrate = parsedArgs.bitrate || '192k';
-          command = command.noVideo().toFormat(parsedArgs.format || 'mp3').audioBitrate(extractBitrate);
+          command = command.noVideo().toFormat(format).audioBitrate(extractBitrate);
           break;
+        }
         }
 
         case 'fade_transition':
