@@ -559,7 +559,7 @@ app.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscri
 });
 
 // Supported formats introspection endpoint
-app.get('/api/supported-formats', requireAuthenticatedUser, (req, res) => {
+app.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, (req, res) => {
   res.json({
     video: {
       formats: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'],
