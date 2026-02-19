@@ -558,6 +558,23 @@ app.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscri
   }
 });
 
+// Supported formats introspection endpoint
+app.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, (req, res) => {
+  res.json({
+    video: {
+      formats: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'],
+      codecs: ['libx264', 'libx265', 'libvpx-vp9', 'auto']
+    },
+    audio: {
+      formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'],
+      bitrates: ['64k', '128k', '192k', '256k', '320k']
+    },
+    extract: {
+      formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a']
+    }
+  });
+});
+
 // Video processing endpoint
 app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, upload.single('video'), async (req, res) => {
   let inputPath = null;
@@ -581,7 +598,13 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     // Create temporary files
     const tmpDir = '/tmp';
     inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
-    outputPath = path.join(tmpDir, `output-${randomUUID()}.mp4`);
+    // Determine output extension based on operation
+    const conversionOps = ['convert_video_format', 'convert_audio_format', 'extract_audio'];
+    let outputExt = 'mp4';
+    if (conversionOps.includes(operation)) {
+      outputExt = parsedArgs.format || 'mp4';
+    }
+    outputPath = path.join(tmpDir, `output-${randomUUID()}.${outputExt}`);
 
     // Write uploaded file to disk
     await fs.writeFile(inputPath, req.file.buffer);
@@ -896,6 +919,49 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           command = command.videoFilters(`eq=saturation=${parsedArgs.saturation}`).audioCodec('copy');
           break;
 
+        case 'convert_video_format': {
+          const supportedVideoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'];
+          const targetFormat = parsedArgs.format;
+          if (!targetFormat || !supportedVideoFormats.includes(targetFormat)) {
+            reject(new Error(`Invalid or unsupported video format: ${targetFormat}`));
+            return;
+          }
+          const codec = parsedArgs.codec && parsedArgs.codec !== 'auto' ? parsedArgs.codec : null;
+          if (codec) {
+            command = command.videoCodec(codec).audioCodec('copy');
+          } else {
+            command = command.outputOptions('-c copy');
+          }
+          command = command.toFormat(targetFormat);
+          break;
+        }
+        }
+
+        case 'convert_audio_format': {
+          const supportedAudioFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'];
+          if (!parsedArgs.format || !supportedAudioFormats.includes(parsedArgs.format)) {
+            reject(new Error(`Invalid or unsupported audio format: ${parsedArgs.format}`));
+            return;
+          }
+          const audioBitrate = parsedArgs.bitrate || '192k';
+          command = command.noVideo().toFormat(parsedArgs.format).audioBitrate(audioBitrate);
+          break;
+        }
+        }
+
+        case 'extract_audio': {
+          const supportedExtractFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
+          const format = parsedArgs.format || 'mp3';
+          if (!supportedExtractFormats.includes(format)) {
+            reject(new Error(`Invalid or unsupported extract format: ${format}`));
+            return;
+          }
+          const extractBitrate = parsedArgs.bitrate || '192k';
+          command = command.noVideo().toFormat(format).audioBitrate(extractBitrate);
+          break;
+        }
+        }
+
         case 'fade_transition':
           // Simple fade in/out effect for a single video
           const duration = parsedArgs.duration || 1;
@@ -944,7 +1010,32 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     }
 
     // Send the processed video
-    res.set('Content-Type', 'video/mp4');
+    const AUDIO_CONTENT_TYPES = {
+      mp3: 'audio/mpeg',
+      wav: 'audio/wav',
+      aac: 'audio/aac',
+      ogg: 'audio/ogg',
+      flac: 'audio/flac',
+      m4a: 'audio/mp4',
+      wma: 'audio/x-ms-wma'
+    };
+    const VIDEO_CONTENT_TYPES = {
+      mp4: 'video/mp4',
+      webm: 'video/webm',
+      mov: 'video/quicktime',
+      avi: 'video/x-msvideo',
+      mkv: 'video/x-matroska',
+      flv: 'video/x-flv',
+      ogv: 'video/ogg'
+    };
+    const audioOnlyOps = ['convert_audio_format', 'extract_audio'];
+    let contentType = 'video/mp4';
+    if (audioOnlyOps.includes(operation)) {
+      contentType = AUDIO_CONTENT_TYPES[outputExt] || 'application/octet-stream';
+    } else if (operation === 'convert_video_format') {
+      contentType = VIDEO_CONTENT_TYPES[outputExt] || 'video/mp4';
+    }
+    res.set('Content-Type', contentType);
     res.send(processedVideo);
 
   } catch (error) {

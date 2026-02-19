@@ -228,6 +228,13 @@ describe('Tools Module', () => {
     expect(dimensionsTool.function.parameters.required).toEqual([]);
   });
 
+  it('has get_supported_formats tool', () => {
+    const formatsTool = tools.find(t => t.function.name === 'get_supported_formats');
+    expect(formatsTool).toBeDefined();
+    expect(formatsTool.function.description.toLowerCase()).toContain('format');
+    expect(formatsTool.function.parameters.required).toEqual([]);
+  });
+
   it('has convert_video_format tool', () => {
     const convertVideoTool = tools.find(t => t.function.name === 'convert_video_format');
     expect(convertVideoTool).toBeDefined();

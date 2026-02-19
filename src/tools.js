@@ -831,6 +831,18 @@ export const tools = [
   {
     type: 'function',
     function: {
+      name: 'get_supported_formats',
+      description: 'Introspect and retrieve the list of supported video and audio formats for file conversion. Call this tool before using convert_video_format or convert_audio_format to know which target formats are available.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'add_video_transition',
       description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos.',
       parameters: {

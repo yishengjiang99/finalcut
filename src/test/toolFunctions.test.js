@@ -1057,4 +1057,212 @@ describe('toolFunctions', () => {
       expect(result).toContain('MB');
     });
   });
+
+  describe('convert_video_format', () => {
+    it('should require format parameter', async () => {
+      const result = await toolFunctions.convert_video_format(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to convert video format');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Error converting video format'),
+        false
+      );
+    });
+
+    it('should reject unsupported formats', async () => {
+      const result = await toolFunctions.convert_video_format(
+        { format: 'xyz' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to convert video format');
+    });
+
+    it('should convert to mp4 successfully', async () => {
+      const result = await toolFunctions.convert_video_format(
+        { format: 'mp4' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Video converted to mp4 successfully.');
+      expect(mockSetVideoFileData).toHaveBeenCalled();
+    });
+
+    it('should convert to webm successfully', async () => {
+      const result = await toolFunctions.convert_video_format(
+        { format: 'webm' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Video converted to webm successfully.');
+    });
+
+    it('should handle server error gracefully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Server error' })
+      });
+      const result = await toolFunctions.convert_video_format(
+        { format: 'mp4' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to convert video format');
+    });
+  });
+
+  describe('convert_audio_format', () => {
+    it('should require format parameter', async () => {
+      const result = await toolFunctions.convert_audio_format(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to convert audio format');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Error converting audio format'),
+        false
+      );
+    });
+
+    it('should reject unsupported formats', async () => {
+      const result = await toolFunctions.convert_audio_format(
+        { format: 'xyz' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to convert audio format');
+    });
+
+    it('should convert to mp3 successfully', async () => {
+      const result = await toolFunctions.convert_audio_format(
+        { format: 'mp3' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Audio converted to mp3 successfully.');
+    });
+
+    it('should convert to wav successfully', async () => {
+      const result = await toolFunctions.convert_audio_format(
+        { format: 'wav' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Audio converted to wav successfully.');
+    });
+
+    it('should handle server error gracefully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Server error' })
+      });
+      const result = await toolFunctions.convert_audio_format(
+        { format: 'mp3' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to convert audio format');
+    });
+  });
+
+  describe('extract_audio', () => {
+    it('should use mp3 as default format', async () => {
+      const result = await toolFunctions.extract_audio(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Audio extracted as mp3 successfully.');
+    });
+
+    it('should extract to specified format', async () => {
+      const result = await toolFunctions.extract_audio(
+        { format: 'wav' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Audio extracted as wav successfully.');
+    });
+
+    it('should reject unsupported formats', async () => {
+      const result = await toolFunctions.extract_audio(
+        { format: 'xyz' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to extract audio');
+    });
+
+    it('should handle server error gracefully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Server error' })
+      });
+      const result = await toolFunctions.extract_audio(
+        { format: 'mp3' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to extract audio');
+    });
+  });
+
+  describe('get_supported_formats', () => {
+    it('should return supported formats info', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          video: { formats: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'], codecs: ['libx264', 'libx265', 'auto'] },
+          audio: { formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'], bitrates: ['128k', '192k', '320k'] },
+          extract: { formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'] }
+        })
+      });
+
+      const result = await toolFunctions.get_supported_formats(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('mp4');
+      expect(result).toContain('mp3');
+      expect(mockAddMessage).toHaveBeenCalled();
+    });
+
+    it('should handle server error gracefully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Unauthorized' })
+      });
+      const result = await toolFunctions.get_supported_formats(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to fetch supported formats');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Error fetching supported formats'),
+        false
+      );
+    });
+  });
 });

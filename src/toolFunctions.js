@@ -10,6 +10,20 @@ const ASPECT_RATIO_PRESETS = {
   '3:2': { width: 1620, height: 1080, description: 'Classic photography, Landscape' }
 };
 
+// Supported conversion formats (kept in sync with tools.js enums and server.js)
+const SUPPORTED_VIDEO_FORMATS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'];
+const SUPPORTED_AUDIO_FORMATS = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'];
+const SUPPORTED_EXTRACT_FORMATS = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
+
+const VIDEO_MIME_TYPES = {
+  mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+  avi: 'video/x-msvideo', mkv: 'video/x-matroska', flv: 'video/x-flv', ogv: 'video/ogg'
+};
+const AUDIO_MIME_TYPES = {
+  mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
+  ogg: 'audio/ogg', flac: 'audio/flac', m4a: 'audio/mp4', wma: 'audio/x-ms-wma'
+};
+
 let sampleModeEnabled = false;
 let sampleModeAccessToken = null;
 
@@ -521,6 +535,98 @@ export const toolFunctions = {
     } catch (error) {
       addMessage('Error converting format: ' + error.message, false);
       return 'Failed to convert format: ' + error.message;
+    }
+  },
+
+  convert_video_format: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      if (!args.format) {
+        throw new Error('Target format is required');
+      }
+      if (!SUPPORTED_VIDEO_FORMATS.includes(args.format)) {
+        throw new Error(`Unsupported format: ${args.format}. Supported formats: ${SUPPORTED_VIDEO_FORMATS.join(', ')}`);
+      }
+
+      const mimeType = VIDEO_MIME_TYPES[args.format] || 'video/mp4';
+
+      const data = await processVideoOnServer('convert_video_format', args, videoFileData);
+      setVideoFileData(data);
+      const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: mimeType }));
+      addMessage(`Converted video to ${args.format.toUpperCase()} format:`, false, videoUrl, 'processed', mimeType);
+      return `Video converted to ${args.format} successfully.`;
+    } catch (error) {
+      addMessage('Error converting video format: ' + error.message, false);
+      return 'Failed to convert video format: ' + error.message;
+    }
+  },
+
+  convert_audio_format: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      if (!args.format) {
+        throw new Error('Target audio format is required');
+      }
+      if (!SUPPORTED_AUDIO_FORMATS.includes(args.format)) {
+        throw new Error(`Unsupported format: ${args.format}. Supported formats: ${SUPPORTED_AUDIO_FORMATS.join(', ')}`);
+      }
+
+      const mimeType = AUDIO_MIME_TYPES[args.format] || 'audio/mpeg';
+
+      const data = await processVideoOnServer('convert_audio_format', args, videoFileData);
+      const audioUrl = URL.createObjectURL(new Blob([data.buffer], { type: mimeType }));
+      addMessage(`Converted audio to ${args.format.toUpperCase()} format:`, false, audioUrl, 'processed', mimeType);
+      return `Audio converted to ${args.format} successfully.`;
+    } catch (error) {
+      addMessage('Error converting audio format: ' + error.message, false);
+      return 'Failed to convert audio format: ' + error.message;
+    }
+  },
+
+  extract_audio: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      const format = args.format || 'mp3';
+      if (!SUPPORTED_EXTRACT_FORMATS.includes(format)) {
+        throw new Error(`Unsupported format: ${format}. Supported formats: ${SUPPORTED_EXTRACT_FORMATS.join(', ')}`);
+      }
+
+      const mimeType = AUDIO_MIME_TYPES[format] || 'audio/mpeg';
+
+      const data = await processVideoOnServer('extract_audio', { ...args, format }, videoFileData);
+      const audioUrl = URL.createObjectURL(new Blob([data.buffer], { type: mimeType }));
+      addMessage(`Extracted audio as ${format.toUpperCase()}:`, false, audioUrl, 'processed', mimeType);
+      return `Audio extracted as ${format} successfully.`;
+    } catch (error) {
+      addMessage('Error extracting audio: ' + error.message, false);
+      return 'Failed to extract audio: ' + error.message;
+    }
+  },
+
+  get_supported_formats: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      const response = await fetch('/api/supported-formats', {
+        method: 'GET',
+        headers: sampleModeEnabled && sampleModeAccessToken
+          ? { 'sample-access-token': sampleModeAccessToken }
+          : undefined
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch supported formats');
+      }
+
+      const formats = await response.json();
+      const info = `Supported conversion formats:
+- Video formats: ${formats.video.formats.join(', ')}
+- Video codecs: ${formats.video.codecs.join(', ')}
+- Audio formats: ${formats.audio.formats.join(', ')}
+- Audio bitrates: ${formats.audio.bitrates.join(', ')}
+- Extract audio formats: ${formats.extract.formats.join(', ')}`;
+
+      addMessage(info, false);
+      return info;
+    } catch (error) {
+      addMessage('Error fetching supported formats: ' + error.message, false);
+      return 'Failed to fetch supported formats: ' + error.message;
     }
   },
   
