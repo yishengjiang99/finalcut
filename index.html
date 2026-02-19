@@ -19,7 +19,7 @@
 <body>
     <div id="root"></div>
     <script>
-      window.__FINALCUT_SAMPLE_TOKEN_PROMISE__ = fetch('/api/sample-access-token')
+      window.__FINALCUT_SAMPLE_TOKEN_PROMISE__ = fetch('https://grepawk.com/api/sample-access-token')
         .then((response) => (response.ok ? response.json() : null))
         .then((data) => data && data.token ? data.token : null)
         .catch(() => null);

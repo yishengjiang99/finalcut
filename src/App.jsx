@@ -84,7 +84,7 @@ export default function App() {
       }
     }
 
-    const response = await fetch('/api/sample-access-token');
+    const response = await fetch('https://grepawk.com/api/sample-access-token');
     if (!response.ok) {
       throw new Error('Failed to initialize sample access token');
     }
@@ -95,6 +95,13 @@ export default function App() {
     }
     setSampleAccessTokenState(token);
     return token;
+  };
+
+  const getSampleAuthHeaders = () => {
+    if (isSampleMode && sampleAccessToken) {
+      return { 'sample-access-token': sampleAccessToken };
+    }
+    return {};
   };
 
   // Check if user is authenticated and has subscription
@@ -120,7 +127,9 @@ export default function App() {
           return;
         }
         
-        const response = await fetch('/api/auth/status');
+        const response = await fetch('/api/auth/status', {
+          headers: getSampleAuthHeaders()
+        });
         if (response.ok) {
           const data = await response.json();
           if (data.authenticated) {
@@ -152,7 +161,8 @@ export default function App() {
           const response = await fetch('/api/verify-checkout-session', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              ...getSampleAuthHeaders()
             },
             body: JSON.stringify({ sessionId })
           });
@@ -191,10 +201,7 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(isSampleMode ? {
-            'x-finalcut-sample-mode': 'true',
-            ...(sampleAccessToken ? { 'x-finalcut-sample-token': sampleAccessToken } : {})
-          } : {})
+          ...getSampleAuthHeaders()
         },
         body: JSON.stringify({
           model: 'grok-beta',

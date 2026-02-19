@@ -95,8 +95,7 @@ function validateSampleAccessToken(token) {
 
 function isValidSampleModeRequest(req) {
   if (!ALLOW_UNAUTH_SAMPLE_MODE) return false;
-  if (req.headers['x-finalcut-sample-mode'] !== 'true') return false;
-  return validateSampleAccessToken(req.headers['x-finalcut-sample-token']);
+  return validateSampleAccessToken(req.headers['sample-access-token']);
 }
 
 const sampleTokenCleanupTimer = setInterval(() => {
@@ -238,7 +237,7 @@ function requireAuthenticatedUser(req, res, next) {
   if (isValidSampleModeRequest(req)) {
     return next();
   }
-  if (req.headers['x-finalcut-sample-mode'] === 'true') {
+  if (req.headers['sample-access-token']) {
     return res.status(401).json({ error: 'Invalid or expired sample access token' });
   }
   if (!req.isAuthenticated || !req.isAuthenticated()) {

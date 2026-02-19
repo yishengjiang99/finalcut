@@ -59,8 +59,7 @@ async function processVideoOnServer(operation, args, videoFileData) {
   const response = await fetch('/api/process-video', {
     method: 'POST',
     headers: sampleModeEnabled ? {
-      'x-finalcut-sample-mode': 'true',
-      ...(sampleModeAccessToken ? { 'x-finalcut-sample-token': sampleModeAccessToken } : {})
+      ...(sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
     } : undefined,
     body: formData
   });
@@ -449,6 +448,9 @@ export const toolFunctions = {
       
       const response = await fetch('/api/process-video', {
         method: 'POST',
+        headers: sampleModeEnabled && sampleModeAccessToken
+          ? { 'sample-access-token': sampleModeAccessToken }
+          : undefined,
         body: formData
       });
       
@@ -581,8 +583,7 @@ export const toolFunctions = {
       const response = await fetch('/api/transition-videos', {
         method: 'POST',
         headers: sampleModeEnabled ? {
-          'x-finalcut-sample-mode': 'true',
-          ...(sampleModeAccessToken ? { 'x-finalcut-sample-token': sampleModeAccessToken } : {})
+          ...(sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
         } : undefined,
         body: formData
       });
