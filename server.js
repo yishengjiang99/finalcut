@@ -559,7 +559,7 @@ app.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscri
 });
 
 // Supported formats introspection endpoint
-app.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, (req, res) => {
+app.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, (req, res) => {
   res.json({
     video: {
       formats: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'],
@@ -926,6 +926,11 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
             reject(new Error(`Invalid or unsupported video format: ${targetFormat}`));
             return;
           }
+          const supportedVideoCodecs = ['libx264', 'libx265', 'libvpx-vp9', 'auto'];
+          if (parsedArgs.codec && !supportedVideoCodecs.includes(parsedArgs.codec)) {
+            reject(new Error(`Invalid or unsupported video codec: ${parsedArgs.codec}`));
+            return;
+          }
           const codec = parsedArgs.codec && parsedArgs.codec !== 'auto' ? parsedArgs.codec : null;
           if (codec) {
             command = command.videoCodec(codec).audioCodec('copy');
@@ -934,7 +939,6 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           }
           command = command.toFormat(targetFormat);
           break;
-        }
         }
 
         case 'convert_audio_format': {
@@ -947,7 +951,6 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           command = command.noVideo().toFormat(parsedArgs.format).audioBitrate(audioBitrate);
           break;
         }
-        }
 
         case 'extract_audio': {
           const supportedExtractFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
@@ -959,7 +962,6 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           const extractBitrate = parsedArgs.bitrate || '192k';
           command = command.noVideo().toFormat(format).audioBitrate(extractBitrate);
           break;
-        }
         }
 
         case 'fade_transition':
