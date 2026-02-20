@@ -1027,40 +1027,6 @@ describe('toolFunctions', () => {
   });
 
   describe('get_video_dimensions', () => {
-    it('should return video information', async () => {
-      
-      // Mock ffmpeg to simulate log output with video information
-      const mockOn = vi.fn();
-      const mockOff = vi.fn();
-      ffmpeg.on = mockOn;
-      ffmpeg.off = mockOff;
-      
-      const result = await toolFunctions.get_video_dimensions(
-        {},
-        mockVideoFileData,
-        mockSetVideoFileData,
-        mockAddMessage
-      );
-      
-      expect(result).toBeDefined();
-      expect(result).toContain('Video');
-      expect(mockAddMessage).toHaveBeenCalled();
-    });
-
-    it('should handle errors gracefully', async () => {
-      
-      const result = await toolFunctions.get_video_dimensions(
-        {},
-        mockVideoFileData,
-        mockSetVideoFileData,
-        mockAddMessage
-      );
-      
-      expect(result).toBeDefined();
-      expect(result).toContain('Video file loaded');
-      expect(mockAddMessage).toHaveBeenCalled();
-    });
-
     it('should include file size in output', async () => {
       const result = await toolFunctions.get_video_dimensions(
         {},

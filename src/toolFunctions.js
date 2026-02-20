@@ -248,10 +248,10 @@ export const toolFunctions = {
       setVideoFileData(data); // Update video data for subsequent edits
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
       addMessage('Processed video (volume adjusted):', false, videoUrl, 'processed', 'video/mp4');
-      return 'Volume adjusted successfully.';
+      return 'Audio volume adjusted successfully.';
     } catch (error) {
       addMessage('Error adjusting volume: ' + error.message, false);
-      return 'Failed to adjust volume: ' + error.message;
+      return 'Failed to adjust audio volume: ' + error.message;
     }
   },
   
@@ -261,15 +261,15 @@ export const toolFunctions = {
       if (!args.type || (args.type !== 'in' && args.type !== 'out')) {
         throw new Error('Type must be "in" or "out"');
       }
-      if (args.start === null || args.start === undefined || args.duration === null || args.duration === undefined) {
-        throw new Error('Start time and duration are required');
+      if (args.duration === null || args.duration === undefined || args.duration <= 0) {
+        throw new Error('Duration must be a positive number');
       }
 
       const data = await processVideoOnServer('audio_fade', args, videoFileData);
       setVideoFileData(data); // Update video data for subsequent edits
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
       addMessage('Processed video (audio fade applied):', false, videoUrl, 'processed', 'video/mp4');
-      return 'Audio fade applied successfully.';
+      return `Audio fade ${args.type} applied successfully.`;
     } catch (error) {
       addMessage('Error applying audio fade: ' + error.message, false);
       return 'Failed to apply audio fade: ' + error.message;
@@ -318,6 +318,9 @@ export const toolFunctions = {
       if (args.delay === null || args.delay === undefined || args.decay === null || args.decay === undefined) {
         throw new Error('Delay and decay are required');
       }
+      if (args.decay <= 0 || args.decay >= 1) {
+        throw new Error('Decay must be between 0 and 1 (exclusive)');
+      }
 
       const data = await processVideoOnServer('echo_effect', args, videoFileData);
       setVideoFileData(data); // Update video data for subsequent edits
@@ -335,6 +338,9 @@ export const toolFunctions = {
       // Validate inputs
       if (args.gain === null || args.gain === undefined) {
         throw new Error('Gain is required');
+      }
+      if (args.gain < -20 || args.gain > 20) {
+        throw new Error('Gain must be between -20 and 20 dB');
       }
 
       const data = await processVideoOnServer('bass_adjustment', args, videoFileData);
@@ -386,6 +392,13 @@ export const toolFunctions = {
   
   normalize_audio: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
+      // Validate inputs
+      if (args.target === null || args.target === undefined) {
+        throw new Error('Target loudness is required');
+      }
+      if (args.target > 0) {
+        throw new Error('Target must be a negative value (LUFS), e.g. -16');
+      }
       const data = await processVideoOnServer('normalize_audio', args, videoFileData);
       setVideoFileData(data); // Update video data for subsequent edits
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
@@ -403,12 +416,15 @@ export const toolFunctions = {
       if (args.delay === null || args.delay === undefined) {
         throw new Error('Delay is required');
       }
+      if (args.delay < 0) {
+        throw new Error('Delay must be a non-negative value');
+      }
 
       const data = await processVideoOnServer('delay_audio', args, videoFileData);
       setVideoFileData(data); // Update video data for subsequent edits
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
       addMessage('Processed video (audio delayed):', false, videoUrl, 'processed', 'video/mp4');
-      return 'Audio delay applied successfully.';
+      return 'Audio delayed successfully.';
     } catch (error) {
       addMessage('Error delaying audio: ' + error.message, false);
       return 'Failed to delay audio: ' + error.message;
@@ -420,6 +436,9 @@ export const toolFunctions = {
       // Validate inputs
       if (args.brightness === null || args.brightness === undefined) {
         throw new Error('Brightness value is required');
+      }
+      if (args.brightness < -1 || args.brightness > 1) {
+        throw new Error('Brightness must be between -1 and 1');
       }
 
       const data = await processVideoOnServer('adjust_brightness', args, videoFileData);
@@ -439,6 +458,9 @@ export const toolFunctions = {
       if (args.degrees === null || args.degrees === undefined) {
         throw new Error('Hue degrees value is required');
       }
+      if (args.degrees < -360 || args.degrees > 360) {
+        throw new Error('Degrees must be between -360 and 360');
+      }
 
       const data = await processVideoOnServer('adjust_hue', args, videoFileData);
       setVideoFileData(data); // Update video data for subsequent edits
@@ -456,6 +478,9 @@ export const toolFunctions = {
       // Validate inputs
       if (args.saturation === null || args.saturation === undefined) {
         throw new Error('Saturation value is required');
+      }
+      if (args.saturation < 0 || args.saturation > 3) {
+        throw new Error('Saturation must be between 0 and 3');
       }
 
       const data = await processVideoOnServer('adjust_saturation', args, videoFileData);
@@ -770,8 +795,28 @@ export const toolFunctions = {
     toolFunctions.equalizer(args, videoFileData, setVideoFileData, addMessage),
   audio_delay: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.delay_audio(args, videoFileData, setVideoFileData, addMessage),
-  resize_video_preset: async (args, videoFileData, setVideoFileData, addMessage) => 
-    toolFunctions.resize_to_aspect_ratio(args, videoFileData, setVideoFileData, addMessage),
+  resize_video_preset: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      if (!args.preset) {
+        throw new Error('Preset is required');
+      }
+      if (!ASPECT_RATIO_PRESETS[args.preset]) {
+        throw new Error('Invalid preset: ' + args.preset + '. Must be one of: ' + Object.keys(ASPECT_RATIO_PRESETS).join(', '));
+      }
+      const preset = ASPECT_RATIO_PRESETS[args.preset];
+      const data = await processVideoOnServer('resize_video', {
+        width: preset.width,
+        height: preset.height
+      }, videoFileData);
+      setVideoFileData(data);
+      const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+      addMessage(`Processed video (resized to ${args.preset}):\n${preset.description}`, false, videoUrl, 'processed', 'video/mp4');
+      return `Video resized to ${args.preset} aspect ratio successfully.`;
+    } catch (error) {
+      addMessage('Error resizing video to preset: ' + error.message, false);
+      return 'Failed to resize video to preset: ' + error.message;
+    }
+  },
   get_video_dimensions: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.get_video_info(args, videoFileData, setVideoFileData, addMessage),
 };
