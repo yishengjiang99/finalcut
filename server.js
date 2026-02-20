@@ -989,7 +989,10 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
       const supportedVideoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'];
       const targetFormat = parsedArgs.format;
       if (!targetFormat || !supportedVideoFormats.includes(targetFormat)) {
-        return res.status(400).json({ error: `Invalid or unsupported video format: ${targetFormat}` });
+      if (!targetFormat || !supportedVideoFormats.includes(targetFormat)) {
+        if (!res.headersSent) return res.status(400).end();
+        return;
+      }
       }
       const supportedVideoCodecs = ['libx264', 'libx265', 'libvpx-vp9', 'auto'];
       if (parsedArgs.codec && !supportedVideoCodecs.includes(parsedArgs.codec)) {
