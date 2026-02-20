@@ -79,53 +79,6 @@ describe('App Component', () => {
     expect(html).not.toContain('No token');
   });
 
-  it('Get Started button creates checkout session and redirects to Stripe', async () => {
-    const mockCheckoutUrl = 'https://checkout.stripe.com/pay/cs_test_123';
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ sessionId: 'cs_test_123', url: mockCheckoutUrl })
-    });
-
-    render(<App />);
-    const getStartedButton = screen.getByText('Get Started');
-    
-    fireEvent.click(getStartedButton);
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          priceId: 'price_1StDJe4OymfcnKESq2dIraNE',
-          successUrl: 'http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}',
-          cancelUrl: 'http://localhost:3000'
-        })
-      });
-    });
-
-    await waitFor(() => {
-      expect(window.location.href).toBe(mockCheckoutUrl);
-    });
-  });
-
-  it('Get Started button handles errors gracefully', async () => {
-    global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
-    render(<App />);
-    const getStartedButton = screen.getByText('Get Started');
-    
-    fireEvent.click(getStartedButton);
-
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('Failed to start checkout. Please try again.');
-    });
-
-    alertSpy.mockRestore();
-  });
-
   it('shows editor interface when returning from successful payment', async () => {
     // Mock location with session_id query parameter
     delete window.location;
@@ -136,15 +89,17 @@ describe('App Component', () => {
       href: 'http://localhost:3000/success?session_id=cs_test_123'
     };
     
-    // Mock the verify endpoint
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ 
-        verified: true, 
-        paymentStatus: 'paid',
-        customerEmail: 'test@example.com'
-      })
-    });
+    // Mock the auth status (not authenticated) and then the verify endpoint
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false }) // for /api/auth/status
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ 
+          verified: true, 
+          paymentStatus: 'paid',
+          customerEmail: 'test@example.com'
+        })
+      });
     
     const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
 

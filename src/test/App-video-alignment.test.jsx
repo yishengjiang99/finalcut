@@ -25,10 +25,24 @@ global.URL.createObjectURL = vi.fn(() => 'mock-url');
 describe('App Component - Video Alignment', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    global.fetch = vi.fn();
+    delete window.location;
+    window.location = { href: '', origin: 'http://localhost:3000', pathname: '/', search: '' };
   });
 
   it('displays uploaded video on the right side (user role)', async () => {
+    // Mock auth status to bypass landing page
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ authenticated: true, user: { hasSubscription: true } })
+    });
+
     const { container } = render(<App />);
+
+    // Wait for the editor interface to appear (landing page bypassed)
+    await waitFor(() => {
+      expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
+    }, { timeout: 3000 });
     
     const fileInput = container.querySelector('input[type="file"]');
     const file = new File(['video content'], 'test.mp4', { type: 'video/mp4' });
@@ -63,8 +77,19 @@ describe('App Component - Video Alignment', () => {
   });
 
   it('displays processed video on the left side (assistant role)', async () => {
+    // Mock auth status to bypass landing page
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ authenticated: true, user: { hasSubscription: true } })
+    });
+
     const { container } = render(<App />);
-    
+
+    // Wait for the editor interface to appear (landing page bypassed)
+    await waitFor(() => {
+      expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
+    }, { timeout: 3000 });
+
     const fileInput = container.querySelector('input[type="file"]');
     const file = new File(['video content'], 'test.mp4', { type: 'video/mp4' });
     
