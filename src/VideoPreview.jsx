@@ -55,6 +55,22 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     }
   }, [videoUrl, mimeType]);
 
+  const handleDownload = () => {
+    const extMap = {
+      'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov',
+      'video/x-msvideo': '.avi', 'video/x-matroska': '.mkv', 'video/ogg': '.ogv',
+      'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/aac': '.aac',
+      'audio/ogg': '.ogg', 'audio/flac': '.flac', 'audio/mp4': '.m4a'
+    };
+    const ext = (mimeType && extMap[mimeType]) || (isAudio ? '.mp3' : '.mp4');
+    const a = document.createElement('a');
+    a.href = videoUrl;
+    a.download = (isAudio ? 'processed-audio' : 'processed-video') + ext;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handlePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -263,6 +279,22 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           }}
         >
           {isPlaying ? '⏸ Pause' : '▶ Play'}
+        </button>
+        
+        <button
+          onClick={handleDownload}
+          style={{
+            padding: '8px 16px',
+            fontSize: '14px',
+            backgroundColor: '#2a2f3a',
+            color: '#e6edf3',
+            border: '1px solid #3a4250',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            WebkitTapHighlightColor: 'transparent'
+          }}
+        >
+          ⬇ Download
         </button>
         
         {!isAudio && (
