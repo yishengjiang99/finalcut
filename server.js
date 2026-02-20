@@ -679,7 +679,8 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         .toFormat('mp4')
         .on('error', (err) => {
           [inputPath, audioInputPath].forEach(p => p && fs.unlink(p).catch(() => {}));
-          if (!res.headersSent) res.status(500).json({ error: err.message });
+          console.error('FFmpeg error:', err);
+          if (!res.headersSent) res.status(500).end();
         })
         .on('end', () => { [inputPath, audioInputPath].forEach(p => p && fs.unlink(p).catch(() => {})); })
         .pipe(res);
