@@ -65,6 +65,25 @@ function normalizeAudioFileInput(audioFile) {
   throw new Error('audioFile must be a base64 string, Uint8Array, or ArrayBuffer');
 }
 
+// Collect all chunks from a ReadableStreamDefaultReader into a single Uint8Array
+async function collectStreamChunks(reader) {
+  const chunks = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalBytes += value.length;
+  }
+  const result = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
 // Helper function to call server API using streaming:
 // video data is sent as the raw request body; operation, args, and file type go in headers.
 // Response is streamed via ReadableStream and accumulated into a Uint8Array.
@@ -87,25 +106,7 @@ async function processVideoOnServer(operation, args, videoFileData) {
     throw new Error(errorData.error || 'Server processing failed');
   }
 
-  // Stream the response progressively, collecting chunks as they arrive
-  const reader = response.body.getReader();
-  const chunks = [];
-  let totalBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    totalBytes += value.length;
-  }
-
-  // Combine all chunks into a single Uint8Array
-  const result = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
+  return collectStreamChunks(response.body.getReader());
 }
 
 export const toolFunctions = {
@@ -552,18 +553,7 @@ export const toolFunctions = {
       }
 
       // Stream the response
-      const reader = response.body.getReader();
-      const chunks = [];
-      let totalBytes = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        totalBytes += value.length;
-      }
-      const data = new Uint8Array(totalBytes);
-      let offset = 0;
-      for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.length; }
+      const data = await collectStreamChunks(response.body.getReader());
 
       setVideoFileData(data);
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
