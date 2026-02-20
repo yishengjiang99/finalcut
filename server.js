@@ -1028,7 +1028,10 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
       const supportedExtractFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
       const format = parsedArgs.format || 'mp3';
       if (!supportedExtractFormats.includes(format)) {
-        return res.status(400).json({ error: `Invalid or unsupported extract format: ${format}` });
+      if (!supportedExtractFormats.includes(format)) {
+        if (!res.headersSent) return res.status(400).end();
+        return;
+      }
       }
       const extractBitrate = parsedArgs.bitrate || '192k';
       command = command.noVideo().toFormat(format).audioBitrate(extractBitrate);
