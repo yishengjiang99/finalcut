@@ -1048,7 +1048,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     .toFormat(outputExt)
     .on('error', (err) => {
       console.error('Error processing video:', err);
-      if (!res.headersSent) res.status(500).json({ error: err.message });
+      if (!res.headersSent) res.status(500).end();
     })
     .pipe(res);
 });
