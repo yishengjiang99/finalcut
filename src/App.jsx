@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { tools, systemPrompt } from './tools.js';
-import { toolFunctions, setSampleModeAccessToken, setSampleModeEnabled } from './toolFunctions.js';
+import { toolFunctions, setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 
 // Sample button style constant
@@ -419,6 +419,7 @@ export default function App() {
           setVideoFileData(data);
           setFileType(isAudio ? 'audio' : 'video');
           setFileMimeType(file.type);
+          setCurrentFileMimeType(file.type);
         }
       }
 
@@ -512,6 +513,7 @@ export default function App() {
       
       setFileType('video');
       setFileMimeType('video/mp4');
+      setCurrentFileMimeType('video/mp4');
       
       // Show selected video
       const uploadedMessage = { role: 'user', content: 'Selected sample video:', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', id: messageIdCounterRef.current++ };

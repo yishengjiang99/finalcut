@@ -12,6 +12,28 @@ global.FormData = class FormData {
   }
 };
 
+// Helper: create a streaming response mock
+function makeStreamResponse(arrayBuffer, jsonData) {
+  const data = new Uint8Array(arrayBuffer);
+  let consumed = false;
+  return {
+    ok: true,
+    body: {
+      getReader: () => ({
+        read: async () => {
+          if (!consumed) { consumed = true; return { done: false, value: data }; }
+          return { done: true, value: undefined };
+        }
+      })
+    },
+    arrayBuffer: async () => arrayBuffer,
+    json: async () => jsonData || {
+      format: { duration: 10, size: 1024 * 1024 },
+      streams: [{ codec_type: 'video', width: 1920, height: 1080, codec_name: 'h264', r_frame_rate: '30/1' }]
+    }
+  };
+}
+
 describe('toolFunctions', () => {
   let mockAddMessage;
   let mockSetVideoFileData;
@@ -26,14 +48,7 @@ describe('toolFunctions', () => {
     global.Blob = vi.fn();
     
     // Mock successful server response by default
-    global.fetch.mockResolvedValue({
-      ok: true,
-      arrayBuffer: async () => new ArrayBuffer(8),
-      json: async () => ({
-        format: { duration: 10, size: 1024 * 1024 },
-        streams: [{ codec_type: 'video', width: 1920, height: 1080, codec_name: 'h264', r_frame_rate: '30/1' }]
-      })
-    });
+    global.fetch.mockResolvedValue(makeStreamResponse(new ArrayBuffer(8)));
   });
 
   describe('resize_video', () => {

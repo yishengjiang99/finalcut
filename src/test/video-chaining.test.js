@@ -12,6 +12,24 @@ global.FormData = class FormData {
   }
 };
 
+// Helper: create a streaming response mock from an ArrayBuffer or Uint8Array
+function makeStreamResponse(data) {
+  const uint8 = data instanceof Uint8Array ? data : new Uint8Array(data);
+  let consumed = false;
+  return {
+    ok: true,
+    body: {
+      getReader: () => ({
+        read: async () => {
+          if (!consumed) { consumed = true; return { done: false, value: uint8 }; }
+          return { done: true, value: undefined };
+        }
+      })
+    },
+    arrayBuffer: async () => uint8.buffer
+  };
+}
+
 describe('Video Editing Chaining', () => {
   let mockAddMessage;
   let mockSetVideoFileData;
@@ -26,10 +44,7 @@ describe('Video Editing Chaining', () => {
     global.Blob = vi.fn();
     
     // Mock successful server response by default
-    global.fetch.mockResolvedValue({
-      ok: true,
-      arrayBuffer: async () => new ArrayBuffer(8),
-    });
+    global.fetch.mockResolvedValue(makeStreamResponse(new ArrayBuffer(8)));
   });
 
   it('should call setVideoFileData after resize_video', async () => {
@@ -91,10 +106,7 @@ describe('Video Editing Chaining', () => {
   it('should allow chaining edits by updating video data', async () => {
     // First edit - resize
     const processedData1 = new Uint8Array([4, 5, 6]);
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      arrayBuffer: async () => processedData1.buffer,
-    });
+    global.fetch.mockResolvedValueOnce(makeStreamResponse(processedData1));
     
     await toolFunctions.resize_video(
       { width: 640, height: 480 },
@@ -107,10 +119,7 @@ describe('Video Editing Chaining', () => {
     
     // Second edit - crop (would use the processed data from resize)
     const processedData2 = new Uint8Array([7, 8, 9]);
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      arrayBuffer: async () => processedData2.buffer,
-    });
+    global.fetch.mockResolvedValueOnce(makeStreamResponse(processedData2));
     
     // Simulate using the processed data
     const updatedVideoData = mockSetVideoFileData.mock.calls[0][0];

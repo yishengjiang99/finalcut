@@ -26,6 +26,7 @@ const AUDIO_MIME_TYPES = {
 
 let sampleModeEnabled = false;
 let sampleModeAccessToken = null;
+let currentFileMimeType = 'video/mp4';
 
 export function setSampleModeEnabled(enabled) {
   sampleModeEnabled = Boolean(enabled);
@@ -33,6 +34,10 @@ export function setSampleModeEnabled(enabled) {
 
 export function setSampleModeAccessToken(token) {
   sampleModeAccessToken = typeof token === 'string' && token ? token : null;
+}
+
+export function setCurrentFileMimeType(mimeType) {
+  currentFileMimeType = (typeof mimeType === 'string' && mimeType) ? mimeType : 'video/mp4';
 }
 
 function normalizeAudioFileInput(audioFile) {
@@ -60,32 +65,47 @@ function normalizeAudioFileInput(audioFile) {
   throw new Error('audioFile must be a base64 string, Uint8Array, or ArrayBuffer');
 }
 
-// Helper function to call server API
+// Helper function to call server API using streaming:
+// video data is sent as the raw request body; operation, args, and file type go in headers.
+// Response is streamed via ReadableStream and accumulated into a Uint8Array.
 async function processVideoOnServer(operation, args, videoFileData) {
-  const formData = new FormData();
-  
-  // Convert videoFileData (Uint8Array) to Blob
-  const videoBlob = new Blob([videoFileData], { type: 'video/mp4' });
-  formData.append('video', videoBlob, 'input.mp4');
-  formData.append('operation', operation);
-  formData.append('args', JSON.stringify(args));
-  
+  const fileMimeType = currentFileMimeType || 'video/mp4';
+
   const response = await fetch('/api/process-video', {
     method: 'POST',
-    headers: sampleModeEnabled ? {
-      ...(sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
-    } : undefined,
-    body: formData
+    headers: {
+      'Content-Type': fileMimeType,
+      'x-operation': operation,
+      'x-args': JSON.stringify(args),
+      ...(sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
+    },
+    body: videoFileData
   });
-  
+
   if (!response.ok) {
     const errorData = await response.json();
     throw new Error(errorData.error || 'Server processing failed');
   }
-  
-  // Get the processed video as array buffer
-  const arrayBuffer = await response.arrayBuffer();
-  return new Uint8Array(arrayBuffer);
+
+  // Stream the response progressively, collecting chunks as they arrive
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalBytes += value.length;
+  }
+
+  // Combine all chunks into a single Uint8Array
+  const result = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
 
 export const toolFunctions = {
@@ -454,25 +474,23 @@ export const toolFunctions = {
   
   get_video_info: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      const formData = new FormData();
-      const videoBlob = new Blob([videoFileData], { type: 'video/mp4' });
-      formData.append('video', videoBlob, 'input.mp4');
-      formData.append('operation', 'get_video_info');
-      formData.append('args', JSON.stringify({}));
-      
+      const fileMimeType = currentFileMimeType || 'video/mp4';
       const response = await fetch('/api/process-video', {
         method: 'POST',
-        headers: sampleModeEnabled && sampleModeAccessToken
-          ? { 'sample-access-token': sampleModeAccessToken }
-          : undefined,
-        body: formData
+        headers: {
+          'Content-Type': fileMimeType,
+          'x-operation': 'get_video_info',
+          'x-args': JSON.stringify({}),
+          ...(sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
+        },
+        body: videoFileData
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Server processing failed');
       }
-      
+
       // Get metadata as JSON
       const metadata = await response.json();
       
@@ -512,11 +530,41 @@ export const toolFunctions = {
       }
 
       const normalizedAudioFile = normalizeAudioFileInput(args.audioFile);
-      const data = await processVideoOnServer('add_audio_track', {
-        audioFile: normalizedAudioFile,
-        mode,
-        volume
-      }, videoFileData);
+      // add_audio_track requires secondary binary audio input; use FormData so both files are sent together
+      const fileMimeType = currentFileMimeType || 'video/mp4';
+      const formData = new FormData();
+      const videoBlob = new Blob([videoFileData], { type: fileMimeType });
+      formData.append('video', videoBlob, 'input.mp4');
+      formData.append('operation', 'add_audio_track');
+      formData.append('args', JSON.stringify({ audioFile: normalizedAudioFile, mode, volume }));
+
+      const response = await fetch('/api/process-video', {
+        method: 'POST',
+        headers: sampleModeEnabled && sampleModeAccessToken
+          ? { 'sample-access-token': sampleModeAccessToken }
+          : undefined,
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Server processing failed');
+      }
+
+      // Stream the response
+      const reader = response.body.getReader();
+      const chunks = [];
+      let totalBytes = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        totalBytes += value.length;
+      }
+      const data = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.length; }
+
       setVideoFileData(data);
       const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
       addMessage(`Processed video (audio track ${mode === 'mix' ? 'mixed' : 'replaced'}):`, false, videoUrl, 'processed', 'video/mp4');

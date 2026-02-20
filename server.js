@@ -310,6 +310,48 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
 });
 
+// Map MIME type to ffmpeg input format string
+function getMimeTypeToFormat(mimeType) {
+  const map = {
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'video/x-msvideo': 'avi',
+    'video/x-matroska': 'matroska',
+    'video/x-flv': 'flv',
+    'video/ogg': 'ogg',
+    'audio/mpeg': 'mp3',
+    'audio/wav': 'wav',
+    'audio/aac': 'aac',
+    'audio/ogg': 'ogg',
+    'audio/flac': 'flac',
+    'audio/mp4': 'm4a',
+  };
+  const base = (mimeType || '').split(';')[0].trim().toLowerCase();
+  return map[base] || 'mp4';
+}
+
+// Map MIME type to file extension
+function getExtFromMimeType(mimeType) {
+  const map = {
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'video/x-msvideo': 'avi',
+    'video/x-matroska': 'mkv',
+    'video/x-flv': 'flv',
+    'video/ogg': 'ogv',
+    'audio/mpeg': 'mp3',
+    'audio/wav': 'wav',
+    'audio/aac': 'aac',
+    'audio/ogg': 'ogg',
+    'audio/flac': 'flac',
+    'audio/mp4': 'm4a',
+  };
+  const base = (mimeType || '').split(';')[0].trim().toLowerCase();
+  return map[base] || 'mp4';
+}
+
 // Stripe webhook endpoint for handling payment events
 // Must be mounted before JSON body parsing so Stripe signature verification receives the raw body.
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -576,486 +618,438 @@ app.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, requireA
 });
 
 // Video processing endpoint
-app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, upload.single('video'), async (req, res) => {
-  let inputPath = null;
-  let outputPath = null;
-  let audioInputPath = null;
+// Client posts video as a raw body stream; operation, args, and file type are in request headers.
+// For add_audio_track (which requires a secondary binary audio input), FormData/multipart is used.
+app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+  const contentType = (req.headers['content-type'] || '').toLowerCase();
 
-  try {
+  // FormData path: only for add_audio_track (secondary binary audio cannot fit in headers)
+  if (contentType.includes('multipart/form-data')) {
+    let multerError = null;
+    await new Promise((resolve) => {
+      upload.single('video')(req, res, (err) => { multerError = err || null; resolve(); });
+    });
+    if (multerError) return res.status(400).json({ error: multerError.message });
+    if (!req.file) return res.status(400).json({ error: 'No video file provided' });
+
     const { operation, args } = req.body;
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No video file provided' });
+    if (!operation) return res.status(400).json({ error: 'No operation specified' });
+    if (operation !== 'add_audio_track') {
+      return res.status(400).json({ error: 'Use streaming request (video body + x-operation header) for this operation' });
     }
 
-    if (!operation) {
-      return res.status(400).json({ error: 'No operation specified' });
-    }
-
-    // Parse args if it's a string
     const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+    let inputPath = null;
+    let audioInputPath = null;
+    try {
+      const tmpDir = '/tmp';
+      inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
+      await fs.writeFile(inputPath, req.file.buffer);
 
-    // Create temporary files
-    const tmpDir = '/tmp';
-    inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
-    // Determine output extension based on operation
-    const conversionOps = ['convert_video_format', 'convert_audio_format', 'extract_audio'];
-    let outputExt = 'mp4';
-    if (conversionOps.includes(operation)) {
-      outputExt = parsedArgs.format || 'mp4';
-    }
-    outputPath = path.join(tmpDir, `output-${randomUUID()}.${outputExt}`);
-
-    // Write uploaded file to disk
-    await fs.writeFile(inputPath, req.file.buffer);
-
-    if (operation === 'add_audio_track') {
       const parsedAudio = parseAudioInput(parsedArgs.audioFile);
       audioInputPath = path.join(tmpDir, `audio-${randomUUID()}.${parsedAudio.extension}`);
       await fs.writeFile(audioInputPath, parsedAudio.buffer);
-    }
 
-    const sourceHasAudio = operation === 'add_audio_track'
-      ? await checkHasAudioStream(inputPath)
-      : false;
-
-    // Process video based on operation
-    const result = await new Promise((resolve, reject) => {
-      let command = ffmpeg(inputPath);
-      if (audioInputPath) {
-        command = command.input(audioInputPath);
+      const sourceHasAudio = await checkHasAudioStream(inputPath);
+      const mode = parsedArgs.mode || 'replace';
+      const volume = parsedArgs.volume ?? 1.0;
+      if (mode !== 'replace' && mode !== 'mix') {
+        return res.status(400).json({ error: 'Mode must be either "replace" or "mix"' });
+      }
+      if (typeof volume !== 'number' || Number.isNaN(volume) || volume < 0 || volume > 2) {
+        return res.status(400).json({ error: 'Volume must be between 0.0 and 2.0' });
       }
 
-      // Special handling for get_video_info
-      if (operation === 'get_video_info') {
-        ffmpeg.ffprobe(inputPath, (err, metadata) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve({ metadata, isMetadata: true });
-          }
-        });
-        return;
+      let command = ffmpeg(inputPath).input(audioInputPath);
+      if (mode === 'mix' && sourceHasAudio) {
+        command = command
+          .complexFilter([
+            `[1:a]volume=${volume}[newaudio]`,
+            '[0:a][newaudio]amix=inputs=2:duration=first:dropout_transition=2[mixedaudio]'
+          ], ['mixedaudio'])
+          .outputOptions(['-map 0:v:0', '-map [mixedaudio]', '-c:v copy', '-c:a aac', '-shortest']);
+      } else {
+        command = command
+          .complexFilter([`[1:a]volume=${volume}[newaudio]`], ['newaudio'])
+          .outputOptions(['-map 0:v:0', '-map [newaudio]', '-c:v copy', '-c:a aac', '-shortest']);
       }
-
-      switch (operation) {
-        case 'resize_video':
-          command = command.videoFilters(`scale=${parsedArgs.width}:${parsedArgs.height}`).audioCodec('copy');
-          break;
-
-        case 'crop_video':
-          command = command.videoFilters(`crop=${parsedArgs.width}:${parsedArgs.height}:${parsedArgs.x}:${parsedArgs.y}`).audioCodec('copy');
-          break;
-
-        case 'rotate_video':
-          command = command.videoFilters(`rotate=${parsedArgs.angle}*PI/180`).audioCodec('copy');
-          break;
-
-        case 'flip_video_horizontal':
-          command = command.videoFilters('hflip').audioCodec('copy');
-          break;
-
-        case 'add_text':
-          const escapedText = parsedArgs.text
-            .replace(/\\/g, '\\\\')
-            .replace(/'/g, "\\'")
-            .replace(/:/g, '\\:')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '')
-            .replace(/\t/g, '\\t');
-          command = command.videoFilters(
-            `drawtext=text='${escapedText}':x=${parsedArgs.x || 10}:y=${parsedArgs.y || 10}:fontsize=${parsedArgs.fontsize || 24}:fontcolor=${parsedArgs.color || 'white'}`
-          ).audioCodec('copy');
-          break;
-
-        case 'trim_video':
-          command = command.setStartTime(parsedArgs.start).setDuration(parsedArgs.end - parsedArgs.start).outputOptions('-c copy');
-          break;
-
-        case 'speed_video':
-          // atempo filter only supports values between 0.5 and 2.0
-          // For values outside this range, we need to chain multiple atempo filters
-          let audioFilter = '';
-          let speed = parsedArgs.speed;
-
-          if (speed >= 0.5 && speed <= 2.0) {
-            audioFilter = `atempo=${speed}`;
-          } else if (speed < 0.5) {
-            // Chain atempo filters for slow speeds
-            let remainingSpeed = speed;
-            const filters = [];
-            while (remainingSpeed < 0.5) {
-              filters.push('atempo=0.5');
-              remainingSpeed *= 2;
-            }
-            if (remainingSpeed !== 1.0) {
-              filters.push(`atempo=${remainingSpeed}`);
-            }
-            audioFilter = filters.join(',');
-          } else {
-            // Chain atempo filters for fast speeds
-            let remainingSpeed = speed;
-            const filters = [];
-            while (remainingSpeed > 2.0) {
-              filters.push('atempo=2.0');
-              remainingSpeed /= 2;
-            }
-            if (remainingSpeed !== 1.0) {
-              filters.push(`atempo=${remainingSpeed}`);
-            }
-            audioFilter = filters.join(',');
-          }
-          command = command.videoFilters(`setpts=PTS/${parsedArgs.speed}`).audioFilters(audioFilter);
-          break;
-
-        case 'adjust_volume':
-          command = command.audioFilters(`volume=${parsedArgs.volume}`).videoCodec('copy');
-          break;
-
-        case 'add_audio_track': {
-          const mode = parsedArgs.mode || 'replace';
-          const volume = parsedArgs.volume ?? 1.0;
-
-          if (!audioInputPath) {
-            reject(new Error('No audio track provided'));
-            return;
-          }
-          if (mode !== 'replace' && mode !== 'mix') {
-            reject(new Error('Mode must be either "replace" or "mix"'));
-            return;
-          }
-          if (typeof volume !== 'number' || Number.isNaN(volume) || volume < 0 || volume > 2) {
-            reject(new Error('Volume must be between 0.0 and 2.0'));
-            return;
-          }
-
-          if (mode === 'mix' && sourceHasAudio) {
-            command = command
-              .complexFilter([
-                `[1:a]volume=${volume}[newaudio]`,
-                '[0:a][newaudio]amix=inputs=2:duration=first:dropout_transition=2[mixedaudio]'
-              ], ['mixedaudio'])
-              .outputOptions([
-                '-map 0:v:0',
-                '-map [mixedaudio]',
-                '-c:v copy',
-                '-c:a aac',
-                '-shortest'
-              ]);
-          } else {
-            command = command
-              .complexFilter([
-                `[1:a]volume=${volume}[newaudio]`
-              ], ['newaudio'])
-              .outputOptions([
-                '-map 0:v:0',
-                '-map [newaudio]',
-                '-c:v copy',
-                '-c:a aac',
-                '-shortest'
-              ]);
-          }
-          break;
-        }
-
-        case 'audio_fade':
-          let fadeFilter = '';
-          if (parsedArgs.type === 'in') {
-            fadeFilter = `afade=t=in:st=${parsedArgs.start}:d=${parsedArgs.duration}`;
-          } else {
-            fadeFilter = `afade=t=out:st=${parsedArgs.start}:d=${parsedArgs.duration}`;
-          }
-          command = command.audioFilters(fadeFilter).videoCodec('copy');
-          break;
-
-        case 'highpass_filter':
-          command = command.audioFilters(`highpass=f=${parsedArgs.frequency}`).videoCodec('copy');
-          break;
-
-        case 'lowpass_filter':
-          command = command.audioFilters(`lowpass=f=${parsedArgs.frequency}`).videoCodec('copy');
-          break;
-
-        case 'echo_effect':
-          command = command.audioFilters(`aecho=1.0:0.7:${parsedArgs.delay}:${parsedArgs.decay}`).videoCodec('copy');
-          break;
-
-        case 'bass_adjustment':
-          command = command.audioFilters(`bass=g=${parsedArgs.gain}`).videoCodec('copy');
-          break;
-
-        case 'treble_adjustment':
-          command = command.audioFilters(`treble=g=${parsedArgs.gain}`).videoCodec('copy');
-          break;
-
-        case 'equalizer':
-          const width = parsedArgs.width || 200;
-          command = command.audioFilters(`equalizer=f=${parsedArgs.frequency}:width_type=h:width=${width}:g=${parsedArgs.gain}`).videoCodec('copy');
-          break;
-
-        case 'normalize_audio':
-          const target = parsedArgs.target || -16;
-          command = command.audioFilters(`loudnorm=I=${target}:TP=-1.5:LRA=11`).videoCodec('copy');
-          break;
-
-        case 'delay_audio':
-          command = command.audioFilters(`adelay=${parsedArgs.delay}|${parsedArgs.delay}`).videoCodec('copy');
-          break;
-
-        case 'audio_chorus':
-          const chorusInGain = parsedArgs.in_gain ?? 0.5;
-          const chorusOutGain = parsedArgs.out_gain ?? 0.9;
-          const chorusDelays = parsedArgs.delays ?? '40|60|80';
-          const chorusDecays = parsedArgs.decays ?? '0.4|0.5|0.6';
-          const chorusSpeeds = parsedArgs.speeds ?? '0.5|0.6|0.7';
-          const chorusDepths = parsedArgs.depths ?? '0.25|0.4|0.35';
-          // 't' at the end sets triangular modulation waveform (alternative is 's' for sinusoidal)
-          command = command.audioFilters(`chorus=${chorusInGain}:${chorusOutGain}:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
-          break;
-
-        case 'audio_flanger':
-          const flangerDelay = parsedArgs.delay ?? 0;
-          const flangerDepth = parsedArgs.depth ?? 2;
-          const flangerRegen = parsedArgs.regen ?? 0;
-          const flangerWidth = parsedArgs.width ?? 71;
-          const flangerSpeed = parsedArgs.speed ?? 0.5;
-          command = command.audioFilters(`flanger=delay=${flangerDelay}:depth=${flangerDepth}:regen=${flangerRegen}:width=${flangerWidth}:speed=${flangerSpeed}`).videoCodec('copy');
-          break;
-
-        case 'audio_phaser':
-          const phaserInGain = parsedArgs.in_gain ?? 0.4;
-          const phaserOutGain = parsedArgs.out_gain ?? 0.74;
-          const phaserDelay = parsedArgs.delay ?? 3;
-          const phaserDecay = parsedArgs.decay ?? 0.4;
-          const phaserSpeed = parsedArgs.speed ?? 0.5;
-          command = command.audioFilters(`aphaser=in_gain=${phaserInGain}:out_gain=${phaserOutGain}:delay=${phaserDelay}:decay=${phaserDecay}:speed=${phaserSpeed}`).videoCodec('copy');
-          break;
-
-        case 'audio_vibrato':
-          const vibratoFreq = parsedArgs.frequency ?? 5;
-          const vibratoDepth = parsedArgs.depth ?? 0.5;
-          command = command.audioFilters(`vibrato=f=${vibratoFreq}:d=${vibratoDepth}`).videoCodec('copy');
-          break;
-
-        case 'audio_tremolo':
-          const tremoloFreq = parsedArgs.frequency ?? 5;
-          const tremoloDepth = parsedArgs.depth ?? 0.5;
-          command = command.audioFilters(`tremolo=f=${tremoloFreq}:d=${tremoloDepth}`).videoCodec('copy');
-          break;
-
-        case 'audio_compressor':
-          const compThreshold = parsedArgs.threshold ?? 0;
-          const compRatio = parsedArgs.ratio ?? 4;
-          const compAttack = parsedArgs.attack ?? 20;
-          const compRelease = parsedArgs.release ?? 250;
-          command = command.audioFilters(`acompressor=threshold=${compThreshold}dB:ratio=${compRatio}:attack=${compAttack}:release=${compRelease}`).videoCodec('copy');
-          break;
-
-        case 'audio_gate':
-          const gateThreshold = parsedArgs.threshold ?? -50;
-          const gateRatio = parsedArgs.ratio ?? 2;
-          const gateAttack = parsedArgs.attack ?? 20;
-          const gateRelease = parsedArgs.release ?? 250;
-          command = command.audioFilters(`agate=threshold=${gateThreshold}dB:ratio=${gateRatio}:attack=${gateAttack}:release=${gateRelease}`).videoCodec('copy');
-          break;
-
-        case 'audio_stereo_widen':
-          const stereoDelay = parsedArgs.delay ?? 20;
-          const stereoFeedback = parsedArgs.feedback ?? 0.3;
-          const stereoCrossfeed = parsedArgs.crossfeed ?? 0.3;
-          command = command.audioFilters(`stereowiden=delay=${stereoDelay}:feedback=${stereoFeedback}:crossfeed=${stereoCrossfeed}`).videoCodec('copy');
-          break;
-
-        case 'audio_reverse':
-          command = command.audioFilters('areverse').videoCodec('copy');
-          break;
-
-        case 'audio_limiter':
-          const limiterLevel = parsedArgs.level ?? 1.0;
-          const limiterAttack = parsedArgs.attack ?? 5;
-          const limiterRelease = parsedArgs.release ?? 50;
-          // level_in=1 keeps input at unity, limit sets the ceiling to prevent clipping
-          command = command.audioFilters(`alimiter=level_in=1:level_out=1:limit=${limiterLevel}:attack=${limiterAttack}:release=${limiterRelease}`).videoCodec('copy');
-          break;
-
-        case 'audio_silence_remove':
-          const startThreshold = parsedArgs.start_threshold ?? -50;
-          const startDuration = parsedArgs.start_duration ?? 0.5;
-          const stopThreshold = parsedArgs.stop_threshold ?? -50;
-          const stopDuration = parsedArgs.stop_duration ?? 0.5;
-          command = command.audioFilters(`silenceremove=start_periods=1:start_threshold=${startThreshold}dB:start_duration=${startDuration}:stop_periods=-1:stop_threshold=${stopThreshold}dB:stop_duration=${stopDuration}`).videoCodec('copy');
-          break;
-
-        case 'audio_pan':
-          const panValue = parsedArgs.pan;
-          // Convert -1 to 1 range to FFmpeg pan filter format
-          // For stereo output: pan=stereo|c0=c0*left_factor+c1*cross_factor|c1=c1*right_factor+c0*cross_factor
-          let leftGain, rightGain;
-          if (panValue < 0) {
-            // Pan left: reduce right channel
-            leftGain = 1.0;
-            rightGain = 1.0 + panValue;  // panValue is negative, so this reduces right
-          } else if (panValue > 0) {
-            // Pan right: reduce left channel
-            leftGain = 1.0 - panValue;
-            rightGain = 1.0;
-          } else {
-            // Center
-            leftGain = 1.0;
-            rightGain = 1.0;
-          }
-          command = command.audioFilters(`pan=stereo|c0=${leftGain}*c0|c1=${rightGain}*c1`).videoCodec('copy');
-          break;
-
-        case 'adjust_brightness':
-          command = command.videoFilters(`eq=brightness=${parsedArgs.brightness}`).audioCodec('copy');
-          break;
-
-        case 'adjust_hue':
-          command = command.videoFilters(`hue=h=${parsedArgs.degrees}`).audioCodec('copy');
-          break;
-
-        case 'adjust_saturation':
-          command = command.videoFilters(`eq=saturation=${parsedArgs.saturation}`).audioCodec('copy');
-          break;
-
-        case 'convert_video_format': {
-          const supportedVideoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'];
-          const targetFormat = parsedArgs.format;
-          if (!targetFormat || !supportedVideoFormats.includes(targetFormat)) {
-            reject(new Error(`Invalid or unsupported video format: ${targetFormat}`));
-            return;
-          }
-          const supportedVideoCodecs = ['libx264', 'libx265', 'libvpx-vp9', 'auto'];
-          if (parsedArgs.codec && !supportedVideoCodecs.includes(parsedArgs.codec)) {
-            reject(new Error(`Invalid or unsupported video codec: ${parsedArgs.codec}`));
-            return;
-          }
-          const codec = parsedArgs.codec && parsedArgs.codec !== 'auto' ? parsedArgs.codec : null;
-          if (codec) {
-            command = command.videoCodec(codec).audioCodec('copy');
-          } else {
-            command = command.outputOptions('-c copy');
-          }
-          command = command.toFormat(targetFormat);
-          break;
-        }
-
-        case 'convert_audio_format': {
-          const supportedAudioFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'];
-          if (!parsedArgs.format || !supportedAudioFormats.includes(parsedArgs.format)) {
-            reject(new Error(`Invalid or unsupported audio format: ${parsedArgs.format}`));
-            return;
-          }
-          const audioBitrate = parsedArgs.bitrate || '192k';
-          command = command.noVideo().toFormat(parsedArgs.format).audioBitrate(audioBitrate);
-          break;
-        }
-
-        case 'extract_audio': {
-          const supportedExtractFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
-          const format = parsedArgs.format || 'mp3';
-          if (!supportedExtractFormats.includes(format)) {
-            reject(new Error(`Invalid or unsupported extract format: ${format}`));
-            return;
-          }
-          const extractBitrate = parsedArgs.bitrate || '192k';
-          command = command.noVideo().toFormat(format).audioBitrate(extractBitrate);
-          break;
-        }
-
-        case 'fade_transition':
-          // Simple fade in/out effect for a single video
-          const duration = parsedArgs.duration || 1;
-          command = command.videoFilters(`fade=t=in:st=0:d=${duration},fade=t=out:st=${parsedArgs.totalDuration - duration}:d=${duration}`).audioCodec('copy');
-          break;
-
-        case 'crossfade_transition':
-          // Crossfade between two videos - requires special handling with complex filtergraph
-          // This requires two input videos which will be handled separately below
-          reject(new Error('crossfade_transition requires special multi-video handling'));
-          return;
-
-        default:
-          reject(new Error(`Unknown operation: ${operation}`));
-          return;
-      }
-
+      res.set('Content-Type', 'video/mp4');
       command
-        .output(outputPath)
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
-        .run();
-    });
-
-    // Handle metadata response
-    if (result && result.isMetadata) {
-      // Clean up input file
-      await fs.unlink(inputPath);
-      if (audioInputPath) {
-        await fs.unlink(audioInputPath);
-      }
-
-      // Send metadata as JSON
-      res.json(result.metadata);
-      return;
+        .outputOptions(['-movflags', 'frag_keyframe+empty_moov+default_base_moof'])
+        .toFormat('mp4')
+        .on('error', (err) => {
+          [inputPath, audioInputPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+          if (!res.headersSent) res.status(500).json({ error: err.message });
+        })
+        .on('end', () => { [inputPath, audioInputPath].forEach(p => p && fs.unlink(p).catch(() => {})); })
+        .pipe(res);
+    } catch (error) {
+      [inputPath, audioInputPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+      if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to process video' });
     }
-
-    // Read the processed video
-    const processedVideo = await fs.readFile(outputPath);
-
-    // Clean up temporary files
-    await fs.unlink(inputPath);
-    await fs.unlink(outputPath);
-    if (audioInputPath) {
-      await fs.unlink(audioInputPath);
-    }
-
-    // Send the processed video
-    const AUDIO_CONTENT_TYPES = {
-      mp3: 'audio/mpeg',
-      wav: 'audio/wav',
-      aac: 'audio/aac',
-      ogg: 'audio/ogg',
-      flac: 'audio/flac',
-      m4a: 'audio/mp4',
-      wma: 'audio/x-ms-wma'
-    };
-    const VIDEO_CONTENT_TYPES = {
-      mp4: 'video/mp4',
-      webm: 'video/webm',
-      mov: 'video/quicktime',
-      avi: 'video/x-msvideo',
-      mkv: 'video/x-matroska',
-      flv: 'video/x-flv',
-      ogv: 'video/ogg'
-    };
-    const audioOnlyOps = ['convert_audio_format', 'extract_audio'];
-    let contentType = 'video/mp4';
-    if (audioOnlyOps.includes(operation)) {
-      contentType = AUDIO_CONTENT_TYPES[outputExt] || 'application/octet-stream';
-    } else if (operation === 'convert_video_format') {
-      contentType = VIDEO_CONTENT_TYPES[outputExt] || 'video/mp4';
-    }
-    res.set('Content-Type', contentType);
-    res.send(processedVideo);
-
-  } catch (error) {
-    console.error('Error processing video:', error);
-
-    // Clean up on error
-    if (inputPath) {
-      try { await fs.unlink(inputPath); } catch (e) { /* ignore */ }
-    }
-    if (outputPath) {
-      try { await fs.unlink(outputPath); } catch (e) { /* ignore */ }
-    }
-    if (audioInputPath) {
-      try { await fs.unlink(audioInputPath); } catch (e) { /* ignore */ }
-    }
-
-    res.status(500).json({ error: error.message || 'Failed to process video' });
+    return;
   }
+
+  // Streaming path: video is the raw request body; operation/args/file-type are in headers.
+  const operation = req.headers['x-operation'];
+  const argsStr = req.headers['x-args'];
+  const fileContentType = contentType.split(';')[0].trim() || 'video/mp4';
+
+  if (!operation) {
+    return res.status(400).json({ error: 'No operation specified in x-operation header' });
+  }
+
+  let parsedArgs;
+  try {
+    parsedArgs = argsStr ? JSON.parse(argsStr) : {};
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
+  }
+
+  const conversionOps = ['convert_video_format', 'convert_audio_format', 'extract_audio'];
+  let outputExt = 'mp4';
+  if (conversionOps.includes(operation)) {
+    outputExt = parsedArgs.format || 'mp4';
+  }
+
+  const inputFormat = getMimeTypeToFormat(fileContentType);
+
+  // Special case: get_video_info uses ffprobe which requires a seekable (on-disk) input
+  if (operation === 'get_video_info') {
+    let tmpInputPath = null;
+    try {
+      const chunks = [];
+      for await (const chunk of req) { chunks.push(chunk); }
+      const inputBuffer = Buffer.concat(chunks);
+      tmpInputPath = path.join('/tmp', `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
+      await fs.writeFile(tmpInputPath, inputBuffer);
+      await new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(tmpInputPath, (err, metadata) => {
+          if (err) reject(err);
+          else { res.json(metadata); resolve(); }
+        });
+      });
+    } catch (error) {
+      console.error('Error getting video info:', error);
+      if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to get video info' });
+    } finally {
+      if (tmpInputPath) await fs.unlink(tmpInputPath).catch(() => {});
+    }
+    return;
+  }
+
+  // Determine response Content-Type based on operation and output format
+  const AUDIO_CONTENT_TYPES = {
+    mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
+    ogg: 'audio/ogg', flac: 'audio/flac', m4a: 'audio/mp4', wma: 'audio/x-ms-wma'
+  };
+  const VIDEO_CONTENT_TYPES = {
+    mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+    avi: 'video/x-msvideo', mkv: 'video/x-matroska', flv: 'video/x-flv', ogv: 'video/ogg'
+  };
+  const audioOnlyOps = ['convert_audio_format', 'extract_audio'];
+  let responseContentType = 'video/mp4';
+  if (audioOnlyOps.includes(operation)) {
+    responseContentType = AUDIO_CONTENT_TYPES[outputExt] || 'application/octet-stream';
+  } else if (operation === 'convert_video_format') {
+    responseContentType = VIDEO_CONTENT_TYPES[outputExt] || 'video/mp4';
+  }
+
+  // Build ffmpeg command: pipe request body to ffmpeg stdin
+  let command = ffmpeg(req).inputFormat(inputFormat);
+
+  switch (operation) {
+    case 'resize_video':
+      command = command.videoFilters(`scale=${parsedArgs.width}:${parsedArgs.height}`).audioCodec('copy');
+      break;
+
+    case 'crop_video':
+      command = command.videoFilters(`crop=${parsedArgs.width}:${parsedArgs.height}:${parsedArgs.x}:${parsedArgs.y}`).audioCodec('copy');
+      break;
+
+    case 'rotate_video':
+      command = command.videoFilters(`rotate=${parsedArgs.angle}*PI/180`).audioCodec('copy');
+      break;
+
+    case 'flip_video_horizontal':
+      command = command.videoFilters('hflip').audioCodec('copy');
+      break;
+
+    case 'add_text': {
+      const escapedText = parsedArgs.text
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/:/g, '\\:')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '')
+        .replace(/\t/g, '\\t');
+      command = command.videoFilters(
+        `drawtext=text='${escapedText}':x=${parsedArgs.x || 10}:y=${parsedArgs.y || 10}:fontsize=${parsedArgs.fontsize || 24}:fontcolor=${parsedArgs.color || 'white'}`
+      ).audioCodec('copy');
+      break;
+    }
+
+    case 'trim_video':
+      command = command.setStartTime(parsedArgs.start).setDuration(parsedArgs.end - parsedArgs.start).outputOptions('-c copy');
+      break;
+
+    case 'speed_video': {
+      let audioFilter = '';
+      const speed = parsedArgs.speed;
+      if (speed >= 0.5 && speed <= 2.0) {
+        audioFilter = `atempo=${speed}`;
+      } else if (speed < 0.5) {
+        let remainingSpeed = speed;
+        const filters = [];
+        while (remainingSpeed < 0.5) { filters.push('atempo=0.5'); remainingSpeed *= 2; }
+        if (remainingSpeed !== 1.0) filters.push(`atempo=${remainingSpeed}`);
+        audioFilter = filters.join(',');
+      } else {
+        let remainingSpeed = speed;
+        const filters = [];
+        while (remainingSpeed > 2.0) { filters.push('atempo=2.0'); remainingSpeed /= 2; }
+        if (remainingSpeed !== 1.0) filters.push(`atempo=${remainingSpeed}`);
+        audioFilter = filters.join(',');
+      }
+      command = command.videoFilters(`setpts=PTS/${parsedArgs.speed}`).audioFilters(audioFilter);
+      break;
+    }
+
+    case 'adjust_volume':
+      command = command.audioFilters(`volume=${parsedArgs.volume}`).videoCodec('copy');
+      break;
+
+    case 'audio_fade': {
+      const fadeFilter = parsedArgs.type === 'in'
+        ? `afade=t=in:st=${parsedArgs.start}:d=${parsedArgs.duration}`
+        : `afade=t=out:st=${parsedArgs.start}:d=${parsedArgs.duration}`;
+      command = command.audioFilters(fadeFilter).videoCodec('copy');
+      break;
+    }
+
+    case 'highpass_filter':
+      command = command.audioFilters(`highpass=f=${parsedArgs.frequency}`).videoCodec('copy');
+      break;
+
+    case 'lowpass_filter':
+      command = command.audioFilters(`lowpass=f=${parsedArgs.frequency}`).videoCodec('copy');
+      break;
+
+    case 'echo_effect':
+      command = command.audioFilters(`aecho=1.0:0.7:${parsedArgs.delay}:${parsedArgs.decay}`).videoCodec('copy');
+      break;
+
+    case 'bass_adjustment':
+      command = command.audioFilters(`bass=g=${parsedArgs.gain}`).videoCodec('copy');
+      break;
+
+    case 'treble_adjustment':
+      command = command.audioFilters(`treble=g=${parsedArgs.gain}`).videoCodec('copy');
+      break;
+
+    case 'equalizer': {
+      const eqWidth = parsedArgs.width || 200;
+      command = command.audioFilters(`equalizer=f=${parsedArgs.frequency}:width_type=h:width=${eqWidth}:g=${parsedArgs.gain}`).videoCodec('copy');
+      break;
+    }
+
+    case 'normalize_audio': {
+      const normTarget = parsedArgs.target || -16;
+      command = command.audioFilters(`loudnorm=I=${normTarget}:TP=-1.5:LRA=11`).videoCodec('copy');
+      break;
+    }
+
+    case 'delay_audio':
+      command = command.audioFilters(`adelay=${parsedArgs.delay}|${parsedArgs.delay}`).videoCodec('copy');
+      break;
+
+    case 'audio_chorus': {
+      const chorusInGain = parsedArgs.in_gain ?? 0.5;
+      const chorusOutGain = parsedArgs.out_gain ?? 0.9;
+      const chorusDelays = parsedArgs.delays ?? '40|60|80';
+      const chorusDecays = parsedArgs.decays ?? '0.4|0.5|0.6';
+      const chorusSpeeds = parsedArgs.speeds ?? '0.5|0.6|0.7';
+      const chorusDepths = parsedArgs.depths ?? '0.25|0.4|0.35';
+      command = command.audioFilters(`chorus=${chorusInGain}:${chorusOutGain}:${chorusDelays}:${chorusDecays}:${chorusSpeeds}:${chorusDepths}:t`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_flanger': {
+      const flangerDelay = parsedArgs.delay ?? 0;
+      const flangerDepth = parsedArgs.depth ?? 2;
+      const flangerRegen = parsedArgs.regen ?? 0;
+      const flangerWidth = parsedArgs.width ?? 71;
+      const flangerSpeed = parsedArgs.speed ?? 0.5;
+      command = command.audioFilters(`flanger=delay=${flangerDelay}:depth=${flangerDepth}:regen=${flangerRegen}:width=${flangerWidth}:speed=${flangerSpeed}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_phaser': {
+      const phaserInGain = parsedArgs.in_gain ?? 0.4;
+      const phaserOutGain = parsedArgs.out_gain ?? 0.74;
+      const phaserDelay = parsedArgs.delay ?? 3;
+      const phaserDecay = parsedArgs.decay ?? 0.4;
+      const phaserSpeed = parsedArgs.speed ?? 0.5;
+      command = command.audioFilters(`aphaser=in_gain=${phaserInGain}:out_gain=${phaserOutGain}:delay=${phaserDelay}:decay=${phaserDecay}:speed=${phaserSpeed}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_vibrato': {
+      const vibratoFreq = parsedArgs.frequency ?? 5;
+      const vibratoDepth = parsedArgs.depth ?? 0.5;
+      command = command.audioFilters(`vibrato=f=${vibratoFreq}:d=${vibratoDepth}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_tremolo': {
+      const tremoloFreq = parsedArgs.frequency ?? 5;
+      const tremoloDepth = parsedArgs.depth ?? 0.5;
+      command = command.audioFilters(`tremolo=f=${tremoloFreq}:d=${tremoloDepth}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_compressor': {
+      const compThreshold = parsedArgs.threshold ?? 0;
+      const compRatio = parsedArgs.ratio ?? 4;
+      const compAttack = parsedArgs.attack ?? 20;
+      const compRelease = parsedArgs.release ?? 250;
+      command = command.audioFilters(`acompressor=threshold=${compThreshold}dB:ratio=${compRatio}:attack=${compAttack}:release=${compRelease}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_gate': {
+      const gateThreshold = parsedArgs.threshold ?? -50;
+      const gateRatio = parsedArgs.ratio ?? 2;
+      const gateAttack = parsedArgs.attack ?? 20;
+      const gateRelease = parsedArgs.release ?? 250;
+      command = command.audioFilters(`agate=threshold=${gateThreshold}dB:ratio=${gateRatio}:attack=${gateAttack}:release=${gateRelease}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_stereo_widen': {
+      const stereoDelay = parsedArgs.delay ?? 20;
+      const stereoFeedback = parsedArgs.feedback ?? 0.3;
+      const stereoCrossfeed = parsedArgs.crossfeed ?? 0.3;
+      command = command.audioFilters(`stereowiden=delay=${stereoDelay}:feedback=${stereoFeedback}:crossfeed=${stereoCrossfeed}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_reverse':
+      command = command.audioFilters('areverse').videoCodec('copy');
+      break;
+
+    case 'audio_limiter': {
+      const limiterLevel = parsedArgs.level ?? 1.0;
+      const limiterAttack = parsedArgs.attack ?? 5;
+      const limiterRelease = parsedArgs.release ?? 50;
+      command = command.audioFilters(`alimiter=level_in=1:level_out=1:limit=${limiterLevel}:attack=${limiterAttack}:release=${limiterRelease}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_silence_remove': {
+      const startThreshold = parsedArgs.start_threshold ?? -50;
+      const startDuration = parsedArgs.start_duration ?? 0.5;
+      const stopThreshold = parsedArgs.stop_threshold ?? -50;
+      const stopDuration = parsedArgs.stop_duration ?? 0.5;
+      command = command.audioFilters(`silenceremove=start_periods=1:start_threshold=${startThreshold}dB:start_duration=${startDuration}:stop_periods=-1:stop_threshold=${stopThreshold}dB:stop_duration=${stopDuration}`).videoCodec('copy');
+      break;
+    }
+
+    case 'audio_pan': {
+      const panValue = parsedArgs.pan;
+      let leftGain, rightGain;
+      if (panValue < 0) {
+        leftGain = 1.0;
+        rightGain = 1.0 + panValue;
+      } else if (panValue > 0) {
+        leftGain = 1.0 - panValue;
+        rightGain = 1.0;
+      } else {
+        leftGain = 1.0;
+        rightGain = 1.0;
+      }
+      command = command.audioFilters(`pan=stereo|c0=${leftGain}*c0|c1=${rightGain}*c1`).videoCodec('copy');
+      break;
+    }
+
+    case 'adjust_brightness':
+      command = command.videoFilters(`eq=brightness=${parsedArgs.brightness}`).audioCodec('copy');
+      break;
+
+    case 'adjust_hue':
+      command = command.videoFilters(`hue=h=${parsedArgs.degrees}`).audioCodec('copy');
+      break;
+
+    case 'adjust_saturation':
+      command = command.videoFilters(`eq=saturation=${parsedArgs.saturation}`).audioCodec('copy');
+      break;
+
+    case 'convert_video_format': {
+      const supportedVideoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'];
+      const targetFormat = parsedArgs.format;
+      if (!targetFormat || !supportedVideoFormats.includes(targetFormat)) {
+        return res.status(400).json({ error: `Invalid or unsupported video format: ${targetFormat}` });
+      }
+      const supportedVideoCodecs = ['libx264', 'libx265', 'libvpx-vp9', 'auto'];
+      if (parsedArgs.codec && !supportedVideoCodecs.includes(parsedArgs.codec)) {
+        return res.status(400).json({ error: `Invalid or unsupported video codec: ${parsedArgs.codec}` });
+      }
+      const codec = parsedArgs.codec && parsedArgs.codec !== 'auto' ? parsedArgs.codec : null;
+      if (codec) {
+        command = command.videoCodec(codec).audioCodec('copy');
+      } else {
+        command = command.outputOptions('-c copy');
+      }
+      command = command.toFormat(targetFormat);
+      break;
+    }
+
+    case 'convert_audio_format': {
+      const supportedAudioFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'];
+      if (!parsedArgs.format || !supportedAudioFormats.includes(parsedArgs.format)) {
+        return res.status(400).json({ error: `Invalid or unsupported audio format: ${parsedArgs.format}` });
+      }
+      const audioBitrate = parsedArgs.bitrate || '192k';
+      command = command.noVideo().toFormat(parsedArgs.format).audioBitrate(audioBitrate);
+      break;
+    }
+
+    case 'extract_audio': {
+      const supportedExtractFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
+      const format = parsedArgs.format || 'mp3';
+      if (!supportedExtractFormats.includes(format)) {
+        return res.status(400).json({ error: `Invalid or unsupported extract format: ${format}` });
+      }
+      const extractBitrate = parsedArgs.bitrate || '192k';
+      command = command.noVideo().toFormat(format).audioBitrate(extractBitrate);
+      break;
+    }
+
+    case 'fade_transition': {
+      const fadeDuration = parsedArgs.duration || 1;
+      command = command.videoFilters(`fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${parsedArgs.totalDuration - fadeDuration}:d=${fadeDuration}`).audioCodec('copy');
+      break;
+    }
+
+    case 'crossfade_transition':
+      return res.status(400).json({ error: 'crossfade_transition requires special multi-video handling' });
+
+    default:
+      return res.status(400).json({ error: `Unknown operation: ${operation}` });
+  }
+
+  // Set response headers and pipe ffmpeg stdout directly to the response
+  res.set('Content-Type', responseContentType);
+  if (outputExt === 'mp4') {
+    command.outputOptions(['-movflags', 'frag_keyframe+empty_moov+default_base_moof']);
+  }
+  command
+    .toFormat(outputExt)
+    .on('error', (err) => {
+      console.error('Error processing video:', err);
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    })
+    .pipe(res);
 });
 
 // Multi-video transition endpoint

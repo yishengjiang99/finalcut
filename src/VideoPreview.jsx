@@ -55,6 +55,15 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     }
   }, [videoUrl, mimeType]);
 
+  const handleDownload = () => {
+    const a = document.createElement('a');
+    a.href = videoUrl;
+    a.download = isAudio ? 'processed-audio' : 'processed-video';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handlePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -263,6 +272,22 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           }}
         >
           {isPlaying ? '⏸ Pause' : '▶ Play'}
+        </button>
+        
+        <button
+          onClick={handleDownload}
+          style={{
+            padding: '8px 16px',
+            fontSize: '14px',
+            backgroundColor: '#2a2f3a',
+            color: '#e6edf3',
+            border: '1px solid #3a4250',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            WebkitTapHighlightColor: 'transparent'
+          }}
+        >
+          ⬇ Download
         </button>
         
         {!isAudio && (
