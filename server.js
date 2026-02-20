@@ -996,7 +996,10 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
       }
       const supportedVideoCodecs = ['libx264', 'libx265', 'libvpx-vp9', 'auto'];
       if (parsedArgs.codec && !supportedVideoCodecs.includes(parsedArgs.codec)) {
-        return res.status(400).json({ error: `Invalid or unsupported video codec: ${parsedArgs.codec}` });
+      if (parsedArgs.codec && !supportedVideoCodecs.includes(parsedArgs.codec)) {
+        if (!res.headersSent) return res.status(400).end();
+        return;
+      }
       }
       const codec = parsedArgs.codec && parsedArgs.codec !== 'auto' ? parsedArgs.codec : null;
       if (codec) {
