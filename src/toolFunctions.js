@@ -819,4 +819,84 @@ export const toolFunctions = {
   },
   get_video_dimensions: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.get_video_info(args, videoFileData, setVideoFileData, addMessage),
+
+  generate_captions: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      const language = args.language || 'auto';
+      const style = args.style || 'default';
+      const position = args.position || 'bottom';
+      const burnIn = args.burn_in !== false; // default true
+
+      const fileMimeType = currentFileMimeType || 'video/mp4';
+
+      // Step 1: Generate captions via xAI speech-to-text
+      const captionResponse = await fetch('/api/generate-captions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': fileMimeType,
+          'x-args': JSON.stringify({ language }),
+          ...(sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
+        },
+        body: videoFileData
+      });
+
+      if (!captionResponse.ok) {
+        const errorData = await captionResponse.json();
+        throw new Error(errorData.error || 'Failed to generate captions');
+      }
+
+      const { srt, vtt } = await captionResponse.json();
+
+      if (!srt) {
+        throw new Error('No captions were generated from the audio');
+      }
+
+      // Step 2: Create downloadable subtitle files
+      const srtBlob = new Blob([srt], { type: 'text/plain' });
+      const vttBlob = new Blob([vtt], { type: 'text/vtt' });
+      const srtUrl = URL.createObjectURL(srtBlob);
+      const vttUrl = URL.createObjectURL(vttBlob);
+
+      // Show a short excerpt of the transcript in chat.
+      // Filter out SRT sequence numbers (lines with only digits) and timestamp lines (contain '-->').
+      const lines = srt.split('\n').filter(l => l.trim() && !/^\d+$/.test(l.trim()) && !l.includes('-->'));
+      const excerpt = lines.slice(0, 4).join(' ').substring(0, 200);
+      addMessage(`Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nDownload subtitles:`, false, srtUrl, 'subtitle-srt', 'text/plain');
+      addMessage(`VTT subtitle file:`, false, vttUrl, 'subtitle-vtt', 'text/vtt');
+
+      // Step 3: Optionally burn subtitles into the video
+      if (burnIn) {
+        const formData = new FormData();
+        const videoBlob = new Blob([videoFileData], { type: fileMimeType });
+        formData.append('video', videoBlob, 'input.mp4');
+        formData.append('operation', 'burn_subtitles');
+        formData.append('args', JSON.stringify({ srtContent: srt, style, position }));
+
+        const burnResponse = await fetch('/api/process-video', {
+          method: 'POST',
+          headers: sampleModeEnabled && sampleModeAccessToken
+            ? { 'sample-access-token': sampleModeAccessToken }
+            : {},
+          body: formData
+        });
+
+        if (!burnResponse.ok) {
+          const errorData = await burnResponse.json();
+          throw new Error(errorData.error || 'Failed to burn subtitles into video');
+        }
+
+        const arrayBuffer = await burnResponse.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        setVideoFileData(data);
+        const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+        addMessage(`Video with burned-in subtitles (${style} style, ${position}):`, false, videoUrl, 'processed', 'video/mp4');
+        return `Captions generated and burned into video successfully. Language: ${language === 'auto' ? 'auto-detected' : language}. Style: ${style}, Position: ${position}. SRT and VTT files are also available for download.`;
+      }
+
+      return `Captions generated successfully. Language: ${language === 'auto' ? 'auto-detected' : language}. SRT and VTT subtitle files are available for download above.`;
+    } catch (error) {
+      addMessage('Error generating captions: ' + error.message, false);
+      return 'Failed to generate captions: ' + error.message;
+    }
+  },
 };

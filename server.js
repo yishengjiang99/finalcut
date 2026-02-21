@@ -617,13 +617,126 @@ app.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, requireA
   });
 });
 
+// Helper: convert SRT subtitle content to WebVTT format
+function srtToVtt(srt) {
+  const vtt = 'WEBVTT\n\n' + srt
+    .replace(/\r\n/g, '\n')
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+  return vtt;
+}
+
+// Caption generation endpoint: extract audio from video and transcribe via xAI
+app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+  const contentType = (req.headers['content-type'] || '').toLowerCase();
+  const fileContentType = contentType.split(';')[0].trim() || 'video/mp4';
+  const argsStr = req.headers['x-args'];
+
+  let parsedArgs = {};
+  try {
+    parsedArgs = argsStr ? JSON.parse(argsStr) : {};
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
+  }
+
+  const language = parsedArgs.language || 'auto';
+  let tmpInputPath = null;
+  let tmpAudioPath = null;
+
+  try {
+    // Read video from request body
+    const chunks = [];
+    for await (const chunk of req) { chunks.push(chunk); }
+    const inputBuffer = Buffer.concat(chunks);
+
+    if (!inputBuffer.length) {
+      return res.status(400).json({ error: 'No video data received' });
+    }
+
+    const ext = getExtFromMimeType(fileContentType);
+    tmpInputPath = path.join('/tmp', `input-${randomUUID()}.${ext}`);
+    await fs.writeFile(tmpInputPath, inputBuffer);
+
+    // Extract audio as mono MP3 at 16kHz (compact format suitable for speech-to-text)
+    tmpAudioPath = path.join('/tmp', `audio-${randomUUID()}.mp3`);
+    await new Promise((resolve, reject) => {
+      ffmpeg(tmpInputPath)
+        .audioFrequency(16000)
+        .audioChannels(1)
+        .audioBitrate('64k')
+        .noVideo()
+        .toFormat('mp3')
+        .on('end', resolve)
+        .on('error', reject)
+        .save(tmpAudioPath);
+    });
+
+    // Convert audio to base64 for xAI API
+    const audioBuffer = await fs.readFile(tmpAudioPath);
+    const audioBase64 = audioBuffer.toString('base64');
+
+    // Build transcription prompt
+    const languageInstruction = language === 'auto'
+      ? 'automatically detect the spoken language'
+      : `transcribe in ${language}`;
+
+    // Call xAI audio model for transcription
+    const xaiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${XAI_API_TOKEN}`
+      },
+      body: JSON.stringify({
+        model: 'grok-2-audio-1212',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Please transcribe this audio and ${languageInstruction}. Output ONLY valid SRT subtitle format with accurate timestamps. Use this exact format with no extra text:\n\n1\n00:00:00,000 --> 00:00:02,500\nSubtitle text here\n\n2\n00:00:02,500 --> 00:00:05,000\nMore text`
+            },
+            {
+              type: 'input_audio',
+              input_audio: {
+                data: audioBase64,
+                format: 'mp3'
+              }
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!xaiResponse.ok) {
+      const errBody = await xaiResponse.json().catch(() => ({}));
+      throw new Error(`xAI API error: ${errBody.error?.message || xaiResponse.statusText}`);
+    }
+
+    const xaiData = await xaiResponse.json();
+    const srtContent = xaiData.choices?.[0]?.message?.content?.trim() || '';
+
+    if (!srtContent) {
+      throw new Error('No transcription received from xAI API');
+    }
+
+    const vttContent = srtToVtt(srtContent);
+    res.json({ srt: srtContent, vtt: vttContent });
+  } catch (error) {
+    console.error('Error generating captions:', error);
+    if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to generate captions' });
+  } finally {
+    if (tmpInputPath) await fs.unlink(tmpInputPath).catch(() => {});
+    if (tmpAudioPath) await fs.unlink(tmpAudioPath).catch(() => {});
+  }
+});
+
 // Video processing endpoint
 // Client posts video as a raw body stream; operation, args, and file type are in request headers.
-// For add_audio_track (which requires a secondary binary audio input), FormData/multipart is used.
+// For add_audio_track and burn_subtitles (which require secondary inputs), FormData/multipart is used.
 app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
   const contentType = (req.headers['content-type'] || '').toLowerCase();
 
-  // FormData path: only for add_audio_track (secondary binary audio cannot fit in headers)
+  // FormData path: for add_audio_track and burn_subtitles
   if (contentType.includes('multipart/form-data')) {
     let multerError = null;
     await new Promise((resolve) => {
@@ -634,11 +747,76 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
 
     const { operation, args } = req.body;
     if (!operation) return res.status(400).json({ error: 'No operation specified' });
-    if (operation !== 'add_audio_track') {
+    if (operation !== 'add_audio_track' && operation !== 'burn_subtitles') {
       return res.status(400).json({ error: 'Use streaming request (video body + x-operation header) for this operation' });
     }
 
     const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+
+    if (operation === 'burn_subtitles') {
+      const { srtContent, style = 'default', position = 'bottom' } = parsedArgs;
+      if (!srtContent || typeof srtContent !== 'string' || !srtContent.trim()) {
+        return res.status(400).json({ error: 'srtContent is required for burn_subtitles' });
+      }
+      const validStyles = ['default', 'white_on_black', 'yellow'];
+      const validPositions = ['bottom', 'top'];
+      if (!validStyles.includes(style)) {
+        return res.status(400).json({ error: `style must be one of: ${validStyles.join(', ')}` });
+      }
+      if (!validPositions.includes(position)) {
+        return res.status(400).json({ error: `position must be one of: ${validPositions.join(', ')}` });
+      }
+
+      let inputPath = null;
+      let srtPath = null;
+      try {
+        const tmpDir = '/tmp';
+        inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
+        await fs.writeFile(inputPath, req.file.buffer);
+
+        srtPath = path.join(tmpDir, `subtitles-${randomUUID()}.srt`);
+        await fs.writeFile(srtPath, srtContent, 'utf8');
+
+        // Build ASS/SSA style override string.
+        // ASS colour format: &HAABBGGRR (AA=alpha 00=opaque 80=semi-transparent, BB=blue, GG=green, RR=red)
+        const alignment = position === 'top' ? 8 : 2; // ASS alignment: 2=bottom-center, 8=top-center
+        let forceStyle = `Fontsize=20,Alignment=${alignment}`;
+        if (style === 'white_on_black') {
+          // White text (&H00FFFFFF) on semi-transparent black background (&H80000000, alpha=0x80)
+          forceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0';
+        } else if (style === 'yellow') {
+          // Yellow text (&H0000FFFF = BGR yellow) with black outline
+          forceStyle += ',PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Bold=1';
+        } else {
+          // Default: white text with black outline
+          forceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Bold=0';
+        }
+
+        // Forward-slash path for FFmpeg's subtitles filter (runs on Linux; UUID has no special chars).
+        // Escape backslashes first, then single quotes for safe embedding in the filter string.
+        const escapedSrtPath = srtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+        res.set('Content-Type', 'video/mp4');
+        ffmpeg(inputPath)
+          .videoFilters(`subtitles='${escapedSrtPath}':force_style='${forceStyle}'`)
+          .audioCodec('copy')
+          .outputOptions(['-movflags', 'frag_keyframe+empty_moov+default_base_moof'])
+          .toFormat('mp4')
+          .on('error', (err) => {
+            [inputPath, srtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+            console.error('FFmpeg error (burn_subtitles):', err);
+            if (!res.headersSent) res.status(500).end();
+          })
+          .on('end', () => { [inputPath, srtPath].forEach(p => p && fs.unlink(p).catch(() => {})); })
+          .pipe(res);
+      } catch (error) {
+        [inputPath, srtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+        if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
+      }
+      return;
+    }
+
+    // add_audio_track path
     let inputPath = null;
     let audioInputPath = null;
     try {

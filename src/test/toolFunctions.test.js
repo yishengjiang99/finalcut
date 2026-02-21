@@ -1246,4 +1246,118 @@ describe('toolFunctions', () => {
       );
     });
   });
+
+  describe('generate_captions', () => {
+    it('should generate captions and burn them into video by default', async () => {
+      const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world\n\n2\n00:00:02,000 --> 00:00:04,000\nThis is a test';
+
+      // First call: /api/generate-captions returns SRT/VTT
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt.replace(/,(\d{3})/g, '.$1') })
+      });
+      // Second call: /api/process-video (burn_subtitles) returns video
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8)
+      });
+
+      const result = await toolFunctions.generate_captions(
+        { language: 'en', style: 'default', position: 'bottom', burn_in: true },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('Captions generated');
+      expect(result).toContain('burned into video');
+      expect(mockSetVideoFileData).toHaveBeenCalled();
+      expect(mockAddMessage).toHaveBeenCalledTimes(3);
+    });
+
+    it('should generate captions without burning when burn_in is false', async () => {
+      const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt })
+      });
+
+      const result = await toolFunctions.generate_captions(
+        { burn_in: false },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('Captions generated');
+      expect(mockSetVideoFileData).not.toHaveBeenCalled();
+      // Only SRT and VTT download messages, no video message
+      expect(mockAddMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle caption generation failure gracefully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Audio extraction failed' })
+      });
+
+      const result = await toolFunctions.generate_captions(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('Failed to generate captions');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Error generating captions'),
+        false
+      );
+    });
+
+    it('should handle burn_subtitles failure gracefully', async () => {
+      const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt })
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'FFmpeg failed' })
+      });
+
+      const result = await toolFunctions.generate_captions(
+        { burn_in: true },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('Failed to generate captions');
+    });
+
+    it('should use auto language detection by default', async () => {
+      const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHola mundo';
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt })
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8)
+      });
+
+      const result = await toolFunctions.generate_captions(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('auto-detected');
+    });
+  });
 });
