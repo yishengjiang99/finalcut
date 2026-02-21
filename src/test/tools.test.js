@@ -265,6 +265,18 @@ describe('Tools Module', () => {
     expect(extractAudioTool.function.description).toContain('Extract audio');
   });
 
+  it('has generate_captions tool', () => {
+    const captionsTool = tools.find(t => t.function.name === 'generate_captions');
+    expect(captionsTool).toBeDefined();
+    expect(captionsTool.function.description).toContain('subtitles');
+    expect(captionsTool.function.parameters.required).toEqual([]);
+    expect(captionsTool.function.parameters.properties.language).toBeDefined();
+    expect(captionsTool.function.parameters.properties.translate_language).toBeDefined();
+    expect(captionsTool.function.parameters.properties.style.enum).toEqual(['default', 'white_on_black', 'yellow']);
+    expect(captionsTool.function.parameters.properties.position.enum).toEqual(['bottom', 'top']);
+    expect(captionsTool.function.parameters.properties.burn_in).toBeDefined();
+  });
+
   it('all tools have proper structure', () => {
     tools.forEach(tool => {
       expect(tool.type).toBe('function');

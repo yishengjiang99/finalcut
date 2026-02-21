@@ -843,6 +843,45 @@ export const tools = [
   {
     type: 'function',
     function: {
+      name: 'generate_captions',
+      description: 'Automatically generate subtitles/captions from the video audio using speech-to-text AI (xAI Grok). Optionally translates the captions to another language using Grok chat and overlays both language tracks on the video. Creates SRT and VTT subtitle files. Use this for accessibility, social media, international content, or any video that needs subtitles.',
+      parameters: {
+        type: 'object',
+        properties: {
+          language: {
+            type: 'string',
+            description: 'Language for transcription (e.g., "en", "es", "fr", "de", "ja", "zh"). Use "auto" for automatic language detection.',
+            default: 'auto'
+          },
+          translate_language: {
+            type: 'string',
+            description: 'Optional: target language code to translate the captions into using Grok (e.g., "es" for Spanish, "fr" for French, "zh" for Chinese). When provided, both the original and translated subtitle tracks are overlaid on the video — translated text at the top, original at the bottom.'
+          },
+          style: {
+            type: 'string',
+            description: 'Subtitle visual style: "default" (white text with outline), "white_on_black" (white text on semi-transparent black background), "yellow" (yellow text with outline).',
+            enum: ['default', 'white_on_black', 'yellow'],
+            default: 'default'
+          },
+          position: {
+            type: 'string',
+            description: 'Position of original-language subtitles on the video: "bottom" (standard) or "top". Translated subtitles appear on the opposite side.',
+            enum: ['bottom', 'top'],
+            default: 'bottom'
+          },
+          burn_in: {
+            type: 'boolean',
+            description: 'Whether to burn the subtitles permanently into the video frames. If true (default), returns a video with embedded subtitles. If false, only returns the SRT/VTT files without modifying the video.',
+            default: true
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'add_video_transition',
       description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos.',
       parameters: {
