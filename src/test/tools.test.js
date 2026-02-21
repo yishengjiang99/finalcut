@@ -271,6 +271,7 @@ describe('Tools Module', () => {
     expect(captionsTool.function.description).toContain('subtitles');
     expect(captionsTool.function.parameters.required).toEqual([]);
     expect(captionsTool.function.parameters.properties.language).toBeDefined();
+    expect(captionsTool.function.parameters.properties.translate_language).toBeDefined();
     expect(captionsTool.function.parameters.properties.style.enum).toEqual(['default', 'white_on_black', 'yellow']);
     expect(captionsTool.function.parameters.properties.position.enum).toEqual(['bottom', 'top']);
     expect(captionsTool.function.parameters.properties.burn_in).toBeDefined();

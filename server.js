@@ -730,6 +730,74 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
   }
 });
 
+// Caption translation endpoint: translate SRT content to another language via Grok chat
+app.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+  let body = '';
+  for await (const chunk of req) { body += chunk; }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch (e) {
+    return res.status(400).json({ error: 'Request body must be valid JSON' });
+  }
+
+  const { srtContent, targetLanguage } = parsed;
+
+  if (!srtContent || typeof srtContent !== 'string' || !srtContent.trim()) {
+    return res.status(400).json({ error: 'srtContent is required' });
+  }
+  if (!targetLanguage || typeof targetLanguage !== 'string' || !targetLanguage.trim()) {
+    return res.status(400).json({ error: 'targetLanguage is required' });
+  }
+
+  // Validate target language is a simple BCP-47-like code (2-8 alphanumeric chars)
+  if (!/^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/.test(targetLanguage.trim())) {
+    return res.status(400).json({ error: 'targetLanguage must be a valid language code (e.g., "es", "fr", "zh")' });
+  }
+
+  try {
+    const xaiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${XAI_API_TOKEN}`
+      },
+      body: JSON.stringify({
+        model: 'grok-3',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional subtitle translator. You will be given SRT subtitle content and must translate only the dialogue text lines to the specified language. Preserve all sequence numbers and timestamps exactly as-is. Output ONLY the complete translated SRT content with no extra commentary.'
+          },
+          {
+            role: 'user',
+            content: `Translate the following SRT subtitles to ${targetLanguage}. Keep all sequence numbers and timestamps unchanged. Only translate the text lines:\n\n${srtContent}`
+          }
+        ]
+      })
+    });
+
+    if (!xaiResponse.ok) {
+      const errBody = await xaiResponse.json().catch(() => ({}));
+      throw new Error(`xAI API error: ${errBody.error?.message || xaiResponse.statusText}`);
+    }
+
+    const xaiData = await xaiResponse.json();
+    const translatedSrt = xaiData.choices?.[0]?.message?.content?.trim() || '';
+
+    if (!translatedSrt) {
+      throw new Error('No translation received from xAI API');
+    }
+
+    const translatedVtt = srtToVtt(translatedSrt);
+    res.json({ srt: translatedSrt, vtt: translatedVtt });
+  } catch (error) {
+    console.error('Error translating captions:', error);
+    if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to translate captions' });
+  }
+});
+
 // Video processing endpoint
 // Client posts video as a raw body stream; operation, args, and file type are in request headers.
 // For add_audio_track and burn_subtitles (which require secondary inputs), FormData/multipart is used.
@@ -754,7 +822,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
 
     if (operation === 'burn_subtitles') {
-      const { srtContent, style = 'default', position = 'bottom' } = parsedArgs;
+      const { srtContent, translatedSrtContent, style = 'default', position = 'bottom' } = parsedArgs;
       if (!srtContent || typeof srtContent !== 'string' || !srtContent.trim()) {
         return res.status(400).json({ error: 'srtContent is required for burn_subtitles' });
       }
@@ -767,8 +835,11 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         return res.status(400).json({ error: `position must be one of: ${validPositions.join(', ')}` });
       }
 
+      const hasTranslation = typeof translatedSrtContent === 'string' && translatedSrtContent.trim().length > 0;
+
       let inputPath = null;
       let srtPath = null;
+      let translatedSrtPath = null;
       try {
         const tmpDir = '/tmp';
         inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
@@ -779,8 +850,11 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
 
         // Build ASS/SSA style override string.
         // ASS colour format: &HAABBGGRR (AA=alpha 00=opaque 80=semi-transparent, BB=blue, GG=green, RR=red)
-        const alignment = position === 'top' ? 8 : 2; // ASS alignment: 2=bottom-center, 8=top-center
-        let forceStyle = `Fontsize=20,Alignment=${alignment}`;
+        // ASS Alignment values: 2=bottom-center, 8=top-center (numpad layout)
+        const ASS_ALIGN_BOTTOM = 2;
+        const ASS_ALIGN_TOP = 8;
+        const alignment = position === 'top' ? ASS_ALIGN_TOP : ASS_ALIGN_BOTTOM;
+        let forceStyle = `FontSize=20,Alignment=${alignment}`;
         if (style === 'white_on_black') {
           // White text (&H00FFFFFF) on semi-transparent black background (&H80000000, alpha=0x80)
           forceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0';
@@ -796,21 +870,45 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         // Escape backslashes first, then single quotes for safe embedding in the filter string.
         const escapedSrtPath = srtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
+        // Build the video filter chain: if a translated track is provided, chain two subtitle filters
+        let videoFilter;
+        if (hasTranslation) {
+          translatedSrtPath = path.join(tmpDir, `translated-${randomUUID()}.srt`);
+          await fs.writeFile(translatedSrtPath, translatedSrtContent, 'utf8');
+
+          // Translated track is placed at the opposite end of the video
+          const translatedAlignment = position === 'top' ? ASS_ALIGN_BOTTOM : ASS_ALIGN_TOP;
+          let translatedForceStyle = `FontSize=18,Alignment=${translatedAlignment}`;
+          if (style === 'white_on_black') {
+            translatedForceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0';
+          } else if (style === 'yellow') {
+            translatedForceStyle += ',PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Bold=1';
+          } else {
+            translatedForceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Bold=0';
+          }
+
+          const escapedTranslatedSrtPath = translatedSrtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          // Chain both subtitle filters: first burn primary, then burn translation on top
+          videoFilter = `subtitles='${escapedSrtPath}':force_style='${forceStyle}',subtitles='${escapedTranslatedSrtPath}':force_style='${translatedForceStyle}'`;
+        } else {
+          videoFilter = `subtitles='${escapedSrtPath}':force_style='${forceStyle}'`;
+        }
+
         res.set('Content-Type', 'video/mp4');
         ffmpeg(inputPath)
-          .videoFilters(`subtitles='${escapedSrtPath}':force_style='${forceStyle}'`)
+          .videoFilters(videoFilter)
           .audioCodec('copy')
           .outputOptions(['-movflags', 'frag_keyframe+empty_moov+default_base_moof'])
           .toFormat('mp4')
           .on('error', (err) => {
-            [inputPath, srtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+            [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
             console.error('FFmpeg error (burn_subtitles):', err);
             if (!res.headersSent) res.status(500).end();
           })
-          .on('end', () => { [inputPath, srtPath].forEach(p => p && fs.unlink(p).catch(() => {})); })
+          .on('end', () => { [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {})); })
           .pipe(res);
       } catch (error) {
-        [inputPath, srtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+        [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
         if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
       }
       return;

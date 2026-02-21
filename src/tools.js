@@ -844,7 +844,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'generate_captions',
-      description: 'Automatically generate subtitles/captions from the video audio using speech-to-text AI (xAI Grok). Creates SRT and VTT subtitle files and optionally burns them into the video. Use this for accessibility, social media, or any video that needs subtitles.',
+      description: 'Automatically generate subtitles/captions from the video audio using speech-to-text AI (xAI Grok). Optionally translates the captions to another language using Grok chat and overlays both language tracks on the video. Creates SRT and VTT subtitle files. Use this for accessibility, social media, international content, or any video that needs subtitles.',
       parameters: {
         type: 'object',
         properties: {
@@ -852,6 +852,10 @@ export const tools = [
             type: 'string',
             description: 'Language for transcription (e.g., "en", "es", "fr", "de", "ja", "zh"). Use "auto" for automatic language detection.',
             default: 'auto'
+          },
+          translate_language: {
+            type: 'string',
+            description: 'Optional: target language code to translate the captions into using Grok (e.g., "es" for Spanish, "fr" for French, "zh" for Chinese). When provided, both the original and translated subtitle tracks are overlaid on the video — translated text at the top, original at the bottom.'
           },
           style: {
             type: 'string',
@@ -861,7 +865,7 @@ export const tools = [
           },
           position: {
             type: 'string',
-            description: 'Position of subtitles on the video: "bottom" (standard) or "top".',
+            description: 'Position of original-language subtitles on the video: "bottom" (standard) or "top". Translated subtitles appear on the opposite side.',
             enum: ['bottom', 'top'],
             default: 'bottom'
           },
