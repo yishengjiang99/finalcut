@@ -680,42 +680,88 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
       : `transcribe in ${language}`;
 
     // Call xAI audio model for transcription
+    const xaiPayload = {
+      model: 'grok-2-audio-1212',
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Please transcribe this audio and ${languageInstruction}. Output ONLY valid SRT subtitle format with accurate timestamps. Use this exact format with no extra text:\n\n1\n00:00:00,000 --> 00:00:02,500\nSubtitle text here\n\n2\n00:00:02,500 --> 00:00:05,000\nMore text`
+          },
+          {
+            type: 'input_audio',
+            input_audio: {
+              data: audioBase64,
+              format: 'mp3'
+            }
+          }
+        ]
+      }]
+    };
     const xaiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
-      body: JSON.stringify({
-        model: 'grok-2-audio-1212',
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Please transcribe this audio and ${languageInstruction}. Output ONLY valid SRT subtitle format with accurate timestamps. Use this exact format with no extra text:\n\n1\n00:00:00,000 --> 00:00:02,500\nSubtitle text here\n\n2\n00:00:02,500 --> 00:00:05,000\nMore text`
-            },
-            {
-              type: 'input_audio',
-              input_audio: {
-                data: audioBase64,
-                format: 'mp3'
-              }
-            }
-          ]
-        }]
-      })
+      body: JSON.stringify(xaiPayload)
     });
 
     if (!xaiResponse.ok) {
-      const errBody = await xaiResponse.json().catch(() => ({}));
-      throw new Error(`xAI API error: ${errBody.error?.message || xaiResponse.statusText}`);
+      const rawErrorBody = await xaiResponse.text().catch(() => '');
+      let parsedErrorBody = null;
+      try {
+        parsedErrorBody = rawErrorBody ? JSON.parse(rawErrorBody) : null;
+      } catch {
+        parsedErrorBody = null;
+      }
+      const requestId = xaiResponse.headers.get('x-request-id')
+        || xaiResponse.headers.get('request-id')
+        || xaiResponse.headers.get('cf-ray');
+      console.error('xAI transcription bad request', {
+        status: xaiResponse.status,
+        statusText: xaiResponse.statusText,
+        requestId,
+        model: xaiPayload.model,
+        language,
+        audioBytes: audioBuffer.length,
+        audioBase64Chars: audioBase64.length,
+        responseBody: rawErrorBody.slice(0, 4000)
+      });
+      throw new Error(
+        `xAI API error (${xaiResponse.status}): ${
+          parsedErrorBody?.error?.message ||
+          parsedErrorBody?.message ||
+          xaiResponse.statusText ||
+          'Bad request'
+        }${requestId ? ` [requestId=${requestId}]` : ''}`
+      );
     }
 
-    const xaiData = await xaiResponse.json();
-    const srtContent = xaiData.choices?.[0]?.message?.content?.trim() || '';
+    const xaiRaw = await xaiResponse.text();
+    let xaiData;
+    try {
+      xaiData = JSON.parse(xaiRaw);
+    } catch (parseError) {
+      console.error('xAI transcription response was not valid JSON', {
+        status: xaiResponse.status,
+        bodyPreview: xaiRaw.slice(0, 2000)
+      });
+      throw new Error('xAI transcription response was not valid JSON');
+    }
+
+    const rawContent = xaiData.choices?.[0]?.message?.content;
+    const srtContent = typeof rawContent === 'string'
+      ? rawContent.trim()
+      : Array.isArray(rawContent)
+        ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('').trim()
+        : '';
 
     if (!srtContent) {
+      console.error('xAI transcription response missing message content', {
+        bodyPreview: xaiRaw.slice(0, 2000)
+      });
       throw new Error('No transcription received from xAI API');
     }
 
