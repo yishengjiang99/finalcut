@@ -21,6 +21,7 @@ const sampleCommands = [
   { icon: '📐', text: 'Resize this video to 1280x720' },
   { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
   { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15' },
+  { icon: '💬', text: 'Generate captions for this video and burn them in' },
   { icon: '⚡', text: 'Make the video play at 2x speed' },
   { icon: '💡', text: 'Increase the brightness by 0.3' },
   { icon: '🔊', text: 'Adjust audio volume to 150%' },
@@ -606,6 +607,10 @@ export default function App() {
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
                   <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>🔄 Format Conversion</h3>
                   <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Convert MP4, WebM, MOV formats</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>💬 AI Captioning</h3>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Generate, translate, and burn subtitles</p>
                 </div>
               </div>
             </div>

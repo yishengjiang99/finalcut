@@ -185,6 +185,43 @@ Run tests with Vitest.
 7. The AI will apply the appropriate filters and transformations using server-side FFmpeg
 8. A spinner will display while ffmpeg is processing your video
 
+### Generate Captions (AI Subtitles)
+
+The app can automatically generate subtitles from your video's audio using AI speech-to-text. It can also translate captions to a second language and burn one or two subtitle tracks into the video.
+
+What you get:
+- Downloadable subtitle files (`.srt` and `.vtt`)
+- Optional burned-in subtitles in the exported video
+- Optional translated subtitle track (shown opposite the original track position)
+
+#### Sample Prompt Text (copy/paste)
+
+```text
+Generate captions for this video.
+```
+
+```text
+Generate English captions for this video and burn them into the video.
+```
+
+```text
+Generate captions, translate them to Spanish, and put Spanish at the top with the original captions at the bottom.
+```
+
+```text
+Generate captions in auto-detect mode, use yellow subtitle style, and place them at the top.
+```
+
+```text
+Generate captions but do not burn them into the video. I only want SRT and VTT files.
+```
+
+Tips:
+- Mention a language code or language name (for example: English/`en`, Spanish/`es`, French/`fr`)
+- Ask for translation to create bilingual captions
+- Ask for subtitle style (`default`, `white_on_black`, or `yellow`)
+- Ask for position (`top` or `bottom`)
+
 ### Sample Video
 
 The application includes a "Try with Sample Video" feature on the landing page. To use this feature, you need to place a file named `BigBuckBunny.mp4` in the `finalcut/public/` directory.
@@ -197,89 +234,14 @@ curl -o BigBuckBunny.mp4 "http://commondatastorage.googleapis.com/gtv-videos-buc
 
 Alternatively, you can use any MP4 video file and name it `BigBuckBunny.mp4`.
 
-## Architecture
+## More Documentation
 
-FinalCut now uses **server-side FFmpeg processing** for improved reliability and performance:
+For deeper technical and deployment details, see:
 
-- **Client (React)**: Handles UI, chat interface, and file uploads
-- **Server (Node.js + Express)**: 
-  - Proxies requests to xAI API (keeping API token secure)
-  - Processes videos using native FFmpeg via fluent-ffmpeg library
-  - Returns processed videos to the client
-
-### Benefits of Server-Side Processing
-
-- ✅ **More Reliable**: Uses native FFmpeg instead of WebAssembly
-- ✅ **Better Performance**: Native code is faster than WASM
-- ✅ **No Browser Limitations**: No memory constraints or CORS issues
-- ✅ **Works Everywhere**: Compatible with all browsers without special headers
-- ✅ **Easier Debugging**: Server-side logs make troubleshooting simpler
-
-## Security
-
-The xAI API token is securely stored on the server side and never exposed to the client. The token is read from the `.env` file and used by the Node.js server to authenticate requests to the xAI API.
-
-Video files are processed on the server and immediately cleaned up after processing, ensuring no data persists on the server.
-
-## Technology Stack
-
-- **React 18** - UI framework
-- **Vite** - Build tool and dev server
-- **Node.js + Express** - Server and API
-- **Passport.js** - Google OAuth authentication
-- **MySQL** - User and subscription data storage
-- **Stripe** - Subscription payment processing
-- **FFmpeg (native)** - Server-side video processing via fluent-ffmpeg
-- **Multer** - File upload handling
-- **xAI Grok API** - AI-powered editing assistance
-- **Vitest** - Testing framework
-- **React Testing Library** - Component testing
-
-## Project Structure
-
-```
-finalcut/
-├── src/
-│   ├── App.jsx           # Main React component
-│   ├── main.jsx          # Application entry point
-│   ├── db.js             # Database connection and user operations
-│   ├── tools.js          # Tool definitions for AI
-│   ├── toolFunctions.js  # Video editing function implementations
-│   └── test/             # Test files
-├── docs/
-│   ├── QUICKSTART.md         # Quick setup guide
-│   ├── GOOGLE_AUTH_SETUP.md  # Detailed auth documentation
-│   ├── STRIPE.md             # Stripe integration guide
-│   └── DEPLOYMENT.md         # Production deployment guide
-├── index.html            # HTML entry point
-├── server.js             # Express server with auth and API routes
-├── package.json          # Dependencies and scripts
-└── vite.config.js        # Vite configuration
-```
-
-## Deployment
-
-For production deployment to DigitalOcean with DNS configuration on GoDaddy, see the comprehensive guides:
-
-- **[DEPLOYMENT.md](./docs/DEPLOYMENT.md)** - Complete step-by-step deployment guide
-- **[QUICK-REFERENCE.md](./docs/QUICK-REFERENCE.md)** - Quick reference for common tasks
-- **[deploy.sh](./deploy.sh)** - Automated deployment script
-- **[setup-server.sh](./setup-server.sh)** - Server setup script
-
-### Quick Deploy
-
-For initial server setup:
-```bash
-wget https://raw.githubusercontent.com/yishengjiang99/pages/main/finalcut/setup-server.sh
-chmod +x setup-server.sh
-sudo ./setup-server.sh
-```
-
-For application updates:
-```bash
-cd /home/finalcut/apps/pages/finalcut
-./deploy.sh
-```
+- **[docs/QUICKSTART.md](./docs/QUICKSTART.md)** - Quick setup guide
+- **[docs/FUNCTIONALITY.md](./docs/FUNCTIONALITY.md)** - Feature overview
+- **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** - Deployment guide
+- **[docs/QUICK-REFERENCE.md](./docs/QUICK-REFERENCE.md)** - Deployment quick reference
 
 ## License
 
