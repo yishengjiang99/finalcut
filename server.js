@@ -1032,8 +1032,25 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     responseContentType = VIDEO_CONTENT_TYPES[outputExt] || 'video/mp4';
   }
 
-  // Build ffmpeg command: pipe request body to ffmpeg stdin
-  let command = ffmpeg(req).inputFormat(inputFormat);
+  // Read request body to a temporary file first. Many container formats (especially MP4)
+  // are not reliably seekable from stdin, which can yield truncated/invalid output blobs.
+  let tmpStreamInputPath = null;
+  try {
+    const chunks = [];
+    for await (const chunk of req) { chunks.push(chunk); }
+    const inputBuffer = Buffer.concat(chunks);
+    if (!inputBuffer.length) {
+      return res.status(400).json({ error: 'No video data received' });
+    }
+    tmpStreamInputPath = path.join('/tmp', `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
+    await fs.writeFile(tmpStreamInputPath, inputBuffer);
+  } catch (error) {
+    console.error('Error buffering streamed input:', error);
+    return res.status(500).json({ error: 'Failed to read uploaded video stream' });
+  }
+
+  // Build ffmpeg command from a seekable temp file, while still streaming output to the client.
+  let command = ffmpeg(tmpStreamInputPath).inputFormat(inputFormat);
 
   switch (operation) {
     case 'resize_video':
@@ -1336,7 +1353,11 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     .toFormat(outputExt)
     .on('error', (err) => {
       console.error('Error processing video:', err);
+      if (tmpStreamInputPath) fs.unlink(tmpStreamInputPath).catch(() => {});
       if (!res.headersSent) res.status(500).end();
+    })
+    .on('end', () => {
+      if (tmpStreamInputPath) fs.unlink(tmpStreamInputPath).catch(() => {});
     })
     .pipe(res);
 });
