@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gen Video 2 - TTS Placeholder Video</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --ink: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #22c55e;
+      --accent-2: #0ea5e9;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background:
+        radial-gradient(circle at 15% 15%, rgba(14,165,233,.2), transparent 45%),
+        radial-gradient(circle at 85% 20%, rgba(34,197,94,.18), transparent 45%),
+        linear-gradient(180deg, #020617, #0f172a);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 20px;
+    }
+    .card {
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 16px;
+      padding: 16px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    p.hint {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    textarea, select, input[type="number"], input[type="range"] {
+      width: 100%;
+      background: #0b1220;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.4;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .slider-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .value {
+      min-width: 46px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    button {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: #1f2937;
+      color: var(--ink);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.primary {
+      background: linear-gradient(90deg, var(--accent-2), var(--accent));
+      border: none;
+      color: #041017;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+    canvas, video {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: #020617;
+      display: block;
+    }
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+    .note {
+      font-size: 12px;
+      line-height: 1.45;
+      color: #cbd5e1;
+      border: 1px dashed rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 10px 12px;
+      text-decoration: none;
+      font-weight: 600;
+      color: #041017;
+      background: linear-gradient(90deg, #fde047, #f59e0b);
+      border-radius: 10px;
+    }
+    .download[hidden] { display: none; }
+    @media (max-width: 900px) {
+      .wrap { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Gen Video 2</h1>
+      <p class="hint">Enter text, preview it with the browser Speech Synthesis API, then generate a placeholder-color video and download it.</p>
+
+      <label for="scriptInput">Script</label>
+      <textarea id="scriptInput" placeholder="Type text to speak...">Hello. This is a generated placeholder video using browser text to speech.</textarea>
+
+      <label for="voiceSelect">Voice</label>
+      <select id="voiceSelect"></select>
+
+      <div class="row">
+        <div>
+          <label for="widthInput">Width</label>
+          <input id="widthInput" type="number" min="320" step="2" value="1280" />
+        </div>
+        <div>
+          <label for="heightInput">Height</label>
+          <input id="heightInput" type="number" min="180" step="2" value="720" />
+        </div>
+      </div>
+
+      <label for="rateInput">Speech Rate</label>
+      <div class="slider-row">
+        <input id="rateInput" type="range" min="0.5" max="2" step="0.05" value="1" />
+        <span class="value" id="rateValue">1.00x</span>
+      </div>
+
+      <label for="pitchInput">Speech Pitch</label>
+      <div class="slider-row">
+        <input id="pitchInput" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="value" id="pitchValue">1.00</span>
+      </div>
+
+      <label for="fpsInput">Video FPS</label>
+      <div class="slider-row">
+        <input id="fpsInput" type="range" min="12" max="60" step="1" value="30" />
+        <span class="value" id="fpsValue">30</span>
+      </div>
+
+      <div class="actions">
+        <button id="previewBtn">Preview Speech</button>
+        <button id="stopBtn">Stop Speech</button>
+        <button id="generateBtn" class="primary">Generate Video</button>
+        <button id="cancelBtn">Cancel Render</button>
+      </div>
+
+      <label style="margin-top: 12px;">
+        <input id="captureAudioCheckbox" type="checkbox" checked style="width:auto; margin-right:8px;" />
+        Capture spoken audio into output video (requires tab audio sharing permission)
+      </label>
+
+      <p class="status" id="statusText">Ready.</p>
+      <div class="note">
+        The browser Speech Synthesis API (`speechSynthesis`) does not expose its audio stream for direct `MediaRecorder` capture in most browsers.
+        This page works around that by asking to capture the current tab audio during render, then merges that audio with the canvas video stream.
+      </div>
+    </section>
+
+    <section class="card stack">
+      <canvas id="stage" width="1280" height="720"></canvas>
+      <video id="previewVideo" controls playsinline></video>
+      <a id="downloadLink" class="download" hidden download="generated-placeholder-video.webm">Download Video</a>
+    </section>
+  </div>
+
+  <script>
+    const els = {
+      scriptInput: document.getElementById('scriptInput'),
+      voiceSelect: document.getElementById('voiceSelect'),
+      widthInput: document.getElementById('widthInput'),
+      heightInput: document.getElementById('heightInput'),
+      rateInput: document.getElementById('rateInput'),
+      pitchInput: document.getElementById('pitchInput'),
+      fpsInput: document.getElementById('fpsInput'),
+      rateValue: document.getElementById('rateValue'),
+      pitchValue: document.getElementById('pitchValue'),
+      fpsValue: document.getElementById('fpsValue'),
+      previewBtn: document.getElementById('previewBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      generateBtn: document.getElementById('generateBtn'),
+      cancelBtn: document.getElementById('cancelBtn'),
+      captureAudioCheckbox: document.getElementById('captureAudioCheckbox'),
+      statusText: document.getElementById('statusText'),
+      stage: document.getElementById('stage'),
+      previewVideo: document.getElementById('previewVideo'),
+      downloadLink: document.getElementById('downloadLink'),
+    };
+
+    const ctx = els.stage.getContext('2d');
+    let voices = [];
+    let activeUtterance = null;
+    let renderCancelled = false;
+    let renderLoopHandle = 0;
+    let currentObjectUrl = null;
+    let speechState = {
+      text: '',
+      startedAt: 0,
+      endedAt: 0,
+      activeWord: '',
+      wordIndex: 0,
+      speaking: false
+    };
+
+    function setStatus(msg) {
+      els.statusText.textContent = msg;
+    }
+
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function getSettings() {
+      const text = els.scriptInput.value.trim();
+      const width = clamp(Number(els.widthInput.value) || 1280, 320, 3840);
+      const height = clamp(Number(els.heightInput.value) || 720, 180, 2160);
+      const rate = clamp(Number(els.rateInput.value) || 1, 0.5, 2);
+      const pitch = clamp(Number(els.pitchInput.value) || 1, 0, 2);
+      const fps = clamp(Number(els.fpsInput.value) || 30, 12, 60);
+      const voice = voices[Number(els.voiceSelect.value)] || null;
+      return { text, width, height, rate, pitch, fps, voice };
+    }
+
+    function populateVoices() {
+      const selectedVoiceName = voices[Number(els.voiceSelect.value)]?.name;
+      voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+      els.voiceSelect.innerHTML = '';
+      if (!voices.length) {
+        const opt = document.createElement('option');
+        opt.textContent = 'No voices available';
+        opt.value = '0';
+        els.voiceSelect.appendChild(opt);
+        return;
+      }
+      voices.forEach((voice, index) => {
+        const opt = document.createElement('option');
+        opt.value = String(index);
+        opt.textContent = `${voice.name} (${voice.lang})${voice.default ? ' • default' : ''}`;
+        els.voiceSelect.appendChild(opt);
+      });
+      const restoredIndex = voices.findIndex(v => v.name === selectedVoiceName);
+      els.voiceSelect.value = String(restoredIndex >= 0 ? restoredIndex : 0);
+    }
+
+    function updateSliderLabels() {
+      els.rateValue.textContent = `${Number(els.rateInput.value).toFixed(2)}x`;
+      els.pitchValue.textContent = Number(els.pitchInput.value).toFixed(2);
+      els.fpsValue.textContent = String(Number(els.fpsInput.value));
+    }
+
+    function estimateDurationSec(text, rate) {
+      const words = (text.match(/\S+/g) || []).length;
+      const baseWpm = 155;
+      const wpm = Math.max(60, baseWpm * rate);
+      const speechSec = words ? (words / wpm) * 60 : 0.8;
+      const punctuationPauses = (text.match(/[.,!?;:]/g) || []).length * 0.16;
+      return clamp(speechSec + punctuationPauses + 0.5, 0.8, 180);
+    }
+
+    function makeUtterance(text, { voice, rate, pitch }, hooks = {}) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = rate;
+      utter.pitch = pitch;
+      if (voice) {
+        utter.voice = voice;
+        utter.lang = voice.lang;
+      }
+      utter.onstart = (e) => hooks.onstart && hooks.onstart(e);
+      utter.onend = (e) => hooks.onend && hooks.onend(e);
+      utter.onerror = (e) => hooks.onerror && hooks.onerror(e);
+      utter.onboundary = (e) => hooks.onboundary && hooks.onboundary(e);
+      return utter;
+    }
+
+    function stopSpeech() {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      activeUtterance = null;
+      speechState.speaking = false;
+    }
+
+    function splitWords(text) {
+      return text.trim().split(/\s+/).filter(Boolean);
+    }
+
+    function drawFrame(nowMs, durationSec, text) {
+      const w = els.stage.width;
+      const h = els.stage.height;
+      const t = nowMs / 1000;
+      const progress = durationSec > 0 ? Math.min(1, t / durationSec) : 0;
+
+      const hue1 = (t * 35) % 360;
+      const hue2 = (hue1 + 130) % 360;
+      const hue3 = (hue1 + 250) % 360;
+      const bg = ctx.createLinearGradient(0, 0, w, h);
+      bg.addColorStop(0, `hsl(${hue1} 70% 18%)`);
+      bg.addColorStop(0.5, `hsl(${hue2} 75% 26%)`);
+      bg.addColorStop(1, `hsl(${hue3} 75% 20%)`);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i < 8; i++) {
+        const x = (w * (i + 1)) / 9 + Math.sin(t * 0.8 + i) * 50;
+        const y = (h * (i % 3 + 1)) / 4 + Math.cos(t * 1.2 + i) * 35;
+        const r = 40 + ((i * 17) % 30) + Math.sin(t + i) * 8;
+        ctx.beginPath();
+        ctx.fillStyle = `hsla(${(hue1 + i * 28) % 360} 85% 62% / 0.22)`;
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const panelW = Math.min(w * 0.86, 980);
+      const panelH = Math.min(h * 0.38, 260);
+      const panelX = (w - panelW) / 2;
+      const panelY = h * 0.52 - panelH / 2;
+
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.45)';
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.18)';
+      ctx.lineWidth = 2;
+      roundRect(ctx, panelX, panelY, panelW, panelH, 22);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = `${Math.max(24, Math.floor(w * 0.026))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Placeholder Video', w / 2, h * 0.16);
+
+      const words = splitWords(text);
+      const displayWords = words.slice(0, 18);
+      const activeWord = speechState.activeWord || '';
+      const activeNorm = activeWord.trim().toLowerCase().replace(/[^\w']/g, '');
+
+      let lines = wrapWords(displayWords, Math.max(3, Math.floor(panelW / 18)));
+      if (!lines.length) lines = ['(No text)'];
+      const fontSize = Math.max(20, Math.floor(panelH / (lines.length + 4)));
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.textAlign = 'left';
+
+      let y = panelY + 52;
+      for (const line of lines) {
+        let x = panelX + 28;
+        for (const part of line.split(/(\s+)/)) {
+          if (!part) continue;
+          const norm = part.trim().toLowerCase().replace(/[^\w']/g, '');
+          const isActive = activeNorm && norm && norm === activeNorm;
+          ctx.fillStyle = isActive ? '#fde047' : 'rgba(255,255,255,0.92)';
+          ctx.fillText(part, x, y);
+          x += ctx.measureText(part).width;
+        }
+        y += fontSize + 10;
+      }
+
+      const progressX = panelX + 28;
+      const progressY = panelY + panelH - 36;
+      const progressW = panelW - 56;
+      const progressH = 12;
+
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      roundRect(ctx, progressX, progressY, progressW, progressH, 6);
+      ctx.fill();
+
+      const fillW = progressW * progress;
+      if (fillW > 0) {
+        const prog = ctx.createLinearGradient(progressX, progressY, progressX + progressW, progressY);
+        prog.addColorStop(0, '#38bdf8');
+        prog.addColorStop(1, '#22c55e');
+        ctx.fillStyle = prog;
+        roundRect(ctx, progressX, progressY, fillW, progressH, 6);
+        ctx.fill();
+      }
+
+      ctx.font = `${Math.max(14, Math.floor(w * 0.012))}px monospace`;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(progress * 100)}%`, w / 2, progressY - 10);
+    }
+
+    function roundRect(context, x, y, w, h, r) {
+      const rr = Math.min(r, w / 2, h / 2);
+      context.beginPath();
+      context.moveTo(x + rr, y);
+      context.arcTo(x + w, y, x + w, y + h, rr);
+      context.arcTo(x + w, y + h, x, y + h, rr);
+      context.arcTo(x, y + h, x, y, rr);
+      context.arcTo(x, y, x + w, y, rr);
+      context.closePath();
+    }
+
+    function wrapWords(words, maxChars) {
+      const lines = [];
+      let line = '';
+      for (const word of words) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (candidate.length > maxChars && line) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    async function previewSpeech() {
+      if (!('speechSynthesis' in window)) {
+        setStatus('Speech synthesis is not supported in this browser.');
+        return;
+      }
+      const settings = getSettings();
+      if (!settings.text) {
+        setStatus('Enter text first.');
+        return;
+      }
+      stopSpeech();
+      speechState = {
+        text: settings.text,
+        startedAt: performance.now(),
+        endedAt: 0,
+        activeWord: '',
+        wordIndex: 0,
+        speaking: true
+      };
+      const words = splitWords(settings.text);
+      const utter = makeUtterance(settings.text, settings, {
+        onstart() {
+          speechState.startedAt = performance.now();
+          speechState.speaking = true;
+          setStatus('Speaking preview...');
+        },
+        onboundary(e) {
+          if (typeof e.charIndex === 'number') {
+            const spoken = settings.text.slice(0, e.charIndex);
+            speechState.wordIndex = splitWords(spoken).length;
+            speechState.activeWord = words[speechState.wordIndex] || '';
+          }
+        },
+        onend() {
+          speechState.speaking = false;
+          speechState.activeWord = '';
+          setStatus('Preview finished.');
+        },
+        onerror(e) {
+          speechState.speaking = false;
+          setStatus(`Speech error: ${e.error || 'unknown'}`);
+        }
+      });
+      activeUtterance = utter;
+      window.speechSynthesis.speak(utter);
+    }
+
+    async function generateVideo() {
+      if (!('MediaRecorder' in window)) {
+        setStatus('MediaRecorder is not supported in this browser.');
+        return;
+      }
+      if (!('speechSynthesis' in window)) {
+        setStatus('Speech synthesis is not supported in this browser.');
+        return;
+      }
+
+      const settings = getSettings();
+      if (!settings.text) {
+        setStatus('Enter text first.');
+        return;
+      }
+
+      renderCancelled = false;
+      els.generateBtn.disabled = true;
+      els.previewBtn.disabled = true;
+      els.downloadLink.hidden = true;
+
+      els.stage.width = settings.width;
+      els.stage.height = settings.height;
+
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = null;
+      }
+
+      const canvasStream = els.stage.captureStream(settings.fps);
+      let displayAudioStream = null;
+      let capturedAudioTrack = null;
+
+      if (els.captureAudioCheckbox.checked && navigator.mediaDevices?.getDisplayMedia) {
+        try {
+          setStatus('Choose this tab and enable "Share tab audio" in the browser prompt...');
+          displayAudioStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true
+          });
+          capturedAudioTrack = displayAudioStream.getAudioTracks()[0] || null;
+          if (!capturedAudioTrack) {
+            setStatus('No tab audio track captured. Video will be silent unless you re-run and enable tab audio.');
+          }
+        } catch (err) {
+          setStatus(`Tab audio capture not granted (${err.name || 'error'}). Continuing without audio.`);
+        }
+      }
+
+      const stream = new MediaStream();
+      canvasStream.getVideoTracks().forEach(track => stream.addTrack(track));
+      if (capturedAudioTrack) {
+        stream.addTrack(capturedAudioTrack);
+      }
+      const mimeCandidates = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      const mimeType = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const estimatedDuration = estimateDurationSec(settings.text, settings.rate);
+      let actualDuration = estimatedDuration;
+      let speechFinished = false;
+      let recordStart = 0;
+      let stopRequested = false;
+
+      const words = splitWords(settings.text);
+      speechState = {
+        text: settings.text,
+        startedAt: 0,
+        endedAt: 0,
+        activeWord: '',
+        wordIndex: 0,
+        speaking: false
+      };
+
+      const utter = makeUtterance(settings.text, settings, {
+        onstart() {
+          speechState.startedAt = performance.now();
+          speechState.speaking = true;
+          setStatus('Rendering video + speaking...');
+        },
+        onboundary(e) {
+          if (typeof e.charIndex === 'number') {
+            const spoken = settings.text.slice(0, e.charIndex);
+            speechState.wordIndex = splitWords(spoken).length;
+            speechState.activeWord = words[speechState.wordIndex] || '';
+          }
+        },
+        onend() {
+          speechState.endedAt = performance.now();
+          speechState.speaking = false;
+          speechState.activeWord = '';
+          actualDuration = Math.max(0.8, (speechState.endedAt - recordStart) / 1000);
+          speechFinished = true;
+        },
+        onerror(e) {
+          speechState.speaking = false;
+          speechFinished = true;
+          setStatus(`Speech error during render: ${e.error || 'unknown'}`);
+        }
+      });
+      activeUtterance = utter;
+
+      const blobPromise = new Promise((resolve, reject) => {
+        recorder.onstop = () => {
+          try {
+            resolve(new Blob(chunks, { type: recorder.mimeType || 'video/webm' }));
+          } catch (err) {
+            reject(err);
+          }
+        };
+        recorder.onerror = (e) => reject(e.error || new Error('Recorder error'));
+      });
+
+      recorder.start(250);
+      recordStart = performance.now();
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utter);
+
+      const loop = () => {
+        if (renderCancelled) {
+          stopRequested = true;
+          try { recorder.stop(); } catch (_) {}
+          stopSpeech();
+          if (displayAudioStream) displayAudioStream.getTracks().forEach(t => t.stop());
+          canvasStream.getTracks().forEach(t => t.stop());
+          cancelAnimationFrame(renderLoopHandle);
+          setStatus('Render cancelled.');
+          return;
+        }
+
+        const elapsed = (performance.now() - recordStart) / 1000;
+        const targetDuration = speechFinished ? actualDuration + 0.35 : Math.max(estimatedDuration, elapsed + 0.1);
+        drawFrame(elapsed * 1000, targetDuration, settings.text);
+
+        if (speechFinished && !stopRequested && elapsed >= actualDuration + 0.35) {
+          stopRequested = true;
+          try { recorder.stop(); } catch (_) {}
+          cancelAnimationFrame(renderLoopHandle);
+          return;
+        }
+
+        renderLoopHandle = requestAnimationFrame(loop);
+      };
+      renderLoopHandle = requestAnimationFrame(loop);
+
+      try {
+        const blob = await blobPromise;
+        if (renderCancelled) return;
+        if (!blob.size) {
+          throw new Error('Generated video is empty');
+        }
+        currentObjectUrl = URL.createObjectURL(blob);
+        els.previewVideo.src = currentObjectUrl;
+        els.downloadLink.href = currentObjectUrl;
+        els.downloadLink.download = `generated-placeholder-video-${Date.now()}.webm`;
+        els.downloadLink.hidden = false;
+        setStatus(`Done. Video ready (${(blob.size / 1024 / 1024).toFixed(2)} MB).`);
+      } catch (err) {
+        setStatus(`Render failed: ${err.message || err}`);
+      } finally {
+        if (displayAudioStream) displayAudioStream.getTracks().forEach(t => t.stop());
+        canvasStream.getTracks().forEach(t => t.stop());
+        els.generateBtn.disabled = false;
+        els.previewBtn.disabled = false;
+      }
+    }
+
+    function cancelRender() {
+      renderCancelled = true;
+    }
+
+    function startCanvasPreviewLoop() {
+      let start = performance.now();
+      const tick = (now) => {
+        if (!speechState.text) {
+          speechState.text = els.scriptInput.value.trim();
+        }
+        drawFrame(now - start, 8, els.scriptInput.value.trim());
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    els.rateInput.addEventListener('input', updateSliderLabels);
+    els.pitchInput.addEventListener('input', updateSliderLabels);
+    els.fpsInput.addEventListener('input', updateSliderLabels);
+    els.previewBtn.addEventListener('click', previewSpeech);
+    els.stopBtn.addEventListener('click', () => {
+      stopSpeech();
+      setStatus('Speech stopped.');
+    });
+    els.generateBtn.addEventListener('click', generateVideo);
+    els.cancelBtn.addEventListener('click', cancelRender);
+
+    if ('speechSynthesis' in window) {
+      populateVoices();
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    } else {
+      setStatus('Speech synthesis is not supported in this browser.');
+    }
+
+    updateSliderLabels();
+    startCanvasPreviewLoop();
+  </script>
+</body>
+</html>

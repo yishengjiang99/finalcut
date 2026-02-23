@@ -560,6 +560,43 @@ export default function App() {
       <div style={{ fontFamily: 'Arial, sans-serif', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#0d1117' }}>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
           <div style={{ maxWidth: '800px', width: '100%', color: '#c9d1d9', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ alignSelf: 'flex-end', marginBottom: '10px', width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
+              <details style={{
+                width: '100%',
+                maxWidth: '260px',
+                backgroundColor: '#161b22',
+                border: '1px solid #30363d',
+                borderRadius: '8px',
+                padding: '8px 10px'
+              }}>
+                <summary style={{
+                  cursor: 'pointer',
+                  listStyle: 'none',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: '#c9d1d9',
+                  userSelect: 'none'
+                }}>
+                  ☰ Menu
+                </summary>
+                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <a
+                    href="/genVideo.html"
+                    style={{
+                      color: '#58a6ff',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: '#0d1117',
+                      border: '1px solid #30363d'
+                    }}
+                  >
+                    Voice Placeholder Video Generator
+                  </a>
+                </div>
+              </details>
+            </div>
             <h1 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '10px', color: '#ffffff', textAlign: 'center' }}>
               FinalCut Video Editor
             </h1>
