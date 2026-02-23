@@ -13,6 +13,7 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import session from 'express-session';
 import { initDatabase, findUserByGoogleId, findUserByEmail, createUser } from './src/db.js';
+import WebSocket from 'ws';
 
 dotenv.config();
 
@@ -625,6 +626,104 @@ function srtToVtt(srt) {
   return vtt;
 }
 
+// Helper: transcribe base64-encoded MP3 audio using the Grok Voice Agent realtime WebSocket API.
+// Returns SRT-formatted transcript text.
+async function transcribeAudioViaVoiceAgent(audioBase64, languageInstruction) {
+  const WS_URL = 'wss://api.x.ai/v1/realtime';
+  const instructions = `Please transcribe this audio and ${languageInstruction}. Output ONLY valid SRT subtitle format with accurate timestamps. Use this exact format with no extra text:\n\n1\n00:00:00,000 --> 00:00:02,500\nSubtitle text here\n\n2\n00:00:02,500 --> 00:00:05,000\nMore text`;
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(WS_URL, ['realtime.x.ai'], {
+      headers: { Authorization: `Bearer ${XAI_API_TOKEN}` }
+    });
+
+    let fullTranscript = '';
+    let settled = false;
+    const TIMEOUT_MS = 120_000;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn(value);
+    };
+    const timer = setTimeout(() => {
+      ws.terminate();
+      settle(reject, new Error('Timeout waiting for transcription from Voice Agent API'));
+    }, TIMEOUT_MS);
+
+    ws.on('open', () => {
+      // 1. Configure session for transcription
+      ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          modalities: ['text', 'audio'],
+          instructions,
+          voice: null,
+          turn_detection: null,
+          input_audio_transcription: { model: 'whisper-1' }
+        }
+      }));
+
+      // 2. Send audio buffer
+      ws.send(JSON.stringify({
+        type: 'input_audio_buffer.append',
+        audio: audioBase64
+      }));
+
+      // 3. Commit the buffer to trigger processing
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+
+      // 4. Request a response (triggers the model to produce output)
+      ws.send(JSON.stringify({ type: 'response.create' }));
+    });
+
+    ws.on('message', (data) => {
+      let event;
+      try {
+        event = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+
+      if (event.type === 'conversation.item.input_audio_transcription.completed') {
+        const text = event.transcript || '';
+        if (text) fullTranscript += (fullTranscript ? ' ' : '') + text;
+      } else if (event.type === 'response.done') {
+        // Prefer the response output text (which follows our SRT instructions) if available
+        const outputContent = event.response?.output?.[0]?.content;
+        const outputText = Array.isArray(outputContent)
+          ? outputContent.filter(p => p.type === 'text').map(p => p.text).join('').trim()
+          : '';
+        const result = outputText || fullTranscript;
+        if (!result) {
+          settle(reject, new Error('No transcription received from Voice Agent API'));
+        } else {
+          settle(resolve, result);
+        }
+        ws.close();
+      } else if (event.type === 'error') {
+        const msg = event.error?.message || JSON.stringify(event.error) || 'Voice Agent API error';
+        console.error('xAI Voice Agent API error event', event);
+        settle(reject, new Error(msg));
+        ws.close();
+      }
+    });
+
+    ws.on('error', (err) => {
+      console.error('xAI Voice Agent WebSocket error', err);
+      settle(reject, new Error(`Voice Agent WebSocket error: ${err.message}`));
+      ws.close();
+    });
+
+    ws.on('close', (code) => {
+      // Only reject if closed unexpectedly before completion
+      if (code !== 1000 && !settled) {
+        settle(reject, new Error(`Voice Agent WebSocket closed unexpectedly (code=${code})`));
+      }
+    });
+  });
+}
+
 // Caption generation endpoint: extract audio from video and transcribe via xAI
 app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
   const contentType = (req.headers['content-type'] || '').toLowerCase();
@@ -638,7 +737,12 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
     return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
   }
 
-  const language = parsedArgs.language || 'auto';
+  const rawLanguage = parsedArgs.language || 'auto';
+  // Validate language: allow 'auto' or a BCP-47-like language code (letters, digits, hyphens only)
+  if (rawLanguage !== 'auto' && !/^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/.test(rawLanguage)) {
+    return res.status(400).json({ error: 'language must be "auto" or a valid language code (e.g., "en", "fr", "zh")' });
+  }
+  const language = rawLanguage;
   let tmpInputPath = null;
   let tmpAudioPath = null;
 
@@ -674,96 +778,13 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
     const audioBuffer = await fs.readFile(tmpAudioPath);
     const audioBase64 = audioBuffer.toString('base64');
 
-    // Build transcription prompt
+    // Build transcription instructions
     const languageInstruction = language === 'auto'
       ? 'automatically detect the spoken language'
       : `transcribe in ${language}`;
 
-    // Call xAI audio model for transcription
-    const xaiPayload = {
-      model: 'grok-2-audio-1212',
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `Please transcribe this audio and ${languageInstruction}. Output ONLY valid SRT subtitle format with accurate timestamps. Use this exact format with no extra text:\n\n1\n00:00:00,000 --> 00:00:02,500\nSubtitle text here\n\n2\n00:00:02,500 --> 00:00:05,000\nMore text`
-          },
-          {
-            type: 'input_audio',
-            input_audio: {
-              data: audioBase64,
-              format: 'mp3'
-            }
-          }
-        ]
-      }]
-    };
-    const xaiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${XAI_API_TOKEN}`
-      },
-      body: JSON.stringify(xaiPayload)
-    });
-
-    if (!xaiResponse.ok) {
-      const rawErrorBody = await xaiResponse.text().catch(() => '');
-      let parsedErrorBody = null;
-      try {
-        parsedErrorBody = rawErrorBody ? JSON.parse(rawErrorBody) : null;
-      } catch {
-        parsedErrorBody = null;
-      }
-      const requestId = xaiResponse.headers.get('x-request-id')
-        || xaiResponse.headers.get('request-id')
-        || xaiResponse.headers.get('cf-ray');
-      console.error('xAI transcription bad request', {
-        status: xaiResponse.status,
-        statusText: xaiResponse.statusText,
-        requestId,
-        model: xaiPayload.model,
-        language,
-        audioBytes: audioBuffer.length,
-        audioBase64Chars: audioBase64.length,
-        responseBody: rawErrorBody.slice(0, 4000)
-      });
-      throw new Error(
-        `xAI API error (${xaiResponse.status}): ${
-          parsedErrorBody?.error?.message ||
-          parsedErrorBody?.message ||
-          xaiResponse.statusText ||
-          'Bad request'
-        }${requestId ? ` [requestId=${requestId}]` : ''}`
-      );
-    }
-
-    const xaiRaw = await xaiResponse.text();
-    let xaiData;
-    try {
-      xaiData = JSON.parse(xaiRaw);
-    } catch (parseError) {
-      console.error('xAI transcription response was not valid JSON', {
-        status: xaiResponse.status,
-        bodyPreview: xaiRaw.slice(0, 2000)
-      });
-      throw new Error('xAI transcription response was not valid JSON');
-    }
-
-    const rawContent = xaiData.choices?.[0]?.message?.content;
-    const srtContent = typeof rawContent === 'string'
-      ? rawContent.trim()
-      : Array.isArray(rawContent)
-        ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('').trim()
-        : '';
-
-    if (!srtContent) {
-      console.error('xAI transcription response missing message content', {
-        bodyPreview: xaiRaw.slice(0, 2000)
-      });
-      throw new Error('No transcription received from xAI API');
-    }
+    // Transcribe audio via the Grok Voice Agent realtime WebSocket API
+    const srtContent = await transcribeAudioViaVoiceAgent(audioBase64, languageInstruction);
 
     const vttContent = srtToVtt(srtContent);
     res.json({ srt: srtContent, vtt: vttContent });
