@@ -715,7 +715,9 @@ async function transcribeAudioViaVoiceAgent(audioBase64, languageInstruction) {
     });
 
     ws.on('close', (code) => {
-      settle(reject, new Error(`Voice Agent WebSocket closed unexpectedly (code=${code})`));
+      if (code !== 1000) {
+        settle(reject, new Error(`Voice Agent WebSocket closed unexpectedly (code=${code})`));
+      }
     });
   });
 }
