@@ -712,6 +712,7 @@ async function transcribeAudioViaVoiceAgent(audioBase64, languageInstruction) {
     ws.on('error', (err) => {
       console.error('xAI Voice Agent WebSocket error', err);
       settle(reject, new Error(`Voice Agent WebSocket error: ${err.message}`));
+      ws.close();
     });
 
     ws.on('close', (code) => {
