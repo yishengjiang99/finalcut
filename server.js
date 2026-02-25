@@ -14,6 +14,8 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import session from 'express-session';
 import { initDatabase, findUserByGoogleId, findUserByEmail, createUser } from './src/db.js';
 import WebSocket from 'ws';
+import axios from 'axios';
+import FormData from 'form-data';
 
 dotenv.config();
 
@@ -30,6 +32,7 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 
 const PORT = process.env.PORT || 3001;
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -60,6 +63,11 @@ if (!STRIPE_SECRET_KEY) {
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
   console.warn('WARNING: Google OAuth credentials not set');
   console.warn('Google login will not be available');
+}
+
+if (!OPENAI_API_KEY) {
+  console.warn('WARNING: OPENAI_API_KEY environment variable is not set');
+  console.warn('Speaker diarization (batch /v1/audio/transcriptions) will not be available');
 }
 
 // Initialize Stripe only if the secret key is available
@@ -724,6 +732,235 @@ async function transcribeAudioViaVoiceAgent(audioBase64, languageInstruction) {
   });
 }
 
+// ── Batch Audio Transcription Helpers ─────────────────────────────────────────
+// NOTE: Speaker diarization requires the batch POST /v1/audio/transcriptions endpoint.
+// The OpenAI Realtime API (wss://api.openai.com/v1/realtime) does NOT support
+// diarization or segment-level speaker labels as of early 2026. Only the batch
+// HTTP endpoint with response_format:"diarized_json" provides per-segment speaker IDs.
+
+/**
+ * Extract audio from a video/audio file as mono WAV at 16 kHz.
+ * 16 kHz is the preferred sample rate for OpenAI Whisper-family transcription models.
+ */
+async function extractAudioToWav(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .audioFrequency(16000)
+      .audioChannels(1)
+      .audioCodec('pcm_s16le')
+      .noVideo()
+      .toFormat('wav')
+      .on('end', resolve)
+      .on('error', reject)
+      .save(outputPath);
+  });
+}
+
+// Max audio file size accepted by OpenAI Audio API (25 MB)
+const OPENAI_MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+// Target chunk duration for splitting (12 minutes → ~23 MB at 16 kHz mono 16-bit)
+const CHUNK_DURATION_SEC = 12 * 60;
+
+/**
+ * Split a WAV file into ≤25 MB segments if it exceeds the API size limit.
+ * Returns an array of { path: string, startSec: number } objects.
+ * The caller is responsible for deleting the returned chunk files.
+ */
+async function splitAudioIfNeeded(wavPath) {
+  const stat = await fs.stat(wavPath);
+  if (stat.size <= OPENAI_MAX_AUDIO_BYTES) {
+    return [{ path: wavPath, startSec: 0 }];
+  }
+
+  console.log(`[diarize] WAV is ${(stat.size / 1024 / 1024).toFixed(1)} MB — splitting into ${CHUNK_DURATION_SEC}s chunks`);
+
+  const duration = await new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(wavPath, (err, meta) => {
+      if (err) return reject(err);
+      resolve(meta.format.duration || 0);
+    });
+  });
+
+  const chunks = [];
+  let startSec = 0;
+  while (startSec < duration) {
+    const chunkPath = path.join('/tmp', `chunk-${randomUUID()}.wav`);
+    await new Promise((resolve, reject) => {
+      ffmpeg(wavPath)
+        .setStartTime(startSec)
+        .setDuration(CHUNK_DURATION_SEC)
+        .audioCodec('copy')
+        .on('end', resolve)
+        .on('error', reject)
+        .save(chunkPath);
+    });
+    chunks.push({ path: chunkPath, startSec });
+    startSec += CHUNK_DURATION_SEC;
+  }
+
+  console.log(`[diarize] Split into ${chunks.length} chunks`);
+  return chunks;
+}
+
+/**
+ * POST a single audio file to POST https://api.openai.com/v1/audio/transcriptions.
+ * Falls back through models on 403/model-not-found errors only.
+ *
+ * Model fallback order:
+ *   gpt-4o-transcribe-diarize  (response_format: diarized_json — full speaker diarization)
+ *   gpt-4o-transcribe          (response_format: verbose_json  — timestamps, no speaker)
+ *   gpt-4o-mini-transcribe     (response_format: verbose_json)
+ *   whisper-1                  (response_format: verbose_json)
+ *
+ * Returns normalized segments: Array<{ start, end, speaker, text }>
+ * (start/end in seconds; speaker may be null for non-diarizing models)
+ */
+async function transcribeWithOpenAI(filePath, timestampOffsetSec = 0) {
+  const MODELS = [
+    { model: 'gpt-4o-transcribe-diarize', format: 'diarized_json' },
+    { model: 'gpt-4o-transcribe',         format: 'verbose_json'  },
+    { model: 'gpt-4o-mini-transcribe',    format: 'verbose_json'  },
+    { model: 'whisper-1',                 format: 'verbose_json'  },
+  ];
+
+  let lastError;
+  for (const { model, format } of MODELS) {
+    const form = new FormData();
+    form.append('file', await fs.readFile(filePath), {
+      filename: path.basename(filePath),
+      contentType: 'audio/wav',
+    });
+    form.append('model', model);
+    form.append('response_format', format);
+    // timestamp_granularities[] is only valid for verbose_json
+    if (format === 'verbose_json') {
+      form.append('timestamp_granularities[]', 'segment');
+    }
+
+    try {
+      console.log(`[diarize] POST /v1/audio/transcriptions model=${model} format=${format} offset=${timestampOffsetSec}s`);
+      const resp = await axios.post(
+        'https://api.openai.com/v1/audio/transcriptions',
+        form,
+        {
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            ...form.getHeaders(),
+          },
+          timeout: 300_000,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        }
+      );
+
+      const data = resp.data;
+      console.log(`[diarize] Response model=${model}: ${JSON.stringify(data).slice(0, 200)}`);
+      const rawSegments = Array.isArray(data.segments) ? data.segments : [];
+
+      if (rawSegments.length) {
+        return rawSegments.map(seg => ({
+          start:   (seg.start ?? 0) + timestampOffsetSec,
+          end:     (seg.end   ?? 0) + timestampOffsetSec,
+          // diarized_json provides seg.speaker ("1", "2"…); verbose_json does not
+          speaker: seg.speaker ? `Speaker ${seg.speaker}` : null,
+          text:    (seg.text || '').trim(),
+        }));
+      }
+
+      // Last-resort: no segments array — treat full response as one block
+      const totalDurationSec = data.duration ?? 0;
+      return [{
+        start:   timestampOffsetSec,
+        end:     timestampOffsetSec + totalDurationSec,
+        speaker: null,
+        text:    (data.text || '').trim(),
+      }];
+    } catch (err) {
+      lastError = err;
+      const status = err.response?.status;
+      const errMsg = err.response?.data?.error?.message || err.message || '';
+      console.error(`[diarize] model=${model} failed: HTTP ${status} — ${errMsg}`);
+      // Only fall back on authorization / model-not-found errors; propagate others immediately
+      if (status === 403 || /not found|unsupported|invalid model|model_not_found/i.test(errMsg)) {
+        console.warn(`[diarize] Falling back from ${model}: ${errMsg}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Merge segment arrays from multiple transcribed chunks into a single sorted list.
+ */
+function mergeDiarizedSegmentsWithOffsets(chunksResults) {
+  return chunksResults
+    .flat()
+    .filter(seg => seg.text)
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Convert seconds to a timestamp string.
+ *   SRT:  HH:MM:SS,mmm  (vtt=false)
+ *   VTT:  HH:MM:SS.mmm  (vtt=true)
+ */
+function secondsToTimestamp(sec, vtt = false) {
+  const ms  = Math.round((sec % 1) * 1000);
+  const s   = Math.floor(sec % 60);
+  const m   = Math.floor((sec / 60) % 60);
+  const h   = Math.floor(sec / 3600);
+  const sep = vtt ? '.' : ',';
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(ms).padStart(3, '0')}`;
+}
+
+/**
+ * Build SRT and VTT strings from normalized segments.
+ * segments: Array<{ start: number, end: number, speaker: string|null, text: string }>
+ *           start/end are in seconds.
+ * Speaker lines are prefixed "Speaker N: " when a speaker label is present.
+ * Returns { srt: string, vtt: string }.
+ */
+function buildSrtAndVtt(segments) {
+  if (!segments.length) return { srt: '', vtt: 'WEBVTT\n' };
+
+  const srtLines = [];
+  const vttLines = ['WEBVTT', ''];
+
+  segments.forEach((seg, i) => {
+    const label    = seg.speaker ? `${seg.speaker}: ` : '';
+    const srtStart = secondsToTimestamp(seg.start, false);
+    const srtEnd   = secondsToTimestamp(seg.end,   false);
+    const vttStart = secondsToTimestamp(seg.start, true);
+    const vttEnd   = secondsToTimestamp(seg.end,   true);
+    const text     = `${label}${seg.text}`;
+
+    srtLines.push(`${i + 1}\n${srtStart} --> ${srtEnd}\n${text}`);
+    vttLines.push(`${vttStart} --> ${vttEnd}\n${text}`);
+  });
+
+  return {
+    srt: srtLines.join('\n\n'),
+    vtt: vttLines.join('\n\n'),
+  };
+}
+
+/**
+ * Burn an SRT subtitle file into a video using ffmpeg subtitles filter.
+ */
+async function burnSubtitlesIntoVideo(inputPath, srtPath, outputPath) {
+  const escapedSrtPath = srtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .videoFilters(`subtitles='${escapedSrtPath}'`)
+      .outputOptions(['-c:a copy'])
+      .on('end', resolve)
+      .on('error', reject)
+      .save(outputPath);
+  });
+}
+
 // Caption generation endpoint: extract audio from video and transcribe via xAI
 app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
   const contentType = (req.headers['content-type'] || '').toLowerCase();
@@ -794,6 +1031,93 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
   } finally {
     if (tmpInputPath) await fs.unlink(tmpInputPath).catch(() => {});
     if (tmpAudioPath) await fs.unlink(tmpAudioPath).catch(() => {});
+  }
+});
+
+// Diarized caption generation endpoint.
+// Uses the OpenAI batch POST /v1/audio/transcriptions for true speaker diarization.
+// The Realtime WSS API does NOT support diarization; only the batch endpoint with
+// response_format:"diarized_json" provides per-segment speaker IDs.
+app.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+  if (!OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'OPENAI_API_KEY is not configured. Speaker diarization is unavailable.' });
+  }
+
+  const contentType = (req.headers['content-type'] || '').toLowerCase();
+  const fileContentType = contentType.split(';')[0].trim() || 'video/mp4';
+  const argsStr = req.headers['x-args'];
+
+  let parsedArgs = {};
+  try {
+    parsedArgs = argsStr ? JSON.parse(argsStr) : {};
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
+  }
+
+  const burnSubtitles = parsedArgs.burnSubtitles === true;
+  const tmpFiles = [];
+  const track = (p) => { tmpFiles.push(p); return p; };
+
+  try {
+    // Read video/audio from request body
+    const chunks = [];
+    for await (const chunk of req) { chunks.push(chunk); }
+    const inputBuffer = Buffer.concat(chunks);
+
+    if (!inputBuffer.length) {
+      return res.status(400).json({ error: 'No video/audio data received' });
+    }
+
+    const ext = getExtFromMimeType(fileContentType);
+    const tmpInputPath = track(path.join('/tmp', `input-${randomUUID()}.${ext}`));
+    await fs.writeFile(tmpInputPath, inputBuffer);
+
+    // Step 1: Extract mono 16 kHz WAV (preferred by OpenAI Whisper-family models)
+    const tmpWavPath = track(path.join('/tmp', `audio-${randomUUID()}.wav`));
+    await extractAudioToWav(tmpInputPath, tmpWavPath);
+    const wavStat = await fs.stat(tmpWavPath);
+    console.log(`[diarize] WAV extracted: ${(wavStat.size / 1024).toFixed(0)} KB`);
+
+    // Step 2: Split into <25 MB chunks if the file is too large for the API
+    const audioChunks = await splitAudioIfNeeded(tmpWavPath);
+    for (const c of audioChunks) {
+      if (c.path !== tmpWavPath) track(c.path);
+    }
+
+    // Step 3: Transcribe each chunk via the batch API (with per-chunk timestamp offset)
+    const chunkSegments = await Promise.all(
+      audioChunks.map(c => transcribeWithOpenAI(c.path, c.startSec))
+    );
+    console.log(`[diarize] Transcribed ${audioChunks.length} chunk(s)`);
+
+    // Step 4: Merge and sort all segments
+    const segments = mergeDiarizedSegmentsWithOffsets(chunkSegments);
+    const hasDiarization = segments.some(s => s.speaker);
+    console.log(`[diarize] ${segments.length} segments total, diarization=${hasDiarization}`);
+
+    // Step 5: Build SRT + VTT
+    const { srt: srtContent, vtt: vttContent } = buildSrtAndVtt(segments);
+
+    if (burnSubtitles) {
+      const tmpSrtPath    = track(path.join('/tmp', `subtitles-${randomUUID()}.srt`));
+      const tmpOutputPath = track(path.join('/tmp', `output-${randomUUID()}.mp4`));
+      await fs.writeFile(tmpSrtPath, srtContent, 'utf8');
+      await burnSubtitlesIntoVideo(tmpInputPath, tmpSrtPath, tmpOutputPath);
+      const outputBuffer = await fs.readFile(tmpOutputPath);
+      res.set('Content-Type', 'video/mp4');
+      res.set('X-Srt-Content', Buffer.from(srtContent).toString('base64'));
+      res.set('X-Vtt-Content', Buffer.from(vttContent).toString('base64'));
+      res.send(outputBuffer);
+    } else {
+      res.json({ srt: srtContent, vtt: vttContent });
+    }
+  } catch (error) {
+    console.error('Error generating diarized captions:', error);
+    if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to generate diarized captions' });
+  } finally {
+    for (const p of tmpFiles) {
+      await fs.unlink(p).catch(() => {});
+    }
   }
 });
 
