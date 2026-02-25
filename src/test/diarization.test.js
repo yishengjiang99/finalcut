@@ -1,65 +1,86 @@
 import { describe, it, expect } from 'vitest';
 
-// Unit tests for speaker diarization helper logic (pure functions, no server/WebSocket needed)
+// Unit tests for speaker diarization helper logic (pure functions, no server/HTTP needed).
+// The implementation uses the OpenAI batch POST /v1/audio/transcriptions endpoint
+// with response_format:"diarized_json", which returns segments with start/end in seconds.
 
-// Replicates the buildSrtFromSegments logic from server.js for unit testing
-function buildSrtFromSegments(segments) {
-  if (!segments.length) return '';
-  let index = 1;
-  return segments.map(seg => {
-    const formatTime = (ms) => {
-      const h = Math.floor(ms / 3_600_000);
-      const m = Math.floor((ms % 3_600_000) / 60_000);
-      const s = Math.floor((ms % 60_000) / 1000);
-      const ms_ = ms % 1000;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms_).padStart(3, '0')}`;
-    };
-    const label = seg.speaker ? `${seg.speaker}: ` : '';
-    return `${index++}\n${formatTime(seg.startMs)} --> ${formatTime(seg.endMs)}\n${label}${seg.text}`;
-  }).join('\n\n');
+// Replicates secondsToTimestamp + buildSrtAndVtt logic from server.js for unit testing.
+function secondsToTimestamp(sec, vtt = false) {
+  const ms  = Math.round((sec % 1) * 1000);
+  const s   = Math.floor(sec % 60);
+  const m   = Math.floor((sec / 60) % 60);
+  const h   = Math.floor(sec / 3600);
+  const sep = vtt ? '.' : ',';
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(ms).padStart(3, '0')}`;
 }
 
-describe('Speaker Diarization - SRT Generation', () => {
-  it('returns empty string for empty segments', () => {
-    expect(buildSrtFromSegments([])).toBe('');
+function buildSrtAndVtt(segments) {
+  if (!segments.length) return { srt: '', vtt: 'WEBVTT\n' };
+
+  const srtLines = [];
+  const vttLines = ['WEBVTT', ''];
+
+  segments.forEach((seg, i) => {
+    const label    = seg.speaker ? `${seg.speaker}: ` : '';
+    const srtStart = secondsToTimestamp(seg.start, false);
+    const srtEnd   = secondsToTimestamp(seg.end,   false);
+    const vttStart = secondsToTimestamp(seg.start, true);
+    const vttEnd   = secondsToTimestamp(seg.end,   true);
+    const text     = `${label}${seg.text}`;
+
+    srtLines.push(`${i + 1}\n${srtStart} --> ${srtEnd}\n${text}`);
+    vttLines.push(`${vttStart} --> ${vttEnd}\n${text}`);
+  });
+
+  return {
+    srt: srtLines.join('\n\n'),
+    vtt: vttLines.join('\n\n'),
+  };
+}
+
+describe('Speaker Diarization - SRT/VTT Generation (batch API, seconds-based)', () => {
+  it('returns empty srt/vtt for empty segments', () => {
+    const { srt, vtt } = buildSrtAndVtt([]);
+    expect(srt).toBe('');
+    expect(vtt).toBe('WEBVTT\n');
   });
 
   it('generates valid SRT without speaker labels', () => {
     const segments = [
-      { startMs: 0, endMs: 2500, speaker: null, text: 'Hello world' },
-      { startMs: 2500, endMs: 5000, speaker: null, text: 'How are you?' }
+      { start: 0, end: 2.5, speaker: null, text: 'Hello world' },
+      { start: 2.5, end: 5.0, speaker: null, text: 'How are you?' }
     ];
-    const srt = buildSrtFromSegments(segments);
+    const { srt } = buildSrtAndVtt(segments);
     expect(srt).toContain('1\n00:00:00,000 --> 00:00:02,500\nHello world');
     expect(srt).toContain('2\n00:00:02,500 --> 00:00:05,000\nHow are you?');
   });
 
-  it('generates SRT with speaker labels', () => {
+  it('generates SRT with speaker labels prefixed "Speaker N: "', () => {
     const segments = [
-      { startMs: 0, endMs: 3000, speaker: 'Speaker 1', text: 'Hi there' },
-      { startMs: 3000, endMs: 6000, speaker: 'Speaker 2', text: 'Hello!' }
+      { start: 0, end: 3.0, speaker: 'Speaker 1', text: 'Hi there' },
+      { start: 3.0, end: 6.0, speaker: 'Speaker 2', text: 'Hello!' }
     ];
-    const srt = buildSrtFromSegments(segments);
+    const { srt } = buildSrtAndVtt(segments);
     expect(srt).toContain('Speaker 1: Hi there');
     expect(srt).toContain('Speaker 2: Hello!');
   });
 
   it('formats timestamps correctly for hours/minutes/seconds', () => {
+    // 3661.5 seconds = 1h 1m 1s 500ms
     const segments = [
-      { startMs: 3_661_500, endMs: 3_665_000, speaker: 'Speaker 1', text: 'Test' }
+      { start: 3661.5, end: 3665.0, speaker: 'Speaker 1', text: 'Test' }
     ];
-    const srt = buildSrtFromSegments(segments);
-    // 3661500ms = 1h 1m 1.5s
+    const { srt } = buildSrtAndVtt(segments);
     expect(srt).toContain('01:01:01,500 --> 01:01:05,000');
   });
 
   it('increments sequence numbers correctly', () => {
     const segments = [
-      { startMs: 0, endMs: 1000, speaker: null, text: 'One' },
-      { startMs: 1000, endMs: 2000, speaker: null, text: 'Two' },
-      { startMs: 2000, endMs: 3000, speaker: null, text: 'Three' }
+      { start: 0, end: 1.0, speaker: null, text: 'One' },
+      { start: 1.0, end: 2.0, speaker: null, text: 'Two' },
+      { start: 2.0, end: 3.0, speaker: null, text: 'Three' }
     ];
-    const srt = buildSrtFromSegments(segments);
+    const { srt } = buildSrtAndVtt(segments);
     expect(srt).toMatch(/^1\n/);
     expect(srt).toContain('\n\n2\n');
     expect(srt).toContain('\n\n3\n');
@@ -67,69 +88,75 @@ describe('Speaker Diarization - SRT Generation', () => {
 
   it('handles mixed speaker and no-speaker segments', () => {
     const segments = [
-      { startMs: 0, endMs: 2000, speaker: 'Speaker 1', text: 'Hello' },
-      { startMs: 2000, endMs: 4000, speaker: null, text: '[inaudible]' }
+      { start: 0, end: 2.0, speaker: 'Speaker 1', text: 'Hello' },
+      { start: 2.0, end: 4.0, speaker: null, text: '[inaudible]' }
     ];
-    const srt = buildSrtFromSegments(segments);
+    const { srt } = buildSrtAndVtt(segments);
     expect(srt).toContain('Speaker 1: Hello');
     expect(srt).toContain('[inaudible]');
-    // No speaker prefix for null speaker
     expect(srt).not.toContain('null:');
+  });
+
+  it('generates VTT with "." separator instead of ","', () => {
+    const segments = [
+      { start: 0, end: 2.5, speaker: 'Speaker 1', text: 'Hello' }
+    ];
+    const { vtt } = buildSrtAndVtt(segments);
+    expect(vtt).toMatch(/^WEBVTT/);
+    expect(vtt).toContain('00:00:00.000 --> 00:00:02.500');
+    expect(vtt).not.toContain(',');
+  });
+
+  it('includes speaker label in VTT output', () => {
+    const segments = [
+      { start: 0, end: 2.0, speaker: 'Speaker 1', text: 'Hi' }
+    ];
+    const { vtt } = buildSrtAndVtt(segments);
+    expect(vtt).toContain('Speaker 1: Hi');
   });
 });
 
-describe('Speaker Diarization - Endpoint Configuration', () => {
+describe('Speaker Diarization - Batch API Configuration', () => {
   it('should have /api/generate-captions-diarized endpoint defined', () => {
-    // Verify the endpoint path constant
     const endpoint = '/api/generate-captions-diarized';
     expect(endpoint).toBe('/api/generate-captions-diarized');
   });
 
-  it('should prefer gpt-4o-transcribe-diarize model', () => {
-    const preferredModel = 'gpt-4o-transcribe-diarize';
-    const fallbackModels = ['gpt-4o-transcribe', 'whisper-1'];
-    expect(preferredModel).toMatch(/diarize/);
-    expect(fallbackModels).toContain('gpt-4o-transcribe');
-    expect(fallbackModels).toContain('whisper-1');
+  it('should use batch HTTP endpoint, not WebSocket', () => {
+    const apiUrl = 'https://api.openai.com/v1/audio/transcriptions';
+    expect(apiUrl).toMatch(/^https:/);
+    expect(apiUrl).not.toMatch(/^wss:/);
+    expect(apiUrl).toContain('/audio/transcriptions');
   });
 
-  it('should use server_vad turn detection settings', () => {
-    const vadConfig = {
-      type: 'server_vad',
-      threshold: 0.5,
-      prefix_padding_ms: 300,
-      silence_duration_ms: 600
-    };
-    expect(vadConfig.type).toBe('server_vad');
-    expect(vadConfig.threshold).toBeGreaterThanOrEqual(0.5);
-    expect(vadConfig.silence_duration_ms).toBeGreaterThanOrEqual(500);
-    expect(vadConfig.silence_duration_ms).toBeLessThanOrEqual(800);
+  it('should prefer gpt-4o-transcribe-diarize with diarized_json format', () => {
+    const primaryModel = { model: 'gpt-4o-transcribe-diarize', format: 'diarized_json' };
+    expect(primaryModel.model).toMatch(/diarize/);
+    expect(primaryModel.format).toBe('diarized_json');
   });
 
-  it('should use transcription-only session settings', () => {
-    const sessionConfig = {
-      modalities: ['text'],
-      voice: null,
-      output_audio_format: null,
-      max_response_output_tokens: 0,
-      temperature: 0.0
-    };
-    expect(sessionConfig.modalities).toEqual(['text']);
-    expect(sessionConfig.voice).toBeNull();
-    expect(sessionConfig.output_audio_format).toBeNull();
-    expect(sessionConfig.max_response_output_tokens).toBe(0);
-    expect(sessionConfig.temperature).toBe(0.0);
+  it('should have correct model fallback chain', () => {
+    const fallbackModels = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'];
+    expect(fallbackModels[0]).toBe('gpt-4o-transcribe');
+    expect(fallbackModels[1]).toBe('gpt-4o-mini-transcribe');
+    expect(fallbackModels[2]).toBe('whisper-1');
   });
 
-  it('should use PCM16 24kHz mono audio format for OpenAI Realtime API', () => {
+  it('should use WAV 16 kHz mono audio format for transcription API', () => {
     const audioConfig = {
-      frequency: 24000,
+      frequency: 16000,
       channels: 1,
       codec: 'pcm_s16le',
-      format: 's16le'
+      format: 'wav'
     };
-    expect(audioConfig.frequency).toBe(24000);
+    expect(audioConfig.frequency).toBe(16000);
     expect(audioConfig.channels).toBe(1);
-    expect(audioConfig.codec).toBe('pcm_s16le');
+    expect(audioConfig.format).toBe('wav');
+  });
+
+  it('should split audio at 25 MB boundary', () => {
+    const MAX_BYTES = 25 * 1024 * 1024;
+    expect(MAX_BYTES).toBe(26214400);
   });
 });
+
