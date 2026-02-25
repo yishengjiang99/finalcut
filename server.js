@@ -30,6 +30,7 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 
 const PORT = process.env.PORT || 3001;
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -60,6 +61,11 @@ if (!STRIPE_SECRET_KEY) {
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
   console.warn('WARNING: Google OAuth credentials not set');
   console.warn('Google login will not be available');
+}
+
+if (!OPENAI_API_KEY) {
+  console.warn('WARNING: OPENAI_API_KEY environment variable is not set');
+  console.warn('Speaker diarization transcription will not be available');
 }
 
 // Initialize Stripe only if the secret key is available
@@ -724,6 +730,183 @@ async function transcribeAudioViaVoiceAgent(audioBase64, languageInstruction) {
   });
 }
 
+// Helper: build SRT content from diarization segments
+// segments: Array of { startMs, endMs, speaker, text }
+function buildSrtFromSegments(segments) {
+  if (!segments.length) return '';
+  let index = 1;
+  return segments.map(seg => {
+    const formatTime = (ms) => {
+      const h = Math.floor(ms / 3_600_000);
+      const m = Math.floor((ms % 3_600_000) / 60_000);
+      const s = Math.floor((ms % 60_000) / 1000);
+      const ms_ = ms % 1000;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms_).padStart(3, '0')}`;
+    };
+    const label = seg.speaker ? `${seg.speaker}: ` : '';
+    return `${index++}\n${formatTime(seg.startMs)} --> ${formatTime(seg.endMs)}\n${label}${seg.text}`;
+  }).join('\n\n');
+}
+
+// Helper: transcribe audio with speaker diarization using OpenAI Realtime API.
+// audioBase64: base64-encoded PCM16 mono 24kHz raw audio
+// Returns SRT-formatted transcript text with speaker labels when available.
+async function transcribeAudioWithDiarization(audioBase64) {
+  const DIARIZE_MODEL = 'gpt-4o-transcribe-diarize';
+  const FALLBACK_MODELS = ['gpt-4o-transcribe', 'whisper-1'];
+  const WS_URL = 'wss://api.openai.com/v1/realtime';
+
+  const tryModel = (model) => new Promise((resolve, reject) => {
+    const protocol = model === 'whisper-1' ? 'realtime' : 'openai-beta.realtime-transcription-preview';
+    const ws = new WebSocket(WS_URL, [protocol], {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'OpenAI-Beta': 'realtime=v1'
+      }
+    });
+
+    const segments = [];
+    let currentSpeechStartMs = 0;
+    let totalAudioMs = 0;
+    let settled = false;
+    const TIMEOUT_MS = 180_000;
+
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.terminate(); } catch {}
+      fn(value);
+    };
+
+    const timer = setTimeout(() => {
+      settle(reject, new Error(`Timeout waiting for diarization transcription (model=${model})`));
+    }, TIMEOUT_MS);
+
+    ws.on('open', () => {
+      console.log(`[diarize] WebSocket open, configuring session with model=${model}`);
+      // Configure session for transcription-only with diarization
+      ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          modalities: ['text'],
+          instructions: 'Silent transcription engine ONLY. NEVER generate speech, commentary, summaries, or any output except the verbatim transcript with speaker labels if diarization is active. Output clean diarized text.',
+          voice: null,
+          output_audio_format: null,
+          max_response_output_tokens: 0,
+          temperature: 0.0,
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 600
+          },
+          input_audio_transcription: { model }
+        }
+      }));
+
+      // Send audio in a single buffer append + commit
+      ws.send(JSON.stringify({
+        type: 'input_audio_buffer.append',
+        audio: audioBase64
+      }));
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+
+      // Estimate total audio duration from base64 size (PCM16 24kHz mono: 2 bytes/sample, 24000 samples/s)
+      const pcmBytes = Math.floor((audioBase64.length * 3) / 4);
+      totalAudioMs = Math.floor((pcmBytes / 2 / 24000) * 1000);
+      console.log(`[diarize] Sent ${pcmBytes} bytes PCM16, estimated ${totalAudioMs}ms audio`);
+    });
+
+    ws.on('message', (data) => {
+      let event;
+      try { event = JSON.parse(data.toString()); } catch { return; }
+
+      const t = event.type;
+
+      if (t === 'input_audio_buffer.speech_started') {
+        currentSpeechStartMs = event.audio_start_ms ?? currentSpeechStartMs;
+        console.log(`[diarize] speech_started at ${currentSpeechStartMs}ms`);
+      } else if (t === 'input_audio_buffer.speech_stopped') {
+        console.log(`[diarize] speech_stopped at ${event.audio_end_ms ?? '?'}ms`);
+      } else if (t === 'conversation.item.input_audio_transcription.completed') {
+        // Diarized output may appear here with speaker field or in text as "Speaker N: ..."
+        const transcript = event.transcript || '';
+        const speaker = event.speaker_id || event.speaker || null;
+        const endMs = event.audio_end_ms ?? (currentSpeechStartMs + 3000);
+        const startMs = event.audio_start_ms ?? currentSpeechStartMs;
+
+        if (transcript) {
+          console.log(`[diarize] transcription.completed: speaker=${speaker}, text="${transcript.slice(0, 80)}"`);
+
+          // Check if diarized segments are available in event.segments
+          if (Array.isArray(event.segments) && event.segments.length) {
+            for (const seg of event.segments) {
+              segments.push({
+                startMs: seg.start_ms ?? seg.start ?? startMs,
+                endMs: seg.end_ms ?? seg.end ?? endMs,
+                speaker: seg.speaker_id || seg.speaker || speaker || null,
+                text: seg.text || transcript
+              });
+            }
+          } else {
+            segments.push({ startMs, endMs, speaker, text: transcript });
+          }
+        }
+      } else if (t === 'response.done') {
+        console.log(`[diarize] response.done received, ${segments.length} segments collected`);
+        // Build SRT from collected segments
+        const srt = buildSrtFromSegments(segments);
+        if (!srt) {
+          settle(reject, new Error('No transcription received'));
+        } else {
+          settle(resolve, srt);
+        }
+      } else if (t === 'session.created' || t === 'session.updated') {
+        console.log(`[diarize] ${t}`);
+      } else if (t === 'error') {
+        const code = event.error?.code || '';
+        const msg = event.error?.message || JSON.stringify(event.error) || 'OpenAI Realtime API error';
+        console.error(`[diarize] error event (model=${model}):`, event.error);
+        // Reject with a marker to indicate we should try fallback
+        settle(reject, Object.assign(new Error(msg), { code, isApiError: true }));
+      }
+    });
+
+    ws.on('error', (err) => {
+      console.error(`[diarize] WebSocket error (model=${model}):`, err.message);
+      settle(reject, err);
+    });
+
+    ws.on('close', (code) => {
+      if (code !== 1000 && !settled) {
+        settle(reject, new Error(`OpenAI Realtime WebSocket closed unexpectedly (code=${code})`));
+      }
+    });
+  });
+
+  // Try diarize model first, fall back on 403/org error or model-not-found
+  const modelsToTry = [DIARIZE_MODEL, ...FALLBACK_MODELS];
+  let lastError;
+  for (const model of modelsToTry) {
+    try {
+      console.log(`[diarize] Attempting transcription with model=${model}`);
+      return await tryModel(model);
+    } catch (err) {
+      lastError = err;
+      const msg = err.message || '';
+      const code = err.code || '';
+      // Only fall back on authorization / not-found errors, not on timeout or audio issues
+      if (err.isApiError && (code === 'model_not_found' || /403|not found|unsupported|not available|organization/i.test(msg))) {
+        console.warn(`[diarize] Model ${model} not available (${msg}), trying fallback...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 // Caption generation endpoint: extract audio from video and transcribe via xAI
 app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
   const contentType = (req.headers['content-type'] || '').toLowerCase();
@@ -794,6 +977,100 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
   } finally {
     if (tmpInputPath) await fs.unlink(tmpInputPath).catch(() => {});
     if (tmpAudioPath) await fs.unlink(tmpAudioPath).catch(() => {});
+  }
+});
+
+// Diarized caption generation endpoint: extract PCM16 audio and transcribe with speaker diarization via OpenAI Realtime API
+app.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+  if (!OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'OPENAI_API_KEY is not configured. Speaker diarization is unavailable.' });
+  }
+
+  const contentType = (req.headers['content-type'] || '').toLowerCase();
+  const fileContentType = contentType.split(';')[0].trim() || 'video/mp4';
+  const argsStr = req.headers['x-args'];
+
+  let parsedArgs = {};
+  try {
+    parsedArgs = argsStr ? JSON.parse(argsStr) : {};
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
+  }
+
+  const burnSubtitles = parsedArgs.burnSubtitles === true;
+  let tmpInputPath = null;
+  let tmpAudioPath = null;
+  let tmpSrtPath = null;
+  let tmpOutputPath = null;
+
+  try {
+    // Read video/audio from request body
+    const chunks = [];
+    for await (const chunk of req) { chunks.push(chunk); }
+    const inputBuffer = Buffer.concat(chunks);
+
+    if (!inputBuffer.length) {
+      return res.status(400).json({ error: 'No video/audio data received' });
+    }
+
+    const ext = getExtFromMimeType(fileContentType);
+    tmpInputPath = path.join('/tmp', `input-${randomUUID()}.${ext}`);
+    await fs.writeFile(tmpInputPath, inputBuffer);
+
+    // Extract audio as PCM16 mono 24kHz raw (required by OpenAI Realtime API)
+    tmpAudioPath = path.join('/tmp', `audio-${randomUUID()}.raw`);
+    await new Promise((resolve, reject) => {
+      ffmpeg(tmpInputPath)
+        .audioFrequency(24000)
+        .audioChannels(1)
+        .audioCodec('pcm_s16le')
+        .noVideo()
+        .toFormat('s16le')
+        .on('end', resolve)
+        .on('error', reject)
+        .save(tmpAudioPath);
+    });
+
+    // Convert raw PCM16 to base64 for OpenAI Realtime API
+    const audioBuffer = await fs.readFile(tmpAudioPath);
+    const audioBase64 = audioBuffer.toString('base64');
+    console.log(`[diarize] PCM16 audio extracted: ${audioBuffer.length} bytes`);
+
+    // Transcribe with speaker diarization
+    const srtContent = await transcribeAudioWithDiarization(audioBase64);
+    const vttContent = srtToVtt(srtContent);
+
+    if (burnSubtitles) {
+      // Burn subtitles into the original video and return the video
+      tmpSrtPath = path.join('/tmp', `subtitles-${randomUUID()}.srt`);
+      await fs.writeFile(tmpSrtPath, srtContent, 'utf8');
+      tmpOutputPath = path.join('/tmp', `output-${randomUUID()}.mp4`);
+
+      const escapedSrtPath = tmpSrtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      await new Promise((resolve, reject) => {
+        ffmpeg(tmpInputPath)
+          .videoFilters(`subtitles='${escapedSrtPath}'`)
+          .outputOptions(['-c:a copy'])
+          .on('end', resolve)
+          .on('error', reject)
+          .save(tmpOutputPath);
+      });
+
+      const outputBuffer = await fs.readFile(tmpOutputPath);
+      res.set('Content-Type', 'video/mp4');
+      res.set('X-Srt-Content', Buffer.from(srtContent).toString('base64'));
+      res.set('X-Vtt-Content', Buffer.from(vttContent).toString('base64'));
+      res.send(outputBuffer);
+    } else {
+      res.json({ srt: srtContent, vtt: vttContent });
+    }
+  } catch (error) {
+    console.error('Error generating diarized captions:', error);
+    if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to generate diarized captions' });
+  } finally {
+    for (const p of [tmpInputPath, tmpAudioPath, tmpSrtPath, tmpOutputPath]) {
+      if (p) await fs.unlink(p).catch(() => {});
+    }
   }
 });
 
