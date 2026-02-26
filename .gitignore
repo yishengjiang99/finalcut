@@ -3,3 +3,6 @@ dist
 .env*
 ffmpegwasm/bin
 ffmpegwasm/emsdk
+ffmpeg-8.0.1
+.tmp-codex/in.mp4
+.tmp-codex/test.srt

@@ -1233,7 +1233,16 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         res.send(outputBuffer);
       } catch (error) {
         console.error('FFmpeg error (burn_subtitles):', error);
-        if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
+        const ffmpegStderr = typeof error?.ffmpegStderr === 'string' ? error.ffmpegStderr : '';
+        if (ffmpegStderr.includes("No such filter: 'subtitles'")) {
+          if (!res.headersSent) {
+            res.status(500).json({
+              error: 'FFmpeg subtitles filter is unavailable (missing libass support). Install an FFmpeg build with libass enabled to burn subtitles.'
+            });
+          }
+        } else if (!res.headersSent) {
+          res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
+        }
       } finally {
         [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
       }
