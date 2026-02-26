@@ -854,16 +854,28 @@ function buildSrtAndVtt(segments) {
 }
 
 /**
- * Burn an SRT subtitle file into a video using ffmpeg subtitles filter.
+ * Embed an SRT subtitle file into a video as a soft subtitle track using ffmpeg.
+ * Copies video and audio streams without re-encoding; encodes subtitle stream as mov_text for MP4.
  */
 async function burnSubtitlesIntoVideo(inputPath, srtPath, outputPath) {
-  const escapedSrtPath = srtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
-      .videoFilters(`subtitles='${escapedSrtPath}'`)
-      .outputOptions(['-c:a copy'])
-      .on('end', resolve)
-      .on('error', reject)
+      .input(srtPath)
+      .outputOptions([
+        '-c copy',
+        '-c:s mov_text'
+      ])
+      .on('start', (commandLine) => {
+        console.log('Spawned FFmpeg with command: ' + commandLine);
+      })
+      .on('error', (err) => {
+        console.error('An error occurred: ' + err.message);
+        reject(err);
+      })
+      .on('end', () => {
+        console.log('Merging finished !');
+        resolve();
+      })
       .save(outputPath);
   });
 }
