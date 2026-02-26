@@ -1,42 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { secondsToTimestamp, buildSrtAndVtt } from '../server/utils.js';
 
 // Unit tests for speaker diarization helper logic (pure functions, no server/HTTP needed).
 // The implementation uses the OpenAI batch POST /v1/audio/transcriptions endpoint
 // with response_format:"diarized_json", which returns segments with start/end in seconds.
-
-// Replicates secondsToTimestamp + buildSrtAndVtt logic from server.js for unit testing.
-function secondsToTimestamp(sec, vtt = false) {
-  const ms  = Math.round((sec % 1) * 1000);
-  const s   = Math.floor(sec % 60);
-  const m   = Math.floor((sec / 60) % 60);
-  const h   = Math.floor(sec / 3600);
-  const sep = vtt ? '.' : ',';
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(ms).padStart(3, '0')}`;
-}
-
-function buildSrtAndVtt(segments) {
-  if (!segments.length) return { srt: '', vtt: 'WEBVTT\n' };
-
-  const srtLines = [];
-  const vttLines = ['WEBVTT', ''];
-
-  segments.forEach((seg, i) => {
-    const label    = seg.speaker ? `${seg.speaker}: ` : '';
-    const srtStart = secondsToTimestamp(seg.start, false);
-    const srtEnd   = secondsToTimestamp(seg.end,   false);
-    const vttStart = secondsToTimestamp(seg.start, true);
-    const vttEnd   = secondsToTimestamp(seg.end,   true);
-    const text     = `${label}${seg.text}`;
-
-    srtLines.push(`${i + 1}\n${srtStart} --> ${srtEnd}\n${text}`);
-    vttLines.push(`${vttStart} --> ${vttEnd}\n${text}`);
-  });
-
-  return {
-    srt: srtLines.join('\n\n'),
-    vtt: vttLines.join('\n\n'),
-  };
-}
 
 describe('Speaker Diarization - SRT/VTT Generation (batch API, seconds-based)', () => {
   it('returns empty srt/vtt for empty segments', () => {
