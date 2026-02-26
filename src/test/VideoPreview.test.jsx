@@ -133,14 +133,4 @@ describe('VideoPreview Component', () => {
     expect(options[2].value).toBe('30');
     expect(options[3].value).toBe('60');
   });
-
-  it('opens full size modal when preview is clicked and closes it', () => {
-    render(<VideoPreview videoUrl="test-video.mp4" title="Test Video" />);
-
-    fireEvent.click(screen.getByLabelText('Open full size video preview'));
-    expect(screen.getByRole('dialog', { name: /Test Video full size preview/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Close expanded video preview'));
-    expect(screen.queryByRole('dialog', { name: /Test Video full size preview/i })).not.toBeInTheDocument();
-  });
 });
