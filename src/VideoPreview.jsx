@@ -7,6 +7,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   const [fps, setFps] = useState(30);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [isAudio, setIsAudio] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -54,6 +55,19 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       };
     }
   }, [videoUrl, mimeType]);
+
+  useEffect(() => {
+    if (!isModalOpen) return undefined;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   const handleDownload = () => {
     const extMap = {
@@ -166,24 +180,48 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           src={videoUrl} 
           style={{ 
             width: '100%', 
-            maxWidth: '400px', 
+            maxWidth: '240px', 
             marginBottom: '12px'
           }} 
           controls
         />
       ) : (
-        <video 
-          ref={videoRef}
-          src={videoUrl} 
-          playsInline 
-          style={{ 
-            width: '100%', 
-            maxWidth: '400px', 
-            borderRadius: '4px',
-            display: 'block',
-            marginBottom: '12px'
-          }} 
-        />
+        <div style={{ marginBottom: '12px' }}>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Open full size video preview"
+            onClick={() => setIsModalOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setIsModalOpen(true);
+              }
+            }}
+            style={{
+              display: 'inline-block',
+              cursor: 'zoom-in',
+              borderRadius: '4px',
+              outline: 'none'
+            }}
+          >
+            <video 
+              ref={videoRef}
+              src={videoUrl} 
+              playsInline 
+              style={{ 
+                width: '100%', 
+                maxWidth: '220px', 
+                borderRadius: '4px',
+                display: 'block',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.35)'
+              }} 
+            />
+          </div>
+          <div style={{ marginTop: '6px', fontSize: '11px', color: '#8b949e' }}>
+            Click preview to expand
+          </div>
+        </div>
       )}
       
       {/* Meter/Slider control */}
@@ -317,6 +355,70 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         )}
       </div>
         </>
+      )}
+
+      {isModalOpen && !isAudio && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${title} full size preview`}
+          onClick={() => setIsModalOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.78)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            zIndex: 1000
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(1000px, 100%)',
+              backgroundColor: '#161b22',
+              border: '1px solid #30363d',
+              borderRadius: '10px',
+              padding: '12px',
+              boxShadow: '0 16px 40px rgba(0,0,0,0.45)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ color: '#c9d1d9', fontSize: '13px', fontWeight: 600 }}>{title}</span>
+              <button
+                type="button"
+                aria-label="Close expanded video preview"
+                onClick={() => setIsModalOpen(false)}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '12px',
+                  backgroundColor: '#2a2f3a',
+                  color: '#e6edf3',
+                  border: '1px solid #3a4250',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <video
+              src={videoUrl}
+              controls
+              autoPlay
+              playsInline
+              style={{
+                width: '100%',
+                maxHeight: '80vh',
+                display: 'block',
+                borderRadius: '6px',
+                backgroundColor: '#000'
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
