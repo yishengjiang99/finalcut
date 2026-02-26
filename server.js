@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import ffmpeg from 'fluent-ffmpeg';
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes, randomUUID } from 'crypto';
@@ -30,6 +31,7 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 }
 
 const PORT = process.env.PORT || 3001;
+const TMP_DIR = process.env.FINALCUT_TMP_DIR || os.tmpdir();
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
@@ -685,7 +687,7 @@ async function splitAudioIfNeeded(wavPath) {
   const chunks = [];
   let startSec = 0;
   while (startSec < duration) {
-    const chunkPath = path.join('/tmp', `chunk-${randomUUID()}.wav`);
+    const chunkPath = path.join(TMP_DIR, `chunk-${randomUUID()}.wav`);
     await new Promise((resolve, reject) => {
       ffmpeg(wavPath)
         .setStartTime(startSec)
@@ -902,11 +904,11 @@ app.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser
     }
 
     const ext = getExtFromMimeType(fileContentType);
-    const tmpInputPath = track(path.join('/tmp', `input-${randomUUID()}.${ext}`));
+    const tmpInputPath = track(path.join(TMP_DIR, `input-${randomUUID()}.${ext}`));
     await fs.writeFile(tmpInputPath, inputBuffer);
 
     // Extract mono 16 kHz WAV (preferred by OpenAI transcription models)
-    const tmpWavPath = track(path.join('/tmp', `audio-${randomUUID()}.wav`));
+    const tmpWavPath = track(path.join(TMP_DIR, `audio-${randomUUID()}.wav`));
     await extractAudioToWav(tmpInputPath, tmpWavPath);
 
     // Split into API-safe chunks if needed
@@ -972,11 +974,11 @@ app.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthenti
     }
 
     const ext = getExtFromMimeType(fileContentType);
-    const tmpInputPath = track(path.join('/tmp', `input-${randomUUID()}.${ext}`));
+    const tmpInputPath = track(path.join(TMP_DIR, `input-${randomUUID()}.${ext}`));
     await fs.writeFile(tmpInputPath, inputBuffer);
 
     // Step 1: Extract mono 16 kHz WAV (preferred by OpenAI Whisper-family models)
-    const tmpWavPath = track(path.join('/tmp', `audio-${randomUUID()}.wav`));
+    const tmpWavPath = track(path.join(TMP_DIR, `audio-${randomUUID()}.wav`));
     await extractAudioToWav(tmpInputPath, tmpWavPath);
     const wavStat = await fs.stat(tmpWavPath);
     console.log(`[diarize] WAV extracted: ${(wavStat.size / 1024).toFixed(0)} KB`);
@@ -1002,8 +1004,8 @@ app.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthenti
     const { srt: srtContent, vtt: vttContent } = buildSrtAndVtt(segments);
 
     if (burnSubtitles) {
-      const tmpSrtPath    = track(path.join('/tmp', `subtitles-${randomUUID()}.srt`));
-      const tmpOutputPath = track(path.join('/tmp', `output-${randomUUID()}.mp4`));
+      const tmpSrtPath    = track(path.join(TMP_DIR, `subtitles-${randomUUID()}.srt`));
+      const tmpOutputPath = track(path.join(TMP_DIR, `output-${randomUUID()}.mp4`));
       await fs.writeFile(tmpSrtPath, srtContent, 'utf8');
       await burnSubtitlesIntoVideo(tmpInputPath, tmpSrtPath, tmpOutputPath);
       const outputBuffer = await fs.readFile(tmpOutputPath);
@@ -1134,9 +1136,8 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
       let inputPath = null;
       let srtPath = null;
       let translatedSrtPath = null;
-      let outputPath = null;
       try {
-        const tmpDir = '/tmp';
+        const tmpDir = TMP_DIR;
         inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
         await fs.writeFile(inputPath, req.file.buffer);
 
@@ -1184,15 +1185,15 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
 
           const escapedTranslatedSrtPath = translatedSrtPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           // Chain both subtitle filters: first burn primary, then burn translation on top
-          videoFilter = `subtitles='${escapedSrtPath}':force_style='${forceStyle}',subtitles='${escapedTranslatedSrtPath}':force_style='${translatedForceStyle}'`;
+          videoFilter = `subtitles=filename='${escapedSrtPath}':force_style='${forceStyle}',subtitles=filename='${escapedTranslatedSrtPath}':force_style='${translatedForceStyle}'`;
         } else {
-          videoFilter = `subtitles='${escapedSrtPath}':force_style='${forceStyle}'`;
+          videoFilter = `subtitles=filename='${escapedSrtPath}':force_style='${forceStyle}'`;
         }
 
-        outputPath = path.join(tmpDir, `burned-${randomUUID()}.mp4`);
-        await new Promise((resolve, reject) => {
+        const outputChunks = await new Promise((resolve, reject) => {
           const ffmpegStderr = [];
-          ffmpeg(inputPath)
+          const chunks = [];
+          const command = ffmpeg(inputPath)
             .videoFilters(videoFilter)
             // Subtitle burn-in requires video re-encode; use explicit MP4-compatible codecs.
             .outputOptions([
@@ -1202,7 +1203,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
               '-c:v libx264',
               '-pix_fmt yuv420p',
               '-c:a aac',
-              '-movflags +faststart'
+              '-movflags frag_keyframe+empty_moov+default_base_moof'
             ])
             .toFormat('mp4')
             .on('start', (commandLine) => {
@@ -1220,18 +1221,21 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
               }
               reject(err);
             })
-            .on('end', resolve)
-            .save(outputPath);
+            .on('end', () => resolve(chunks));
+
+          const ffmpegStream = command.pipe();
+          ffmpegStream.on('data', (chunk) => { chunks.push(chunk); });
+          ffmpegStream.on('error', reject);
         });
 
-        const outputBuffer = await fs.readFile(outputPath);
+        const outputBuffer = Buffer.concat(outputChunks);
         res.set('Content-Type', 'video/mp4');
         res.send(outputBuffer);
       } catch (error) {
         console.error('FFmpeg error (burn_subtitles):', error);
         if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
       } finally {
-        [inputPath, srtPath, translatedSrtPath, outputPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+        [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
       }
       return;
     }
@@ -1240,7 +1244,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     let inputPath = null;
     let audioInputPath = null;
     try {
-      const tmpDir = '/tmp';
+      const tmpDir = TMP_DIR;
       inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
       await fs.writeFile(inputPath, req.file.buffer);
 
@@ -1320,7 +1324,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
       const chunks = [];
       for await (const chunk of req) { chunks.push(chunk); }
       const inputBuffer = Buffer.concat(chunks);
-      tmpInputPath = path.join('/tmp', `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
+      tmpInputPath = path.join(TMP_DIR, `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
       await fs.writeFile(tmpInputPath, inputBuffer);
       await new Promise((resolve, reject) => {
         ffmpeg.ffprobe(tmpInputPath, (err, metadata) => {
@@ -1364,7 +1368,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
     if (!inputBuffer.length) {
       return res.status(400).json({ error: 'No video data received' });
     }
-    tmpStreamInputPath = path.join('/tmp', `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
+    tmpStreamInputPath = path.join(TMP_DIR, `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
     await fs.writeFile(tmpStreamInputPath, inputBuffer);
   } catch (error) {
     console.error('Error buffering streamed input:', error);
@@ -1704,7 +1708,7 @@ app.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedUser
     const transitionDuration = duration ? parseFloat(duration) : 1;
 
     // Create temporary files
-    const tmpDir = '/tmp';
+    const tmpDir = TMP_DIR;
     
     // Write uploaded files to disk
     const inputPaths = [];
