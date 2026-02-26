@@ -32,6 +32,7 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 
 const PORT = process.env.PORT || 3001;
 const TMP_DIR = process.env.FINALCUT_TMP_DIR || os.tmpdir();
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
@@ -1191,13 +1192,14 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
         }
 
         const outputChunks = await new Promise((resolve, reject) => {
+          const ffmpegLoglevel = IS_PRODUCTION ? 'error' : 'debug';
           const ffmpegStderr = [];
           const chunks = [];
           const command = ffmpeg(inputPath)
             .videoFilters(videoFilter)
             // Subtitle burn-in requires video re-encode; use explicit MP4-compatible codecs.
             .outputOptions([
-              '-loglevel debug',
+              `-loglevel ${ffmpegLoglevel}`,
               '-map 0:v:0',
               '-map 0:a?',
               '-c:v libx264',
@@ -1207,11 +1209,15 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
             ])
             .toFormat('mp4')
             .on('start', (commandLine) => {
-              console.error('FFmpeg command (burn_subtitles):', commandLine);
+              if (!IS_PRODUCTION) {
+                console.error('FFmpeg command (burn_subtitles):', commandLine);
+              }
             })
             .on('stderr', (line) => {
               ffmpegStderr.push(line);
-              console.error('FFmpeg stderr (burn_subtitles):', line);
+              if (!IS_PRODUCTION) {
+                console.error('FFmpeg stderr (burn_subtitles):', line);
+              }
             })
             .on('error', (err, stdout, stderr) => {
               if (stdout) console.error('FFmpeg stdout (burn_subtitles):', stdout);
