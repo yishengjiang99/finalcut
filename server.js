@@ -1134,6 +1134,7 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
       let inputPath = null;
       let srtPath = null;
       let translatedSrtPath = null;
+      let outputPath = null;
       try {
         const tmpDir = '/tmp';
         inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
@@ -1188,22 +1189,49 @@ app.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, re
           videoFilter = `subtitles='${escapedSrtPath}':force_style='${forceStyle}'`;
         }
 
+        outputPath = path.join(tmpDir, `burned-${randomUUID()}.mp4`);
+        await new Promise((resolve, reject) => {
+          const ffmpegStderr = [];
+          ffmpeg(inputPath)
+            .videoFilters(videoFilter)
+            // Subtitle burn-in requires video re-encode; use explicit MP4-compatible codecs.
+            .outputOptions([
+              '-loglevel debug',
+              '-map 0:v:0',
+              '-map 0:a?',
+              '-c:v libx264',
+              '-pix_fmt yuv420p',
+              '-c:a aac',
+              '-movflags +faststart'
+            ])
+            .toFormat('mp4')
+            .on('start', (commandLine) => {
+              console.error('FFmpeg command (burn_subtitles):', commandLine);
+            })
+            .on('stderr', (line) => {
+              ffmpegStderr.push(line);
+              console.error('FFmpeg stderr (burn_subtitles):', line);
+            })
+            .on('error', (err, stdout, stderr) => {
+              if (stdout) console.error('FFmpeg stdout (burn_subtitles):', stdout);
+              if (stderr) console.error('FFmpeg stderr blob (burn_subtitles):', stderr);
+              if (!err.ffmpegStderr && ffmpegStderr.length) {
+                err.ffmpegStderr = ffmpegStderr.join('\n');
+              }
+              reject(err);
+            })
+            .on('end', resolve)
+            .save(outputPath);
+        });
+
+        const outputBuffer = await fs.readFile(outputPath);
         res.set('Content-Type', 'video/mp4');
-        ffmpeg(inputPath)
-          .videoFilters(videoFilter)
-          .audioCodec('copy')
-          .outputOptions(['-movflags', 'frag_keyframe+empty_moov+default_base_moof'])
-          .toFormat('mp4')
-          .on('error', (err) => {
-            [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
-            console.error('FFmpeg error (burn_subtitles):', err);
-            if (!res.headersSent) res.status(500).end();
-          })
-          .on('end', () => { [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {})); })
-          .pipe(res);
+        res.send(outputBuffer);
       } catch (error) {
-        [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+        console.error('FFmpeg error (burn_subtitles):', error);
         if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
+      } finally {
+        [inputPath, srtPath, translatedSrtPath, outputPath].forEach(p => p && fs.unlink(p).catch(() => {}));
       }
       return;
     }
