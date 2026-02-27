@@ -144,6 +144,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           video.textTracks.removeEventListener('change', handleTrackChange);
         }
         cancelAnimationFrame(rafRef.current);
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
       };
     }
   }, [videoUrl, mimeType, renderFrame]);
