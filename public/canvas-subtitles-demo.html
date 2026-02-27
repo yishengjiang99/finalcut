@@ -220,11 +220,12 @@ Load your own video file or paste a URL above.
       try {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       } catch (e) {
+      } catch (e) {
         if (e.name === 'SecurityError') {
           corsMsg.style.display = 'block';
-          rafId = requestAnimationFrame(renderFrame);
-          return;
+          return; // Stop the loop on CORS error
         }
+      }
       }
 
       // Ensure native captions stay hidden
