@@ -1248,34 +1248,30 @@ describe('toolFunctions', () => {
   });
 
   describe('generate_captions', () => {
-    it('should generate captions and burn them into video by default', async () => {
+    it('should generate captions and show video with soft subtitle track by default', async () => {
       const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world\n\n2\n00:00:02,000 --> 00:00:04,000\nThis is a test';
 
-      // First call: /api/generate-captions returns SRT/VTT
+      // Only one call needed: /api/generate-captions returns SRT/VTT
       global.fetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt.replace(/,(\d{3})/g, '.$1') })
       });
-      // Second call: /api/process-video (burn_subtitles) returns video
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8)
-      });
 
       const result = await toolFunctions.generate_captions(
-        { language: 'en', style: 'default', position: 'bottom', burn_in: true },
+        { language: 'en' },
         mockVideoFileData,
         mockSetVideoFileData,
         mockAddMessage
       );
 
       expect(result).toContain('Captions generated');
-      expect(result).toContain('burned into the video');
-      expect(mockSetVideoFileData).toHaveBeenCalled();
-      expect(mockAddMessage).toHaveBeenCalledTimes(3);
+      expect(result).toContain('Soft subtitle track');
+      expect(mockSetVideoFileData).not.toHaveBeenCalled();
+      // SRT download message + video preview with soft subtitle track
+      expect(mockAddMessage).toHaveBeenCalledTimes(2);
     });
 
-    it('should generate captions without burning when burn_in is false', async () => {
+    it('should generate captions with soft subtitle track (burn_in parameter is ignored)', async () => {
       const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
 
       global.fetch.mockResolvedValueOnce({
@@ -1292,7 +1288,7 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('Captions generated');
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      // Only SRT and VTT download messages, no video message
+      // SRT download message + video preview with soft subtitle track
       expect(mockAddMessage).toHaveBeenCalledTimes(2);
     });
 
@@ -1316,16 +1312,12 @@ describe('toolFunctions', () => {
       );
     });
 
-    it('should handle burn_subtitles failure gracefully', async () => {
+    it('should succeed with soft subtitle track even when burn_in: true is passed', async () => {
       const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt })
-      });
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: 'FFmpeg failed' })
       });
 
       const result = await toolFunctions.generate_captions(
@@ -1335,7 +1327,9 @@ describe('toolFunctions', () => {
         mockAddMessage
       );
 
-      expect(result).toContain('Failed to generate captions');
+      expect(result).toContain('Captions generated');
+      expect(result).toContain('Soft subtitle track');
+      expect(mockSetVideoFileData).not.toHaveBeenCalled();
     });
 
     it('should use auto language detection by default', async () => {
@@ -1344,10 +1338,6 @@ describe('toolFunctions', () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ srt: sampleSrt, vtt: 'WEBVTT\n\n' + sampleSrt })
-      });
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8)
       });
 
       const result = await toolFunctions.generate_captions(
@@ -1360,7 +1350,7 @@ describe('toolFunctions', () => {
       expect(result).toContain('auto-detected');
     });
 
-    it('should translate captions and burn both tracks when translate_language is provided', async () => {
+    it('should translate captions and show video with translated subtitle track', async () => {
       const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
       const translatedSrt = '1\n00:00:00,000 --> 00:00:02,000\nHola mundo';
 
@@ -1374,27 +1364,21 @@ describe('toolFunctions', () => {
         ok: true,
         json: async () => ({ srt: translatedSrt, vtt: 'WEBVTT\n\n' + translatedSrt })
       });
-      // 3: /api/process-video (burn_subtitles with both tracks)
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8)
-      });
 
       const result = await toolFunctions.generate_captions(
-        { translate_language: 'es', burn_in: true },
+        { translate_language: 'es' },
         mockVideoFileData,
         mockSetVideoFileData,
         mockAddMessage
       );
 
       expect(result).toContain('translated to es');
-      expect(result).toContain('burned into the video');
-      expect(mockSetVideoFileData).toHaveBeenCalled();
-      // 2 original subtitle messages + 2 translated subtitle messages + 1 video message = 5
-      expect(mockAddMessage).toHaveBeenCalledTimes(5);
+      expect(mockSetVideoFileData).not.toHaveBeenCalled();
+      // SRT download + video w/ original track + translated SRT download + video w/ translated track = 4
+      expect(mockAddMessage).toHaveBeenCalledTimes(4);
     });
 
-    it('should translate captions without burning when burn_in is false', async () => {
+    it('should translate captions with soft subtitle track', async () => {
       const sampleSrt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
       const translatedSrt = '1\n00:00:00,000 --> 00:00:02,000\nBonjour monde';
 
@@ -1408,15 +1392,15 @@ describe('toolFunctions', () => {
       });
 
       const result = await toolFunctions.generate_captions(
-        { translate_language: 'fr', burn_in: false },
+        { translate_language: 'fr' },
         mockVideoFileData,
         mockSetVideoFileData,
         mockAddMessage
       );
 
-      expect(result).toContain('fr translation');
+      expect(result).toContain('translated to fr');
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      // 2 original + 2 translated subtitle download messages
+      // SRT download + video w/ original track + translated SRT download + video w/ translated track = 4
       expect(mockAddMessage).toHaveBeenCalledTimes(4);
     });
 
@@ -1433,7 +1417,7 @@ describe('toolFunctions', () => {
       });
 
       const result = await toolFunctions.generate_captions(
-        { translate_language: 'de', burn_in: false },
+        { translate_language: 'de' },
         mockVideoFileData,
         mockSetVideoFileData,
         mockAddMessage

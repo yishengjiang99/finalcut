@@ -827,13 +827,10 @@ export const toolFunctions = {
     try {
       const language = args.language || 'auto';
       const translateLanguage = args.translate_language || null;
-      const style = args.style || 'default';
-      const position = args.position || 'bottom';
-      const burnIn = args.burn_in !== false; // default true
 
       const fileMimeType = currentFileMimeType || 'video/mp4';
 
-      // Step 1: Generate captions via xAI speech-to-text
+      // Step 1: Generate captions via OpenAI speech-to-text
       const captionResponse = await fetch('/api/generate-captions', {
         method: 'POST',
         headers: {
@@ -857,19 +854,26 @@ export const toolFunctions = {
 
       // Step 2: Create downloadable subtitle files for the original language
       const srtBlob = new Blob([srt], { type: 'text/plain' });
-      const vttBlob = new Blob([vtt], { type: 'text/vtt' });
       const srtUrl = URL.createObjectURL(srtBlob);
-      const vttUrl = URL.createObjectURL(vttBlob);
 
       // Show a short excerpt of the transcript in chat.
       // Filter out SRT sequence numbers (lines with only digits) and timestamp lines (contain '-->').
       const lines = srt.split('\n').filter(l => l.trim() && !/^\d+$/.test(l.trim()) && !l.includes('-->'));
       const excerpt = lines.slice(0, 4).join(' ').substring(0, 200);
-      addMessage(`Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nDownload original subtitles:`, false, srtUrl, 'subtitle-srt', 'text/plain');
-      addMessage(`VTT subtitle file:`, false, vttUrl, 'subtitle-vtt', 'text/vtt');
+      addMessage(`Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nDownload SRT subtitles:`, false, srtUrl, 'subtitle-srt', 'text/plain');
 
-      // Step 3: Optionally translate captions using Grok chat
-      let translatedSrt = null;
+      // Step 3: Show original video with soft subtitle track (no re-encoding).
+      // The <track> element lets the browser render subtitles natively and allows
+      // the user to toggle them on/off. The Download button delivers the original
+      // video file unchanged — no burned-in pixels.
+      const vttBlob = new Blob([vtt], { type: 'text/vtt' });
+      const vttUrl = URL.createObjectURL(vttBlob);
+      // Create the original video URL once; reuse it for translated track preview too
+      const originalVideoUrl = URL.createObjectURL(new Blob([videoFileData], { type: fileMimeType }));
+      const langDesc = language === 'auto' ? 'auto-detected' : language;
+      addMessage(`Video with soft subtitles (${langDesc}) — toggle captions via browser controls. Download saves the original video without burned-in subtitles:`, false, originalVideoUrl, 'processed', fileMimeType, false, vttUrl);
+
+      // Step 4: Optionally translate captions using Grok chat
       if (translateLanguage) {
         const translateResponse = await fetch('/api/translate-captions', {
           method: 'POST',
@@ -886,53 +890,21 @@ export const toolFunctions = {
         }
 
         const translationResult = await translateResponse.json();
-        translatedSrt = translationResult.srt;
+        const translatedSrt = translationResult.srt;
 
-        // Offer translated subtitle files for download too
+        // Offer translated subtitle files for download and show video with translated track
         const translatedSrtBlob = new Blob([translatedSrt], { type: 'text/plain' });
-        const translatedVttBlob = new Blob([translationResult.vtt], { type: 'text/vtt' });
         addMessage(`Translated subtitles (${translateLanguage}):`, false, URL.createObjectURL(translatedSrtBlob), 'subtitle-srt', 'text/plain');
-        addMessage(`Translated VTT file (${translateLanguage}):`, false, URL.createObjectURL(translatedVttBlob), 'subtitle-vtt', 'text/vtt');
+
+        const translatedVttBlob = new Blob([translationResult.vtt], { type: 'text/vtt' });
+        const translatedVttUrl = URL.createObjectURL(translatedVttBlob);
+        // Reuse the same original video URL for the translated subtitle preview
+        addMessage(`Video with translated subtitles (${translateLanguage}):`, false, originalVideoUrl, 'processed', fileMimeType, false, translatedVttUrl);
+
+        return `Captions generated (language: ${langDesc}) and translated to ${translateLanguage}. Soft subtitle tracks shown above — no re-encoding required. SRT files are also available for download.`;
       }
 
-      // Step 4: Optionally burn subtitles into the video
-      if (burnIn) {
-        const formData = new FormData();
-        const videoBlob = new Blob([videoFileData], { type: fileMimeType });
-        formData.append('video', videoBlob, 'input.mp4');
-        formData.append('operation', 'burn_subtitles');
-        formData.append('args', JSON.stringify({
-          srtContent: srt,
-          translatedSrtContent: translatedSrt,
-          style,
-          position
-        }));
-
-        const burnResponse = await fetch('/api/process-video', {
-          method: 'POST',
-          headers: sampleModeEnabled && sampleModeAccessToken
-            ? { 'sample-access-token': sampleModeAccessToken }
-            : {},
-          body: formData
-        });
-
-        if (!burnResponse.ok) {
-          const errorData = await burnResponse.json();
-          throw new Error(errorData.error || 'Failed to burn subtitles into video');
-        }
-
-        const arrayBuffer = await burnResponse.arrayBuffer();
-        const data = new Uint8Array(arrayBuffer);
-        setVideoFileData(data);
-        const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-        const trackDesc = translatedSrt
-          ? `original (${language === 'auto' ? 'auto-detected' : language}) at ${position} + ${translateLanguage} translation at ${position === 'bottom' ? 'top' : 'bottom'}`
-          : `${language === 'auto' ? 'auto-detected' : language}, ${style} style, ${position}`;
-        addMessage(`Video with burned-in subtitles (${trackDesc}):`, false, videoUrl, 'processed', 'video/mp4');
-        return `Captions generated${translatedSrt ? ` and translated to ${translateLanguage}` : ''} (language: ${language === 'auto' ? 'auto-detected' : language}). Both subtitle tracks burned into the video. SRT and VTT files are also available for download.`;
-      }
-
-      return `Captions generated successfully${translatedSrt ? ` with ${translateLanguage} translation` : ''}. Language: ${language === 'auto' ? 'auto-detected' : language}. SRT and VTT subtitle files are available for download above.`;
+      return `Captions generated successfully. Language: ${langDesc}. Soft subtitle track added to the video above — no re-encoding required. The original video file is preserved for download.`;
     } catch (error) {
       addMessage('Error generating captions: ' + error.message, false);
       return 'Failed to generate captions: ' + error.message;

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-export default function VideoPreview({ videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null }) {
+export default function VideoPreview({ videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -175,15 +175,30 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         <video 
           ref={videoRef}
           src={videoUrl} 
-          playsInline 
+          playsInline
+          crossOrigin="anonymous"
           style={{ 
             width: '100%', 
             maxWidth: '400px', 
             borderRadius: '4px',
             display: 'block',
             marginBottom: '12px'
-          }} 
-        />
+          }}
+        >
+          {/* Soft subtitle track — avoids expensive server-side re-encoding.
+              The original video file is preserved unchanged; subtitles are
+              rendered by the browser and can be toggled on/off by the user.
+              The Download button below uses the same videoUrl (original video). */}
+          {vttUrl && (
+            <track
+              kind="subtitles"
+              src={vttUrl}
+              srcLang={subtitleLang}
+              label={subtitleLabel}
+              default
+            />
+          )}
+        </video>
       )}
       
       {/* Meter/Slider control */}
