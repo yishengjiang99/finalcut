@@ -61,6 +61,17 @@ export async function initDatabase() {
       )
     `);
 
+    // Create user_lessons table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_lessons (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        user_id BIGINT NOT NULL,
+        lesson VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX (user_id, created_at)
+      )
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -109,11 +120,47 @@ export async function updateUserSubscription(email, hasSubscription, subscriptio
   );
 }
 
+// Lesson operations
+export async function getRecentLessons(userId, limit = 7) {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      'SELECT lesson FROM user_lessons WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+      [userId, limit]
+    );
+    return rows.map(r => r.lesson);
+  } catch (err) {
+    console.error('Failed to load lessons:', err.message);
+    return [];
+  }
+}
+
+export async function saveLesson(userId, lesson) {
+  if (!lesson) return;
+  try {
+    const pool = getPool();
+    // De-dupe: skip if same as most recent lesson for this user
+    const [recent] = await pool.query(
+      'SELECT lesson FROM user_lessons WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    if (recent.length > 0 && recent[0].lesson === lesson) return;
+    await pool.query(
+      'INSERT INTO user_lessons (user_id, lesson) VALUES (?, ?)',
+      [userId, lesson]
+    );
+  } catch (err) {
+    console.error('Failed to save lesson:', err.message);
+  }
+}
+
 export default {
   getPool,
   initDatabase,
   findUserByEmail,
   findUserByGoogleId,
   createUser,
-  updateUserSubscription
+  updateUserSubscription,
+  getRecentLessons,
+  saveLesson,
 };
