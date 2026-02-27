@@ -295,7 +295,7 @@ Load your own video file or paste a URL above.
     video.addEventListener('timeupdate', () => {
       const t = video.currentTime;
       scrubber.value = t;
-      fps = Number(fpsSel.value);
+      // fps is already set on initial load and when user changes fpsSel
       const mins   = String(Math.floor(t / 60)).padStart(2, '0');
       const secs   = String(Math.floor(t % 60)).padStart(2, '0');
       const frames = String(Math.floor((t % 1) * fps)).padStart(2, '0');
