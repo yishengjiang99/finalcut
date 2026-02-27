@@ -224,7 +224,8 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
         const lines = lineBuffer.split('\n');
         lineBuffer = lines.pop() || '';
 
-        for (const line of lines) {
+        for (const rawLine of lines) {
+          const line = rawLine.replace(/\r$/, ''); // handle \r\n line endings
           if (!line.startsWith('data: ')) {
             // Non-data SSE lines (event:, id:, comments) – forward as-is
             if (line.trim() !== '') {
