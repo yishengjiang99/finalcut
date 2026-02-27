@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 export default function VideoPreview({ videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -7,7 +7,68 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   const [fps, setFps] = useState(30);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [isAudio, setIsAudio] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState(null);
+  const [corsError, setCorsError] = useState(false);
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const rafRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  const renderFrame = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!canvas || !video) return;
+    const ctx = canvas.getContext('2d');
+    try {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    } catch (e) {
+      if (e.name === 'SecurityError') {
+        setCorsError(true);
+        return;
+      }
+    }
+    // Render active subtitle cues onto canvas (no native overlay)
+    const track = video.textTracks && video.textTracks[0];
+    if (track && track.activeCues && track.activeCues.length > 0) {
+      const fontSize = Math.max(16, Math.floor(canvas.height * 0.045));
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      for (let i = 0; i < track.activeCues.length; i++) {
+        const cue = track.activeCues[i];
+        const rawLines = (() => {
+          try {
+            const div = document.createElement('div');
+            div.innerHTML = cue.text || '';
+            return (div.textContent || '').split('\n');
+          } catch (_) { return (cue.text || '').split('\n'); }
+        })();
+        const lines = rawLines;
+        const lineHeight = fontSize * 1.4;
+        const totalHeight = lines.length * lineHeight;
+        const baseY = canvas.height * 0.88 - totalHeight / 2;
+        const x = canvas.width / 2;
+        let maxWidth = 0;
+        lines.forEach(line => {
+          const w = ctx.measureText(line).width;
+          if (w > maxWidth) maxWidth = w;
+        });
+        const padX = 14, padY = 8;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(x - maxWidth / 2 - padX, baseY - fontSize - padY, maxWidth + padX * 2, totalHeight + padY * 2);
+        lines.forEach((line, idx) => {
+          const y = baseY + idx * lineHeight;
+          ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+          ctx.lineWidth = 3;
+          ctx.strokeText(line, x, y);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(line, x, y);
+        });
+      }
+    }
+    rafRef.current = requestAnimationFrame(renderFrame);
+  }, []);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -33,27 +94,104 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
+      setCorsError(false);
+      cancelAnimationFrame(rafRef.current);
       
       // Force the video element to load the new source
       video.load();
       
       const handleLoadedMetadata = () => {
         setDuration(video.duration);
+        if (!isAudioFile && canvasRef.current) {
+          canvasRef.current.width = video.videoWidth || 640;
+          canvasRef.current.height = video.videoHeight || 360;
+        }
+        // Always keep native captions hidden — we render them ourselves on canvas
+        if (video.textTracks) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'hidden';
+          }
+        }
+        if (!isAudioFile) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = requestAnimationFrame(renderFrame);
+        }
       };
       
       const handleTimeUpdate = () => {
         setCurrentTime(video.currentTime);
       };
+
+      // Also hide track mode when tracks change (e.g. after track loads)
+      const handleTrackChange = () => {
+        if (video.textTracks) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'hidden';
+          }
+        }
+      };
       
       video.addEventListener('loadedmetadata', handleLoadedMetadata);
       video.addEventListener('timeupdate', handleTimeUpdate);
+      if (video.textTracks && typeof video.textTracks.addEventListener === 'function') {
+        video.textTracks.addEventListener('change', handleTrackChange);
+      }
       
       return () => {
         video.removeEventListener('loadedmetadata', handleLoadedMetadata);
         video.removeEventListener('timeupdate', handleTimeUpdate);
+        if (video.textTracks && typeof video.textTracks.removeEventListener === 'function') {
+          video.textTracks.removeEventListener('change', handleTrackChange);
+        }
+        cancelAnimationFrame(rafRef.current);
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
       };
     }
-  }, [videoUrl, mimeType]);
+  }, [videoUrl, mimeType, renderFrame]);
+
+  const handleStartRecording = () => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+    chunksRef.current = [];
+    setDownloadUrl(null);
+    try {
+      const outStream = canvas.captureStream(30);
+      // Best-effort audio
+      try {
+        const vStream = video.captureStream ? video.captureStream() : null;
+        if (vStream) {
+          const audioTracks = vStream.getAudioTracks();
+          if (audioTracks.length > 0) outStream.addTrack(audioTracks[0]);
+        }
+      } catch (_) { /* audio capture not supported or CORS issue — proceed without audio */
+        // eslint-disable-next-line no-console
+        console.warn('Audio capture skipped:', _);
+      }
+      const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+      const recMimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+      const recorder = new MediaRecorder(outStream, { mimeType: recMimeType });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        setDownloadUrl(URL.createObjectURL(blob));
+        setIsRecording(false);
+      };
+      recorder.start(100);
+      setIsRecording(true);
+    } catch (e) {
+      setCorsError(true);
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  };
 
   const handleDownload = () => {
     const extMap = {
@@ -172,33 +310,47 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           controls
         />
       ) : (
-        <video 
-          ref={videoRef}
-          src={videoUrl} 
-          playsInline
-          crossOrigin="anonymous"
-          style={{ 
-            width: '100%', 
-            maxWidth: '400px', 
-            borderRadius: '4px',
-            display: 'block',
-            marginBottom: '12px'
-          }}
-        >
-          {/* Soft subtitle track — avoids expensive server-side re-encoding.
-              The original video file is preserved unchanged; subtitles are
-              rendered by the browser and can be toggled on/off by the user.
-              The Download button below uses the same videoUrl (original video). */}
-          {vttUrl && (
-            <track
-              kind="subtitles"
-              src={vttUrl}
-              srcLang={subtitleLang}
-              label={subtitleLabel}
-              default
-            />
+        <>
+          {/* Hidden video element — decode/source only; canvas is the visible player */}
+          <video 
+            ref={videoRef}
+            src={videoUrl} 
+            playsInline
+            crossOrigin="anonymous"
+            style={{ display: 'none' }}
+          >
+            {/* track.mode is set to "hidden" in JS so native captions never show;
+                we read activeCues and burn them into the canvas ourselves. */}
+            {vttUrl && (
+              <track
+                kind="subtitles"
+                src={vttUrl}
+                srcLang={subtitleLang}
+                label={subtitleLabel}
+                default
+              />
+            )}
+          </video>
+
+          {/* Canvas — the visible "player" with subtitles always burned in */}
+          <canvas
+            ref={canvasRef}
+            style={{
+              width: '100%',
+              maxWidth: '400px',
+              borderRadius: '4px',
+              display: 'block',
+              marginBottom: '12px',
+              backgroundColor: '#000'
+            }}
+          />
+
+          {corsError && (
+            <p style={{ color: '#f85149', fontSize: '12px', marginBottom: '8px' }}>
+              ⚠ CORS error: canvas export/recording may fail for cross-origin videos.
+            </p>
           )}
-        </video>
+        </>
       )}
       
       {/* Meter/Slider control */}
@@ -311,6 +463,62 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         >
           ⬇ Download
         </button>
+
+        {!isAudio && !isRecording && (
+          <button
+            onClick={handleStartRecording}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              backgroundColor: '#2a2f3a',
+              color: '#e6edf3',
+              border: '1px solid #3a4250',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent'
+            }}
+          >
+            ⏺ Start Recording
+          </button>
+        )}
+
+        {!isAudio && isRecording && (
+          <button
+            onClick={handleStopRecording}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              backgroundColor: '#6e1a1a',
+              color: '#e6edf3',
+              border: '1px solid #a03030',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent'
+            }}
+          >
+            ⏹ Stop Recording
+          </button>
+        )}
+        
+        {!isAudio && downloadUrl && (
+          <a
+            href={downloadUrl}
+            download="burned_subs.webm"
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              backgroundColor: '#1a3a1a',
+              color: '#58a65c',
+              border: '1px solid #2d6b30',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              textDecoration: 'none',
+              display: 'inline-block'
+            }}
+          >
+            ⬇ Download WebM
+          </a>
+        )}
         
         {!isAudio && (
           <button 
