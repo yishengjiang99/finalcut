@@ -186,7 +186,7 @@ export function useCallAPI({
         }
       }
     } catch (error) {
-      addMessage('Error communicating with xAI API: ' + error.message, false);
+      addMessage({ text: 'Error communicating with xAI API: ' + error.message });
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
     }

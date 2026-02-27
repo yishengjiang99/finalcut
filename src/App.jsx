@@ -187,7 +187,15 @@ export default function App() {
     verifyPayment();
   }, []);
 
-  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null, showSampleLinks = false, vttUrl = null) => {
+  const addMessage = ({
+    text,
+    isUser = false,
+    videoUrl = null,
+    videoType = 'processed',
+    mimeType = null,
+    showSampleLinks = false,
+    vttUrl = null
+  }) => {
     const id = messageIdCounterRef.current++;
     setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, showSampleLinks, vttUrl }]);
   };
@@ -234,7 +242,7 @@ export default function App() {
         const isVideo = file.type.startsWith('video/');
 
         if (!isAudio && !isVideo) {
-          addMessage(`Error: File "${file.name}" is not a valid audio or video file.`, false);
+          addMessage({ text: `Error: File "${file.name}" is not a valid audio or video file.` });
           hasError = true;
           continue;
         }
@@ -263,7 +271,7 @@ export default function App() {
       }
 
       if (newVideos.length === 0) {
-        addMessage('Error: No valid files were uploaded.', false);
+        addMessage({ text: 'Error: No valid files were uploaded.' });
         return;
       }
 
@@ -295,7 +303,7 @@ export default function App() {
 
       await callAPI(messagesForAPI);
     } catch (error) {
-      addMessage('Error uploading files: ' + error.message, false);
+      addMessage({ text: 'Error uploading files: ' + error.message });
     }
 
     // Clear the input so the same files can be uploaded again if needed
@@ -339,7 +347,7 @@ export default function App() {
       const response = await fetch(sampleVideoUrl);
       if (!response.ok) {
         // If sample video doesn't exist, just show a message
-        addMessage('Sample video not available. Please upload your own video.', false);
+        addMessage({ text: 'Sample video not available. Please upload your own video.' });
         return;
       }
       
@@ -363,7 +371,7 @@ export default function App() {
       
       await callAPI(messagesForAPI, { sampleAccessToken: token });
     } catch (error) {
-      addMessage('Error loading sample video. Please upload your own video.', false);
+      addMessage({ text: 'Error loading sample video. Please upload your own video.' });
     }
   };
 

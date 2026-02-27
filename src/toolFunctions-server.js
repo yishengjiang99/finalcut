@@ -48,10 +48,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('resize_video', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (resized):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (resized):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Video resized successfully.';
     } catch (error) {
-      addMessage('Error resizing video: ' + error.message, false);
+      addMessage({ text: 'Error resizing video: ' + error.message });
       return 'Failed to resize video: ' + error.message;
     }
   },
@@ -68,10 +68,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('crop_video', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (cropped):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (cropped):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Video cropped successfully.';
     } catch (error) {
-      addMessage('Error cropping video: ' + error.message, false);
+      addMessage({ text: 'Error cropping video: ' + error.message });
       return 'Failed to crop video: ' + error.message;
     }
   },
@@ -85,10 +85,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('rotate_video', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (rotated):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (rotated):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Video rotated successfully.';
     } catch (error) {
-      addMessage('Error rotating video: ' + error.message, false);
+      addMessage({ text: 'Error rotating video: ' + error.message });
       return 'Failed to rotate video: ' + error.message;
     }
   },
@@ -102,10 +102,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('add_text', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (text added):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (text added):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Text added to video successfully.';
     } catch (error) {
-      addMessage('Error adding text to video: ' + error.message, false);
+      addMessage({ text: 'Error adding text to video: ' + error.message });
       return 'Failed to add text to video: ' + error.message;
     }
   },
@@ -119,10 +119,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('trim_video', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (trimmed):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (trimmed):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Video trimmed successfully.';
     } catch (error) {
-      addMessage('Error trimming video: ' + error.message, false);
+      addMessage({ text: 'Error trimming video: ' + error.message });
       return 'Failed to trim video: ' + error.message;
     }
   },
@@ -136,10 +136,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('speed_video', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (speed adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (speed adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Video speed adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting video speed: ' + error.message, false);
+      addMessage({ text: 'Error adjusting video speed: ' + error.message });
       return 'Failed to adjust video speed: ' + error.message;
     }
   },
@@ -153,10 +153,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('adjust_volume', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (volume adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (volume adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Volume adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting volume: ' + error.message, false);
+      addMessage({ text: 'Error adjusting volume: ' + error.message });
       return 'Failed to adjust volume: ' + error.message;
     }
   },
@@ -173,10 +173,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('audio_fade', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (audio fade applied):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (audio fade applied):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Audio fade applied successfully.';
     } catch (error) {
-      addMessage('Error applying audio fade: ' + error.message, false);
+      addMessage({ text: 'Error applying audio fade: ' + error.message });
       return 'Failed to apply audio fade: ' + error.message;
     }
   },
@@ -190,10 +190,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('highpass_filter', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (highpass filter applied):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (highpass filter applied):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Highpass filter applied successfully.';
     } catch (error) {
-      addMessage('Error applying highpass filter: ' + error.message, false);
+      addMessage({ text: 'Error applying highpass filter: ' + error.message });
       return 'Failed to apply highpass filter: ' + error.message;
     }
   },
@@ -207,10 +207,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('lowpass_filter', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (lowpass filter applied):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (lowpass filter applied):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Lowpass filter applied successfully.';
     } catch (error) {
-      addMessage('Error applying lowpass filter: ' + error.message, false);
+      addMessage({ text: 'Error applying lowpass filter: ' + error.message });
       return 'Failed to apply lowpass filter: ' + error.message;
     }
   },
@@ -224,10 +224,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('echo_effect', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (echo effect applied):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (echo effect applied):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Echo effect applied successfully.';
     } catch (error) {
-      addMessage('Error applying echo effect: ' + error.message, false);
+      addMessage({ text: 'Error applying echo effect: ' + error.message });
       return 'Failed to apply echo effect: ' + error.message;
     }
   },
@@ -241,10 +241,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('bass_adjustment', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (bass adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (bass adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Bass adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting bass: ' + error.message, false);
+      addMessage({ text: 'Error adjusting bass: ' + error.message });
       return 'Failed to adjust bass: ' + error.message;
     }
   },
@@ -258,10 +258,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('treble_adjustment', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (treble adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (treble adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Treble adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting treble: ' + error.message, false);
+      addMessage({ text: 'Error adjusting treble: ' + error.message });
       return 'Failed to adjust treble: ' + error.message;
     }
   },
@@ -275,10 +275,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('equalizer', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (equalizer applied):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (equalizer applied):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Equalizer applied successfully.';
     } catch (error) {
-      addMessage('Error applying equalizer: ' + error.message, false);
+      addMessage({ text: 'Error applying equalizer: ' + error.message });
       return 'Failed to apply equalizer: ' + error.message;
     }
   },
@@ -287,10 +287,10 @@ export const toolFunctions = {
     try {
       const data = await processVideoOnServer('normalize_audio', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (audio normalized):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (audio normalized):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Audio normalized successfully.';
     } catch (error) {
-      addMessage('Error normalizing audio: ' + error.message, false);
+      addMessage({ text: 'Error normalizing audio: ' + error.message });
       return 'Failed to normalize audio: ' + error.message;
     }
   },
@@ -304,10 +304,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('delay_audio', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (audio delayed):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (audio delayed):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Audio delay applied successfully.';
     } catch (error) {
-      addMessage('Error delaying audio: ' + error.message, false);
+      addMessage({ text: 'Error delaying audio: ' + error.message });
       return 'Failed to delay audio: ' + error.message;
     }
   },
@@ -321,10 +321,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('adjust_brightness', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (brightness adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (brightness adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Brightness adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting brightness: ' + error.message, false);
+      addMessage({ text: 'Error adjusting brightness: ' + error.message });
       return 'Failed to adjust brightness: ' + error.message;
     }
   },
@@ -338,10 +338,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('adjust_hue', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (hue adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (hue adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Hue adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting hue: ' + error.message, false);
+      addMessage({ text: 'Error adjusting hue: ' + error.message });
       return 'Failed to adjust hue: ' + error.message;
     }
   },
@@ -355,10 +355,10 @@ export const toolFunctions = {
 
       const data = await processVideoOnServer('adjust_saturation', args, videoFileData);
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage('Processed video (saturation adjusted):', false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: 'Processed video (saturation adjusted):', videoUrl: videoUrl, mimeType: 'video/mp4' });
       return 'Saturation adjusted successfully.';
     } catch (error) {
-      addMessage('Error adjusting saturation: ' + error.message, false);
+      addMessage({ text: 'Error adjusting saturation: ' + error.message });
       return 'Failed to adjust saturation: ' + error.message;
     }
   },
@@ -370,10 +370,10 @@ export const toolFunctions = {
   get_video_info: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       // This would need special handling on server
-      addMessage('Getting video info is not yet implemented on server-side', false);
+      addMessage({ text: 'Getting video info is not yet implemented on server-side' });
       return 'Feature not yet available with server-side processing';
     } catch (error) {
-      addMessage('Error getting video info: ' + error.message, false);
+      addMessage({ text: 'Error getting video info: ' + error.message });
       return 'Failed to get video info: ' + error.message;
     }
   },
@@ -381,10 +381,10 @@ export const toolFunctions = {
   add_audio_track: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       // This needs multipart upload handling on server
-      addMessage('Adding audio track is not yet implemented on server-side', false);
+      addMessage({ text: 'Adding audio track is not yet implemented on server-side' });
       return 'Feature not yet available with server-side processing';
     } catch (error) {
-      addMessage('Error adding audio track: ' + error.message, false);
+      addMessage({ text: 'Error adding audio track: ' + error.message });
       return 'Failed to add audio track: ' + error.message;
     }
   },
@@ -392,10 +392,10 @@ export const toolFunctions = {
   convert_to_format: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       // This would need format-aware server handling
-      addMessage('Format conversion is not yet implemented on server-side', false);
+      addMessage({ text: 'Format conversion is not yet implemented on server-side' });
       return 'Feature not yet available with server-side processing';
     } catch (error) {
-      addMessage('Error converting format: ' + error.message, false);
+      addMessage({ text: 'Error converting format: ' + error.message });
       return 'Failed to convert format: ' + error.message;
     }
   },
@@ -417,10 +417,10 @@ export const toolFunctions = {
       }, videoFileData);
       
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage(`Processed video (resized to ${args.ratio}):\n${preset.description}`, false, videoUrl, 'processed', 'video/mp4');
+      addMessage({ text: `Processed video (resized to ${args.ratio}):\n${preset.description}`, videoUrl: videoUrl, mimeType: 'video/mp4' });
       return `Video resized to ${args.ratio} aspect ratio successfully.`;
     } catch (error) {
-      addMessage('Error resizing to aspect ratio: ' + error.message, false);
+      addMessage({ text: 'Error resizing to aspect ratio: ' + error.message });
       return 'Failed to resize to aspect ratio: ' + error.message;
     }
   }

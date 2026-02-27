@@ -61,8 +61,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to resize video');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error resizing video'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error resizing video') })
       );
     });
 
@@ -162,11 +161,11 @@ describe('toolFunctions', () => {
       expect(result).toBe('Video flipped horizontally successfully.');
       expect(mockSetVideoFileData).toHaveBeenCalled();
       expect(mockAddMessage).toHaveBeenCalledWith(
-        'Processed video (flipped horizontally):',
-        false,
-        'mock-url',
-        'processed',
-        'video/mp4'
+        expect.objectContaining({
+          text: 'Processed video (flipped horizontally):',
+          videoUrl: 'mock-url',
+          mimeType: 'video/mp4'
+        })
       );
     });
 
@@ -184,8 +183,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to flip video horizontally');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error flipping video horizontally'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error flipping video horizontally') })
       );
     });
   });
@@ -306,8 +304,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to add audio track');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error adding audio track'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error adding audio track') })
       );
     });
 
@@ -331,8 +328,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to add audio track');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Mode must be either "replace" or "mix"'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Mode must be either "replace" or "mix"') })
       );
     });
 
@@ -346,8 +342,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to add audio track');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Volume must be between 0.0 and 2.0'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Volume must be between 0.0 and 2.0') })
       );
     });
 
@@ -361,8 +356,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to add audio track');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Volume must be between 0.0 and 2.0'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Volume must be between 0.0 and 2.0') })
       );
     });
 
@@ -744,8 +738,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to resize video to preset');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error resizing video to preset'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error resizing video to preset') })
       );
     });
 
@@ -758,8 +751,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to resize video to preset');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid preset'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Invalid preset') })
       );
     });
 
@@ -834,8 +826,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to adjust brightness');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error adjusting brightness'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error adjusting brightness') })
       );
     });
 
@@ -898,8 +889,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to adjust hue');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error adjusting hue'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error adjusting hue') })
       );
     });
 
@@ -962,8 +952,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to adjust saturation');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error adjusting saturation'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error adjusting saturation') })
       );
     });
 
@@ -1049,8 +1038,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to convert video format');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error converting video format'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error converting video format') })
       );
     });
 
@@ -1110,8 +1098,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to convert audio format');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error converting audio format'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error converting audio format') })
       );
     });
 
@@ -1241,8 +1228,7 @@ describe('toolFunctions', () => {
       );
       expect(result).toContain('Failed to fetch supported formats');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error fetching supported formats'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error fetching supported formats') })
       );
     });
   });
@@ -1307,8 +1293,7 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('Failed to generate captions');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error generating captions'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error generating captions') })
       );
     });
 
@@ -1425,8 +1410,7 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('Failed to generate captions');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error generating captions'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error generating captions') })
       );
     });
   });
