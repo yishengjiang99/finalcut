@@ -1267,8 +1267,8 @@ describe('toolFunctions', () => {
       expect(result).toContain('Captions generated');
       expect(result).toContain('Soft subtitle track');
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      // SRT download message + video preview with soft subtitle track
-      expect(mockAddMessage).toHaveBeenCalledTimes(2);
+      // Combined caption summary + video preview with soft subtitle track
+      expect(mockAddMessage).toHaveBeenCalledTimes(1);
     });
 
     it('should generate captions with soft subtitle track (burn_in parameter is ignored)', async () => {
@@ -1288,8 +1288,8 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('Captions generated');
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      // SRT download message + video preview with soft subtitle track
-      expect(mockAddMessage).toHaveBeenCalledTimes(2);
+      // Combined caption summary + video preview with soft subtitle track
+      expect(mockAddMessage).toHaveBeenCalledTimes(1);
     });
 
     it('should handle caption generation failure gracefully', async () => {
@@ -1374,8 +1374,8 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('translated to es');
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      // SRT download + video w/ original track + translated SRT download + video w/ translated track = 4
-      expect(mockAddMessage).toHaveBeenCalledTimes(4);
+      // Combined original caption summary+video + translated SRT download + translated subtitle video = 3
+      expect(mockAddMessage).toHaveBeenCalledTimes(3);
     });
 
     it('should translate captions with soft subtitle track', async () => {
@@ -1400,8 +1400,8 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('translated to fr');
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      // SRT download + video w/ original track + translated SRT download + video w/ translated track = 4
-      expect(mockAddMessage).toHaveBeenCalledTimes(4);
+      // Combined original caption summary+video + translated SRT download + translated subtitle video = 3
+      expect(mockAddMessage).toHaveBeenCalledTimes(3);
     });
 
     it('should handle translation failure gracefully', async () => {

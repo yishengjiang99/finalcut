@@ -852,26 +852,19 @@ export const toolFunctions = {
         throw new Error('No captions were generated from the audio');
       }
 
-      // Step 2: Create downloadable subtitle files for the original language
+      // Step 2: Build transcript excerpt and subtitle download URLs for the original language
       const srtBlob = new Blob([srt], { type: 'text/plain' });
       const srtUrl = URL.createObjectURL(srtBlob);
-
-      // Show a short excerpt of the transcript in chat.
-      // Filter out SRT sequence numbers (lines with only digits) and timestamp lines (contain '-->').
       const lines = srt.split('\n').filter(l => l.trim() && !/^\d+$/.test(l.trim()) && !l.includes('-->'));
       const excerpt = lines.slice(0, 4).join(' ').substring(0, 200);
-      addMessage(`Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nDownload SRT subtitles:`, false, srtUrl, 'subtitle-srt', 'text/plain');
 
       // Step 3: Show original video with soft subtitle track (no re-encoding).
-      // The <track> element lets the browser render subtitles natively and allows
-      // the user to toggle them on/off. The Download button delivers the original
-      // video file unchanged — no burned-in pixels.
       const vttBlob = new Blob([vtt], { type: 'text/vtt' });
       const vttUrl = URL.createObjectURL(vttBlob);
       // Create the original video URL once; reuse it for translated track preview too
       const originalVideoUrl = URL.createObjectURL(new Blob([videoFileData], { type: fileMimeType }));
       const langDesc = language === 'auto' ? 'auto-detected' : language;
-      addMessage(`Video with soft subtitles (${langDesc}) — toggle captions via browser controls. Download saves the original video without burned-in subtitles:`, false, originalVideoUrl, 'processed', fileMimeType, false, vttUrl);
+      addMessage(`Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nVideo with soft subtitles (${langDesc}). SRT download: ${srtUrl}`, false, originalVideoUrl, 'processed', fileMimeType, false, vttUrl);
 
       // Step 4: Optionally translate captions using Grok chat
       if (translateLanguage) {

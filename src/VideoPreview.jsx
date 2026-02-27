@@ -257,12 +257,6 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     return () => video.removeEventListener('loadedmetadata', startAutoRecording);
   }, [vttUrl, isAudio, isCollapsed, isRecording, downloadUrl, handleStartRecording]);
 
-  const handleStopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
   const handleDownload = () => {
     if (!isAudio && vttUrl) {
       if (!downloadUrl) return;
@@ -545,42 +539,6 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           {!isAudio && !!vttUrl ? (downloadUrl ? '⬇ Download Burned WebM' : (isRecording ? '⏺ Rendering Burned WebM...' : '⏺ Preparing Burned WebM...')) : '⬇ Download'}
         </button>
 
-        {!isAudio && !vttUrl && !isRecording && (
-          <button
-            onClick={handleStartRecording}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              backgroundColor: '#2a2f3a',
-              color: '#e6edf3',
-              border: '1px solid #3a4250',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              WebkitTapHighlightColor: 'transparent'
-            }}
-          >
-            ⏺ Start Recording
-          </button>
-        )}
-
-        {!isAudio && !vttUrl && isRecording && (
-          <button
-            onClick={handleStopRecording}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              backgroundColor: '#6e1a1a',
-              color: '#e6edf3',
-              border: '1px solid #a03030',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              WebkitTapHighlightColor: 'transparent'
-            }}
-          >
-            ⏹ Stop Recording
-          </button>
-        )}
-        
         {!isAudio && (
           <button 
             onClick={handleFrameForward}
