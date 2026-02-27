@@ -156,8 +156,11 @@ export function useCallAPI({
 
       // Process tool calls if any
       if (toolCallsArray.length > 0) {
-        // Server-side processing - show spinner during ffmpeg processing
-        setProcessing(true);
+        // Only show the ffmpeg-processing spinner for operations that actually run ffmpeg.
+        // Caption generation (generate_captions) is a pure API call and should not block the UI.
+        const NON_FFMPEG_TOOLS = new Set(['generate_captions']);
+        const needsProcessingSpinner = toolCallsArray.some(call => !NON_FFMPEG_TOOLS.has(call.function.name));
+        if (needsProcessingSpinner) setProcessing(true);
 
         try {
           for (const call of toolCallsArray) {
@@ -182,7 +185,7 @@ export function useCallAPI({
           }
           await callAPIRef.current(currentMessages);
         } finally {
-          setProcessing(false);
+          if (needsProcessingSpinner) setProcessing(false);
         }
       }
     } catch (error) {
