@@ -22,7 +22,7 @@ const sampleCommands = [
   { icon: '📐', text: 'Resize this video to 1280x720' },
   { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
   { icon: '✂️', text: 'Trim the video to keep only seconds 5 to 15' },
-  { icon: '💬', text: 'Generate captions for this video and burn them in' },
+  { icon: '💬', text: 'Generate captions for this video' },
   { icon: '⚡', text: 'Make the video play at 2x speed' },
   { icon: '💡', text: 'Increase the brightness by 0.3' },
   { icon: '🔊', text: 'Adjust audio volume to 150%' },
@@ -187,9 +187,9 @@ export default function App() {
     verifyPayment();
   }, []);
 
-  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null, showSampleLinks = false) => {
+  const addMessage = (text, isUser = false, videoUrl = null, videoType = 'processed', mimeType = null, showSampleLinks = false, vttUrl = null) => {
     const id = messageIdCounterRef.current++;
-    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, showSampleLinks }]);
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, showSampleLinks, vttUrl }]);
   };
 
   const getVideoTitle = (videoType) => {
@@ -448,7 +448,7 @@ export default function App() {
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#161b22', borderRadius: '6px', border: '1px solid #30363d' }}>
                   <h3 style={{ fontSize: '14px', marginBottom: '4px', color: '#b0bac9' }}>💬 AI Captioning</h3>
-                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Generate, translate, and burn subtitles</p>
+                  <p style={{ fontSize: '11px', color: '#8b949e', margin: 0 }}>Generate and translate subtitles</p>
                 </div>
               </div>
             </div>
@@ -548,6 +548,7 @@ export default function App() {
                     videoUrl={msg.videoUrl}
                     title={getVideoTitle(msg.videoType)}
                     mimeType={msg.mimeType}
+                    vttUrl={msg.vttUrl || null}
                   />
                 </div>
               )}
