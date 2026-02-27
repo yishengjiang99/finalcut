@@ -15,6 +15,8 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   const rafRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const autoRecordStartedRef = useRef(false);
+  const autoMutedRef = useRef(false);
 
   const renderFrame = useCallback(() => {
     const video = videoRef.current;
@@ -95,7 +97,15 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       setCurrentTime(0);
       setDuration(0);
       setCorsError(false);
+      autoRecordStartedRef.current = false;
       cancelAnimationFrame(rafRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setDownloadUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       
       // Force the video element to load the new source
       video.load();
@@ -151,12 +161,25 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     }
   }, [videoUrl, mimeType, renderFrame]);
 
-  const handleStartRecording = () => {
+  useEffect(() => {
+    return () => {
+      setDownloadUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, []);
+
+  const handleStartRecording = useCallback(async ({ auto = false } = {}) => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video) return;
+    if (!canvas || !video) return false;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') return true;
     chunksRef.current = [];
-    setDownloadUrl(null);
+    setDownloadUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     try {
       const outStream = canvas.captureStream(30);
       // Best-effort audio
@@ -175,17 +198,64 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       const recorder = new MediaRecorder(outStream, { mimeType: recMimeType });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        setDownloadUrl(URL.createObjectURL(blob));
-        setIsRecording(false);
+      const handleVideoEnded = () => {
+        if (recorder.state !== 'inactive') recorder.stop();
       };
+      recorder.onstop = () => {
+        video.removeEventListener('ended', handleVideoEnded);
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const nextUrl = URL.createObjectURL(blob);
+        setDownloadUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return nextUrl;
+        });
+        setIsRecording(false);
+        if (autoMutedRef.current) {
+          video.muted = false;
+          autoMutedRef.current = false;
+        }
+      };
+      video.addEventListener('ended', handleVideoEnded);
       recorder.start(100);
       setIsRecording(true);
+      if (auto) {
+        video.pause();
+        video.currentTime = 0;
+        if (!video.muted) {
+          video.muted = true;
+          autoMutedRef.current = true;
+        }
+        await video.play();
+      }
+      return true;
     } catch (e) {
       setCorsError(true);
+      setIsRecording(false);
+      if (autoMutedRef.current && videoRef.current) {
+        videoRef.current.muted = false;
+        autoMutedRef.current = false;
+      }
+      return false;
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || isAudio || !vttUrl || isCollapsed || autoRecordStartedRef.current || isRecording || downloadUrl) return;
+
+    const startAutoRecording = () => {
+      if (autoRecordStartedRef.current) return;
+      autoRecordStartedRef.current = true;
+      void handleStartRecording({ auto: true });
+    };
+
+    if (video.readyState >= 1) {
+      startAutoRecording();
+      return undefined;
+    }
+    video.addEventListener('loadedmetadata', startAutoRecording, { once: true });
+    return () => video.removeEventListener('loadedmetadata', startAutoRecording);
+  }, [vttUrl, isAudio, isCollapsed, isRecording, downloadUrl, handleStartRecording]);
 
   const handleStopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -194,6 +264,16 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   };
 
   const handleDownload = () => {
+    if (!isAudio && vttUrl) {
+      if (!downloadUrl) return;
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = 'burned_subs.webm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
     const extMap = {
       'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov',
       'video/x-msvideo': '.avi', 'video/x-matroska': '.mkv', 'video/ogg': '.ogv',
@@ -450,21 +530,22 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         
         <button
           onClick={handleDownload}
+          disabled={!isAudio && !!vttUrl && !downloadUrl}
           style={{
             padding: '8px 16px',
             fontSize: '14px',
-            backgroundColor: '#2a2f3a',
-            color: '#e6edf3',
+            backgroundColor: (!isAudio && !!vttUrl && !downloadUrl) ? '#21262d' : '#2a2f3a',
+            color: (!isAudio && !!vttUrl && !downloadUrl) ? '#6e7681' : '#e6edf3',
             border: '1px solid #3a4250',
             borderRadius: '4px',
-            cursor: 'pointer',
+            cursor: (!isAudio && !!vttUrl && !downloadUrl) ? 'not-allowed' : 'pointer',
             WebkitTapHighlightColor: 'transparent'
           }}
         >
-          ⬇ Download
+          {!isAudio && !!vttUrl ? (downloadUrl ? '⬇ Download Burned WebM' : (isRecording ? '⏺ Rendering Burned WebM...' : '⏺ Preparing Burned WebM...')) : '⬇ Download'}
         </button>
 
-        {!isAudio && !isRecording && (
+        {!isAudio && !vttUrl && !isRecording && (
           <button
             onClick={handleStartRecording}
             style={{
@@ -482,7 +563,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           </button>
         )}
 
-        {!isAudio && isRecording && (
+        {!isAudio && !vttUrl && isRecording && (
           <button
             onClick={handleStopRecording}
             style={{
@@ -498,26 +579,6 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           >
             ⏹ Stop Recording
           </button>
-        )}
-        
-        {!isAudio && downloadUrl && (
-          <a
-            href={downloadUrl}
-            download="burned_subs.webm"
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              backgroundColor: '#1a3a1a',
-              color: '#58a65c',
-              border: '1px solid #2d6b30',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              textDecoration: 'none',
-              display: 'inline-block'
-            }}
-          >
-            ⬇ Download WebM
-          </a>
         )}
         
         {!isAudio && (

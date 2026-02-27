@@ -86,6 +86,18 @@ describe('VideoPreview Component', () => {
     expect(screen.getByText(/Frame ▶/)).toBeInTheDocument();
   });
 
+  it('shows burned-webm download state for caption preview', () => {
+    render(<VideoPreview videoUrl="test-video.mp4" vttUrl="test-captions.vtt" />);
+    const downloadButton = screen.getByRole('button', { name: /Preparing Burned WebM/i });
+    expect(downloadButton).toBeDisabled();
+  });
+
+  it('hides manual recording controls when caption track is present', () => {
+    render(<VideoPreview videoUrl="test-video.mp4" vttUrl="test-captions.vtt" />);
+    expect(screen.queryByText(/Start Recording/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stop Recording/i)).not.toBeInTheDocument();
+  });
+
   it('renders range slider for video scrubbing', () => {
     const { container } = render(<VideoPreview videoUrl="test-video.mp4" />);
     const slider = container.querySelector('input[type="range"]');
