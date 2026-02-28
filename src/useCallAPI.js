@@ -15,13 +15,6 @@ export function useCallAPI({
   uploadedVideos,
 }) {
   const callAPIRef = useRef(null);
-  const abortControllerRef = useRef(null);
-
-  const stopOperation = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  }, []);
 
   const callAPI = useCallback(async (currentMessages, options = {}) => {
     const forcedSampleToken = options.sampleAccessToken || null;
@@ -29,9 +22,6 @@ export function useCallAPI({
     const authHeaders = shouldUseSampleAuth
       ? { 'sample-access-token': forcedSampleToken || sampleAccessToken }
       : {};
-
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
 
     setIsCallingAPI(true); // Set loading state before API call
     try {
@@ -46,8 +36,7 @@ export function useCallAPI({
           messages: currentMessages,
           tools: tools,
           tool_choice: 'auto'
-        }),
-        signal: abortController.signal
+        })
       });
 
       if (!response.ok) {
@@ -167,11 +156,8 @@ export function useCallAPI({
 
       // Process tool calls if any
       if (toolCallsArray.length > 0) {
-        // Only show the ffmpeg-processing spinner for operations that actually run ffmpeg.
-        // Caption generation (generate_captions) is a pure API call and should not block the UI.
-        const NON_FFMPEG_TOOLS = new Set(['generate_captions']);
-        const needsProcessingSpinner = toolCallsArray.some(call => !NON_FFMPEG_TOOLS.has(call.function.name));
-        if (needsProcessingSpinner) setProcessing(true);
+        // Server-side processing - show spinner during ffmpeg processing
+        setProcessing(true);
 
         try {
           for (const call of toolCallsArray) {
@@ -196,20 +182,18 @@ export function useCallAPI({
           }
           await callAPIRef.current(currentMessages);
         } finally {
-          if (needsProcessingSpinner) setProcessing(false);
+          setProcessing(false);
         }
       }
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        addMessage({ text: 'Error communicating with xAI API: ' + error.message });
-      }
+      addMessage({ text: 'Error communicating with xAI API: ' + error.message });
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
-      setProcessing(false);
     }
   }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos]);
 
   callAPIRef.current = callAPI;
 
-  return { callAPI, stopOperation };
+  return callAPI;
 }
+

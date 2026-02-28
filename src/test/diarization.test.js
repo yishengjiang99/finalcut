@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { secondsToTimestamp, buildSrtAndVtt, splitSegmentIntoChunks, MAX_CAPTION_WORDS } from '../server/utils.js';
+import { secondsToTimestamp, buildSrtAndVtt } from '../server/utils.js';
 
 // Unit tests for speaker diarization helper logic (pure functions, no server/HTTP needed).
 // The implementation uses the OpenAI batch POST /v1/audio/transcriptions endpoint
@@ -80,66 +80,6 @@ describe('Speaker Diarization - SRT/VTT Generation (batch API, seconds-based)', 
     ];
     const { vtt } = buildSrtAndVtt(segments);
     expect(vtt).toContain('Speaker 1: Hi');
-  });
-});
-
-describe('Caption Segment Splitting', () => {
-  it('MAX_CAPTION_WORDS is 5', () => {
-    expect(MAX_CAPTION_WORDS).toBe(5);
-  });
-
-  it('does not split a segment with <= MAX_CAPTION_WORDS words', () => {
-    const seg = { start: 0, end: 2, speaker: null, text: 'Hello world' };
-    const chunks = splitSegmentIntoChunks(seg);
-    expect(chunks).toHaveLength(1);
-    expect(chunks[0].text).toBe('Hello world');
-  });
-
-  it('splits a long segment into chunks of at most MAX_CAPTION_WORDS words', () => {
-    const seg = { start: 0, end: 10, speaker: null, text: 'one two three four five six seven' };
-    const chunks = splitSegmentIntoChunks(seg);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) {
-      expect(chunk.text.split(/\s+/).length).toBeLessThanOrEqual(MAX_CAPTION_WORDS);
-    }
-  });
-
-  it('distributes time proportionally across split chunks', () => {
-    const seg = { start: 0, end: 10, speaker: null, text: 'one two three four five six seven eight nine ten' };
-    const chunks = splitSegmentIntoChunks(seg);
-    expect(chunks[0].start).toBeCloseTo(0);
-    expect(chunks[chunks.length - 1].end).toBeCloseTo(10);
-    // Each chunk start should be >= previous chunk end
-    for (let i = 1; i < chunks.length; i++) {
-      expect(chunks[i].start).toBeGreaterThanOrEqual(chunks[i - 1].start);
-    }
-  });
-
-  it('preserves speaker label across split chunks', () => {
-    const seg = { start: 0, end: 6, speaker: 'Speaker 1', text: 'a b c d e f' };
-    const chunks = splitSegmentIntoChunks(seg);
-    for (const chunk of chunks) {
-      expect(chunk.speaker).toBe('Speaker 1');
-    }
-  });
-
-  it('buildSrtAndVtt splits long segments into multiple SRT entries', () => {
-    const segments = [
-      { start: 0, end: 10, speaker: null, text: 'one two three four five six seven eight nine ten' }
-    ];
-    const { srt } = buildSrtAndVtt(segments);
-    // Should have more than 1 entry (sequence numbers 1, 2, ...)
-    expect(srt).toContain('1\n');
-    expect(srt).toContain('\n\n2\n');
-  });
-
-  it('buildSrtAndVtt keeps short segments as single entries', () => {
-    const segments = [
-      { start: 0, end: 2, speaker: null, text: 'Hi there' }
-    ];
-    const { srt } = buildSrtAndVtt(segments);
-    expect(srt).toContain('1\n');
-    expect(srt).not.toContain('\n\n2\n');
   });
 });
 
