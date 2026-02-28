@@ -48,8 +48,7 @@ describe('Video Transitions', () => {
       );
       expect(result).toContain('Failed to apply video transition');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('At least two video clips are required'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('At least two video clips are required') })
       );
     });
 
@@ -62,8 +61,7 @@ describe('Video Transitions', () => {
       );
       expect(result).toContain('Failed to apply video transition');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Transition type is required'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Transition type is required') })
       );
     });
 
@@ -81,11 +79,11 @@ describe('Video Transitions', () => {
       expect(result).toContain('Video transition (crossfade) applied successfully');
       expect(mockSetVideoFileData).toHaveBeenCalled();
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('crossfade transition'),
-        false,
-        'mock-url',
-        'processed',
-        'video/mp4'
+        expect.objectContaining({
+          text: expect.stringContaining('crossfade transition'),
+          videoUrl: 'mock-url',
+          mimeType: 'video/mp4'
+        })
       );
       expect(global.fetch).toHaveBeenCalledWith(
         '/api/transition-videos',
@@ -196,8 +194,7 @@ describe('Video Transitions', () => {
       
       expect(result).toContain('Failed to apply video transition');
       expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Error applying video transition'),
-        false
+        expect.objectContaining({ text: expect.stringContaining('Error applying video transition') })
       );
     });
 
