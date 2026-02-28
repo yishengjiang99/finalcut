@@ -196,7 +196,7 @@ export default function App() {
     return videoType === 'original' ? 'Original Video' : 'Processed Video';
   };
 
-  const callAPI = useCallAPI({
+  const { callAPI, stopOperation } = useCallAPI({
     isSampleMode,
     sampleAccessToken,
     setIsCallingAPI,
@@ -593,8 +593,8 @@ export default function App() {
               }}></div>
             )}
           </div>
-          <button onClick={handleSend} disabled={!videoFileData || isCallingAPI} style={{ padding: '12px 16px', backgroundColor: (videoFileData && !isCallingAPI) ? '#2f3644' : '#21262d', color: (videoFileData && !isCallingAPI) ? '#e6edf3' : '#6e7681', border: '1px solid #424a59', borderRadius: '4px', cursor: (videoFileData && !isCallingAPI) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
-            {isCallingAPI ? 'Sending...' : 'Send'}
+          <button onClick={isCallingAPI ? stopOperation : handleSend} disabled={!isCallingAPI && !videoFileData} style={{ padding: '12px 16px', backgroundColor: isCallingAPI ? '#3a1f1f' : ((videoFileData && !isCallingAPI) ? '#2f3644' : '#21262d'), color: isCallingAPI ? '#f85149' : ((videoFileData && !isCallingAPI) ? '#e6edf3' : '#6e7681'), border: isCallingAPI ? '1px solid #6e2222' : '1px solid #424a59', borderRadius: '4px', cursor: (isCallingAPI || (videoFileData && !isCallingAPI)) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
+            {isCallingAPI ? '⏹ Stop' : 'Send'}
           </button>
         </div>
         <footer style={{ 

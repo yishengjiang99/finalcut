@@ -15,6 +15,13 @@ export function useCallAPI({
   uploadedVideos,
 }) {
   const callAPIRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  const stopOperation = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, []);
 
   const callAPI = useCallback(async (currentMessages, options = {}) => {
     const forcedSampleToken = options.sampleAccessToken || null;
@@ -22,6 +29,9 @@ export function useCallAPI({
     const authHeaders = shouldUseSampleAuth
       ? { 'sample-access-token': forcedSampleToken || sampleAccessToken }
       : {};
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     setIsCallingAPI(true); // Set loading state before API call
     try {
@@ -36,7 +46,8 @@ export function useCallAPI({
           messages: currentMessages,
           tools: tools,
           tool_choice: 'auto'
-        })
+        }),
+        signal: abortController.signal
       });
 
       if (!response.ok) {
@@ -189,14 +200,17 @@ export function useCallAPI({
         }
       }
     } catch (error) {
-      addMessage('Error communicating with xAI API: ' + error.message, false);
+      if (error.name !== 'AbortError') {
+        addMessage('Error communicating with xAI API: ' + error.message, false);
+      }
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
+      setProcessing(false);
     }
   }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos]);
 
   callAPIRef.current = callAPI;
 
-  return callAPI;
+  return { callAPI, stopOperation };
 }
 
