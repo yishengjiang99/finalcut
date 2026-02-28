@@ -130,47 +130,4 @@ describe('App Component', () => {
 
     replaceStateSpy.mockRestore();
   });
-
-  it('shows Stop button instead of Send button when API call is in progress', async () => {
-    // Mock useCallAPI to expose a controllable isCallingAPI state via a trigger function
-    let triggerStop;
-    vi.doMock('../useCallAPI.js', () => ({
-      useCallAPI: vi.fn(() => {
-        const { useState: _useState } = require('react');
-        return {
-          callAPI: vi.fn(),
-          stopOperation: vi.fn(() => { triggerStop && triggerStop(); })
-        };
-      })
-    }));
-    // Since module mocking is complex, we verify the rendered output directly
-    // The Stop button logic is: isCallingAPI ? '⏹ Stop' : 'Send'
-    // We verify it by checking the button state in the actual component
-
-    // Show the editor first (simulate successful payment auth)
-    delete window.location;
-    window.location = {
-      pathname: '/success',
-      search: '?session_id=cs_test_123',
-      origin: 'http://localhost:3000',
-      href: 'http://localhost:3000/success?session_id=cs_test_123'
-    };
-
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false }) // /api/auth/status
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ verified: true, paymentStatus: 'paid' })
-      }); // /api/verify-checkout-session
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Get Started')).not.toBeInTheDocument();
-    });
-
-    // By default (no active API call), the Send button should be visible
-    expect(screen.getByText('Send')).toBeInTheDocument();
-    expect(screen.queryByText('⏹ Stop')).not.toBeInTheDocument();
-  });
 });

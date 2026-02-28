@@ -102,50 +102,20 @@ export function secondsToTimestamp(sec, vtt = false) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(ms).padStart(3, '0')}`;
 }
 
-// Maximum words per SRT/VTT caption segment for on-screen readability
-export const MAX_CAPTION_WORDS = 5;
-
-/**
- * Split a single segment into smaller sub-segments of at most MAX_CAPTION_WORDS words,
- * distributing the time proportionally across the sub-segments.
- */
-export function splitSegmentIntoChunks(seg, maxWords = MAX_CAPTION_WORDS) {
-  const words = seg.text.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return [seg];
-
-  const duration = seg.end - seg.start;
-  const chunks = [];
-  for (let i = 0; i < words.length; i += maxWords) {
-    const chunkWords = words.slice(i, i + maxWords);
-    const chunkStart = seg.start + (i / words.length) * duration;
-    const chunkEnd   = seg.start + (Math.min(i + maxWords, words.length) / words.length) * duration;
-    chunks.push({
-      start:   chunkStart,
-      end:     chunkEnd,
-      speaker: seg.speaker,
-      text:    chunkWords.join(' '),
-    });
-  }
-  return chunks;
-}
-
 /**
  * Build SRT and VTT strings from normalized segments.
  * segments: Array<{ start: number, end: number, speaker: string|null, text: string }>
  *           start/end are in seconds.
  * Speaker lines are prefixed "Speaker N: " when a speaker label is present.
- * Long segments are automatically split into ≤MAX_CAPTION_WORDS-word chunks.
  * Returns { srt: string, vtt: string }.
  */
 export function buildSrtAndVtt(segments) {
   if (!segments.length) return { srt: '', vtt: 'WEBVTT\n' };
 
-  const expanded = segments.flatMap(seg => splitSegmentIntoChunks(seg));
-
   const srtLines = [];
   const vttLines = ['WEBVTT', ''];
 
-  expanded.forEach((seg, i) => {
+  segments.forEach((seg, i) => {
     const label    = seg.speaker ? `${seg.speaker}: ` : '';
     const srtStart = secondsToTimestamp(seg.start, false);
     const srtEnd   = secondsToTimestamp(seg.end,   false);
