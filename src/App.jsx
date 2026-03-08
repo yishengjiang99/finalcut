@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { systemPrompt } from './tools.js';
 import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
+import MidiExplorer from './MidiExplorer.jsx';
 import { useCallAPI } from './useCallAPI.js';
 
 // Sample button style constant
@@ -39,6 +40,7 @@ const welcomeMessage = {
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true); // Show landing page initially
+  const [showMidiExplorer, setShowMidiExplorer] = useState(false); // Show MIDI Explorer tab
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
   const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
   const [authError, setAuthError] = useState(null); // Track authentication errors
@@ -504,6 +506,48 @@ export default function App() {
         }
       `}</style>
       <main style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', backgroundColor: '#0d1117', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {/* Top navigation bar */}
+        <nav style={{ display: 'flex', gap: '8px', padding: '8px 16px', borderBottom: '1px solid #30363d', backgroundColor: '#161b22' }}>
+          <button
+            onClick={() => setShowMidiExplorer(false)}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: !showMidiExplorer ? '#2f3644' : 'transparent',
+              color: !showMidiExplorer ? '#e6edf3' : '#8b949e',
+              border: '1px solid ' + (!showMidiExplorer ? '#424a59' : 'transparent'),
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            🎬 Video Editor
+          </button>
+          <button
+            onClick={() => setShowMidiExplorer(true)}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: showMidiExplorer ? '#2f3644' : 'transparent',
+              color: showMidiExplorer ? '#e6edf3' : '#8b949e',
+              border: '1px solid ' + (showMidiExplorer ? '#424a59' : 'transparent'),
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            🎵 MIDI Explorer
+          </button>
+        </nav>
+
+        {/* MIDI Explorer view */}
+        {showMidiExplorer && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+            <MidiExplorer />
+          </div>
+        )}
+
+        {/* Video Editor view */}
+        {!showMidiExplorer && (
+        <>
         {/* Processing Spinner Overlay */}
         {processing && (
           <div style={{
@@ -615,6 +659,8 @@ export default function App() {
         }}>
           <p style={{ margin: 0 }}>© 2026 FinalCut Video Editor. All rights reserved.</p>
         </footer>
+        </> /* end video editor fragment */
+        )} {/* end !showMidiExplorer */}
       </main>
     </div>
   );
