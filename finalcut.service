@@ -1,0 +1,47 @@
+# FinalCut Systemd Service File
+# 
+# This file defines a systemd service for the FinalCut application.
+# It provides an alternative to PM2 for managing the Node.js application.
+#
+# Installation:
+# 1. Copy this file to /etc/systemd/system/finalcut.service
+# 2. Update the paths and user in this file as needed
+# 3. Enable and start the service:
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable finalcut.service
+#    sudo systemctl start finalcut.service
+#
+# Management Commands:
+# - Start: sudo systemctl start finalcut
+# - Stop: sudo systemctl stop finalcut
+# - Restart: sudo systemctl restart finalcut
+# - Status: sudo systemctl status finalcut
+# - Logs: journalctl -u finalcut -f
+
+[Unit]
+Description=FinalCut Video Editor Application
+Documentation=https://github.com/yishengjiang99/pages
+After=network.target
+
+[Service]
+Type=simple
+User=finalcut
+WorkingDirectory=/home/finalcut/apps/pages/finalcut
+Environment=NODE_ENV=production
+EnvironmentFile=/home/finalcut/apps/pages/finalcut/.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=finalcut
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Launch Chrome → Vite",
+            "url": "http://localhost:5173", // ← match your vite server port
+            "webRoot": "${workspaceFolder}/src",
+            "sourceMaps": true,
+            "breakOnLoad": true, // helps with initial-load breakpoints
+            "preLaunchTask": "npm: dev", // optional: auto-start vite
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/**",
+                "!**/node_modules/**"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,6 @@
+This directory should contain BigBuckBunny.mp4 for the "Try with Sample Video" feature.
+
+To download the sample video, run:
+curl -o BigBuckBunny.mp4 "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+
+Or place any MP4 video file here and name it BigBuckBunny.mp4
