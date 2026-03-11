@@ -180,10 +180,11 @@ export function useCallAPI({
               id: messageIdCounterRef.current++
             });
           }
-          await callAPIRef.current(currentMessages);
         } finally {
+          // Hide spinner as soon as video processing is done, before the follow-up API call
           setProcessing(false);
         }
+        await callAPIRef.current(currentMessages);
       }
     } catch (error) {
       addMessage({ text: 'Error communicating with xAI API: ' + error.message });
