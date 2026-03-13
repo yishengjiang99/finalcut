@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Video Editor Chat</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+      window.__FINALCUT_SAMPLE_TOKEN_PROMISE__ = fetch('https://grepawk.com/api/sample-access-token')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => data && data.token ? data.token : null)
+        .catch(() => null);
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
