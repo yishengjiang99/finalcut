@@ -32,7 +32,7 @@ const sampleCommands = [
 // Welcome message with sample links
 const welcomeMessage = {
   role: 'assistant',
-  content: 'Welcome to FinalCut! Upload a video or audio file to get started. Try these sample commands:',
+  content: 'Welcome to FinalCap! Upload a video or audio file to get started. Try these sample commands:',
   id: 0,
   showSampleLinks: true
 };
@@ -407,7 +407,7 @@ export default function App() {
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
           <div style={{ maxWidth: '800px', width: '100%', color: '#c9d1d9', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h1 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '10px', color: '#ffffff', textAlign: 'center' }}>
-              FinalCut Video Editor
+              FinalCap - AI Video Editor
             </h1>
             <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center', color: '#8b949e' }}>
               AI-powered video and audio editing at your fingertips
@@ -485,7 +485,7 @@ export default function App() {
           color: '#8b949e',
           fontSize: '14px'
         }}>
-          <p style={{ margin: '0 0 8px 0' }}>© 2026 FinalCut Video Editor. All rights reserved.</p>
+          <p style={{ margin: '0 0 8px 0' }}>© 2026 FinalCap - AI Video Editor. All rights reserved.</p>
           <p style={{ margin: 0, fontSize: '12px' }}>AI-powered video editing made simple</p>
         </footer>
       </div>
@@ -613,7 +613,7 @@ export default function App() {
           color: '#8b949e',
           fontSize: '12px'
         }}>
-          <p style={{ margin: 0 }}>© 2026 FinalCut Video Editor. All rights reserved.</p>
+          <p style={{ margin: 0 }}>© 2026 FinalCap - AI Video Editor. All rights reserved.</p>
         </footer>
       </main>
     </div>
