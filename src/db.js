@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { createHash, randomBytes } from 'crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -72,6 +73,19 @@ export async function initDatabase() {
       )
     `);
 
+    // Mobile API access tokens (Bearer). Store only SHA-256 hashes.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS api_tokens (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        token_hash CHAR(64) NOT NULL UNIQUE,
+        expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_api_tokens_user (user_id),
+        INDEX idx_api_tokens_expires (expires_at)
+      )
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -135,6 +149,52 @@ export async function getRecentLessons(userId, limit = 7) {
   }
 }
 
+export function hashApiToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Issue a mobile Bearer access token for a user.
+ * Returns the raw token (show once) and TTL metadata.
+ */
+export async function createApiToken(userId, ttlMs) {
+  const pool = getPool();
+  const token = randomBytes(32).toString('hex');
+  const tokenHash = hashApiToken(token);
+  const expiresAt = new Date(Date.now() + ttlMs);
+  await pool.query(
+    'INSERT INTO api_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
+    [userId, tokenHash, expiresAt]
+  );
+  return { token, expiresInMs: ttlMs, expiresAt };
+}
+
+export async function findUserByApiToken(token) {
+  if (typeof token !== 'string' || token.length < 32) {
+    return null;
+  }
+  const pool = getPool();
+  const tokenHash = hashApiToken(token);
+  const [rows] = await pool.query(
+    `SELECT u.* FROM api_tokens t
+     INNER JOIN users u ON u.id = t.user_id
+     WHERE t.token_hash = ? AND t.expires_at > UTC_TIMESTAMP()
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return rows[0] || null;
+}
+
+export async function revokeApiToken(token) {
+  if (typeof token !== 'string' || token.length < 32) {
+    return false;
+  }
+  const pool = getPool();
+  const tokenHash = hashApiToken(token);
+  const [result] = await pool.query('DELETE FROM api_tokens WHERE token_hash = ?', [tokenHash]);
+  return result.affectedRows > 0;
+}
+
 export async function saveLesson(userId, lesson) {
   if (!lesson) return;
   try {
@@ -161,6 +221,9 @@ export default {
   findUserByGoogleId,
   createUser,
   updateUserSubscription,
+  createApiToken,
+  findUserByApiToken,
+  revokeApiToken,
   getRecentLessons,
   saveLesson,
 };

@@ -14,10 +14,16 @@ export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 export const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback';
+export const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID || '';
 export const SESSION_SECRET = process.env.SESSION_SECRET;
 export const APP_BASE_URL = process.env.APP_BASE_URL;
 export const ALLOW_UNAUTH_SAMPLE_MODE = process.env.ALLOW_UNAUTH_SAMPLE_MODE !== 'false';
 export const SAMPLE_TOKEN_TTL_MS = Math.max(60_000, Number(process.env.SAMPLE_TOKEN_TTL_MS || 10 * 60 * 1000));
+// Mobile Bearer access token TTL (default 30 days)
+export const MOBILE_ACCESS_TOKEN_TTL_MS = Math.max(
+  60_000,
+  Number(process.env.MOBILE_ACCESS_TOKEN_TTL_MS || 30 * 24 * 60 * 60 * 1000)
+);
 
 if (!XAI_API_TOKEN) {
   console.error('ERROR: XAI_API_TOKEN environment variable is not set');

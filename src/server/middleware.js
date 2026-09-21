@@ -6,6 +6,7 @@ import {
   SAMPLE_TOKEN_TTL_MS,
   APP_BASE_URL,
 } from './config.js';
+import { findUserByApiToken } from '../db.js';
 
 export const sampleAccessTokens = new Map();
 
@@ -58,20 +59,70 @@ export const videoProcessLimiter = rateLimit({
   message: 'Too many video processing requests, please try again later.'
 });
 
-export function requireAuthenticatedUser(req, res, next) {
-  if (isValidSampleModeRequest(req)) {
-    return next();
+/**
+ * Extract Bearer token from Authorization header.
+ * Returns null if missing/malformed.
+ */
+export function extractBearerToken(req) {
+  const header = req.headers.authorization;
+  if (typeof header !== 'string') return null;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  if (!match) return null;
+  const token = match[1].trim();
+  return token || null;
+}
+
+/**
+ * Attach req.user from a valid Bearer API token when present.
+ * Does not reject unauthenticated requests — use requireAuthenticatedUser for that.
+ * @returns {Promise<boolean>} true if a Bearer user was attached
+ */
+export async function attachBearerUser(req) {
+  const token = extractBearerToken(req);
+  if (!token) return false;
+  const user = await findUserByApiToken(token);
+  if (!user) {
+    const err = new Error('Invalid or expired access token');
+    err.statusCode = 401;
+    throw err;
   }
-  if (req.headers['sample-access-token']) {
-    return res.status(401).json({ error: 'Invalid or expired sample access token' });
+  user.has_subscription = Boolean(user.has_subscription);
+  req.user = user;
+  req.authMethod = 'bearer';
+  return true;
+}
+
+export async function requireAuthenticatedUser(req, res, next) {
+  try {
+    if (isValidSampleModeRequest(req)) {
+      return next();
+    }
+    if (req.headers['sample-access-token']) {
+      return res.status(401).json({ error: 'Invalid or expired sample access token' });
+    }
+
+    // Mobile / API clients: Authorization: Bearer <accessToken>
+    if (extractBearerToken(req)) {
+      await attachBearerUser(req);
+      return next();
+    }
+
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: 'Invalid user session' });
+    }
+    req.authMethod = req.authMethod || 'session';
+    next();
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status === 401) {
+      return res.status(401).json({ error: error.message || 'Authentication required' });
+    }
+    console.error('requireAuthenticatedUser error:', error);
+    return res.status(500).json({ error: 'Authentication error' });
   }
-  if (!req.isAuthenticated || !req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  if (!req.user || !req.user.id) {
-    return res.status(401).json({ error: 'Invalid user session' });
-  }
-  next();
 }
 
 export function requireActiveSubscription(req, res, next) {
