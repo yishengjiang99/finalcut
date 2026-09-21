@@ -3,8 +3,9 @@ import { extractBearerToken } from '../server/middleware.js';
 
 describe('Mobile Bearer auth helpers', () => {
   it('extracts Bearer tokens case-insensitively', () => {
-    const req = { headers: { authorization: 'Bearer abcdefghijklmnopqrstuvwxyz012345' } };
-    expect(extractBearerToken(req)).toBe('abcdefghijklmnopqrstuvwxyz012345');
+    // Fixture only — not a real credential (GitGuardian-safe).
+    const req = { headers: { authorization: 'Bearer test-fixture-bearer-token-not-a-real-secret' } };
+    expect(extractBearerToken(req)).toBe('test-fixture-bearer-token-not-a-real-secret');
   });
 
   it('returns null when Authorization is missing or malformed', () => {
