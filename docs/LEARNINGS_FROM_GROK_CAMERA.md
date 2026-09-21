@@ -41,17 +41,15 @@ FinalCut today: web Stripe + Google OAuth.
 
 ---
 
-## 3. Auth for native clients: Bearer > cookies
+## 3. Auth for native clients
 
-Web sessions (`express-session` + Google OAuth cookies) are awkward on iOS (`WKWebView` / ASWebAuthenticationSession edge cases, `Secure` cookies, CORS).
+Web sessions (`express-session` + Google OAuth cookies) are awkward on iOS.
 
-Grok Camera used guest cookies + device tokens for some paths; FinalCut is correctly moving to:
+**v1 (now):** skip Google Sign-In. Use the SignIn **stub** + DEBUG-only `sample-access-token` so the iOS shell can hit APIs. Do not treat demo tokens as the prod auth path.
 
-1. Google Sign-In (or Sign in with Apple) on device  
-2. Exchange for **Bearer** access token  
-3. `Authorization: Bearer …` on API calls  
+**Later:** Google/Apple Sign-In → exchange for **Bearer** (`Authorization: Bearer …`) alongside cookies for web. Bearer work can land ahead of product wiring (mobile Bearer PR) but is **not** a v1 blocker. When enabling: set any new server env (e.g. `GOOGLE_IOS_CLIENT_ID`) on the **box** `.env`, then restart `finalcut.service`.
 
-See open work: mobile Bearer PR. Also set any new server env (e.g. `GOOGLE_IOS_CLIENT_ID`) on the **box** `.env`, then restart `finalcut.service`.
+**Backend caveats:** job `resultUrl` downloads still need auth; in-memory jobs die on `finalcut.service` restart (OK for scaffold). StoreKit entitlement verify is not on the server yet — web Stripe gate still applies until Apple receipts land.
 
 ---
 
@@ -64,7 +62,7 @@ FinalCut FFmpeg jobs are **worse** if sync — iOS will background-kill long upl
 **Pattern that worked / is right for FinalCut**
 
 - `POST` → `{ jobId }`
-- `GET /jobs/:id` → `queued | running | succeeded | failed` + `progress?` + absolute `resultUrl`
+- `GET /api/jobs/:id` → `queued | running | succeeded | failed` + `progress?` + absolute `resultUrl`
 - Absolute URLs via prod `APP_BASE_URL` / `https://grepawk.com`
 - Poll-only is fine for v0; add SSE later only if UX needs it
 
@@ -148,7 +146,8 @@ FinalCut brand + timeline/chat editor UX stay distinct.
 ## Quick checklist for FinalCut iOS v1
 
 - [ ] Release API base = `https://grepawk.com` (or documented API origin on that host)
-- [ ] Bearer auth from Google/Apple; no reliance on web session cookies
+- [ ] v1: DEBUG `sample-access-token` + SignIn stub (no Google yet)
+- [ ] Later: Bearer from Google/Apple; no reliance on web session cookies for iOS
 - [ ] Upload + FFmpeg via async job + poll + `resultUrl`
 - [ ] StoreKit plan before App Review (or documented web-only billing boundary)
 - [ ] Export compliance + privacy URLs accurate before TF/ASC submit
