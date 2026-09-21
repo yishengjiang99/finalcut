@@ -72,3 +72,24 @@ struct JobPollResponse: Codable, Equatable {
     var createdAt: String?
     var updatedAt: String?
 }
+
+
+// MARK: - Captions (POST /api/generate-captions, /api/translate-captions)
+
+/// Soft caption payloads from generate / translate (JSON `{ srt, vtt }`).
+struct CaptionsResponse: Codable, Equatable {
+    var srt: String
+    var vtt: String
+    var language: String?
+}
+
+struct TranslateCaptionsRequest: Codable, Equatable {
+    var srtContent: String
+    var targetLanguage: String
+}
+
+struct TranslateCaptionsResponse: Codable, Equatable {
+    var srt: String
+    var vtt: String
+    var targetLanguage: String
+}

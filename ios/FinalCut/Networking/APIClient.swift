@@ -347,7 +347,7 @@ final class APIClient {
         return data
     }
 
-    // MARK: - Video / captions (Bearer)
+    // MARK: - Video / captions
 
     func processVideo(body: Data, contentType: String, operationHeader: String? = nil) async throws -> Data {
         var request = makeRequest(
@@ -378,16 +378,122 @@ final class APIClient {
         return data
     }
 
-    func generateCaptions(body: Data, contentType: String = "application/json") async throws -> Data {
-        try await postAuthorized(url: generateCaptionsURL, body: body, contentType: contentType)
+    /// POST /api/generate-captions — raw video body + optional `X-Args` JSON (`language`).
+    /// Returns soft `{ srt, vtt }`. 422 = no speech (do not invent VTT).
+    func generateCaptions(
+        videoData: Data,
+        mimeType: String = "video/mp4",
+        language: String = "auto"
+    ) async throws -> CaptionsResponse {
+        var request = makeRequest(
+            url: generateCaptionsURL,
+            method: "POST",
+            auth: .bearerPreferred,
+            body: videoData,
+            contentType: mimeType
+        )
+        let argsData = try JSONSerialization.data(withJSONObject: ["language": language], options: [])
+        if let argsString = String(data: argsData, encoding: .utf8) {
+            request.setValue(argsString, forHTTPHeaderField: "X-Args")
+        }
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 422 {
+            throw APIError.noSpeechDetected
+        }
+        try Self.throwIfNeeded(response: response, data: data)
+        do {
+            return try decoder.decode(CaptionsResponse.self, from: data)
+        } catch {
+            throw APIError.decoding
+        }
     }
 
-    func generateCaptionsDiarized(body: Data, contentType: String = "application/json") async throws -> Data {
+    func generateCaptionsDiarized(body: Data, contentType: String) async throws -> Data {
         try await postAuthorized(url: generateCaptionsDiarizedURL, body: body, contentType: contentType)
     }
 
-    func translateCaptions(body: Data, contentType: String = "application/json") async throws -> Data {
-        try await postAuthorized(url: translateCaptionsURL, body: body, contentType: contentType)
+    /// POST /api/translate-captions — JSON `{ srtContent, targetLanguage }` → `{ srt, vtt, targetLanguage }`.
+    func translateCaptions(srtContent: String, targetLanguage: String) async throws -> TranslateCaptionsResponse {
+        let payload = TranslateCaptionsRequest(srtContent: srtContent, targetLanguage: targetLanguage)
+        let body = try encoder.encode(payload)
+        let data = try await postAuthorized(url: translateCaptionsURL, body: body)
+        do {
+            return try decoder.decode(TranslateCaptionsResponse.self, from: data)
+        } catch {
+            throw APIError.decoding
+        }
+    }
+
+    /// Burn-in MUST be sync multipart `POST /api/process-video` with `operation=burn_subtitles`.
+    /// Do **not** use `/api/jobs/process-video` — jobs/ffmpegOps rejects `burn_subtitles` / `add_audio_track`.
+    /// Multipart fields: `video`, `operation`, `args` JSON (`srtContent`, optional `translatedSrtContent`).
+    /// Response body is burned `video/mp4` bytes.
+    func burnSubtitles(
+        videoData: Data,
+        fileName: String = "video.mp4",
+        mimeType: String = "video/mp4",
+        srtContent: String,
+        translatedSrtContent: String? = nil,
+        style: String = "default",
+        position: String = "bottom"
+    ) async throws -> Data {
+        var args: [String: Any] = [
+            "srtContent": srtContent,
+            "style": style,
+            "position": position,
+        ]
+        if let translatedSrtContent, !translatedSrtContent.isEmpty {
+            args["translatedSrtContent"] = translatedSrtContent
+        }
+        let multipart = try Self.makeMultipartProcessVideoBody(
+            videoData: videoData,
+            fileName: fileName,
+            mimeType: mimeType,
+            operation: "burn_subtitles",
+            args: args
+        )
+        return try await processVideo(
+            body: multipart.data,
+            contentType: "multipart/form-data; boundary=\(multipart.boundary)"
+        )
+    }
+
+    /// Shared multipart builder for sync process-video (`burn_subtitles` / `add_audio_track`).
+    static func makeMultipartProcessVideoBody(
+        videoData: Data,
+        fileName: String,
+        mimeType: String,
+        operation: String,
+        args: [String: Any]
+    ) throws -> (data: Data, boundary: String) {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let crlf = "\r\n"
+
+        func append(_ string: String) {
+            body.append(Data(string.utf8))
+        }
+
+        func appendField(name: String, value: String) {
+            append("--\(boundary)\(crlf)")
+            append("Content-Disposition: form-data; name=\"\(name)\"\(crlf)\(crlf)")
+            append("\(value)\(crlf)")
+        }
+
+        appendField(name: "operation", value: operation)
+        if !args.isEmpty {
+            let argsData = try JSONSerialization.data(withJSONObject: args, options: [])
+            let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
+            appendField(name: "args", value: argsString)
+        }
+
+        append("--\(boundary)\(crlf)")
+        append("Content-Disposition: form-data; name=\"video\"; filename=\"\(fileName)\"\(crlf)")
+        append("Content-Type: \(mimeType)\(crlf)\(crlf)")
+        body.append(videoData)
+        append(crlf)
+        append("--\(boundary)--\(crlf)")
+        return (body, boundary)
     }
 
     /// Server Stripe helper — unused by iOS Paywall (StoreKit only). Kept for API path completeness.
@@ -421,6 +527,8 @@ enum APIError: Error, LocalizedError, Equatable {
     case httpStatus(Int, String?)
     case decoding
     case message(String)
+    /// 422 from /api/generate-captions — no speech in clip.
+    case noSpeechDetected
 
     var errorDescription: String? {
         switch self {
@@ -430,6 +538,18 @@ enum APIError: Error, LocalizedError, Equatable {
             return "Failed to decode response"
         case .message(let text):
             return text
+        case .noSpeechDetected:
+            return "no speech"
+        }
+    }
+
+    /// Inline chat copy for caption failures (Design UX).
+    var captionsChatMessage: String {
+        switch self {
+        case .noSpeechDetected:
+            return "Couldn't generate captions — no speech"
+        default:
+            return "Couldn't generate captions — try again"
         }
     }
 }

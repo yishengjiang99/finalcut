@@ -5,6 +5,8 @@ import AVKit
 struct PreviewPaneView: View {
     var state: EditorState
     var videoURL: URL?
+    /// Dimmer copy while `processing` (Design: “Generating captions…” / “Translating…” / burn-in).
+    var processingMessage: String = ProcessingOverlayKind.editing.message
 
     @State private var player: AVPlayer?
 
@@ -26,12 +28,20 @@ struct PreviewPaneView: View {
             }
 
             if state == .uploading || state == .processing {
-                ProgressView()
-                    .tint(AppTheme.accent)
-                    .scaleEffect(1.2)
-                    .padding(16)
-                    .background(AppTheme.surfaceElevated.opacity(0.9))
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .tint(AppTheme.accent)
+                        .scaleEffect(1.2)
+                    if state == .processing {
+                        Text(processingMessage)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(16)
+                .background(AppTheme.surfaceElevated.opacity(0.9))
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
             }
         }
         .accessibilityIdentifier("Preview")
