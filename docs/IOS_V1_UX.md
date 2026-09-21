@@ -14,8 +14,8 @@
 | Heavy edits | Existing Node/FFmpeg API (grepawk.com) — no on-device FFmpeg |
 | Preview / scrub | Local AVKit / AVFoundation only |
 | Timeline | Stub only (single clip scrubber under preview) — not multi-track |
-| Auth | Placeholder screens OK (Google vs Sign in with Apple = open) |
-| Paywall | StoreKit placeholder OK (vs web Stripe = open) |
+| Auth | `SignIn` stub only — no Google / Apple in this slice |
+| Paywall | StoreKit IAP (buy/restore) — not web Stripe Checkout |
 | First tools | Trim, text overlay, transitions, audio filters, Grok chat tools |
 
 ---
@@ -25,8 +25,8 @@
 Use these identifiers in navigation and file names:
 
 1. `Landing`
-2. `SignIn` — stub
-3. `Paywall` — StoreKit stub
+2. `SignIn` — stub (no Google)
+3. `Paywall` — StoreKit IAP (buy/restore placeholders)
 4. `Editor` — single root (not a tab bar)
 5. `ExportSheet`
 
@@ -108,10 +108,11 @@ Dark editor chrome. Quiet, near-black canvas. Chat is the edit surface — **not
 
 ### Chat edit
 1. User types natural-language edit (or taps a SampleChip)  
-2. Append user bubble → `processing`  
-3. Call existing chat + FFmpeg API  
-4. On success: assistant bubble + result thumb; swap preview to processed clip → `ready`  
-5. On failure: error bubble → `failed`
+2. Append user bubble → `processing` (dimmer stays up)  
+3. `POST /api/jobs/process-video` (multipart) → `{ jobId }`  
+4. Poll `GET /api/jobs/:id` while status is `queued` or `running`  
+5. On `succeeded`: assistant bubble + result thumb from absolute `resultUrl` on `https://grepawk.com`; swap preview → `ready`  
+6. On `failed`: error bubble → `failed`
 
 ### Export
 1. Tap Export → present `ExportSheet`  
@@ -162,11 +163,13 @@ Match web quick commands where useful:
 
 ---
 
-## Open product decisions (do not block scaffold)
+## Locked product decisions
 
-1. Sign in with Apple vs Google (or both)  
-2. StoreKit product shape vs web Stripe subscription  
-3. When to require auth relative to sample video  
+1. **Paywall** = StoreKit IAP (not Stripe web)  
+2. **SignIn** = stub / no Google for this scaffold  
+3. Sample-video / DEBUG path may use sample-access-token (Backend #47) without full auth
+
+Still open later: Sign in with Apple vs Google for production identity; StoreKit product SKUs.  
 
 ---
 
