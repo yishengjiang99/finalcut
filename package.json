@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest --run",
     "server": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:live-captions": "vitest --run src/test/live-captions.e2e.test.js"
   },
   "dependencies": {
     "axios": "^1.13.5",

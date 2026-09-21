@@ -164,5 +164,21 @@ export function mergeTranslatedSrt(originalSrt, translatedRaw) {
 
 export function srtHasSpeech(srt) {
   const cues = parseSrtCues(srt);
-  return cues.some(c => c.text && c.text.replace(/\[[^\]]*\]/g, '').trim().length > 0);
+  const texts = cues
+    .map(c => (c.text || '').replace(/\[[^\]]*\]/g, '').trim())
+    .filter(Boolean);
+  if (!texts.length) return false;
+
+  // Whisper-family models often hallucinate on silence / near-silence.
+  const joined = texts.join(' ').trim();
+  const lower = joined.toLowerCase();
+  const trivial = new Set([
+    'you', 'thanks', 'thank you', 'thank you.', 'thanks for watching',
+    'thanks for watching.', 'bye', 'the end', '.', '...',
+  ]);
+  if (trivial.has(lower)) return false;
+  if (texts.length === 1 && texts[0].split(/\s+/).length <= 2 && texts[0].length < 12) {
+    return false;
+  }
+  return true;
 }
