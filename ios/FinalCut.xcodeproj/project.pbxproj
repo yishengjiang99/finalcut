@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BBE32E010B504F31BC957E8B /* StoreKitPurchaseStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2EA2AC7EC9D4B6BBC3F0AA3 /* StoreKitPurchaseStub.swift */; };
 		9F319DEF88764177A7261FB2 /* FinalCutApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF99BBA1B92461D91BDB465 /* FinalCutApp.swift */; };
 		BF632DFF66964B5F9456C5F8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B364855EAC084A2C921B51CA /* ContentView.swift */; };
 		AAB276A57F434CE499CC1C50 /* EditorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8402916397845F3B4C09078 /* EditorState.swift */; };
@@ -32,6 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B2EA2AC7EC9D4B6BBC3F0AA3 /* StoreKitPurchaseStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitPurchaseStub.swift; sourceTree = "<group>"; };
 		FDF99BBA1B92461D91BDB465 /* FinalCutApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalCutApp.swift; sourceTree = "<group>"; };
 		B364855EAC084A2C921B51CA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E8402916397845F3B4C09078 /* EditorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorState.swift; sourceTree = "<group>"; };
@@ -161,6 +163,7 @@
 			isa = PBXGroup;
 			children = (
 				30393A1FFA234AA49E7981C1 /* PaywallView.swift */,
+				B2EA2AC7EC9D4B6BBC3F0AA3 /* StoreKitPurchaseStub.swift */,
 			);
 			path = Paywall;
 			sourceTree = "<group>";
@@ -304,6 +307,7 @@
 				923F4C12D222427682D18271 /* LandingView.swift in Sources */,
 				92EF861F56A74C15B759DD05 /* SignInView.swift in Sources */,
 				B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */,
+				BBE32E010B504F31BC957E8B /* StoreKitPurchaseStub.swift in Sources */,
 				BE9592D7F57E46BAA68C3B35 /* EditorView.swift in Sources */,
 				FBCD626AF515417B80A9F8F3 /* TopBarView.swift in Sources */,
 				58DF57BA5CED43BFA53F3018 /* PreviewPaneView.swift in Sources */,

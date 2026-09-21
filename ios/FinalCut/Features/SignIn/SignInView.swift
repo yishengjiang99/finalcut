@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// Placeholder SignIn — Google vs Apple still open (Design).
+/// Placeholder SignIn — Google Sign-In deferred (product decision).
+/// Non-functional auth; local demo can continue into Paywall / Editor.
 struct SignInView: View {
     @EnvironmentObject private var appModel: AppModel
-    @State private var isBusy = false
-    @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -26,7 +25,7 @@ struct SignInView: View {
                 Text("Sign in")
                     .font(.title.bold())
                     .foregroundStyle(AppTheme.textPrimary)
-                Text("Provider TBD — Google vs Apple still open.\nBearer token via mobile Google stub when ready.")
+                Text("Coming soon — Google Sign-In deferred for this scaffold.\nContinue for a local demo of the editor shell.")
                     .font(.footnote)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -35,48 +34,40 @@ struct SignInView: View {
 
             VStack(spacing: 12) {
                 Button {
-                    // Stub: would obtain Google ID token then call APIClient.authenticateWithGoogle
-                    appModel.completeSignIn(sampleMode: false)
+                    // Non-functional — no Google SDK / mobile auth call.
                 } label: {
-                    Label("Continue with Google (stub)", systemImage: "g.circle.fill")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accent)
-                .disabled(isBusy)
-
-                Button {
-                    appModel.completeSignIn(sampleMode: false)
-                } label: {
-                    Label("Continue with Apple (stub)", systemImage: "apple.logo")
+                    Label("Sign in with Google — Coming soon", systemImage: "g.circle.fill")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
                 .buttonStyle(.bordered)
-                .disabled(isBusy)
+                .disabled(true)
+
+                Button {
+                    // Local demo path into Paywall → Editor (no auth).
+                    appModel.completeSignIn(sampleMode: false)
+                } label: {
+                    Text("Continue to editor (local demo)")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accent)
 
                 #if DEBUG
                 Button {
                     Task { await enterSampleMode() }
                 } label: {
-                    Text("Try sample mode (DEBUG)")
+                    Text("Continue with sample mode (DEBUG)")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
                 .buttonStyle(.bordered)
                 .tint(AppTheme.textSecondary)
-                .disabled(isBusy)
                 #endif
             }
             .padding(.horizontal, 24)
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.danger)
-                    .padding(.horizontal)
-            }
 
             Spacer()
         }
@@ -86,17 +77,15 @@ struct SignInView: View {
     }
 
     #if DEBUG
+    @State private var sampleError: String?
+
     private func enterSampleMode() async {
-        isBusy = true
-        defer { isBusy = false }
         do {
             _ = try await appModel.apiClient.fetchSampleAccessToken()
-            appModel.completeSignIn(sampleMode: true)
         } catch {
-            // Still allow continuing in sample UI even if endpoint fails offline.
-            errorMessage = "Sample token fetch failed — continuing in demo UI."
-            appModel.completeSignIn(sampleMode: true)
+            // Offline / endpoint unavailable — still allow demo UI.
         }
+        appModel.completeSignIn(sampleMode: true)
     }
     #endif
 }

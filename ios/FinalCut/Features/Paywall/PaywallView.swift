@@ -1,9 +1,11 @@
 import SwiftUI
 import StoreKit
 
-/// Paywall placeholder — StoreKit vs Stripe still open.
+/// Paywall — StoreKit 2 In-App Purchase stub (NOT Stripe Checkout).
 struct PaywallView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var statusMessage: String?
+    @State private var isBusy = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -28,7 +30,7 @@ struct PaywallView: View {
                 Text("Unlock FinalCut")
                     .font(.title.bold())
                     .foregroundStyle(AppTheme.textPrimary)
-                Text("StoreKit placeholder. Server Stripe checkout (`/api/create-checkout-session`) remains available.")
+                Text("StoreKit 2 In-App Purchase stub.\nProduct: \(StoreKitPurchaseStub.monthlyProductID)\nDoes not open Stripe URLs.")
                     .font(.footnote)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -37,18 +39,35 @@ struct PaywallView: View {
 
             VStack(spacing: 12) {
                 Button {
-                    // StoreKit purchase stub
-                    appModel.unlockEditor()
+                    Task { await buy() }
                 } label: {
-                    Text("Subscribe (StoreKit stub)")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                    Group {
+                        if isBusy {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Subscribe (StoreKit)")
+                        }
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.accent)
+                .disabled(isBusy)
 
-                Button("Continue free / already paid") {
+                Button {
+                    Task { await restore() }
+                } label: {
+                    Text("Restore purchases")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBusy)
+
+                Button("Continue without purchase (local demo)") {
                     appModel.unlockEditor()
                 }
                 .font(.subheadline)
@@ -56,11 +75,58 @@ struct PaywallView: View {
             }
             .padding(.horizontal, 24)
 
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppTheme.background.ignoresSafeArea())
         .accessibilityIdentifier("Paywall")
+        .task {
+            // Warm product fetch; empty in simulator without StoreKit config is fine.
+            let products = await StoreKitPurchaseStub.loadProducts()
+            if products.isEmpty {
+                statusMessage = "No StoreKit products loaded (add a StoreKit Configuration or App Store Connect product)."
+            }
+        }
+    }
+
+    private func buy() async {
+        isBusy = true
+        defer { isBusy = false }
+        let outcome = await StoreKitPurchaseStub.purchaseMonthly()
+        switch outcome {
+        case .success:
+            statusMessage = "Purchase succeeded."
+            appModel.unlockEditor()
+        case .cancelled:
+            statusMessage = "Purchase cancelled."
+        case .pending:
+            statusMessage = "Purchase pending approval."
+        case .unavailable:
+            statusMessage = "Product unavailable — continuing local demo."
+            appModel.unlockEditor()
+        case .failed(let message):
+            statusMessage = "Purchase failed: \(message)"
+        }
+    }
+
+    private func restore() async {
+        isBusy = true
+        defer { isBusy = false }
+        let ok = await StoreKitPurchaseStub.restoreEntitlements()
+        if ok {
+            statusMessage = "Entitlement restored."
+            appModel.unlockEditor()
+        } else {
+            statusMessage = "No entitlement found (simulator without transactions is expected)."
+        }
     }
 }
 

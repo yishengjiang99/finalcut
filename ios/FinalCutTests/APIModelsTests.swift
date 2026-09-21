@@ -50,7 +50,7 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(token.expiresInMs, 3_600_000)
     }
 
-    /// Matches Backend PR #46 response shape.
+    /// Decodes unused mobile Google response shape (future auth; not wired to SignIn).
     func testMobileGoogleAuthDecode() throws {
         let json = """
         {"accessToken":"tok-abc","expiresIn":2592000000,"tokenType":"Bearer","user":{"email":"x@y.z","name":"Pat","hasSubscription":false}}

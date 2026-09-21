@@ -2,9 +2,9 @@ import Foundation
 
 /// HTTP client for FinalCut backend.
 ///
-/// Auth priority (mobile):
-/// 1. `Authorization: Bearer <accessToken>` on chat / process-video / transition / captions / auth/status
-/// 2. Sample mode: `sample-access-token` header — **DEBUG / demo flag only**
+/// Auth for this scaffold (Google Sign-In deferred):
+/// 1. **DEBUG / demo:** `sample-access-token` header when sample mode is enabled
+/// 2. Optional unused Bearer (`accessToken`) storage/helpers for a future auth phase — not wired to SignIn
 /// 3. Cookie jar via `HTTPCookieStorage` is optional/temporary; do not rely on it as primary
 final class APIClient {
     private let session: URLSession
@@ -110,8 +110,8 @@ final class APIClient {
         return try decoder.decode(AuthStatus.self, from: data)
     }
 
-    /// Stub: POST /api/auth/mobile/google `{ idToken }` → `{ accessToken, expiresIn, user }`.
-    /// Endpoint may not exist on server yet; client is ready.
+    /// Unused in this scaffold (Google Sign-In deferred). Kept for a future auth phase.
+    /// POST /api/auth/mobile/google `{ idToken }` → `{ accessToken, expiresIn, tokenType, user }`.
     func authenticateWithGoogle(idToken: String) async throws -> MobileGoogleAuthResponse {
         let payload = MobileGoogleAuthRequest(idToken: idToken)
         let body = try encoder.encode(payload)
@@ -257,6 +257,7 @@ final class APIClient {
         try await postAuthorized(url: translateCaptionsURL, body: body, contentType: contentType)
     }
 
+    /// Server Stripe helper — unused by iOS Paywall (StoreKit only). Kept for API path completeness.
     func createCheckoutSession(body: Data = Data("{}".utf8)) async throws -> CreateCheckoutSessionResponse {
         let data = try await postAuthorized(url: createCheckoutSessionURL, body: body)
         return try decoder.decode(CreateCheckoutSessionResponse.self, from: data)
