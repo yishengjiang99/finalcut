@@ -1,4 +1,4 @@
-# FinalCut — App Review notes (paste into ASC)
+# FinalCap — App Review notes (paste into ASC)
 
 **Build:** ______ (`CFBundleShortVersionString` / `CFBundleVersion`)  
 **Contact email:** yisheng.jiang@gmail.com  
@@ -10,11 +10,11 @@
 
 ## What this app is
 
-FinalCut is a **video editor**: import a clip from Photos, request edits in a chat UI, run server-side processing on grepawk.com, preview, and export. It is **not** a camera app and does not use the live camera for the MVP.
+FinalCap is a **video editor**: import a clip from Photos, request edits in a chat UI, run server-side processing on grepawk.com, preview, and export. It is **not** a camera app and does not use the live camera for the MVP.
 
 ## How to demo (happy path)
 
-1. Launch FinalCut.  
+1. Launch FinalCap.  
 2. **Sign in** with the provided demo account **or** Sign in with Apple/Google (whichever ships in this build).  
 3. Tap **Import** and choose any short sample video from Photos (or the Review device library).  
 4. In chat, try: `Generate captions` (or tap the captions affordance). Wait for soft captions.  

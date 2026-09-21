@@ -1,4 +1,4 @@
-# FinalCut — StoreKit / IAP plan
+# FinalCap — StoreKit / IAP plan
 
 ## Products (placeholders — create in ASC)
 

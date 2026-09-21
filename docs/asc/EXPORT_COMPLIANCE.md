@@ -1,4 +1,4 @@
-# FinalCut — Export compliance
+# FinalCap — Export compliance
 
 ## Answer for standard HTTPS-only builds
 
