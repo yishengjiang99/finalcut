@@ -27,7 +27,7 @@ struct PaywallView: View {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 44))
                     .foregroundStyle(AppTheme.accent)
-                Text("Unlock FinalCut")
+                Text("Unlock FinalCap")
                     .font(.title.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                 Text("StoreKit 2 In-App Purchase stub.\nProduct: \(StoreKitPurchaseStub.monthlyProductID)\nDoes not open Stripe URLs.")

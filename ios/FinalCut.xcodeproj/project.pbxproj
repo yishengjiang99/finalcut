@@ -385,7 +385,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = FinalCut;
+				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save exported videos to your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import videos to edit in FinalCut.";
@@ -415,7 +415,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = FinalCut;
+				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save exported videos to your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import videos to edit in FinalCut.";
