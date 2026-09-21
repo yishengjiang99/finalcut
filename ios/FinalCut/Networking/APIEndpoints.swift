@@ -5,7 +5,10 @@ enum APIEndpoints {
     static let sampleAccessToken = "/api/sample-access-token"
     static let mobileGoogleAuth = "/api/auth/mobile/google"
     static let chat = "/api/chat"
+    /// Sync process-video (web). iOS prefers async jobs path below.
     static let processVideo = "/api/process-video"
+    /// Async job enqueue (multipart) — preferred for iOS.
+    static let jobsProcessVideo = "/api/jobs/process-video"
     static let transitionVideos = "/api/transition-videos"
     static let generateCaptions = "/api/generate-captions"
     static let generateCaptionsDiarized = "/api/generate-captions-diarized"
@@ -14,6 +17,16 @@ enum APIEndpoints {
     static let verifyCheckoutSession = "/api/verify-checkout-session"
     static let authGoogle = "/auth/google"
     static let authLogout = "/auth/logout"
+
+    /// Poll job status: GET /api/jobs/:id
+    static func jobStatus(_ id: String) -> String {
+        "/api/jobs/\(id)"
+    }
+
+    /// Download job result media: GET /api/jobs/:id/result (auth may still be required).
+    static func jobResult(_ id: String) -> String {
+        "/api/jobs/\(id)/result"
+    }
 
     static func url(base: URL, path: String) -> URL {
         var normalized = path
