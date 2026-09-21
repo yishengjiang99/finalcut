@@ -63,3 +63,9 @@ Mundo`;
     expect(srtHasSpeech('')).toBe(false);
   });
 });
+
+  it('rejects trivial silence hallucinations', () => {
+    const you = `1\n00:00:00,000 --> 00:00:02,000\nyou`;
+    expect(srtHasSpeech(you)).toBe(false);
+  });
+
