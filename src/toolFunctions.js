@@ -827,80 +827,147 @@ export const toolFunctions = {
     try {
       const language = args.language || 'auto';
       const translateLanguage = args.translate_language || null;
+      const burnIn = args.burn_in !== false; // default true
+      const style = args.style || 'default';
+      const position = args.position || 'bottom';
 
       const fileMimeType = currentFileMimeType || 'video/mp4';
+      const sampleHeaders = sampleModeEnabled && sampleModeAccessToken
+        ? { 'sample-access-token': sampleModeAccessToken }
+        : {};
 
-      // Step 1: Generate captions via OpenAI speech-to-text
+      // Step 1: Generate captions via OpenAI speech-to-text (server)
       const captionResponse = await fetch('/api/generate-captions', {
         method: 'POST',
         headers: {
           'Content-Type': fileMimeType,
           'x-args': JSON.stringify({ language }),
-          ...(sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
+          ...sampleHeaders,
         },
         body: videoFileData
       });
 
       if (!captionResponse.ok) {
-        const errorData = await captionResponse.json();
+        let errorData = {};
+        try { errorData = await captionResponse.json(); } catch (_) {}
         throw new Error(errorData.error || 'Failed to generate captions');
       }
 
       const { srt, vtt } = await captionResponse.json();
 
-      if (!srt) {
+      if (!srt || !String(srt).trim()) {
         throw new Error('No captions were generated from the audio');
       }
 
-      // Step 2: Build transcript excerpt and subtitle download URLs for the original language
+      // Step 2: Excerpt + soft-track preview URLs
       const srtBlob = new Blob([srt], { type: 'text/plain' });
       const srtUrl = URL.createObjectURL(srtBlob);
       const lines = srt.split('\n').filter(l => l.trim() && !/^\d+$/.test(l.trim()) && !l.includes('-->'));
       const excerpt = lines.slice(0, 4).join(' ').substring(0, 200);
-
-      // Step 3: Show original video with soft subtitle track (no re-encoding).
       const vttBlob = new Blob([vtt], { type: 'text/vtt' });
       const vttUrl = URL.createObjectURL(vttBlob);
-      // Create the original video URL once; reuse it for translated track preview too
       const originalVideoUrl = URL.createObjectURL(new Blob([videoFileData], { type: fileMimeType }));
       const langDesc = language === 'auto' ? 'auto-detected' : language;
-      addMessage({ text: `Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nVideo with soft subtitles (${langDesc}). SRT download: ${srtUrl}`, videoUrl: originalVideoUrl, mimeType: fileMimeType, vttUrl: vttUrl });
 
-      // Step 4: Optionally translate captions using Grok chat
+      let translatedSrt = null;
+      let translatedVtt = null;
+
+      // Step 3: Optional translation (Grok) — server locks original timestamps
       if (translateLanguage) {
         const translateResponse = await fetch('/api/translate-captions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
+            ...sampleHeaders,
           },
           body: JSON.stringify({ srtContent: srt, targetLanguage: translateLanguage })
         });
 
         if (!translateResponse.ok) {
-          const errorData = await translateResponse.json();
+          let errorData = {};
+          try { errorData = await translateResponse.json(); } catch (_) {}
           throw new Error(errorData.error || 'Failed to translate captions');
         }
 
         const translationResult = await translateResponse.json();
-        const translatedSrt = translationResult.srt;
-
-        // Offer translated subtitle files for download and show video with translated track
-        const translatedSrtBlob = new Blob([translatedSrt], { type: 'text/plain' });
-        addMessage({ text: `Translated subtitles (${translateLanguage}):`, videoUrl: URL.createObjectURL(translatedSrtBlob), videoType: 'subtitle-srt', mimeType: 'text/plain' });
-
-        const translatedVttBlob = new Blob([translationResult.vtt], { type: 'text/vtt' });
-        const translatedVttUrl = URL.createObjectURL(translatedVttBlob);
-        // Reuse the same original video URL for the translated subtitle preview
-        addMessage({ text: `Video with translated subtitles (${translateLanguage}):`, videoUrl: originalVideoUrl, mimeType: fileMimeType, vttUrl: translatedVttUrl });
-
-        return `Captions generated (language: ${langDesc}) and translated to ${translateLanguage}. Soft subtitle tracks shown above — no re-encoding required. SRT files are also available for download.`;
+        translatedSrt = translationResult.srt;
+        translatedVtt = translationResult.vtt;
       }
 
-      return `Captions generated successfully. Language: ${langDesc}. Soft subtitle track added to the video above — no re-encoding required. The original video file is preserved for download.`;
+      // Step 4: Soft preview (always useful) or burn-in into video
+      if (!burnIn) {
+        addMessage({
+          text: `Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nSoft subtitles (${langDesc}). SRT: ${srtUrl}`,
+          videoUrl: originalVideoUrl,
+          mimeType: fileMimeType,
+          vttUrl: vttUrl,
+        });
+        if (translatedSrt) {
+          const translatedSrtBlob = new Blob([translatedSrt], { type: 'text/plain' });
+          addMessage({ text: `Translated subtitles (${translateLanguage}):`, videoUrl: URL.createObjectURL(translatedSrtBlob), videoType: 'subtitle-srt', mimeType: 'text/plain' });
+          const translatedVttUrl = URL.createObjectURL(new Blob([translatedVtt], { type: 'text/vtt' }));
+          addMessage({ text: `Video with translated soft subtitles (${translateLanguage}):`, videoUrl: originalVideoUrl, mimeType: fileMimeType, vttUrl: translatedVttUrl });
+          return `Captions generated (${langDesc}) and translated to ${translateLanguage}. Soft tracks only (burn_in=false).`;
+        }
+        return `Captions generated successfully (${langDesc}). Soft subtitle track only (burn_in=false).`;
+      }
+
+      // burn_in: multipart → process-video burn_subtitles (supports dual-track)
+      const formData = new FormData();
+      formData.append('video', new Blob([videoFileData], { type: fileMimeType }), 'input.mp4');
+      formData.append('operation', 'burn_subtitles');
+      const burnArgs = {
+        srtContent: srt,
+        style,
+        position,
+      };
+      if (translatedSrt) {
+        burnArgs.translatedSrtContent = translatedSrt;
+      }
+      formData.append('args', JSON.stringify(burnArgs));
+
+      const burnResponse = await fetch('/api/process-video', {
+        method: 'POST',
+        headers: sampleHeaders,
+        body: formData,
+      });
+
+      if (!burnResponse.ok) {
+        let errorData = {};
+        try { errorData = await burnResponse.json(); } catch (_) {}
+        // Fall back to soft tracks rather than hard-failing the whole caption flow
+        addMessage({
+          text: `Captions ready but burn-in failed (${errorData.error || burnResponse.status}). Showing soft subtitles instead.`,
+          videoUrl: originalVideoUrl,
+          mimeType: fileMimeType,
+          vttUrl: translatedVtt ? URL.createObjectURL(new Blob([translatedVtt], { type: 'text/vtt' })) : vttUrl,
+        });
+        return `Captions generated (${langDesc}) but burn-in failed: ${errorData.error || burnResponse.status}. Soft subtitles shown.`;
+      }
+
+      const burned = await collectStreamChunks(burnResponse.body.getReader());
+      setVideoFileData(burned);
+      const burnedUrl = URL.createObjectURL(new Blob([burned], { type: 'video/mp4' }));
+      const dual = translatedSrt ? ` Dual-track burn-in (translated ${translateLanguage} + original).` : '';
+      addMessage({
+        text: `Captions burned in (${langDesc}).${dual} Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"`,
+        videoUrl: burnedUrl,
+        mimeType: 'video/mp4',
+      });
+      addMessage({ text: 'SRT download:', videoUrl: srtUrl, videoType: 'subtitle-srt', mimeType: 'text/plain' });
+      if (translatedSrt) {
+        addMessage({
+          text: `Translated SRT (${translateLanguage}):`,
+          videoUrl: URL.createObjectURL(new Blob([translatedSrt], { type: 'text/plain' })),
+          videoType: 'subtitle-srt',
+          mimeType: 'text/plain',
+        });
+      }
+      return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in.`;
     } catch (error) {
       addMessage({ text: 'Error generating captions: ' + error.message });
       return 'Failed to generate captions: ' + error.message;
     }
   },
+
 };

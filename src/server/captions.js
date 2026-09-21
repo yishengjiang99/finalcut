@@ -18,6 +18,12 @@ import {
   secondsToTimestamp,
   buildSrtAndVtt,
 } from './utils.js';
+import {
+  normalizeLanguageCode,
+  mergeTranslatedSrt,
+  srtHasSpeech,
+  stripLlmFences,
+} from './captionHelpers.js';
 
 // ── Batch Audio Transcription Helpers ─────────────────────────────────────────
 // NOTE: Speaker diarization requires the batch POST /v1/audio/transcriptions endpoint.
@@ -102,13 +108,21 @@ export async function splitAudioIfNeeded(wavPath) {
  * Returns normalized segments: Array<{ start, end, speaker, text }>
  * (start/end in seconds; speaker may be null for non-diarizing models)
  */
-export async function transcribeWithOpenAI(filePath, timestampOffsetSec = 0, languageCode = null) {
-  const MODELS = [
-    { model: 'gpt-4o-transcribe-diarize', format: 'diarized_json' },
-    { model: 'gpt-4o-transcribe',         format: 'verbose_json'  },
-    { model: 'gpt-4o-mini-transcribe',    format: 'verbose_json'  },
-    { model: 'whisper-1',                 format: 'verbose_json'  },
-  ];
+export async function transcribeWithOpenAI(filePath, timestampOffsetSec = 0, languageCode = null, { preferDiarization = false } = {}) {
+  // Caption generate: prefer reliable timestamp models first (diarize model is slower / often unavailable).
+  // Diarized endpoint: try diarize model first, then fall back.
+  const MODELS = preferDiarization
+    ? [
+        { model: 'gpt-4o-transcribe-diarize', format: 'diarized_json' },
+        { model: 'gpt-4o-transcribe',         format: 'verbose_json'  },
+        { model: 'gpt-4o-mini-transcribe',    format: 'verbose_json'  },
+        { model: 'whisper-1',                 format: 'verbose_json'  },
+      ]
+    : [
+        { model: 'gpt-4o-transcribe',         format: 'verbose_json'  },
+        { model: 'whisper-1',                 format: 'verbose_json'  },
+        { model: 'gpt-4o-mini-transcribe',    format: 'verbose_json'  },
+      ];
 
   let lastError;
   for (const { model, format } of MODELS) {
@@ -170,8 +184,11 @@ export async function transcribeWithOpenAI(filePath, timestampOffsetSec = 0, lan
       const status = err.response?.status;
       const errMsg = err.response?.data?.error?.message || err.message || '';
       console.error(`[diarize] model=${model} failed: HTTP ${status} — ${errMsg}`);
-      // Only fall back on authorization / model-not-found errors; propagate others immediately
-      if (status === 403 || /not found|unsupported|invalid model|model_not_found/i.test(errMsg)) {
+      // Fall back on auth / model / format issues; propagate hard failures (timeouts, 5xx after last try)
+      if (
+        status === 403 || status === 404 || status === 400
+        || /not found|unsupported|invalid model|model_not_found|invalid.*format|response_format/i.test(errMsg)
+      ) {
         console.warn(`[diarize] Falling back from ${model}: ${errMsg}`);
         continue;
       }
@@ -237,12 +254,12 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
     return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
   }
 
-  const rawLanguage = parsedArgs.language || 'auto';
-  // Validate language: allow 'auto' or a BCP-47-like language code (letters, digits, hyphens only)
-  if (rawLanguage !== 'auto' && !/^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/.test(rawLanguage)) {
-    return res.status(400).json({ error: 'language must be "auto" or a valid language code (e.g., "en", "fr", "zh")' });
+  const language = normalizeLanguageCode(parsedArgs.language || 'auto', { allowAuto: true });
+  if (!language) {
+    return res.status(400).json({
+      error: 'language must be "auto" or a language code/name (e.g., "en", "es", "English", "zh")',
+    });
   }
-  const language = rawLanguage;
   const tmpFiles = [];
   const track = (p) => { tmpFiles.push(p); return p; };
 
@@ -275,13 +292,20 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
       audioChunks.map(c => transcribeWithOpenAI(
         c.path,
         c.startSec,
-        language === 'auto' ? null : language
+        language === 'auto' ? null : language,
+        { preferDiarization: false }
       ))
     );
     const segments = mergeDiarizedSegmentsWithOffsets(chunkSegments);
     const { srt: srtContent, vtt: vttContent } = buildSrtAndVtt(segments);
 
-    res.json({ srt: srtContent, vtt: vttContent });
+    if (!srtHasSpeech(srtContent)) {
+      return res.status(422).json({
+        error: 'No speech detected in the audio. Try a clip with clearer dialogue, or set language explicitly (e.g. "en").',
+      });
+    }
+
+    res.json({ srt: srtContent, vtt: vttContent, language });
   } catch (error) {
     console.error('Error generating captions:', error);
     if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to generate captions' });
@@ -313,6 +337,12 @@ router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthe
   }
 
   const burnSubtitles = parsedArgs.burnSubtitles === true;
+  const language = normalizeLanguageCode(parsedArgs.language || 'auto', { allowAuto: true });
+  if (!language) {
+    return res.status(400).json({
+      error: 'language must be "auto" or a language code/name (e.g., "en", "es", "English")',
+    });
+  }
   const tmpFiles = [];
   const track = (p) => { tmpFiles.push(p); return p; };
 
@@ -344,7 +374,12 @@ router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthe
 
     // Step 3: Transcribe each chunk via the batch API (with per-chunk timestamp offset)
     const chunkSegments = await Promise.all(
-      audioChunks.map(c => transcribeWithOpenAI(c.path, c.startSec))
+      audioChunks.map(c => transcribeWithOpenAI(
+        c.path,
+        c.startSec,
+        language === 'auto' ? null : language,
+        { preferDiarization: true }
+      ))
     );
     console.log(`[diarize] Transcribed ${audioChunks.length} chunk(s)`);
 
@@ -381,14 +416,16 @@ router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthe
 
 // Caption translation endpoint: translate SRT content to another language via Grok chat
 router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
-  let body = '';
-  for await (const chunk of req) { body += chunk; }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(body);
-  } catch (e) {
-    return res.status(400).json({ error: 'Request body must be valid JSON' });
+  // express.json() is mounted globally — prefer req.body; only fall back to raw stream if empty.
+  let parsed = req.body;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.keys(parsed).length) {
+    let body = '';
+    for await (const chunk of req) { body += chunk; }
+    try {
+      parsed = JSON.parse(body);
+    } catch (e) {
+      return res.status(400).json({ error: 'Request body must be valid JSON' });
+    }
   }
 
   const { srtContent, targetLanguage } = parsed;
@@ -400,9 +437,15 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
     return res.status(400).json({ error: 'targetLanguage is required' });
   }
 
-  // Validate target language is a simple BCP-47-like code (2-8 alphanumeric chars)
-  if (!/^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/.test(targetLanguage.trim())) {
-    return res.status(400).json({ error: 'targetLanguage must be a valid language code (e.g., "es", "fr", "zh")' });
+  const normalizedTarget = normalizeLanguageCode(targetLanguage, { allowAuto: false });
+  if (!normalizedTarget) {
+    return res.status(400).json({
+      error: 'targetLanguage must be a language code/name (e.g., "es", "fr", "Spanish", "zh")',
+    });
+  }
+
+  if (!XAI_API_TOKEN) {
+    return res.status(503).json({ error: 'XAI_API_TOKEN is not configured. Caption translation is unavailable.' });
   }
 
   try {
@@ -414,14 +457,20 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
       },
       body: JSON.stringify({
         model: 'grok-3',
+        temperature: 0,
         messages: [
           {
             role: 'system',
-            content: 'You are a professional subtitle translator. You will be given SRT subtitle content and must translate only the dialogue text lines to the specified language. Preserve all sequence numbers and timestamps exactly as-is. Output ONLY the complete translated SRT content with no extra commentary.'
+            content:
+              'You are a professional subtitle translator. Translate ONLY the dialogue text lines of the given SRT. '
+              + 'Preserve every sequence number and timestamp line EXACTLY (including "-->" and commas). '
+              + 'Output ONLY valid SRT. No markdown fences, no commentary.',
           },
           {
             role: 'user',
-            content: `Translate the following SRT subtitles to ${targetLanguage}. Keep all sequence numbers and timestamps unchanged. Only translate the text lines:\n\n${srtContent}`
+            content:
+              `Translate the dialogue lines to language code "${normalizedTarget}". `
+              + `Keep timestamps identical.\n\n${srtContent}`,
           }
         ]
       })
@@ -433,14 +482,16 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
     }
 
     const xaiData = await xaiResponse.json();
-    const translatedSrt = xaiData.choices?.[0]?.message?.content?.trim() || '';
+    const rawTranslated = xaiData.choices?.[0]?.message?.content?.trim() || '';
 
-    if (!translatedSrt) {
+    if (!rawTranslated) {
       throw new Error('No translation received from xAI API');
     }
 
+    // Lock original timestamps — models often mangle SRT timing lines
+    const translatedSrt = mergeTranslatedSrt(srtContent, stripLlmFences(rawTranslated));
     const translatedVtt = srtToVtt(translatedSrt);
-    res.json({ srt: translatedSrt, vtt: translatedVtt });
+    res.json({ srt: translatedSrt, vtt: translatedVtt, targetLanguage: normalizedTarget });
   } catch (error) {
     console.error('Error translating captions:', error);
     if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to translate captions' });
