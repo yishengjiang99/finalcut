@@ -81,3 +81,13 @@ xcodebuild test -project FinalCut.xcodeproj -scheme FinalCut -destination 'platf
 ```
 
 `FinalCutTests` covers API URL construction (jobs + captions), JobStatus / JobPollResponse decoding, caption JSON decode, and burn_subtitles multipart field names.
+
+## App Store submission
+
+ASC checklist, listing copy, Review notes, privacy / export / StoreKit:
+
+→ [`docs/asc/README.md`](../docs/asc/README.md)
+
+Reusable iOS shipping playbook (extracted from Grok Camera learnings):
+
+→ [`docs/playbooks/ios-app-from-scratch.md`](../docs/playbooks/ios-app-from-scratch.md)
