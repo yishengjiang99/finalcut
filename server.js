@@ -7,6 +7,7 @@ import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
 import { chatRouter } from './src/server/chat.js';
+import { jobsRouter } from './src/server/jobs.js';
 
 const app = express();
 
@@ -40,11 +41,13 @@ app.use(stripeRouter);
 app.use(captionsRouter);
 app.use(videoRouter);
 app.use(chatRouter);
+app.use(jobsRouter);
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);
   console.log('Configuration loaded successfully');
   console.log('FFmpeg video processing endpoint available at /api/process-video');
+  console.log('Async job endpoints: POST /api/jobs/process-video, GET /api/jobs/:id');
   if (stripe) {
     console.log('Stripe payment endpoints available:');
     console.log('  - POST /api/create-checkout-session');
