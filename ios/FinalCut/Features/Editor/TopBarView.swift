@@ -6,7 +6,7 @@ struct TopBarView: View {
 
     var body: some View {
         HStack {
-            Text("FinalCut")
+            Text("FinalCap")
                 .font(.headline)
                 .foregroundStyle(AppTheme.textPrimary)
             Spacer()

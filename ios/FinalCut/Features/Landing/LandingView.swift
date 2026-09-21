@@ -10,7 +10,7 @@ struct LandingView: View {
                 Image(systemName: "film.stack")
                     .font(.system(size: 56, weight: .light))
                     .foregroundStyle(AppTheme.accent)
-                Text("FinalCut")
+                Text("FinalCap")
                     .font(.largeTitle.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                 Text("AI video editing — native iOS shell")

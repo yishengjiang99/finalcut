@@ -1,6 +1,18 @@
 # FinalCut iOS
 
-Native SwiftUI shell for FinalCut (iOS 17+).
+Native SwiftUI shell for **FinalCap** (iOS 17+).
+
+## Product naming
+
+| Surface | Name |
+|--------|------|
+| Home-screen display name (`CFBundleDisplayName`) | **FinalCap** |
+| App Store App Name | **FinalCap - AI Video Editor** |
+| Bundle ID | `com.grepawk.finalcut` (**unchanged**) |
+| Xcode target / scheme / folders / types | FinalCut (**unchanged**) |
+| StoreKit product id | `com.grepawk.finalcut.subscription.monthly` (**unchanged**) |
+
+`INFOPLIST_KEY_CFBundleDisplayName = FinalCap` is set on the FinalCut target for Debug and Release in `FinalCut.xcodeproj/project.pbxproj`.
 
 ## Open in Xcode
 
