@@ -1,5 +1,8 @@
 # FinalCap — App Store screenshot brief
 
+**App name (ASC):** FinalCap - AI Video Editor  
+**Home screen:** FinalCap  
+
 **Visual system:** darkroom-adjacent video editor (preview + timeline stub + chat). **Do not** reuse Grok Camera / Photo Recipes viewfinder chrome, shutter, or AO dials.
 
 ## Required sizes (ASC — confirm current matrix)
@@ -21,7 +24,7 @@ Story arc: **import → chat edit → captions → burn → export**. Skip SignI
 
 | # | On-frame title | Shows | Avoid |
 |---|----------------|-------|--------|
-| 1 | AI video editing | `Landing` — dark value prop + Get Started | Camera shutter, Photo Recipes chrome |
+| 1 | FinalCap | `Landing` — dark value prop + Get Started | Camera shutter, Photo Recipes chrome |
 | 2 | Import your clip | `Editor` empty or Photos import CTA | Mic / camera permission banners |
 | 3 | Preview ready | Preview (~40%) + `TimelineStub` scrub + chat welcome + sample chips | Tiny illegible chat |
 | 4 | Edit in chat | User bubble (“Trim to 5–15s”) + processing dimmer (“Editing…”) | Walls of JSON / raw tool dumps |
@@ -39,7 +42,7 @@ Frames 4–6 may be combined to 6 total if ASC slot count is tight: keep **Impor
 
 ## Copy tone
 
-Craft-forward, short. No “Grok”, no “Final Cut Pro”, no beauty-filter language.
+Craft-forward, short. Use **FinalCap** on frames. No “Grok”, no “Final Cut Pro”, no “FinalCut” as store name, no beauty-filter language.
 
 ## File naming
 
