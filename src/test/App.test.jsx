@@ -50,7 +50,7 @@ describe('App Component', () => {
 
   it('renders landing page with title', () => {
     render(<App />);
-    expect(screen.getByText('FinalCut Video Editor')).toBeInTheDocument();
+    expect(screen.getByText('FinalCap')).toBeInTheDocument();
   });
 
   it('renders landing page with Get Started button', () => {
@@ -65,7 +65,7 @@ describe('App Component', () => {
 
   it('renders footer on landing page', () => {
     render(<App />);
-    expect(screen.getByText('© 2026 FinalCut Video Editor. All rights reserved.')).toBeInTheDocument();
+    expect(screen.getByText('© 2026 FinalCap. All rights reserved.')).toBeInTheDocument();
     expect(screen.getByText('AI-powered video editing made simple')).toBeInTheDocument();
   });
 
