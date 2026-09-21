@@ -9,6 +9,41 @@ enum EditorState: String, Codable, CaseIterable, Equatable {
     case failed
 }
 
+/// Dimmer copy during `processing` (Design UX — captions three-step flow).
+enum ProcessingOverlayKind: String, Codable, CaseIterable, Equatable {
+    case editing
+    case generatingCaptions
+    case translating
+    case burningSubtitles
+
+    /// User-visible overlay string. Burn-in uses a specific label (not generic “Editing”).
+    var message: String {
+        switch self {
+        case .editing:
+            return "Editing…"
+        case .generatingCaptions:
+            return "Generating captions…"
+        case .translating:
+            return "Translating…"
+        case .burningSubtitles:
+            return "Burning subtitles…"
+        }
+    }
+}
+
+/// Soft caption artifacts retained for share/export chips and burn-in args.
+struct CaptionArtifacts: Equatable, Codable {
+    var srt: String?
+    var vtt: String?
+    var language: String?
+    var translatedSrt: String?
+    var translatedVtt: String?
+    var targetLanguage: String?
+
+    var hasSource: Bool { srt?.isEmpty == false }
+    var hasTranslation: Bool { translatedSrt?.isEmpty == false }
+}
+
 /// Async jobs poll API status (Backend #47).
 /// Editor stays `.processing` for `queued` | `running`; flips only on terminal.
 enum JobStatus: String, Codable, CaseIterable, Equatable {

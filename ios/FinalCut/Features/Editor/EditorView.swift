@@ -17,7 +17,8 @@ struct EditorView: View {
 
             PreviewPaneView(
                 state: model.state,
-                videoURL: model.localVideoURL
+                videoURL: model.localVideoURL,
+                processingMessage: model.processingOverlay.message
             )
             .frame(maxHeight: 240)
 
@@ -87,13 +88,29 @@ final class EditorViewModel: ObservableObject {
     @Published var showSampleChips = true
     @Published var lastError: String?
     @Published var activeJobId: String?
+    @Published var processingOverlay: ProcessingOverlayKind = .editing
+    @Published var captionArtifacts = CaptionArtifacts()
 
-    /// Shared API client from AppModel (jobs path preferred over sync process-video).
+    /// Shared API client from AppModel (jobs for long FFmpeg edits; captions sync).
     var apiClient: APIClient?
 
-    let sampleChips = ["Trim silence", "Add captions", "Vertical crop", "Highlight reel"]
+    /// Demo chips for the captions three-step flow + other edits.
+    let sampleChips = [
+        "Generate captions",
+        "Translate to Spanish",
+        "Burn in",
+        "Trim silence",
+        "Vertical crop",
+    ]
 
     private var processingTask: Task<Void, Never>?
+
+    enum CaptionIntent: Equatable {
+        case generate
+        case translate(language: String)
+        case burnIn
+        case otherEdit
+    }
 
     func handleImport(_ result: Result<[URL], Error>) {
         switch result {
@@ -102,7 +119,6 @@ final class EditorViewModel: ObservableObject {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             state = .uploading
-            // Stub: copy/reference locally; real upload hits async jobs later.
             localVideoURL = url
             state = .ready
             messages.append(ChatMessage(role: .system, content: "Imported \(url.lastPathComponent)"))
@@ -143,21 +159,272 @@ final class EditorViewModel: ObservableObject {
         messages.append(ChatMessage(role: .user, content: text))
         composerText = ""
         lastError = nil
-        // Dimmer stays up through queued|running; only terminal flips ready/failed.
+
+        let intent = Self.detectCaptionIntent(text)
+        processingOverlay = Self.overlay(for: intent)
         state = .processing
-        messages.append(
-            ChatMessage(
-                role: .assistant,
-                content: "Got it — running “\(text)” via async jobs API (poll-only; no on-device FFmpeg).",
-                resultThumbnailURLs: []
-            )
-        )
+
         processingTask?.cancel()
-        processingTask = Task { await runJobsEdit(prompt: text) }
+        processingTask = Task {
+            switch intent {
+            case .generate:
+                await runGenerateCaptions()
+            case .translate(let language):
+                await runTranslateCaptions(targetLanguage: language)
+            case .burnIn:
+                await runBurnIn()
+            case .otherEdit:
+                messages.append(
+                    ChatMessage(
+                        role: .assistant,
+                        content: "Got it — running “\(text)” via async jobs API (poll-only; no on-device FFmpeg)."
+                    )
+                )
+                await runJobsEdit(prompt: text)
+            }
+        }
     }
 
-    /// Prefer POST /api/jobs/process-video + poll GET /api/jobs/:id.
-    /// Without a local video or client, simulate the same status → editor mapping.
+    static func detectCaptionIntent(_ prompt: String) -> CaptionIntent {
+        let lower = prompt.lowercased()
+        if lower.contains("burn") {
+            return .burnIn
+        }
+        if lower.contains("translate") {
+            if lower.contains("spanish") || lower.contains("español") || lower.contains("es ") || lower.hasSuffix(" es") {
+                return .translate(language: "Spanish")
+            }
+            if lower.contains("french") || lower.contains("français") {
+                return .translate(language: "French")
+            }
+            if lower.contains("chinese") || lower.contains("zh") {
+                return .translate(language: "Chinese")
+            }
+            // "Translate to X" — take trailing token when present
+            if let range = lower.range(of: "translate to ") {
+                let rest = prompt[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !rest.isEmpty {
+                    return .translate(language: String(rest.prefix(32)))
+                }
+            }
+            return .translate(language: "Spanish")
+        }
+        if lower.contains("caption") || lower.contains("subtitl") {
+            return .generate
+        }
+        return .otherEdit
+    }
+
+    static func overlay(for intent: CaptionIntent) -> ProcessingOverlayKind {
+        switch intent {
+        case .generate: return .generatingCaptions
+        case .translate: return .translating
+        case .burnIn: return .burningSubtitles
+        case .otherEdit: return .editing
+        }
+    }
+
+    // MARK: - Captions three steps (sync; NOT one async captions job)
+
+    private func ensureClientAndToken() async throws -> APIClient {
+        guard let client = apiClient else {
+            throw APIError.message("API client unavailable")
+        }
+        if client.sampleModeEnabled {
+            _ = try await client.ensureSampleAccessToken()
+        }
+        return client
+    }
+
+    private func readLocalVideoData() throws -> (Data, URL) {
+        guard let videoURL = localVideoURL else {
+            throw APIError.message("Import a video first")
+        }
+        let accessed = videoURL.startAccessingSecurityScopedResource()
+        defer { if accessed { videoURL.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: videoURL)
+        return (data, videoURL)
+    }
+
+    private func runGenerateCaptions() async {
+        do {
+            let client = try await ensureClientAndToken()
+            let (videoData, videoURL) = try readLocalVideoData()
+            processingOverlay = .generatingCaptions
+            let result = try await client.generateCaptions(
+                videoData: videoData,
+                mimeType: Self.mimeType(for: videoURL)
+            )
+            captionArtifacts.srt = result.srt
+            captionArtifacts.vtt = result.vtt
+            captionArtifacts.language = result.language
+            state = .ready
+            processingOverlay = .editing
+            messages.append(
+                ChatMessage(
+                    role: .assistant,
+                    content: "Captions ready — soft SRT/VTT chips below.",
+                    downloadChips: Self.sourceChips(srt: result.srt, vtt: result.vtt)
+                )
+            )
+        } catch is CancellationError {
+            // cancelled
+        } catch let error as APIError {
+            finishCaptionFailure(error)
+        } catch {
+            finishCaptionFailure(APIError.message(error.localizedDescription))
+        }
+    }
+
+    private func runTranslateCaptions(targetLanguage: String) async {
+        do {
+            guard let srt = captionArtifacts.srt, !srt.isEmpty else {
+                state = .failed
+                lastError = "Generate captions first"
+                messages.append(
+                    ChatMessage(
+                        role: .assistant,
+                        content: "Couldn't translate — generate captions first"
+                    )
+                )
+                return
+            }
+            let client = try await ensureClientAndToken()
+            processingOverlay = .translating
+            let result = try await client.translateCaptions(
+                srtContent: srt,
+                targetLanguage: targetLanguage
+            )
+            captionArtifacts.translatedSrt = result.srt
+            captionArtifacts.translatedVtt = result.vtt
+            captionArtifacts.targetLanguage = result.targetLanguage
+            state = .ready
+            processingOverlay = .editing
+
+            var chips = Self.sourceChips(
+                srt: captionArtifacts.srt ?? srt,
+                vtt: captionArtifacts.vtt ?? ""
+            )
+            chips.append(contentsOf: Self.translationChips(
+                srt: result.srt,
+                vtt: result.vtt,
+                language: result.targetLanguage
+            ))
+            messages.append(
+                ChatMessage(
+                    role: .assistant,
+                    content: "Translated to \(result.targetLanguage) — source + target chips below.",
+                    downloadChips: chips
+                )
+            )
+        } catch is CancellationError {
+            // cancelled
+        } catch let error as APIError {
+            finishCaptionFailure(error, fallback: "Couldn't translate captions — try again")
+        } catch {
+            finishCaptionFailure(APIError.message(error.localizedDescription), fallback: "Couldn't translate captions — try again")
+        }
+    }
+
+    /// Sync burn-in via POST /api/process-video (never jobs).
+    private func runBurnIn() async {
+        do {
+            guard let srt = captionArtifacts.srt, !srt.isEmpty else {
+                state = .failed
+                lastError = "Generate captions first"
+                messages.append(
+                    ChatMessage(
+                        role: .assistant,
+                        content: "Couldn't burn captions — generate captions first"
+                    )
+                )
+                return
+            }
+            let client = try await ensureClientAndToken()
+            let (videoData, videoURL) = try readLocalVideoData()
+            processingOverlay = .burningSubtitles
+            let burned = try await client.burnSubtitles(
+                videoData: videoData,
+                fileName: videoURL.lastPathComponent,
+                mimeType: Self.mimeType(for: videoURL),
+                srtContent: srt,
+                translatedSrtContent: captionArtifacts.translatedSrt
+            )
+            let out = FileManager.default.temporaryDirectory
+                .appendingPathComponent("burned-\(UUID().uuidString).mp4")
+            try burned.write(to: out)
+            localVideoURL = out
+            state = .ready
+            processingOverlay = .editing
+
+            var chips = Self.sourceChips(srt: srt, vtt: captionArtifacts.vtt ?? "")
+            if let tSrt = captionArtifacts.translatedSrt, let tVtt = captionArtifacts.translatedVtt {
+                chips.append(contentsOf: Self.translationChips(
+                    srt: tSrt,
+                    vtt: tVtt,
+                    language: captionArtifacts.targetLanguage ?? "translated"
+                ))
+            }
+            messages.append(
+                ChatMessage(
+                    role: .assistant,
+                    content: captionArtifacts.hasTranslation
+                        ? "Burned dual-language preview — soft chips still available."
+                        : "Burned captions into preview — soft chips still available.",
+                    downloadChips: chips
+                )
+            )
+        } catch is CancellationError {
+            // cancelled
+        } catch let error as APIError {
+            finishCaptionFailure(error, fallback: "Couldn't burn captions — try again")
+        } catch {
+            finishCaptionFailure(APIError.message(error.localizedDescription), fallback: "Couldn't burn captions — try again")
+        }
+    }
+
+    private func finishCaptionFailure(_ error: APIError, fallback: String? = nil) {
+        state = .failed
+        lastError = error.errorDescription
+        processingOverlay = .editing
+        let copy: String
+        if case .noSpeechDetected = error {
+            copy = error.captionsChatMessage
+        } else if let fallback {
+            copy = fallback
+        } else {
+            copy = error.captionsChatMessage
+        }
+        messages.append(ChatMessage(role: .assistant, content: copy))
+        // No fake VTT/SRT chips on failure.
+    }
+
+    static func sourceChips(srt: String, vtt: String) -> [CaptionDownloadChip] {
+        var chips: [CaptionDownloadChip] = []
+        if !srt.isEmpty {
+            chips.append(CaptionDownloadChip(label: "SRT", filename: "captions.srt", content: srt))
+        }
+        if !vtt.isEmpty {
+            chips.append(CaptionDownloadChip(label: "VTT", filename: "captions.vtt", content: vtt))
+        }
+        return chips
+    }
+
+    static func translationChips(srt: String, vtt: String, language: String) -> [CaptionDownloadChip] {
+        let tag = language.prefix(2).uppercased()
+        var chips: [CaptionDownloadChip] = []
+        if !srt.isEmpty {
+            chips.append(CaptionDownloadChip(label: "\(tag) SRT", filename: "captions-\(tag.lowercased()).srt", content: srt))
+        }
+        if !vtt.isEmpty {
+            chips.append(CaptionDownloadChip(label: "\(tag) VTT", filename: "captions-\(tag.lowercased()).vtt", content: vtt))
+        }
+        return chips
+    }
+
+    // MARK: - Other long FFmpeg edits → async jobs poll
+
+    /// Prefer POST /api/jobs/process-video + poll GET /api/jobs/:id (not for burn/add_audio).
     func runJobsEdit(prompt: String) async {
         if let client = apiClient, let videoURL = localVideoURL {
             await runRealJobsEdit(client: client, videoURL: videoURL, prompt: prompt)
@@ -175,7 +442,6 @@ final class EditorViewModel: ObservableObject {
 
     private func runRealJobsEdit(client: APIClient, videoURL: URL, prompt: String) async {
         do {
-            // Prod E2E: sample mode uses header `sample-access-token` (not Bearer).
             if client.sampleModeEnabled {
                 _ = try await client.ensureSampleAccessToken()
             }
@@ -183,6 +449,7 @@ final class EditorViewModel: ObservableObject {
             defer { if accessed { videoURL.stopAccessingSecurityScopedResource() } }
             let videoData = try Data(contentsOf: videoURL)
             let operation = Self.mapPromptToOperation(prompt)
+            processingOverlay = .editing
             let enqueue = try await client.submitProcessVideoJob(
                 videoData: videoData,
                 fileName: videoURL.lastPathComponent,
@@ -240,7 +507,6 @@ final class EditorViewModel: ObservableObject {
             }
         }
         if localVideoURL == nil {
-            // No clip imported — return to empty after demo poll completes.
             state = .empty
         }
         messages.append(
@@ -251,13 +517,13 @@ final class EditorViewModel: ObservableObject {
         )
     }
 
-    /// Lightweight prompt → server operation mapping for the scaffold.
+    /// Lightweight prompt → server operation mapping for non-caption edits.
+    /// Never maps to burn_subtitles / add_audio_track (those are sync process-video only).
     static func mapPromptToOperation(_ prompt: String) -> String {
         let lower = prompt.lowercased()
         if lower.contains("silence") { return "audio_silence_remove" }
         if lower.contains("trim") { return "trim_video" }
         if lower.contains("vertical") || lower.contains("crop") { return "crop_video" }
-        // Captions use dedicated caption APIs; fall back to trim for scaffold jobs path.
         return "trim_video"
     }
 

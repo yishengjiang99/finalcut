@@ -195,4 +195,78 @@ final class APIModelsTests: XCTestCase {
         let all = EditorState.allCases.map(\.rawValue)
         XCTAssertEqual(all, ["empty", "uploading", "ready", "processing", "failed"])
     }
+
+    func testCaptionsResponseDecode() throws {
+        let json = """
+        {"srt":"1\\n00:00:00,000 --> 00:00:01,000\\nHello\\n","vtt":"WEBVTT\\n\\n00:00:00.000 --> 00:00:01.000\\nHello\\n","language":"en"}
+        """.data(using: .utf8)!
+        let captions = try JSONDecoder().decode(CaptionsResponse.self, from: json)
+        XCTAssertTrue(captions.srt.contains("Hello"))
+        XCTAssertTrue(captions.vtt.contains("WEBVTT"))
+        XCTAssertEqual(captions.language, "en")
+    }
+
+    func testTranslateCaptionsResponseDecode() throws {
+        let json = """
+        {"srt":"1\\n00:00:00,000 --> 00:00:01,000\\nHola\\n","vtt":"WEBVTT\\n\\n00:00:00.000 --> 00:00:01.000\\nHola\\n","targetLanguage":"Spanish"}
+        """.data(using: .utf8)!
+        let translated = try JSONDecoder().decode(TranslateCaptionsResponse.self, from: json)
+        XCTAssertTrue(translated.srt.contains("Hola"))
+        XCTAssertEqual(translated.targetLanguage, "Spanish")
+    }
+
+    func testTranslateCaptionsRequestEncode() throws {
+        let req = TranslateCaptionsRequest(srtContent: "1\nHi\n", targetLanguage: "Spanish")
+        let data = try JSONEncoder().encode(req)
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(obj?["srtContent"] as? String, "1\nHi\n")
+        XCTAssertEqual(obj?["targetLanguage"] as? String, "Spanish")
+    }
+
+    func testCaptionEndpointURLs() {
+        let client = APIClient(config: APIConfig(baseURL: APIConfig.defaultBaseURL))
+        XCTAssertEqual(client.generateCaptionsURL.absoluteString, "https://grepawk.com/api/generate-captions")
+        XCTAssertEqual(client.translateCaptionsURL.absoluteString, "https://grepawk.com/api/translate-captions")
+        XCTAssertEqual(client.processVideoURL.absoluteString, "https://grepawk.com/api/process-video")
+        XCTAssertEqual(APIEndpoints.generateCaptions, "/api/generate-captions")
+        XCTAssertEqual(APIEndpoints.translateCaptions, "/api/translate-captions")
+        XCTAssertEqual(APIEndpoints.processVideo, "/api/process-video")
+    }
+
+    func testProcessingOverlayCopy() {
+        XCTAssertEqual(ProcessingOverlayKind.generatingCaptions.message, "Generating captions…")
+        XCTAssertEqual(ProcessingOverlayKind.translating.message, "Translating…")
+        XCTAssertEqual(ProcessingOverlayKind.burningSubtitles.message, "Burning subtitles…")
+        XCTAssertNotEqual(ProcessingOverlayKind.burningSubtitles.message, "Editing…")
+    }
+
+    func testCaptionIntentDetection() {
+        XCTAssertEqual(EditorViewModel.detectCaptionIntent("Generate captions"), .generate)
+        XCTAssertEqual(EditorViewModel.detectCaptionIntent("Add captions"), .generate)
+        XCTAssertEqual(EditorViewModel.detectCaptionIntent("Translate to Spanish"), .translate(language: "Spanish"))
+        XCTAssertEqual(EditorViewModel.detectCaptionIntent("Burn in"), .burnIn)
+        XCTAssertEqual(EditorViewModel.detectCaptionIntent("Trim silence"), .otherEdit)
+    }
+
+    func testAPIErrorCaptionsChatCopy() {
+        XCTAssertEqual(APIError.noSpeechDetected.captionsChatMessage, "Couldn't generate captions — no speech")
+        XCTAssertEqual(APIError.decoding.captionsChatMessage, "Couldn't generate captions — try again")
+    }
+
+    func testMultipartBurnBodyContainsOperationAndSrt() throws {
+        let video = Data("fake-video".utf8)
+        let multipart = try APIClient.makeMultipartProcessVideoBody(
+            videoData: video,
+            fileName: "clip.mp4",
+            mimeType: "video/mp4",
+            operation: "burn_subtitles",
+            args: ["srtContent": "1\nHi\n", "style": "default", "position": "bottom"]
+        )
+        let body = String(data: multipart.data, encoding: .utf8) ?? ""
+        XCTAssertTrue(body.contains("name=\"operation\""))
+        XCTAssertTrue(body.contains("burn_subtitles"))
+        XCTAssertTrue(body.contains("srtContent"))
+        XCTAssertTrue(body.contains("name=\"video\""))
+        XCTAssertTrue(body.contains("fake-video"))
+    }
 }

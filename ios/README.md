@@ -61,10 +61,23 @@ Editor states: `empty | uploading | ready | processing | failed`.
 
 Local demo flow: Landing → SignIn (continue) → Paywall (buy/restore/skip) → Editor (**empty → import → ready**).
 
+
+## Captions three-step flow
+
+Captions are **three separate sync steps** (not one async captions job):
+
+1. **Generate** — `POST /api/generate-captions` (raw video body + optional `X-Args`) → soft `{ srt, vtt }` chips under the assistant bubble. Overlay: “Generating captions…”. 422 → inline “no speech” (no fake VTT).
+2. **Translate** (optional) — `POST /api/translate-captions` JSON `{ srtContent, targetLanguage }` → source + target chips. Overlay: “Translating…”.
+3. **Burn-in** — sync multipart `POST /api/process-video` with `operation=burn_subtitles` and `args` including `srtContent` (+ `translatedSrtContent` for dual). **Do not** use `/api/jobs/process-video` for burn/add_audio. Overlay: “Burning subtitles…”. On success, swap preview to the burned clip; keep soft download chips.
+
+Auth (DEBUG/demo): `GET /api/sample-access-token`, then header `sample-access-token` on generate/translate/burn and result downloads — never `Authorization: Bearer` with the sample token.
+
+Other long FFmpeg edits still use the async jobs poll path from Backend #51.
+
 ## Tests
 
 ```bash
 xcodebuild test -project FinalCut.xcodeproj -scheme FinalCut -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-`FinalCutTests` covers API URL construction (including jobs endpoints) and JobStatus / JobPollResponse decoding.
+`FinalCutTests` covers API URL construction (jobs + captions), JobStatus / JobPollResponse decoding, caption JSON decode, and burn_subtitles multipart field names.

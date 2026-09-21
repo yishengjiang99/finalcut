@@ -45,6 +45,31 @@ struct ChatView: View {
                     .background(bubbleColor(for: message.role))
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
 
+                if !message.downloadChips.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(message.downloadChips) { chip in
+                                ShareLink(
+                                    item: chip.content,
+                                    subject: Text(chip.filename),
+                                    message: Text(chip.filename),
+                                    preview: SharePreview(chip.filename)
+                                ) {
+                                    Text(chip.label)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppTheme.textPrimary)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(AppTheme.surfaceElevated)
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(AppTheme.border, lineWidth: 1))
+                                }
+                                .accessibilityLabel("Download \(chip.label)")
+                            }
+                        }
+                    }
+                }
+
                 if !message.resultThumbnailURLs.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -77,7 +102,14 @@ struct ChatView: View {
 
 #Preview {
     ChatView(messages: [
-        ChatMessage(role: .user, content: "Add captions"),
-        ChatMessage(role: .assistant, content: "Sure — generating on server…")
+        ChatMessage(role: .user, content: "Generate captions"),
+        ChatMessage(
+            role: .assistant,
+            content: "Captions ready — soft chips below.",
+            downloadChips: [
+                CaptionDownloadChip(label: "SRT", filename: "captions.srt", content: "1\n00:00:00,000 --> 00:00:01,000\nHi\n"),
+                CaptionDownloadChip(label: "VTT", filename: "captions.vtt", content: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi\n"),
+            ]
+        ),
     ])
 }
