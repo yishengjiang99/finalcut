@@ -26,7 +26,7 @@ Override the API base URL at runtime via `APIConfig.shared.baseURL`.
 
 - SignIn is a **stub** (“Coming soon”) with **Continue to editor (local demo)**.
 - **No `GOOGLE_IOS_CLIENT_ID` required** for this scaffold.
-- **DEBUG / demo only:** optional `sample-access-token` from `GET /api/sample-access-token`.
+- **DEBUG / demo only:** `GET /api/sample-access-token`, then send header `sample-access-token: <token>` on API calls (jobs enqueue, poll, **and** result downloads). Never `Authorization: Bearer <sample-token>`.
 - Unused Bearer helpers may remain on `APIClient` for a future phase; not active in SignIn.
 - Cookie jar is optional/temporary; not primary.
 
@@ -41,9 +41,13 @@ Override the API base URL at runtime via `APIConfig.shared.baseURL`.
 ## Architecture (v1)
 
 - **Preview playback + scrub**: AVKit / AVFoundation only.
-- **Edits / processing**: server Node/FFmpeg APIs when networked (`/api/chat`, `/api/process-video`, …).
+- **Edits / processing**: prefer **async jobs API** (poll-only):
+  - `POST /api/jobs/process-video` (multipart) → `{ jobId }`
+  - `GET /api/jobs/:id` → `{ status, progress?, error?, resultUrl? }` with `status ∈ queued|running|succeeded|failed`
+  - Absolute `resultUrl` on `https://grepawk.com` (download may still need auth)
+- Sync `POST /api/process-video` remains for web; iOS should not prefer it.
+- Editor stays in `processing` through `queued|running`; flips to `ready` / `failed` only on terminal status.
 - **No on-device FFmpeg** in v1.
-- Future poll jobs: `JobStatus` = `queued | running | succeeded | failed`.
 
 ## Screens (Design names)
 
@@ -63,4 +67,4 @@ Local demo flow: Landing → SignIn (continue) → Paywall (buy/restore/skip) �
 xcodebuild test -project FinalCut.xcodeproj -scheme FinalCut -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-`FinalCutTests` covers API URL construction and model decoding stubs.
+`FinalCutTests` covers API URL construction (including jobs endpoints) and JobStatus / JobPollResponse decoding.

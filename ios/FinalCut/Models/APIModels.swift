@@ -50,3 +50,25 @@ struct SSEEvent: Equatable {
     var event: String?
     var data: String
 }
+
+// MARK: - Async jobs (POST /api/jobs/process-video, GET /api/jobs/:id)
+
+/// 202 response from enqueueing a process-video job.
+struct JobEnqueueResponse: Codable, Equatable {
+    var jobId: String
+    var status: JobStatus
+    var pollUrl: String?
+}
+
+/// Poll body from GET /api/jobs/:id (matches server `publicJob`).
+struct JobPollResponse: Codable, Equatable {
+    var jobId: String
+    var status: JobStatus
+    var progress: Double?
+    var error: String?
+    var resultUrl: String?
+    var contentType: String?
+    var operation: String?
+    var createdAt: String?
+    var updatedAt: String?
+}

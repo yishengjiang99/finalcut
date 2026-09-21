@@ -3,7 +3,9 @@ import Foundation
 /// HTTP client for FinalCut backend.
 ///
 /// Auth for this scaffold (Google Sign-In deferred):
-/// 1. **DEBUG / demo:** `sample-access-token` header when sample mode is enabled
+/// 1. **DEBUG / demo E2E (prod grepawk.com):** `GET /api/sample-access-token`, then send header
+///    `sample-access-token: <token>` on jobs enqueue, poll, and result downloads.
+///    Never `Authorization: Bearer <sample-token>`.
 /// 2. Optional unused Bearer (`accessToken`) storage/helpers for a future auth phase — not wired to SignIn
 /// 3. Cookie jar via `HTTPCookieStorage` is optional/temporary; do not rely on it as primary
 final class APIClient {
@@ -51,6 +53,9 @@ final class APIClient {
     var mobileGoogleAuthURL: URL { url(for: APIEndpoints.mobileGoogleAuth) }
     var chatURL: URL { url(for: APIEndpoints.chat) }
     var processVideoURL: URL { url(for: APIEndpoints.processVideo) }
+    var jobsProcessVideoURL: URL { url(for: APIEndpoints.jobsProcessVideo) }
+    func jobStatusURL(id: String) -> URL { url(for: APIEndpoints.jobStatus(id)) }
+    func jobResultURL(id: String) -> URL { url(for: APIEndpoints.jobResult(id)) }
     var transitionVideosURL: URL { url(for: APIEndpoints.transitionVideos) }
     var generateCaptionsURL: URL { url(for: APIEndpoints.generateCaptions) }
     var generateCaptionsDiarizedURL: URL { url(for: APIEndpoints.generateCaptionsDiarized) }
@@ -89,16 +94,21 @@ final class APIClient {
     private func attachAuth(to request: inout URLRequest, mode: AuthAttachment) {
         guard mode == .bearerPreferred else { return }
 
-        if let accessToken, !accessToken.isEmpty {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        // sample-access-token: DEBUG / demo builds only — never primary auth.
+        // Prod E2E / DEBUG demo: GET /api/sample-access-token then send
+        // `sample-access-token: <token>` on every authenticated call (jobs enqueue,
+        // poll, and result download). Never put the sample token in Authorization.
         #if DEBUG
         if config.sampleModeEnabled, let sampleAccessToken, !sampleAccessToken.isEmpty {
             request.setValue(sampleAccessToken, forHTTPHeaderField: "sample-access-token")
+            // Sample mode is sufficient for requireAuthenticatedUser / subscription
+            // on grepawk.com — skip Bearer so we never send Authorization: Bearer <sample>.
+            return
         }
         #endif
+
+        if let accessToken, !accessToken.isEmpty {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
     }
 
     // MARK: - Auth
@@ -131,12 +141,23 @@ final class APIClient {
     }
 
     func fetchSampleAccessToken() async throws -> SampleAccessTokenResponse {
+        // No auth on this route — issues a short-lived token for the `sample-access-token` header.
         let request = makeRequest(url: sampleAccessTokenURL, method: "GET", auth: .none)
         let (data, response) = try await session.data(for: request)
         try Self.throwIfNeeded(response: response, data: data)
         let result = try decoder.decode(SampleAccessTokenResponse.self, from: data)
         sampleAccessToken = result.token
         return result
+    }
+
+    /// Ensures a live sample token is stored for the `sample-access-token` header (DEBUG / demo).
+    /// Call before jobs enqueue/poll/result against https://grepawk.com.
+    @discardableResult
+    func ensureSampleAccessToken() async throws -> String {
+        if let sampleAccessToken, !sampleAccessToken.isEmpty {
+            return sampleAccessToken
+        }
+        return try await fetchSampleAccessToken().token
     }
 
     // MARK: - Chat (SSE stub)
@@ -212,6 +233,118 @@ final class APIClient {
                 }
             }
         }
+    }
+
+
+    // MARK: - Async jobs (prefer over sync process-video on iOS)
+
+    /// Multipart enqueue: POST /api/jobs/process-video → 202 { jobId, status, pollUrl? }
+    /// Fields: `video` (file), `operation` (string), `args` (optional JSON string).
+    func submitProcessVideoJob(
+        videoData: Data,
+        fileName: String = "video.mp4",
+        mimeType: String = "video/mp4",
+        operation: String,
+        args: [String: Any] = [:]
+    ) async throws -> JobEnqueueResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let crlf = "\r\n"
+
+        func append(_ string: String) {
+            body.append(Data(string.utf8))
+        }
+
+        func appendField(name: String, value: String) {
+            append("--\(boundary)\(crlf)")
+            append("Content-Disposition: form-data; name=\"\(name)\"\(crlf)\(crlf)")
+            append("\(value)\(crlf)")
+        }
+
+        appendField(name: "operation", value: operation)
+        if !args.isEmpty {
+            let argsData = try JSONSerialization.data(withJSONObject: args, options: [])
+            let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
+            appendField(name: "args", value: argsString)
+        }
+
+        append("--\(boundary)\(crlf)")
+        append("Content-Disposition: form-data; name=\"video\"; filename=\"\(fileName)\"\(crlf)")
+        append("Content-Type: \(mimeType)\(crlf)\(crlf)")
+        body.append(videoData)
+        append(crlf)
+        append("--\(boundary)--\(crlf)")
+
+        let request = makeRequest(
+            url: jobsProcessVideoURL,
+            method: "POST",
+            auth: .bearerPreferred,
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        do {
+            return try decoder.decode(JobEnqueueResponse.self, from: data)
+        } catch {
+            throw APIError.decoding
+        }
+    }
+
+    /// Single poll: GET /api/jobs/:id
+    func fetchJobStatus(id: String) async throws -> JobPollResponse {
+        let request = makeRequest(url: jobStatusURL(id: id), method: "GET", auth: .bearerPreferred)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        do {
+            return try decoder.decode(JobPollResponse.self, from: data)
+        } catch {
+            throw APIError.decoding
+        }
+    }
+
+    /// Poll with exponential backoff until terminal status (`succeeded` | `failed`).
+    /// Calls `onUpdate` after each successful poll (including the first).
+    func pollJob(
+        id: String,
+        initialInterval: TimeInterval = 0.5,
+        maxInterval: TimeInterval = 5.0,
+        maxAttempts: Int = 60,
+        onUpdate: ((JobPollResponse) -> Void)? = nil
+    ) async throws -> JobPollResponse {
+        var interval = initialInterval
+        var last: JobPollResponse?
+        for attempt in 0..<maxAttempts {
+            if attempt > 0 {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                interval = min(interval * 2, maxInterval)
+            }
+            let status = try await fetchJobStatus(id: id)
+            last = status
+            onUpdate?(status)
+            if status.status.isTerminal {
+                return status
+            }
+        }
+        if let last {
+            return last
+        }
+        throw APIError.message("Job poll timed out for \(id)")
+    }
+
+    /// Download job result bytes. Auth: same `sample-access-token` header (or Bearer) as poll.
+    /// Prefer `resultUrl` from the poll body when absolute (APP_BASE_URL = https://grepawk.com).
+    func downloadJobResult(id: String, resultUrl: String? = nil) async throws -> Data {
+        let url: URL
+        if let resultUrl, let absolute = URL(string: resultUrl), absolute.scheme != nil {
+            url = absolute
+        } else {
+            url = jobResultURL(id: id)
+        }
+        let request = makeRequest(url: url, method: "GET", auth: .bearerPreferred)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        return data
     }
 
     // MARK: - Video / captions (Bearer)
