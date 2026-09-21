@@ -844,34 +844,34 @@ export const tools = [
     type: 'function',
     function: {
       name: 'generate_captions',
-      description: 'Automatically generate subtitles/captions from the video audio using speech-to-text AI (xAI Grok). Optionally translates the captions to another language using Grok chat and overlays both language tracks on the video. Creates SRT and VTT subtitle files. Use this for accessibility, social media, international content, or any video that needs subtitles.',
+      description: 'Generate subtitles from the video audio via speech-to-text (OpenAI transcription on the server). Optionally translate dialogue with Grok to another language. Use ISO language codes when possible (en, es, fr, de, ja, zh) — full names like "Spanish" are also accepted. Creates SRT/VTT. When burn_in is true (default), burns captions into the video (dual-track if translating: translated on top, original on bottom). When burn_in is false, returns soft subtitle tracks only. Use for accessibility, social, or international content.',
       parameters: {
         type: 'object',
         properties: {
           language: {
             type: 'string',
-            description: 'Language for transcription (e.g., "en", "es", "fr", "de", "ja", "zh"). Use "auto" for automatic language detection.',
+            description: 'Spoken language of the audio for transcription. Prefer ISO codes: "en", "es", "fr", "de", "ja", "zh". Use "auto" if unknown. Do NOT pass sentences.',
             default: 'auto'
           },
           translate_language: {
             type: 'string',
-            description: 'Optional: target language code to translate the captions into using Grok (e.g., "es" for Spanish, "fr" for French, "zh" for Chinese). When provided, both the original and translated subtitle tracks are overlaid on the video — translated text at the top, original at the bottom.'
+            description: 'Optional target language for translation (ISO code preferred: "es", "fr", "zh", or names like "Spanish"). When set, captions are translated after transcription. With burn_in true, both tracks are burned in (translated top, original bottom).'
           },
           style: {
             type: 'string',
-            description: 'Subtitle visual style: "default" (white text with outline), "white_on_black" (white text on semi-transparent black background), "yellow" (yellow text with outline).',
+            description: 'Burn-in subtitle style (only when burn_in is true): "default", "white_on_black", or "yellow".',
             enum: ['default', 'white_on_black', 'yellow'],
             default: 'default'
           },
           position: {
             type: 'string',
-            description: 'Position of original-language subtitles on the video: "bottom" (standard) or "top". Translated subtitles appear on the opposite side.',
+            description: 'Burn-in position for the original-language track: "bottom" (default) or "top". Translated track uses the opposite side when present.',
             enum: ['bottom', 'top'],
             default: 'bottom'
           },
           burn_in: {
             type: 'boolean',
-            description: 'Whether to burn the subtitles permanently into the video frames. If true (default), returns a video with embedded subtitles. If false, only returns the SRT/VTT files without modifying the video.',
+            description: 'If true (default), burn subtitles into video frames via FFmpeg. If false, only soft SRT/VTT tracks (no re-encode).',
             default: true
           }
         },
@@ -904,4 +904,4 @@ export const tools = [
   }
 ];
 
-export const systemPrompt = 'You are a helpful video and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video or audio. Respond with descriptions of actions and call tools when appropriate to perform the edits.';
+export const systemPrompt = 'You are a helpful video and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video or audio. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video.';
