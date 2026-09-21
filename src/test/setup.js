@@ -1,3 +1,8 @@
+// Provide required server env so importing config/middleware in unit tests
+// does not process.exit(1) when CI has no secrets.
+if (!process.env.XAI_API_TOKEN) process.env.XAI_API_TOKEN = 'test-xai-token-not-for-prod';
+if (!process.env.SESSION_SECRET) process.env.SESSION_SECRET = 'test-session-secret-not-for-prod';
+
 import { expect, afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';

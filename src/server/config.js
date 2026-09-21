@@ -25,16 +25,20 @@ export const MOBILE_ACCESS_TOKEN_TTL_MS = Math.max(
   Number(process.env.MOBILE_ACCESS_TOKEN_TTL_MS || 30 * 24 * 60 * 60 * 1000)
 );
 
+// Vitest sets VITEST=true; skip hard-exit so unit tests can import server modules
+ // without production secrets. Production still exits when required vars are missing.
+const isTestRuntime = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+
 if (!XAI_API_TOKEN) {
   console.error('ERROR: XAI_API_TOKEN environment variable is not set');
   console.error('Please create a .env file with XAI_API_TOKEN=your_token_here');
-  process.exit(1);
+  if (!isTestRuntime) process.exit(1);
 }
 
 if (!SESSION_SECRET) {
   console.error('ERROR: SESSION_SECRET environment variable is not set');
   console.error('Please set SESSION_SECRET to a secure random string');
-  process.exit(1);
+  if (!isTestRuntime) process.exit(1);
 }
 
 if (!STRIPE_SECRET_KEY) {
