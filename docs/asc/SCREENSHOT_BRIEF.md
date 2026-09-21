@@ -1,4 +1,4 @@
-# FinalCut — App Store screenshot brief
+# FinalCap — App Store screenshot brief
 
 **Visual system:** darkroom-adjacent video editor (preview + timeline stub + chat). **Do not** reuse Grok Camera / Photo Recipes viewfinder chrome, shutter, or AO dials.
 

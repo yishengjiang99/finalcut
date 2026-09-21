@@ -1,4 +1,4 @@
-# FinalCut — App Store listing draft
+# FinalCap — App Store listing draft
 
 **Status:** DRAFT — confirm display name + copy with Design / CoS before pasting into ASC.  
 **Bundle ID:** `com.grepawk.finalcut`  
@@ -11,9 +11,9 @@ Do **not** use “Grok”, “Final Cut Pro”, or Apple product names in the Ap
 
 ## App Name (≤30)
 
-`FinalCut`
+`FinalCap - AI Video Editor`
 
-Alts if taken: `FinalCut AI`, `grepawk FinalCut` (check trademark / confusion with Apple Final Cut Pro — prefer distinct subtitle).
+Subtitle / alts if needed: `AI Video Editor`, `Chat Video Editor` (avoid “Final Cut” / Final Cut Pro confusion).
 
 ## Subtitle (≤30)
 
@@ -27,7 +27,7 @@ Import a clip, describe the edit in chat, preview, and export — captions, trim
 
 ## Description
 
-FinalCut turns short videos into finished clips with a chat-first editor.
+FinalCap turns short videos into finished clips with a chat-first editor.
 
 IMPORT
 • Bring a clip from Photos  
@@ -49,7 +49,7 @@ EXPORT
 SUBSCRIPTION
 Pro unlocks via Apple In-App Purchase (StoreKit). Web billing on grepawk.com does not replace iOS IAP for in-app unlocks.
 
-FinalCut is built by grepawk — a video editor with an AI chat loop, not a camera app.
+FinalCap is built by grepawk — a video editor with an AI chat loop, not a camera app.
 
 ## Keywords (≤100 chars, verify in ASC)
 

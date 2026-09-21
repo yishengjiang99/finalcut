@@ -1,4 +1,4 @@
-# FinalCut — App Privacy (nutrition label) draft
+# FinalCap — App Privacy (nutrition label) draft
 
 Complete App Store Connect → App Privacy to match **shipping** behavior. Mark TBD until iOS confirms.
 
@@ -31,4 +31,4 @@ Default: **Do not track** across apps/sites. No third-party ad SDK in v1. If you
 
 ## Explicit non-claims
 
-Do not declare camera capture, contacts scrapes, or Photo Recipes Recommend frame uploads unless FinalCut ships them.
+Do not declare camera capture, contacts scrapes, or Photo Recipes Recommend frame uploads unless FinalCap ships them.

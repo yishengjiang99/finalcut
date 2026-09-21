@@ -1,7 +1,7 @@
-# FinalCut iOS — App Store submission checklist
+# FinalCap iOS — App Store submission checklist
 
 Bundle ID: `com.grepawk.finalcut`  
-Display name: `FinalCut` (confirm before lock)  
+App Name: `FinalCap - AI Video Editor` · Display name: `FinalCap`  
 API: `https://grepawk.com`  
 Owner: FinalCut iOS + Design; CoS gates submit.
 
