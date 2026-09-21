@@ -1,0 +1,56 @@
+{
+  "identifier" : "FinalCut",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21400001",
+      "localizations" : [
+
+      ],
+      "name" : "FinalCut Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21400002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Pro editing, captions, and export on FinalCut.",
+              "displayName" : "FinalCut Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.grepawk.finalcut.subscription.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
