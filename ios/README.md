@@ -34,6 +34,7 @@ Override the API base URL at runtime via `APIConfig.shared.baseURL`.
 
 - Uses StoreKit 2 placeholders: `Product.products`, `purchase()`, `Transaction.currentEntitlements`.
 - Placeholder product id: **`com.grepawk.finalcut.subscription.monthly`** (configure in App Store Connect or a StoreKit Configuration file).
+- Local StoreKit config: **`FinalCut/StoreKit/FinalCut.storekit`** — attached to the shared **FinalCut** scheme (`FinalCut.xcodeproj/xcshareddata/xcschemes/FinalCut.xcscheme`) for simulator IAP testing.
 - PaywallView: **Subscribe** / **Restore purchases** call stub helpers; they no-op gracefully when products are missing (typical simulator).
 - **Does not** open Stripe Checkout URLs or use `ASWebAuthenticationSession` for billing.
 - Local demo can continue without a purchase.
@@ -87,6 +88,8 @@ xcodebuild test -project FinalCut.xcodeproj -scheme FinalCut -destination 'platf
 ASC checklist, listing copy, Review notes, privacy / export / StoreKit:
 
 → [`docs/asc/README.md`](../docs/asc/README.md)
+
+Info.plist / build keys (see [`docs/asc/INFO_PLIST_KEYS.md`](../docs/asc/INFO_PLIST_KEYS.md)) are set on the FinalCut target via `INFOPLIST_KEY_*` in `project.pbxproj` (`GENERATE_INFOPLIST_FILE = YES`): export compliance (`ITSAppUsesNonExemptEncryption = NO`), Photo Library + Photo Library Add usage strings. Camera / Microphone keys are omitted until in-app capture ships.
 
 Reusable iOS shipping playbook (extracted from Grok Camera learnings):
 
