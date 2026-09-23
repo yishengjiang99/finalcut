@@ -412,6 +412,94 @@ export const toolFunctions = {
       return 'Failed to normalize audio: ' + error.message;
     }
   },
+
+  audio_compressor: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      const threshold = args.threshold ?? 0;
+      const ratio = args.ratio ?? 4;
+      const attack = args.attack ?? 20;
+      const release = args.release ?? 250;
+
+      if (threshold < -60 || threshold > 0) {
+        throw new Error('Threshold must be between -60 and 0 dB');
+      }
+      if (ratio < 1 || ratio > 20) {
+        throw new Error('Ratio must be between 1 and 20');
+      }
+      if (attack < 0.01 || attack > 2000) {
+        throw new Error('Attack must be between 0.01 and 2000 milliseconds');
+      }
+      if (release < 0.01 || release > 9000) {
+        throw new Error('Release must be between 0.01 and 9000 milliseconds');
+      }
+
+      const data = await processVideoOnServer('audio_compressor', {
+        threshold,
+        ratio,
+        attack,
+        release
+      }, videoFileData);
+      setVideoFileData(data);
+      const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
+      addMessage({ text: 'Processed video (dynamic compression applied):', videoUrl: videoUrl, mimeType: 'video/mp4' });
+      return 'Dynamic audio compression applied successfully.';
+    } catch (error) {
+      addMessage({ text: 'Error applying dynamic compression: ' + error.message });
+      return 'Failed to apply dynamic compression: ' + error.message;
+    }
+  },
+
+  audio_dynamic_normalize: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      const mode = args.mode ?? 'dynaudnorm';
+      if (!['dynaudnorm', 'compand'].includes(mode)) {
+        throw new Error('Mode must be either "dynaudnorm" or "compand"');
+      }
+
+      let normalizedArgs;
+      if (mode === 'compand') {
+        const attacks = args.attacks ?? 0.3;
+        const decays = args.decays ?? 0.8;
+        const points = args.points ?? '-70/-70|-40/-30|-20/-15|0/-12';
+        const gain = args.gain ?? 3;
+
+        if (attacks <= 0 || decays <= 0) {
+          throw new Error('Attack and decay times must be positive');
+        }
+        if (typeof points !== 'string' || !/^(-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?)(\|-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?)*$/.test(points)) {
+          throw new Error('Points must use input/output dB pairs like "-70/-70|-40/-30|-20/-15|0/-12"');
+        }
+        if (gain < -20 || gain > 20) {
+          throw new Error('Gain must be between -20 and 20 dB');
+        }
+
+        normalizedArgs = { mode, attacks, decays, points, gain };
+      } else {
+        const frame_length = args.frame_length ?? 150;
+        const gaussian_size = args.gaussian_size ?? 31;
+
+        if (frame_length < 10 || frame_length > 8000) {
+          throw new Error('Frame length must be between 10 and 8000 milliseconds');
+        }
+        if (!Number.isInteger(gaussian_size) || gaussian_size < 3 || gaussian_size > 301 || gaussian_size % 2 === 0) {
+          throw new Error('Gaussian size must be an odd integer between 3 and 301');
+        }
+
+        normalizedArgs = { mode, frame_length, gaussian_size };
+      }
+
+      const data = await processVideoOnServer('audio_dynamic_normalize', normalizedArgs, videoFileData);
+      setVideoFileData(data);
+      const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
+      addMessage({ text: 'Processed video (dynamic audio normalized):', videoUrl: videoUrl, mimeType: 'video/mp4' });
+      return mode === 'compand'
+        ? 'Gentle compand dynamic control applied successfully.'
+        : 'Dynamic audio normalization applied successfully.';
+    } catch (error) {
+      addMessage({ text: 'Error applying dynamic audio normalization: ' + error.message });
+      return 'Failed to apply dynamic audio normalization: ' + error.message;
+    }
+  },
   
   delay_audio: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {

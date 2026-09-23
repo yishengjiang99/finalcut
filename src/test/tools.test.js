@@ -154,6 +154,13 @@ describe('Tools Module', () => {
     expect(compressorTool.function.description).toContain('compression');
   });
 
+  it('has audio_dynamic_normalize tool', () => {
+    const dynamicNormalizeTool = tools.find(t => t.function.name === 'audio_dynamic_normalize');
+    expect(dynamicNormalizeTool).toBeDefined();
+    expect(dynamicNormalizeTool.function.description).toContain('classical');
+    expect(dynamicNormalizeTool.function.parameters.properties.mode.enum).toEqual(['dynaudnorm', 'compand']);
+  });
+
   it('has audio_gate tool', () => {
     const gateTool = tools.find(t => t.function.name === 'audio_gate');
     expect(gateTool).toBeDefined();

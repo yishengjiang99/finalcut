@@ -2,6 +2,27 @@ import { useCallback, useRef } from 'react';
 import { tools } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 
+async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
+  try {
+    await fetch('/api/chat-error', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeaders || {})
+      },
+      body: JSON.stringify({
+        message: error?.message || String(error),
+        name: error?.name || null,
+        stack: error?.stack || null,
+        messageCount,
+        context
+      })
+    });
+  } catch (reportError) {
+    console.error('Failed to report chat error:', reportError);
+  }
+}
+
 export function useCallAPI({
   isSampleMode,
   sampleAccessToken,
@@ -162,14 +183,24 @@ export function useCallAPI({
         try {
           for (const call of toolCallsArray) {
             const funcName = call.function.name;
-            const args = JSON.parse(call.function.arguments);
+            const toolFunction = toolFunctions[funcName];
+            if (typeof toolFunction !== 'function') {
+              throw new Error(`Unsupported tool call from xAI: ${funcName || '(missing tool name)'}`);
+            }
+
+            let args;
+            try {
+              args = JSON.parse(call.function.arguments || '{}');
+            } catch (parseError) {
+              throw new Error(`Invalid arguments for xAI tool call "${funcName}": ${parseError.message}`);
+            }
 
             // Pass uploadedVideos only to functions that need it
             let result;
             if (funcName === 'add_video_transition') {
-              result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage, uploadedVideos);
+              result = await toolFunction(args, videoFileData, setVideoFileData, addMessage, uploadedVideos);
             } else {
-              result = await toolFunctions[funcName](args, videoFileData, setVideoFileData, addMessage);
+              result = await toolFunction(args, videoFileData, setVideoFileData, addMessage);
             }
 
             currentMessages.push({
@@ -187,6 +218,16 @@ export function useCallAPI({
         await callAPIRef.current(currentMessages);
       }
     } catch (error) {
+      await reportChatError(error, {
+        authHeaders,
+        messageCount: currentMessages.length,
+        context: {
+          toolCallNames: currentMessages
+            .flatMap(message => message?.tool_calls || [])
+            .map(toolCall => toolCall?.function?.name)
+            .filter(Boolean)
+        }
+      });
       addMessage({ text: 'Error communicating with xAI API: ' + error.message });
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
@@ -197,4 +238,3 @@ export function useCallAPI({
 
   return callAPI;
 }
-
