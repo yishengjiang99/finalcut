@@ -257,15 +257,35 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     return () => video.removeEventListener('loadedmetadata', startAutoRecording);
   }, [vttUrl, isAudio, isCollapsed, isRecording, downloadUrl, handleStartRecording]);
 
-  const handleDownload = () => {
+  const fallbackAnchorDownload = (url, filename) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const shareVideoFile = async (url, filename, fileType) => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: fileType });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Download Video' });
+    } else {
+      fallbackAnchorDownload(url, filename);
+    }
+  };
+
+  const handleDownload = async () => {
     if (!isAudio && vttUrl) {
       if (!downloadUrl) return;
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = 'burned_subs.webm';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const filename = 'burned_subs.webm';
+      try {
+        await shareVideoFile(downloadUrl, filename, 'video/webm');
+      } catch {
+        fallbackAnchorDownload(downloadUrl, filename);
+      }
       return;
     }
     const extMap = {
@@ -275,12 +295,12 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       'audio/ogg': '.ogg', 'audio/flac': '.flac', 'audio/mp4': '.m4a'
     };
     const ext = (mimeType && extMap[mimeType]) || (isAudio ? '.mp3' : '.mp4');
-    const a = document.createElement('a');
-    a.href = videoUrl;
-    a.download = (isAudio ? 'processed-audio' : 'processed-video') + ext;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const filename = (isAudio ? 'processed-audio' : 'processed-video') + ext;
+    try {
+      await shareVideoFile(videoUrl, filename, mimeType || (isAudio ? 'audio/mpeg' : 'video/mp4'));
+    } catch {
+      fallbackAnchorDownload(videoUrl, filename);
+    }
   };
 
   const handlePlayPause = () => {
