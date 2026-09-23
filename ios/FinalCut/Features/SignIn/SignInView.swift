@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Placeholder SignIn — Google Sign-In deferred (product decision).
+/// Placeholder SignIn — account sign-in deferred (product decision).
 /// Non-functional auth; local demo can continue into Paywall / Editor.
 struct SignInView: View {
     @EnvironmentObject private var appModel: AppModel
@@ -25,7 +25,7 @@ struct SignInView: View {
                 Text("Sign in")
                     .font(.title.bold())
                     .foregroundStyle(AppTheme.textPrimary)
-                Text("Coming soon — Google Sign-In deferred for this scaffold.\nContinue for a local demo of the editor shell.")
+                Text("Account sign-in is not available yet.\nContinue for a local demo of the editor shell.")
                     .font(.footnote)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -33,16 +33,6 @@ struct SignInView: View {
             }
 
             VStack(spacing: 12) {
-                Button {
-                    // Non-functional — no Google SDK / mobile auth call.
-                } label: {
-                    Label("Sign in with Google — Coming soon", systemImage: "g.circle.fill")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.bordered)
-                .disabled(true)
-
                 Button {
                     // Local demo path into Paywall → Editor (no auth).
                     appModel.completeSignIn(sampleMode: false)
