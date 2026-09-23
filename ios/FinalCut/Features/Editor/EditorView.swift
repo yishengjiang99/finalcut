@@ -14,7 +14,8 @@ struct EditorView: View {
                 onImport: { model.presentPhotosPicker = true },
                 onImportFiles: { model.presentImporter = true },
                 onExport: { showExport = true },
-                importEnabled: importEnabled
+                importEnabled: importEnabled,
+                importLabel: appModel.isTestVideoMode ? "Test video" : "Import"
             )
 
             PreviewPaneView(
@@ -65,6 +66,9 @@ struct EditorView: View {
         }
         .onAppear {
             model.apiClient = appModel.apiClient
+            if appModel.isTestVideoMode {
+                model.loadBundledTestVideo()
+            }
         }
         .overlay(alignment: .top) {
             if model.state == .failed, let err = model.lastError {
@@ -80,7 +84,7 @@ struct EditorView: View {
     }
 
     private var importEnabled: Bool {
-        model.state != .uploading && model.state != .processing
+        !appModel.isTestVideoMode && model.state != .uploading && model.state != .processing
     }
 }
 
@@ -163,6 +167,19 @@ final class EditorViewModel: ObservableObject {
         captionArtifacts = CaptionArtifacts()
         state = .ready
         messages.append(ChatMessage(role: .system, content: message))
+    }
+
+    func loadBundledTestVideo() {
+        guard localVideoURL == nil else { return }
+        guard let url = Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4") else {
+            state = .failed
+            lastError = "Test video unavailable"
+            return
+        }
+        localVideoURL = url
+        state = .ready
+        showSampleChips = true
+        messages.append(ChatMessage(role: .system, content: "Loaded test video"))
     }
 
     func applySampleChip(_ chip: String) {

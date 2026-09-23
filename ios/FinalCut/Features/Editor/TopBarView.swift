@@ -5,6 +5,7 @@ struct TopBarView: View {
     var onImportFiles: () -> Void
     var onExport: () -> Void
     var importEnabled = true
+    var importLabel = "Import"
 
     var body: some View {
         HStack {
@@ -16,7 +17,7 @@ struct TopBarView: View {
                 Button("Photo Library", systemImage: "photo.on.rectangle", action: onImport)
                 Button("Choose File", systemImage: "folder", action: onImportFiles)
             } label: {
-                Text("Import")
+                Text(importLabel)
             } primaryAction: {
                 onImport()
             }
