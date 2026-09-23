@@ -268,6 +268,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
 
   const shareVideoFile = async (url, filename, fileType) => {
     const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+    }
     const blob = await response.blob();
     const file = new File([blob], filename, { type: fileType });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
