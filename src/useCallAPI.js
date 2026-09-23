@@ -2,6 +2,13 @@ import { useCallback } from 'react';
 import { tools } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 
+export function assertToolCallApplied(result, functionName) {
+  if (typeof result !== 'string' || /^Failed\b/i.test(result.trim())) {
+    throw new Error(`Tool call "${functionName}" was not applied: ${result || 'no result returned'}`);
+  }
+  return result;
+}
+
 export function filterMessagesForInference(messages) {
   const latestUserMessage = [...messages]
     .reverse()
@@ -189,6 +196,15 @@ export function useCallAPI({
         setProcessing(true);
 
         try {
+          // React state updates are asynchronous. Keep a local working value so
+          // each tool receives the bytes produced by the previous tool in this
+          // same response (for example: volume, then brightness).
+          let workingVideoFileData = videoFileData;
+          const updateWorkingVideoFileData = data => {
+            workingVideoFileData = data;
+            setVideoFileData(data);
+          };
+
           for (const call of toolCallsArray) {
             const funcName = call.function.name;
             const toolFunction = toolFunctions[funcName];
@@ -206,10 +222,14 @@ export function useCallAPI({
             // Pass uploadedVideos only to functions that need it
             let result;
             if (funcName === 'add_video_transition') {
-              result = await toolFunction(args, videoFileData, setVideoFileData, addMessage, uploadedVideos);
+              result = await toolFunction(args, workingVideoFileData, updateWorkingVideoFileData, addMessage, uploadedVideos);
             } else {
-              result = await toolFunction(args, videoFileData, setVideoFileData, addMessage);
+              result = await toolFunction(args, workingVideoFileData, updateWorkingVideoFileData, addMessage);
             }
+
+            // Tool functions report processing failures as result strings. Do
+            // not let a later tool run against media that was never updated.
+            result = assertToolCallApplied(result, funcName);
 
             currentMessages.push({
               role: 'tool',
@@ -220,7 +240,7 @@ export function useCallAPI({
             });
           }
         } finally {
-          // Hide spinner as soon as video processing is done, before the follow-up API call
+          // Hide spinner as soon as all tool calls in this response are done.
           setProcessing(false);
         }
       }

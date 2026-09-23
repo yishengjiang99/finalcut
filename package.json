@@ -15,7 +15,9 @@
     "deploy:grepawk": "./scripts/deploy-grepawk.sh",
     "test:live-captions": "vitest --run src/test/live-captions.e2e.test.js",
     "test:playwright:live-captions": "playwright test tests/playwright/live-captions.spec.js",
-    "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js"
+    "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js",
+    "ios": "./scripts/run-ios-device.sh",
+    "ios:simulator": "./scripts/run-ios-simulator.sh"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

@@ -292,21 +292,6 @@ export async function updateUserSubscription(email, hasSubscription, subscriptio
   );
 }
 
-// Lesson operations
-export async function getRecentLessons(userId, limit = 7) {
-  try {
-    const pool = getPool();
-    const [rows] = await pool.query(
-      'SELECT lesson FROM user_lessons WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-      [userId, limit]
-    );
-    return rows.map(r => r.lesson);
-  } catch (err) {
-    console.error('Failed to load lessons:', err.message);
-    return [];
-  }
-}
-
 export function hashApiToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -466,7 +451,6 @@ export default {
   createApiToken,
   findUserByApiToken,
   revokeApiToken,
-  getRecentLessons,
   saveLesson,
   enqueueChatInteraction,
   flushChatInteractionQueue,

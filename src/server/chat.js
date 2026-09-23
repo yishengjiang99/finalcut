@@ -125,8 +125,9 @@ export function flushStreamFilter(filter) {
 
 // ─── System prompt builder ───────────────────────────────────────────────────
 
-function buildSystemMessage(recentLessons) {
+export function buildSystemMessage() {
   const outputContract =
+    'When a request requires multiple edits, emit one tool call for each edit in the order they should be applied. The tool calls will be executed sequentially on the current media.\n\n' +
     'Always end your FINAL response (after any tool use is complete) with exactly this format:\n' +
     '- Answer:\n' +
     '  <your answer here>\n' +
@@ -134,12 +135,7 @@ function buildSystemMessage(recentLessons) {
     '  <1-2 sentences summarizing a key insight, max 240 chars, no private data>\n' +
     'No third section.';
 
-  let content = outputContract;
-  if (recentLessons.length > 0) {
-    const bullets = recentLessons.map(l => `- ${l}`).join('\n');
-    content += `\n\nRecent lessons (do not repeat verbatim unless relevant):\n${bullets}`;
-  }
-  return { role: 'system', content };
+  return { role: 'system', content: outputContract };
 }
 
 function messageContentToText(content) {
@@ -212,6 +208,10 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       },
     });
 
+    // Keep the client payload focused on the latest actionable request, but
+    // always restore the server-owned system contract.
+    const systemMessage = buildSystemMessage();
+
     // Enable streaming for xAI API
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -221,7 +221,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       },
       body: JSON.stringify({
         ...req.body,
-        messages: req.body.messages,
+        messages: [systemMessage, ...req.body.messages],
         model: 'grok-3', // Specify the new model here
         stream: true // Enable streaming
       })

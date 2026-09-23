@@ -1,5 +1,7 @@
 node_modules
 dist
+ios/build
+ios/build-device
 .env*
 ffmpegwasm/bin
 ffmpegwasm/emsdk

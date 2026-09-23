@@ -23,18 +23,30 @@ vi.mock('../server/config.js', () => ({
 
 // Stub out DB calls – not needed for unit-level filter tests
 vi.mock('../db.js', () => ({
-  getRecentLessons: vi.fn().mockResolvedValue([]),
   saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   getPool: vi.fn(),
 }));
 
 import {
+  buildSystemMessage,
   extractLesson,
   createStreamFilter,
   applyStreamFilter,
   flushStreamFilter,
 } from '../server/chat.js';
+
+describe('buildSystemMessage', () => {
+  it('always includes the output contract', () => {
+    const message = buildSystemMessage();
+
+    expect(message).toEqual(expect.objectContaining({ role: 'system' }));
+    expect(message.content).toContain('Always end your FINAL response');
+    expect(message.content).toContain('- Answer:');
+    expect(message.content).toContain('- Lesson:');
+  });
+
+});
 
 // ─── extractLesson ────────────────────────────────────────────────────────────
 

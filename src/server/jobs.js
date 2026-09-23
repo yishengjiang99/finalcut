@@ -7,6 +7,7 @@ import {
   videoProcessLimiter,
   requireAuthenticatedUser,
   requireInferenceAccess,
+  requireActiveSubscription,
   upload,
   getBaseUrlFromRequest,
   isValidSampleModeRequest,
