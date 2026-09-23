@@ -249,6 +249,38 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Trim silence"), .otherEdit)
     }
 
+    @MainActor
+    func testAppModelModeTransitions() {
+        let appModel = AppModel()
+
+        appModel.tryTestVideoNow()
+        XCTAssertEqual(appModel.route, .editor)
+        XCTAssertTrue(appModel.hasUnlockedEditor)
+        XCTAssertTrue(appModel.isSampleMode)
+        XCTAssertTrue(appModel.isTestVideoMode)
+        XCTAssertTrue(appModel.apiClient.sampleModeEnabled)
+
+        appModel.goToSignIn()
+        XCTAssertEqual(appModel.route, .signIn)
+        XCTAssertFalse(appModel.isSampleMode)
+        XCTAssertFalse(appModel.isTestVideoMode)
+        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+
+        appModel.tryTestVideoNow()
+        appModel.unlockEditor()
+        XCTAssertEqual(appModel.route, .editor)
+        XCTAssertFalse(appModel.isSampleMode)
+        XCTAssertFalse(appModel.isTestVideoMode)
+        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+
+        appModel.tryTestVideoNow()
+        appModel.skipToEditorForDev()
+        XCTAssertEqual(appModel.route, .editor)
+        XCTAssertFalse(appModel.isSampleMode)
+        XCTAssertFalse(appModel.isTestVideoMode)
+        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+    }
+
     func testAPIErrorCaptionsChatCopy() {
         XCTAssertEqual(APIError.noSpeechDetected.captionsChatMessage, "Couldn't generate captions — no speech")
         XCTAssertEqual(APIError.decoding.captionsChatMessage, "Couldn't generate captions — try again")

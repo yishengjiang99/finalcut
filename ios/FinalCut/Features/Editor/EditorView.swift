@@ -179,13 +179,21 @@ final class EditorViewModel: ObservableObject {
     }
 
     func loadBundledTestVideo() {
-        guard localVideoURL == nil else { return }
-        guard let url = Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4") else {
+        guard let url = bundledTestVideoURL else {
             state = .failed
             lastError = "Test video unavailable"
             return
         }
+        guard localVideoURL != url else { return }
+        processingTask?.cancel()
+        activeJobId = nil
+        messages = []
+        composerText = ""
         localVideoURL = url
+        photosPickerItem = nil
+        lastError = nil
+        captionArtifacts = CaptionArtifacts()
+        processingOverlay = .editing
         state = .ready
         showSampleChips = true
         messages.append(ChatMessage(role: .system, content: "Loaded test video"))
