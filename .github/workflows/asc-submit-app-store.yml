@@ -1,0 +1,604 @@
+name: ASC submit App Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: CFBundleVersion / ASC build version (e.g. 26)
+        required: false
+        type: string
+        default: "26"
+      version_string:
+        description: App Store versionString (marketing version)
+        required: false
+        type: string
+        default: "1.0"
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Attach build and submit for review
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          VERSION_STRING: ${{ inputs.version_string }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, re, time, urllib.request, urllib.error, urllib.parse
+          import jwt
+
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          issuer = os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          build_number = os.environ['BUILD_NUMBER'].strip()
+          version_string = os.environ['VERSION_STRING'].strip()
+          bundle_id = os.environ['BUNDLE_ID'].strip()
+
+          now = int(time.time())
+          token = jwt.encode(
+            {'iss': issuer, 'iat': now, 'exp': now + 1200, 'aud': 'appstoreconnect-v1'},
+            p8, algorithm='ES256', headers={'kid': key_id},
+          )
+
+          def api(method, path, body=None, ok_statuses=None):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com' + path,
+              data=data, method=method,
+              headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
+            try:
+              with urllib.request.urlopen(req, timeout=90) as r:
+                raw = r.read().decode() or '{}'
+                return r.status, json.loads(raw)
+            except urllib.error.HTTPError as e:
+              err = e.read().decode()
+              if ok_statuses and e.code in ok_statuses:
+                try:
+                  parsed = json.loads(err) if err else {}
+                except json.JSONDecodeError:
+                  parsed = {'raw': err}
+                return e.code, parsed
+              raise SystemExit(f'{method} {path} -> {e.code}: {err[:2000]}')
+
+          EDITABLE = {
+            'PREPARE_FOR_SUBMISSION',
+            'DEVELOPER_REJECTED',
+            'REJECTED',
+            'METADATA_REJECTED',
+            'INVALID_BINARY',
+          }
+          REPLACEABLE = EDITABLE | {
+            'WAITING_FOR_REVIEW',
+            'IN_REVIEW',
+            'PENDING_DEVELOPER_RELEASE',
+          }
+
+          print(f'=== ASC submit: bundle={bundle_id} build={build_number} versionString={version_string} ===')
+
+          # --- App ---
+          _, apps = api('GET', f'/v1/apps?filter[bundleId]={urllib.parse.quote(bundle_id)}')
+          if not apps.get('data'):
+            raise SystemExit(f'App not found for bundleId {bundle_id}')
+          app_id = apps['data'][0]['id']
+          print('app', app_id, apps['data'][0].get('attributes', {}).get('name'))
+
+          # --- Build (must be VALID) ---
+          _, builds = api(
+            'GET',
+            f'/v1/builds?filter[app]={app_id}&filter[version]={urllib.parse.quote(build_number)}&limit=10&sort=-uploadedDate',
+          )
+          match = None
+          for b in builds.get('data', []):
+            attrs = b.get('attributes', {})
+            print('candidate build', b['id'], attrs.get('version'), attrs.get('processingState'),
+                  'usesNonExemptEncryption=', attrs.get('usesNonExemptEncryption'))
+            if str(attrs.get('version')) == str(build_number):
+              match = b
+              break
+          if not match:
+            raise SystemExit(f'Build {build_number} not found')
+          build_id = match['id']
+          battrs = match['attributes']
+          if battrs.get('processingState') != 'VALID':
+            raise SystemExit(
+              f'Build {build_number} ({build_id}) processingState={battrs.get("processingState")} (need VALID)'
+            )
+          print('selected build', build_id, battrs.get('processingState'),
+                'usesNonExemptEncryption=', battrs.get('usesNonExemptEncryption'))
+
+          # Ensure export compliance cleared
+          if battrs.get('usesNonExemptEncryption') is not False:
+            print('clearing usesNonExemptEncryption...')
+            st, updated = api('PATCH', f'/v1/builds/{build_id}', {
+              'data': {
+                'type': 'builds',
+                'id': build_id,
+                'attributes': {'usesNonExemptEncryption': False},
+              }
+            })
+            print('patched encryption', st,
+                  updated.get('data', {}).get('attributes', {}).get('usesNonExemptEncryption'))
+          else:
+            print('usesNonExemptEncryption already false')
+
+          # --- App Store versions ---
+          _, versions = api(
+            'GET',
+            f'/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20',
+          )
+          version_candidates = []
+          for v in versions.get('data', []):
+            attrs = v.get('attributes', {})
+            print('version', v['id'], attrs.get('versionString'), attrs.get('appStoreState'),
+                  attrs.get('platform'))
+            if attrs.get('versionString') == version_string and attrs.get('platform') == 'IOS':
+              version_candidates.append(v)
+
+          def prefer_version(cands):
+            # Prefer editable, then replaceable (waiting/in review), then any match
+            for state_set in (EDITABLE, REPLACEABLE):
+              for v in cands:
+                if v['attributes'].get('appStoreState') in state_set:
+                  return v
+            return cands[0] if cands else None
+
+          version = prefer_version(version_candidates)
+
+          if version is None:
+            print(f'No IOS versionString={version_string}; creating PREPARE_FOR_SUBMISSION...')
+            st, created = api('POST', '/v1/appStoreVersions', {
+              'data': {
+                'type': 'appStoreVersions',
+                'attributes': {
+                  'platform': 'IOS',
+                  'versionString': version_string,
+                },
+                'relationships': {
+                  'app': {'data': {'type': 'apps', 'id': app_id}},
+                },
+              }
+            })
+            version = created['data']
+            print('created version', version['id'], version['attributes'].get('appStoreState'))
+          else:
+            print('using version', version['id'], version['attributes'].get('appStoreState'))
+
+          version_id = version['id']
+          vstate = version['attributes'].get('appStoreState')
+
+          # --- Cancel/withdraw prior review submission if waiting/in review ---
+          canceled_submission_ids = []
+          if vstate in ('WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_APPLE_RELEASE'):
+            print(f'version state {vstate}; looking for open reviewSubmissions to cancel...')
+            st, subs = api(
+              'GET',
+              f'/v1/apps/{app_id}/reviewSubmissions?filter[platform]=IOS&limit=20',
+              ok_statuses={404, 403},
+            )
+            if st in (404, 403):
+              # try without platform filter
+              st, subs = api(
+                'GET',
+                f'/v1/reviewSubmissions?filter[app]={app_id}&limit=20',
+                ok_statuses={404, 403},
+              )
+            # READY_FOR_REVIEW shells are often not cancellable; focus on live review.
+            open_states = {
+              'WAITING_FOR_REVIEW', 'IN_REVIEW', 'UNRESOLVED_ISSUES', 'CANCELING',
+            }
+            for s in (subs.get('data') or []):
+              sattrs = s.get('attributes', {})
+              sstate = sattrs.get('state')
+              print('reviewSubmission', s['id'], sstate, sattrs.get('platform'))
+              if sstate in open_states:
+                if sstate == 'CANCELING':
+                  canceled_submission_ids.append(s['id'])
+                  print(f'already CANCELING reviewSubmission {s["id"]}; will wait for COMPLETE')
+                  continue
+                print(f'canceling reviewSubmission {s["id"]} (state={sstate})...')
+                cst, canceled = api(
+                  'PATCH', f'/v1/reviewSubmissions/{s["id"]}',
+                  {
+                    'data': {
+                      'type': 'reviewSubmissions',
+                      'id': s['id'],
+                      'attributes': {'canceled': True},
+                    }
+                  },
+                  ok_statuses={409, 422},
+                )
+                if cst >= 400:
+                  print('cancel warning', cst, json.dumps(canceled)[:800])
+                else:
+                  canceled_submission_ids.append(s['id'])
+                  print('canceled', canceled.get('data', {}).get('attributes', {}).get('state'))
+
+            # Poll canceled submissions until COMPLETE — version stays ITEM_PART_OF_ANOTHER
+            # while cancel is still CANCELING even if appStoreState already flipped.
+            for sid in canceled_submission_ids:
+              for attempt in range(40):
+                _, sref = api('GET', f'/v1/reviewSubmissions/{sid}')
+                sstate = sref.get('data', {}).get('attributes', {}).get('state')
+                print(f'cancel COMPLETE poll {sid} {attempt+1}: {sstate}')
+                if sstate == 'COMPLETE':
+                  break
+                if sstate not in ('CANCELING', 'WAITING_FOR_REVIEW', 'IN_REVIEW'):
+                  # unexpected but stop waiting
+                  break
+                time.sleep(3)
+              else:
+                raise SystemExit(
+                  f'reviewSubmission {sid} did not reach COMPLETE after cancel; '
+                  f'last state={sstate}. Retry shortly.'
+                )
+
+            # Poll until version is editable again
+            editable_after = EDITABLE | {'READY_FOR_REVIEW', 'DEVELOPER_REJECTED'}
+            for attempt in range(30):
+              _, vrefresh = api('GET', f'/v1/appStoreVersions/{version_id}')
+              version = vrefresh['data']
+              vstate = version['attributes'].get('appStoreState')
+              print(f'version state poll {attempt+1}: {vstate}')
+              if vstate in editable_after or vstate not in (
+                'WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_APPLE_RELEASE',
+              ):
+                break
+              time.sleep(3)
+            print('version state after cancel attempt:', vstate)
+
+          if vstate in ('PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE',
+                        'PROCESSING_FOR_APP_STORE', 'READY_FOR_SALE'):
+            raise SystemExit(
+              f'Cannot attach/submit: appStoreVersion {version_id} is in non-editable state {vstate}. '
+              f'Create a new versionString or complete prior release in ASC.'
+            )
+
+          if vstate in ('WAITING_FOR_REVIEW', 'IN_REVIEW'):
+            raise SystemExit(
+              f'Version {version_id} still {vstate} after cancel attempts; '
+              f'cannot replace build yet. Retry shortly or withdraw in ASC UI.'
+            )
+
+          # --- Attach build ---
+          print(f'attaching build {build_id} to version {version_id}...')
+          for attempt in range(8):
+            st, attach_resp = api(
+              'PATCH',
+              f'/v1/appStoreVersions/{version_id}/relationships/build',
+              {'data': {'type': 'builds', 'id': build_id}},
+              ok_statuses={409, 422},
+            )
+            _, rel = api('GET', f'/v1/appStoreVersions/{version_id}/relationships/build')
+            current = (rel.get('data') or {}).get('id')
+            if st < 400 or current == build_id:
+              print('build attached/verified', st, 'current=', current)
+              break
+            print(f'attach attempt {attempt+1} -> {st} current={current} body={json.dumps(attach_resp)[:500]}')
+            time.sleep(5)
+          else:
+            raise SystemExit(
+              f'Build attach failed: expected {build_id}, got {current}. '
+              f'Last ASC body: {json.dumps(attach_resp)[:1500]}'
+            )
+
+          _, rel = api('GET', f'/v1/appStoreVersions/{version_id}/relationships/build')
+          attached = (rel.get('data') or {}).get('id')
+          print('verified attached build', attached)
+          if attached != build_id:
+            raise SystemExit(f'Build attach failed: expected {build_id}, got {attached}')
+
+          # --- Submit via reviewSubmissions (prefer) ---
+          def list_submission_items(submission_id):
+            # Related collection is /items (not /reviewSubmissionItems).
+            st_items, items = api(
+              'GET',
+              f'/v1/reviewSubmissions/{submission_id}/items'
+              f'?include=appStoreVersion&limit=50',
+              ok_statuses={404},
+            )
+            if st_items >= 400:
+              return []
+            included_by_id = {inc.get('id'): inc for inc in (items.get('included') or [])}
+            out = []
+            for it in items.get('data') or []:
+              rel = (it.get('relationships') or {}).get('appStoreVersion', {}).get('data') or {}
+              vid = rel.get('id')
+              # Some ASC responses omit relationship data; fall back to included / item id.
+              if not vid:
+                for inc in (items.get('included') or []):
+                  if inc.get('type') == 'appStoreVersions':
+                    vid = inc.get('id')
+                    break
+              # Item ids are often base64("submissionId|n|numericVersionId")
+              raw_id = it.get('id') or ''
+              out.append({
+                'id': raw_id,
+                'attrs': it.get('attributes') or {},
+                'appStoreVersion': vid,
+                'raw': raw_id,
+              })
+              print('existing item', raw_id, it.get('attributes'), 'version=', vid)
+            return out
+
+          def submission_has_version(submission_id):
+            # Match UUID, or accept any appStoreVersion item (single-version apps).
+            items = list_submission_items(submission_id)
+            for it in items:
+              vid = it.get('appStoreVersion')
+              if vid == version_id:
+                return True
+              # ASC sometimes keys relationships by numeric id; item id embeds it.
+              if version_id and version_id.replace('-', '') in (it.get('raw') or ''):
+                return True
+            # Related link probe as last resort
+            st_rel, rel = api(
+              'GET',
+              f'/v1/reviewSubmissions/{submission_id}/relationships/items',
+              ok_statuses={404, 403},
+            )
+            if st_rel < 400 and (rel.get('data') or []):
+              # Items exist; for our single-version flow treat as present after a successful add.
+              print('submission has', len(rel.get('data') or []), 'item linkage(s)')
+              return True
+            return False
+
+          def add_version_to_submission(submission_id):
+            """Add version item; retry while prior cancel still holds the item lock."""
+            last = None
+            existing_items = list_submission_items(submission_id)
+            if submission_has_version(submission_id) or existing_items:
+              # Non-empty shell from a prior partial success — do not re-POST.
+              print(f'submission {submission_id} already has {len(existing_items)} item(s); skip add')
+              return True, 200, {'already': True}
+            for attempt in range(20):
+              st_item, item_resp = api(
+                'POST', '/v1/reviewSubmissionItems',
+                {
+                  'data': {
+                    'type': 'reviewSubmissionItems',
+                    'relationships': {
+                      'reviewSubmission': {
+                        'data': {'type': 'reviewSubmissions', 'id': submission_id},
+                      },
+                      'appStoreVersion': {
+                        'data': {'type': 'appStoreVersions', 'id': version_id},
+                      },
+                    },
+                  }
+                },
+                ok_statuses={409, 422},
+              )
+              last = (st_item, item_resp)
+              if st_item < 400:
+                print('added reviewSubmissionItem', item_resp.get('data', {}).get('id'))
+                return True, st_item, item_resp
+              detail = json.dumps(item_resp)[:1200]
+              print(f'reviewSubmissionItems attempt {attempt+1} -> {st_item} {detail}')
+              codes = []
+              blob = json.dumps(item_resp)
+              for err in (item_resp.get('errors') or []):
+                codes.append(err.get('code') or '')
+                meta = err.get('meta') or {}
+                for key in ('associatedErrors', 'associatedErrors'):
+                  for assoc in (meta.get(key) or {}).values():
+                    for a in assoc or []:
+                      codes.append(a.get('code') or '')
+              if 'ITEM_PART_OF_ANOTHER_SUBMISSION' in blob:
+                codes.append('STATE_ERROR.ITEM_PART_OF_ANOTHER_SUBMISSION')
+              # Already linked to this or another resolving submission
+              if any('DUPLICATE' in c or 'ALREADY' in c for c in codes):
+                items_now = list_submission_items(submission_id)
+                if items_now:
+                  return True, st_item, {'already': True, **(item_resp if isinstance(item_resp, dict) else {})}
+              # Still locked by canceled/other submission — switch or retry
+              if any('ITEM_PART_OF_ANOTHER_SUBMISSION' in c for c in codes):
+                # If THIS submission already holds an item, proceed
+                if list_submission_items(submission_id):
+                  return True, st_item, {'already': True}
+                # Parse the holding submission id from the error detail and switch to it.
+                other_id = None
+                blob = json.dumps(item_resp)
+                m = re.search(
+                  r'reviewSubmission with id ([0-9a-fA-F-]{36})',
+                  blob,
+                )
+                if not m:
+                  m = re.search(
+                    r'another reviewSubmission with id ([0-9a-fA-F-]{36})',
+                    blob,
+                  )
+                if m:
+                  other_id = m.group(1)
+                  print('version held by reviewSubmission', other_id, '— switching')
+                  return True, 200, {'switch_to': other_id}
+                time.sleep(5)
+                continue
+              # Stale empty READY_FOR_REVIEW that cannot take this version
+              return False, st_item, item_resp
+            return False, last[0], last[1]
+
+          def create_review_submission():
+            body = {
+              'data': {
+                'type': 'reviewSubmissions',
+                'attributes': {'platform': 'IOS'},
+                'relationships': {
+                  'app': {'data': {'type': 'apps', 'id': app_id}},
+                },
+              }
+            }
+            st, created = api('POST', '/v1/reviewSubmissions', body, ok_statuses={403, 409, 422})
+            if st >= 400:
+              # try without platform attribute (newer API)
+              body2 = {
+                'data': {
+                  'type': 'reviewSubmissions',
+                  'relationships': {
+                    'app': {'data': {'type': 'apps', 'id': app_id}},
+                  },
+                }
+              }
+              st, created = api('POST', '/v1/reviewSubmissions', body2, ok_statuses={403, 409, 422})
+            return st, created
+
+          def submit_via_review_submissions():
+            # Prefer a READY_FOR_REVIEW that already includes this version.
+            # Do NOT blindly reuse stale empty READY_FOR_REVIEW shells.
+            st, existing = api(
+              'GET',
+              f'/v1/reviewSubmissions?filter[app]={app_id}&limit=20',
+              ok_statuses={403, 404},
+            )
+            ready = []
+            if st < 400:
+              for s in existing.get('data') or []:
+                sattrs = s.get('attributes', {})
+                print('candidate submission', s['id'], sattrs.get('state'), sattrs.get('platform'))
+                if sattrs.get('state') == 'READY_FOR_REVIEW':
+                  ready.append(s)
+
+            submission_id = None
+            # Prefer READY_FOR_REVIEW shells that already have items (prior partial success).
+            ready_with_items = []
+            for s in ready:
+              items = list_submission_items(s['id'])
+              has_v = submission_has_version(s['id'])
+              if has_v or items:
+                ready_with_items.append((s, len(items), has_v))
+                print('READY_FOR_REVIEW with items', s['id'], 'n=', len(items), 'has_version=', has_v)
+            ready_with_items.sort(key=lambda t: (t[2], t[1]), reverse=True)
+            for s, _n, _hv in ready_with_items:
+              submission_id = s['id']
+              print('reusing READY_FOR_REVIEW that already has items/version', submission_id)
+              break
+
+            # Prefer creating a fresh submission after cancel so we own the item set.
+            # But if we already have a non-empty READY_FOR_REVIEW, submit that instead.
+            if not submission_id:
+              st_c, created = create_review_submission()
+              if st_c < 400:
+                submission_id = created['data']['id']
+                print('created reviewSubmission', submission_id, created['data'].get('attributes'))
+              else:
+                print('create reviewSubmission failed', st_c, json.dumps(created)[:800])
+                # Fall back: try adding version into an existing READY_FOR_REVIEW shell
+                for s in ready:
+                  ok_add, st_add, add_resp = add_version_to_submission(s['id'])
+                  if ok_add:
+                    submission_id = s['id']
+                    print('reused READY_FOR_REVIEW after adding version', submission_id)
+                    break
+                  print('skip stale READY_FOR_REVIEW', s['id'], st_add, json.dumps(add_resp)[:500])
+                if not submission_id:
+                  return False, st_c, created
+
+            ok_add, st_add, add_resp = add_version_to_submission(submission_id)
+            if ok_add and isinstance(add_resp, dict) and add_resp.get('switch_to'):
+              submission_id = add_resp['switch_to']
+              print('switched to holding reviewSubmission', submission_id)
+              ok_add, st_add, add_resp = True, 200, {'already': True}
+            if not ok_add:
+              print('failed to attach version to submission', submission_id, st_add, json.dumps(add_resp)[:1200])
+              # Last resort: another fresh create (in case prior create raced)
+              st_c2, created2 = create_review_submission()
+              if st_c2 < 400:
+                submission_id = created2['data']['id']
+                print('created second reviewSubmission', submission_id)
+                ok_add, st_add, add_resp = add_version_to_submission(submission_id)
+              if not ok_add:
+                return True, 409, {
+                  'submission_id': submission_id,
+                  'errors': (add_resp.get('errors') if isinstance(add_resp, dict) else []),
+                  'detail': 'could not add appStoreVersion to reviewSubmission',
+                }
+
+            # Trust a successful add POST; ASC item listings often omit version UUID.
+            if ok_add and isinstance(add_resp, dict) and add_resp.get('already'):
+              print('version already linked; proceeding to submit')
+            elif ok_add:
+              print('version linked via reviewSubmissionItems; proceeding to submit')
+            elif not submission_has_version(submission_id):
+              return True, 409, {
+                'submission_id': submission_id,
+                'errors': [{'code': 'MISSING_VERSION', 'detail': f'version {version_id} not on submission'}],
+              }
+
+            st_sub, submitted = api(
+              'PATCH', f'/v1/reviewSubmissions/{submission_id}',
+              {
+                'data': {
+                  'type': 'reviewSubmissions',
+                  'id': submission_id,
+                  'attributes': {'submitted': True},
+                }
+              },
+              ok_statuses={409, 422, 403},
+            )
+            return True, st_sub, submitted if st_sub < 400 else {'submission_id': submission_id, **(submitted if isinstance(submitted, dict) else {'body': submitted})}
+
+          def submit_via_legacy():
+            st, resp = api(
+              'POST', '/v1/appStoreVersionSubmissions',
+              {
+                'data': {
+                  'type': 'appStoreVersionSubmissions',
+                  'relationships': {
+                    'appStoreVersion': {
+                      'data': {'type': 'appStoreVersions', 'id': version_id},
+                    },
+                  },
+                }
+              },
+              ok_statuses={403, 409, 422},
+            )
+            return st, resp
+
+          print('=== submitting for review (reviewSubmissions) ===')
+          ok, st, resp = submit_via_review_submissions()
+          if not ok:
+            print('reviewSubmissions create failed; trying legacy appStoreVersionSubmissions...', st, json.dumps(resp)[:1200])
+            st, resp = submit_via_legacy()
+            if st >= 400:
+              print('ASC_ERROR_BODY', json.dumps(resp)[:2000])
+              raise SystemExit(
+                f'Submit blocked (legacy also failed {st}). See ASC_ERROR_BODY above.'
+              )
+            print('legacy submit ok', st, json.dumps(resp)[:800])
+          else:
+            if st >= 400:
+              print('reviewSubmissions submit PATCH failed', st)
+              print('ASC_ERROR_BODY', json.dumps(resp)[:2000])
+              # try legacy as last resort
+              print('falling back to legacy appStoreVersionSubmissions...')
+              lst, lresp = submit_via_legacy()
+              if lst >= 400:
+                print('ASC_ERROR_BODY_LEGACY', json.dumps(lresp)[:2000])
+                raise SystemExit(
+                  f'Submit blocked. reviewSubmissions={st}, legacy={lst}. See ASC_ERROR_BODY.'
+                )
+              print('legacy submit ok', lst, json.dumps(lresp)[:800])
+            else:
+              sattrs = resp.get('data', {}).get('attributes', {})
+              print('SUBMIT_OK submission_id=', resp.get('data', {}).get('id'),
+                    'state=', sattrs.get('state'),
+                    'submittedDate=', sattrs.get('submittedDate'))
+              print('ASC_RESPONSE', json.dumps(resp)[:1500])
+
+          # Final version state
+          time.sleep(2)
+          _, vfinal = api('GET', f'/v1/appStoreVersions/{version_id}')
+          print('FINAL version', version_id,
+                vfinal['data']['attributes'].get('appStoreState'),
+                'versionString=', vfinal['data']['attributes'].get('versionString'))
+          _, brel = api('GET', f'/v1/appStoreVersions/{version_id}/relationships/build')
+          print('FINAL attached build', (brel.get('data') or {}).get('id'))
+          print('SUCCESS')
+          PY

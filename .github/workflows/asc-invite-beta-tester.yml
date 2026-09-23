@@ -1,0 +1,224 @@
+name: ASC invite beta tester
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Tester email to invite to TestFlight
+        required: true
+        type: string
+      first_name:
+        description: First name for new betaTester records
+        required: false
+        type: string
+        default: Tester
+      last_name:
+        description: Last name for new betaTester records
+        required: false
+        type: string
+        default: Invite
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Invite TestFlight beta tester via ASC API
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          TESTER_EMAIL: ${{ inputs.email }}
+          FIRST_NAME: ${{ inputs.first_name }}
+          LAST_NAME: ${{ inputs.last_name }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request, urllib.error, urllib.parse
+          import jwt
+
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          issuer = os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          email = os.environ['TESTER_EMAIL'].strip().lower()
+          first_name = (os.environ.get('FIRST_NAME') or 'Tester').strip() or 'Tester'
+          last_name = (os.environ.get('LAST_NAME') or 'Invite').strip() or 'Invite'
+          bundle_id = os.environ['BUNDLE_ID'].strip()
+
+          now = int(time.time())
+          token = jwt.encode(
+            {'iss': issuer, 'iat': now, 'exp': now + 1200, 'aud': 'appstoreconnect-v1'},
+            p8, algorithm='ES256', headers={'kid': key_id},
+          )
+
+          def api(method, path, body=None, raise_http=True):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com' + path,
+              data=data, method=method,
+              headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
+            try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                raw = r.read().decode() or '{}'
+                return r.status, json.loads(raw), None
+            except urllib.error.HTTPError as e:
+              err = e.read().decode()
+              if raise_http:
+                raise SystemExit(f'{method} {path} -> {e.code}: {err[:1200]}')
+              return e.code, None, err
+
+          print(f'Inviting {email} for bundle {bundle_id}')
+
+          _, apps, _ = api('GET', f'/v1/apps?filter[bundleId]={urllib.parse.quote(bundle_id)}')
+          if not apps.get('data'):
+            raise SystemExit(f'App not found for bundleId={bundle_id}')
+          app_id = apps['data'][0]['id']
+          print('app', app_id, apps['data'][0].get('attributes', {}).get('name'))
+
+          _, groups_resp, _ = api('GET', f'/v1/apps/{app_id}/betaGroups?limit=50')
+          groups = groups_resp.get('data', [])
+          for g in groups:
+            a = g['attributes']
+            print(
+              'group', g['id'], a.get('name'),
+              'isInternal', a.get('isInternalGroup'),
+              'hasAccessToAllBuilds', a.get('hasAccessToAllBuilds'),
+            )
+
+          def find_group(*names, external=None):
+            want = {n.lower() for n in names}
+            for g in groups:
+              a = g['attributes']
+              name = (a.get('name') or '').lower()
+              if name not in want:
+                continue
+              if external is True and a.get('isInternalGroup'):
+                continue
+              if external is False and not a.get('isInternalGroup'):
+                continue
+              return g
+            return None
+
+          core = find_group('Core', external=True)
+          internal = find_group('Internal', external=False)
+          if internal is None:
+            for g in groups:
+              a = g['attributes']
+              if a.get('isInternalGroup') and a.get('name') != 'App Store Connect Users':
+                internal = g
+                break
+
+          targets = []
+          if core is not None:
+            targets.append(('Core', core, True))
+          else:
+            print('WARN: Core external group not found')
+          if internal is not None:
+            targets.append(('Internal', internal, False))
+          else:
+            print('WARN: Internal group not found')
+
+          if not targets:
+            raise SystemExit('No target beta groups found (Core/Internal)')
+
+          q = urllib.parse.quote(email)
+          tester_id = None
+          st, testers, err = api(
+            'GET',
+            f'/v1/betaTesters?filter[email]={q}&filter[apps]={app_id}&limit=10',
+            raise_http=False,
+          )
+          if st == 200 and testers and testers.get('data'):
+            tester_id = testers['data'][0]['id']
+            print('existing betaTester', tester_id, testers['data'][0].get('attributes'))
+          else:
+            st2, testers2, err2 = api(
+              'GET', f'/v1/betaTesters?filter[email]={q}&limit=10', raise_http=False,
+            )
+            if st2 == 200 and testers2 and testers2.get('data'):
+              tester_id = testers2['data'][0]['id']
+              print('existing betaTester (global)', tester_id, testers2['data'][0].get('attributes'))
+            else:
+              print('no existing tester; will create', 'app_filter', st, (err or '')[:200], 'global', st2, (err2 or '')[:200])
+
+          outcomes = []
+          created_fresh = False
+
+          if tester_id is None:
+            first_label, first_group, _ = targets[0]
+            body = {
+              'data': {
+                'type': 'betaTesters',
+                'attributes': {
+                  'email': email,
+                  'firstName': first_name,
+                  'lastName': last_name,
+                },
+                'relationships': {
+                  'betaGroups': {
+                    'data': [{'type': 'betaGroups', 'id': first_group['id']}],
+                  },
+                },
+              }
+            }
+            st, created, err = api('POST', '/v1/betaTesters', body, raise_http=False)
+            if st in (200, 201) and created and created.get('data'):
+              tester_id = created['data']['id']
+              created_fresh = True
+              print('created betaTester', tester_id, 'status', st)
+              print(f'RESULT group={first_label}: created_and_linked status={st}')
+              outcomes.append({'group': first_label, 'result': 'created_and_linked', 'status': st})
+              targets = targets[1:]
+            elif st == 409 or (err and 'DUPLICATE' in err):
+              print('create conflict, re-fetching', (err or '')[:500])
+              _, testers3, _ = api('GET', f'/v1/betaTesters?filter[email]={q}&limit=10')
+              if not testers3.get('data'):
+                raise SystemExit(f'Create conflict but tester not found: {(err or "")[:800]}')
+              tester_id = testers3['data'][0]['id']
+            else:
+              raise SystemExit(f'POST /v1/betaTesters -> {st}: {(err or "")[:1200]}')
+
+          for label, group, is_external in targets:
+            gid = group['id']
+            st_m, memb, err_m = api(
+              'GET',
+              f'/v1/betaGroups/{gid}/betaTesters?filter[email]={q}&limit=5',
+              raise_http=False,
+            )
+            already = False
+            if st_m == 200 and memb and memb.get('data'):
+              already = any(
+                t['id'] == tester_id or (t.get('attributes') or {}).get('email', '').lower() == email
+                for t in memb['data']
+              )
+            if already:
+              print(f'RESULT group={label}: already_member')
+              outcomes.append({'group': label, 'result': 'already_member', 'status': st_m})
+              continue
+
+            body = {'data': [{'type': 'betaTesters', 'id': tester_id}]}
+            st_a, _, err_a = api(
+              'POST', f'/v1/betaGroups/{gid}/relationships/betaTesters', body, raise_http=False,
+            )
+            if st_a in (200, 201, 204):
+              kind = 'invite_linked_external' if is_external else 'linked_internal'
+              print(f'RESULT group={label}: {kind} status={st_a} (Apple emails invite for external groups)')
+              outcomes.append({'group': label, 'result': kind, 'status': st_a})
+            else:
+              print(f'RESULT group={label}: FAILED status={st_a} err={(err_a or "")[:800]}')
+              outcomes.append({'group': label, 'result': f'FAILED:{st_a}', 'error': (err_a or '')[:800]})
+
+          print('SUMMARY', json.dumps(outcomes))
+          ok = any(
+            o.get('result') in (
+              'created_and_linked', 'already_member', 'invite_linked_external', 'linked_internal',
+            )
+            for o in outcomes
+          )
+          if not ok:
+            raise SystemExit('No group membership succeeded')
+          print('DONE ok email=', email, 'tester_id=', tester_id, 'created_fresh=', created_fresh)
+          PY

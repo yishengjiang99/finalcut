@@ -1,0 +1,54 @@
+name: ASC status (read-only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query FinalCap App Store state
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request
+          import jwt
+          key_id = os.environ["APP_STORE_CONNECT_KEY_ID"].strip()
+          issuer = os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          bundle_id = os.environ["BUNDLE_ID"].strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": issuer, "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"}, p8, algorithm="ES256", headers={"kid": key_id})
+          def api(path):
+            req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=90) as r:
+              return json.loads(r.read().decode() or "{}")
+          apps = api(f"/v1/apps?filter[bundleId]={bundle_id}")
+          app = apps["data"][0]
+          app_id = app["id"]
+          print("APP", app_id, app["attributes"].get("name"), app["attributes"].get("bundleId"))
+          vers = api(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=10")
+          for v in vers.get("data", []):
+            a = v["attributes"]
+            print("VERSION", v["id"], a.get("versionString"), a.get("appStoreState"), a.get("appVersionState"), a.get("createdDate"))
+          if vers.get("data"):
+            vid = vers["data"][0]["id"]
+            rel = api(f"/v1/appStoreVersions/{vid}/build")
+            b = rel.get("data")
+            if b:
+              ba = b["attributes"]
+              print("ATTACHED_BUILD", b["id"], "cfBundleVersion=", ba.get("version"), "processing=", ba.get("processingState"), "uploaded=", ba.get("uploadedDate"))
+            else:
+              print("ATTACHED_BUILD none")
+          subs = api(f"/v1/apps/{app_id}/reviewSubmissions?filter[platform]=IOS&limit=15")
+          for s in subs.get("data", []):
+            a = s["attributes"]
+            print("SUBMISSION", s["id"], a.get("state"), "submitted=", a.get("submittedDate"), "platform=", a.get("platform"))
+          PY
