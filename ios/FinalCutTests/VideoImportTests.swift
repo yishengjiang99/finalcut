@@ -79,6 +79,49 @@ final class VideoImportTests: XCTestCase {
         XCTAssertEqual(model.messages.count, 1)
     }
 
+    @MainActor
+    func testLoadBundledTestVideoDoesNotReplaceExistingImportedVideo() throws {
+        let model = EditorViewModel()
+        let existing = URL(fileURLWithPath: "/existing.mp4")
+        model.localVideoURL = existing
+        model.state = .ready
+
+        model.loadBundledTestVideo()
+
+        XCTAssertEqual(model.localVideoURL, existing)
+        XCTAssertTrue(model.messages.isEmpty)
+    }
+
+    @MainActor
+    func testResetBundledTestVideoClearsUntouchedFixture() throws {
+        let model = EditorViewModel()
+
+        model.loadBundledTestVideo()
+        let bundled = try XCTUnwrap(model.localVideoURL)
+
+        model.resetBundledTestVideoIfNeeded()
+
+        XCTAssertEqual(bundled.lastPathComponent, "finalcap-test-video.mp4")
+        XCTAssertNil(model.localVideoURL)
+        XCTAssertEqual(model.state, .empty)
+        XCTAssertTrue(model.messages.isEmpty)
+    }
+
+    @MainActor
+    func testResetBundledTestVideoPreservesModifiedFixtureState() throws {
+        let model = EditorViewModel()
+
+        model.loadBundledTestVideo()
+        let bundled = try XCTUnwrap(model.localVideoURL)
+        model.messages.append(ChatMessage(role: .user, content: "Trim silence"))
+
+        model.resetBundledTestVideoIfNeeded()
+
+        XCTAssertEqual(model.localVideoURL, bundled)
+        XCTAssertEqual(model.state, .ready)
+        XCTAssertEqual(model.messages.count, 2)
+    }
+
     /// Create a real, short H.264 clip without depending on app demo resources.
     private func writeTestVideo(to url: URL) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)

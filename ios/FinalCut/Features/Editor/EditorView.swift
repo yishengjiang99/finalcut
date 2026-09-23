@@ -188,6 +188,7 @@ final class EditorViewModel: ObservableObject {
             lastError = "Test video unavailable"
             return
         }
+        guard localVideoURL == nil || localVideoURL == url else { return }
         guard localVideoURL != url else { return }
         processingTask?.cancel()
         activeJobId = nil
