@@ -41,7 +41,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.grepawk.finalcut.subscription.monthly",
+          "productID" : "com.ragnus.w2.subscription.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Pro Monthly",
           "type" : "RecurringSubscription"

@@ -4,7 +4,7 @@ import StoreKit
 /// StoreKit 2 placeholders for FinalCut subscription (not Stripe).
 enum StoreKitPurchaseStub {
     /// Placeholder product id — configure in App Store Connect / StoreKit Configuration file.
-    static let monthlyProductID = "com.grepawk.finalcut.subscription.monthly"
+    static let monthlyProductID = "com.ragnus.w2.subscription.monthly"
 
     /// Loads products via StoreKit 2. Returns empty if unavailable (simulator without config).
     static func loadProducts() async -> [Product] {
