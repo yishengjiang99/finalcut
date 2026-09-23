@@ -83,5 +83,19 @@ jobs:
             -scheme FinalCut \
             -destination "${{ steps.sim.outputs.destination }}" \
             -only-testing:FinalCutTests \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             test
+
+      - name: Print test failure details
+        if: failure()
+        working-directory: ios
+        run: xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ios/TestResults.xcresult
+          if-no-files-found: ignore
