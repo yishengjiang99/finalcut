@@ -24,10 +24,9 @@ final class VideoImportTests: XCTestCase {
 
     @MainActor
     func testImportedVideoPlaysAfterOriginalFileIsRemoved() async throws {
-        let fixture = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
         let source = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mp4")
-        try FileManager.default.copyItem(at: fixture, to: source)
         defer { try? FileManager.default.removeItem(at: source) }
+        try await writeTestVideo(to: source)
 
         let model = EditorViewModel()
         await model.handleImport(.success([source]))
@@ -78,5 +77,87 @@ final class VideoImportTests: XCTestCase {
         XCTAssertNil(model.captionArtifacts.srt)
         XCTAssertEqual(imported.pathExtension, "mov")
         XCTAssertEqual(model.messages.count, 1)
+    }
+
+    @MainActor
+    func testLoadBundledTestVideoDoesNotReplaceExistingImportedVideo() throws {
+        let model = EditorViewModel()
+        let existing = URL(fileURLWithPath: "/existing.mp4")
+        model.localVideoURL = existing
+        model.state = .ready
+
+        model.loadBundledTestVideo()
+
+        XCTAssertEqual(model.localVideoURL, existing)
+        XCTAssertTrue(model.messages.isEmpty)
+    }
+
+    @MainActor
+    func testResetBundledTestVideoClearsUntouchedFixture() throws {
+        let model = EditorViewModel()
+
+        model.loadBundledTestVideo()
+        let bundled = try XCTUnwrap(model.localVideoURL)
+
+        model.resetBundledTestVideoIfNeeded()
+
+        XCTAssertEqual(bundled.lastPathComponent, "finalcap-test-video.mp4")
+        XCTAssertNil(model.localVideoURL)
+        XCTAssertEqual(model.state, .empty)
+        XCTAssertTrue(model.messages.isEmpty)
+    }
+
+    @MainActor
+    func testResetBundledTestVideoPreservesModifiedFixtureState() throws {
+        let model = EditorViewModel()
+
+        model.loadBundledTestVideo()
+        let bundled = try XCTUnwrap(model.localVideoURL)
+        model.messages.append(ChatMessage(role: .user, content: "Trim silence"))
+
+        model.resetBundledTestVideoIfNeeded()
+
+        XCTAssertEqual(model.localVideoURL, bundled)
+        XCTAssertEqual(model.state, .ready)
+        XCTAssertEqual(model.messages.count, 2)
+    }
+
+    /// Create a real, short H.264 clip without depending on app demo resources.
+    private func writeTestVideo(to url: URL) async throws {
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: 64,
+            AVVideoHeightKey: 64,
+        ])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input)
+        writer.add(input)
+        guard writer.startWriting() else {
+            throw try XCTUnwrap(writer.error)
+        }
+        writer.startSession(atSourceTime: .zero)
+        defer { if writer.status == .writing { writer.cancelWriting() } }
+
+        var buffer: CVPixelBuffer?
+        XCTAssertEqual(CVPixelBufferCreate(kCFAllocatorDefault, 64, 64, kCVPixelFormatType_32ARGB, nil, &buffer), kCVReturnSuccess)
+        let frame = try XCTUnwrap(buffer)
+        CVPixelBufferLockBaseAddress(frame, [])
+        memset(CVPixelBufferGetBaseAddress(frame), 0, CVPixelBufferGetDataSize(frame))
+        CVPixelBufferUnlockBaseAddress(frame, [])
+
+        let deadline = Date().addingTimeInterval(10)
+        for index in 0..<20 {
+            while !input.isReadyForMoreMediaData, writer.status == .writing, Date() < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            guard input.isReadyForMoreMediaData else {
+                XCTFail("Video writer did not become ready: \(String(describing: writer.error))")
+                return
+            }
+            XCTAssertTrue(adaptor.append(frame, withPresentationTime: CMTime(value: Int64(index), timescale: 10)))
+        }
+        input.markAsFinished()
+        await writer.finishWriting()
+        XCTAssertEqual(writer.status, .completed, writer.error?.localizedDescription ?? "")
     }
 }

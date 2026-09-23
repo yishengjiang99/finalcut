@@ -35,6 +35,16 @@
 		F0583706C16045F3940B2A03 /* VideoImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0583706C16045F3940B2A04 /* VideoImportTests.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		F0583706C16045F3940B2A05 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E983094B601743CCA257AE26 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 222FA0522493476C89FA9258;
+			remoteInfo = FinalCut;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		B2EA2AC7EC9D4B6BBC3F0AA3 /* StoreKitPurchaseStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitPurchaseStub.swift; sourceTree = "<group>"; };
 		FDF99BBA1B92461D91BDB465 /* FinalCutApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalCutApp.swift; sourceTree = "<group>"; };
@@ -262,7 +272,7 @@
 			buildRules = (
 			);
 			dependencies = (
-				1A2B3C4D5E6F7890A1B2C3D4 /* PBXTargetDependency */,
+				F0583706C16045F3940B2A06 /* PBXTargetDependency */,
 			);
 			name = FinalCutTests;
 			productName = FinalCutTests;
@@ -306,33 +316,6 @@
 			);
 		};
 
-/* Begin PBXReferenceProxy section */
-		1A2B3C4D5E6F7890A1B2C3D5 /* FinalCut.app */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.application;
-			path = FinalCut.app;
-			remoteRef = 1A2B3C4D5E6F7890A1B2C3D6 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
-
-/* Begin PBXContainerItemProxy section */
-		1A2B3C4D5E6F7890A1B2C3D6 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E983094B601743CCA257AE26 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 222FA0522493476C89FA9258;
-			remoteInfo = FinalCut;
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXTargetDependency section */
-		1A2B3C4D5E6F7890A1B2C3D4 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 222FA0522493476C89FA9258 /* FinalCut */;
-			TargetAttributes = 1A2B3C4D5E6F7890A1B2C3D6 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -387,6 +370,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F0583706C16045F3940B2A06 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 222FA0522493476C89FA9258 /* FinalCut */;
+			targetProxy = F0583706C16045F3940B2A05 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1366E1B70466411EB4A03854 /* Debug */ = {

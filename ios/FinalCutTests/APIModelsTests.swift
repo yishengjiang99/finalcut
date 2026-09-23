@@ -240,12 +240,45 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNotEqual(ProcessingOverlayKind.burningSubtitles.message, "Editing…")
     }
 
+    @MainActor
     func testCaptionIntentDetection() {
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Generate captions"), .generate)
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Add captions"), .generate)
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Translate to Spanish"), .translate(language: "Spanish"))
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Burn in"), .burnIn)
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Trim silence"), .otherEdit)
+    }
+
+    @MainActor
+    func testAppModelModeTransitions() {
+        let appModel = AppModel()
+
+        appModel.tryTestVideoNow()
+        XCTAssertEqual(appModel.route, .editor)
+        XCTAssertTrue(appModel.hasUnlockedEditor)
+        XCTAssertTrue(appModel.isSampleMode)
+        XCTAssertTrue(appModel.isTestVideoMode)
+        XCTAssertTrue(appModel.apiClient.sampleModeEnabled)
+
+        appModel.goToSignIn()
+        XCTAssertEqual(appModel.route, .signIn)
+        XCTAssertFalse(appModel.isSampleMode)
+        XCTAssertFalse(appModel.isTestVideoMode)
+        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+
+        appModel.tryTestVideoNow()
+        appModel.unlockEditor()
+        XCTAssertEqual(appModel.route, .editor)
+        XCTAssertFalse(appModel.isSampleMode)
+        XCTAssertFalse(appModel.isTestVideoMode)
+        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+
+        appModel.tryTestVideoNow()
+        appModel.skipToEditorForDev()
+        XCTAssertEqual(appModel.route, .editor)
+        XCTAssertFalse(appModel.isSampleMode)
+        XCTAssertFalse(appModel.isTestVideoMode)
+        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
     }
 
     func testAPIErrorCaptionsChatCopy() {

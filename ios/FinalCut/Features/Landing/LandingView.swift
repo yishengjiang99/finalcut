@@ -36,6 +36,12 @@ struct LandingView: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(AppTheme.textSecondary)
+
+                Button("Open empty editor") {
+                    appModel.skipToEditorForDev()
+                }
+                .font(.footnote)
+                .foregroundStyle(AppTheme.textSecondary)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 40)

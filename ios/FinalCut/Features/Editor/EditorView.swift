@@ -68,7 +68,19 @@ struct EditorView: View {
             model.apiClient = appModel.apiClient
             if appModel.isTestVideoMode {
                 model.loadBundledTestVideo()
+            } else {
+                model.resetBundledTestVideoIfNeeded()
             }
+        }
+        .onChange(of: appModel.isTestVideoMode) { _, isTestVideoMode in
+            if isTestVideoMode {
+                model.loadBundledTestVideo()
+            } else {
+                model.resetBundledTestVideoIfNeeded()
+            }
+        }
+        .onChange(of: appModel.isSampleMode) { _, _ in
+            model.apiClient = appModel.apiClient
         }
         .overlay(alignment: .top) {
             if model.state == .failed, let err = model.lastError {
@@ -170,16 +182,39 @@ final class EditorViewModel: ObservableObject {
     }
 
     func loadBundledTestVideo() {
-        guard localVideoURL == nil else { return }
-        guard let url = Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4") else {
+        guard canAutoLoadBundledTestVideo else { return }
+        guard let url = bundledTestVideoURL else {
             state = .failed
             lastError = "Test video unavailable"
             return
         }
+        processingTask?.cancel()
+        activeJobId = nil
+        messages = []
+        composerText = ""
         localVideoURL = url
+        photosPickerItem = nil
+        lastError = nil
+        captionArtifacts = CaptionArtifacts()
+        processingOverlay = .editing
         state = .ready
         showSampleChips = true
         messages.append(ChatMessage(role: .system, content: "Loaded test video"))
+    }
+
+    func resetBundledTestVideoIfNeeded() {
+        guard shouldResetBundledTestVideo else { return }
+        processingTask?.cancel()
+        activeJobId = nil
+        state = .empty
+        messages = []
+        composerText = ""
+        self.localVideoURL = nil
+        photosPickerItem = nil
+        lastError = nil
+        captionArtifacts = CaptionArtifacts()
+        processingOverlay = .editing
+        showSampleChips = true
     }
 
     func applySampleChip(_ chip: String) {
@@ -567,6 +602,33 @@ final class EditorViewModel: ObservableObject {
         case "m4v": return "video/x-m4v"
         default: return "video/mp4"
         }
+    }
+
+    private var bundledTestVideoURL: URL? {
+        Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
+    }
+
+    private var canAutoLoadBundledTestVideo: Bool {
+        guard localVideoURL == nil else { return false }
+        guard state == .empty, activeJobId == nil, captionArtifacts == CaptionArtifacts() else { return false }
+        guard composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return messages.isEmpty
+    }
+
+    private var shouldResetBundledTestVideo: Bool {
+        guard isBundledTestVideoLoaded else { return false }
+        guard state == .ready, activeJobId == nil, captionArtifacts == CaptionArtifacts() else { return false }
+        guard composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return messages.isEmpty || (
+            messages.count == 1 &&
+            messages[0].role == .system &&
+            messages[0].content == "Loaded test video"
+        )
+    }
+
+    private var isBundledTestVideoLoaded: Bool {
+        guard let localVideoURL else { return false }
+        return localVideoURL.standardizedFileURL == bundledTestVideoURL?.standardizedFileURL
     }
 }
 

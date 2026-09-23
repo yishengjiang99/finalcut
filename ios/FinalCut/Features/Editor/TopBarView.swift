@@ -21,9 +21,9 @@ struct TopBarView: View {
             } primaryAction: {
                 onImport()
             }
-                .font(.subheadline.weight(.semibold))
-                .disabled(!importEnabled)
-                .accessibilityHint("Opens Photos. Touch and hold for more import options.")
+            .font(.subheadline.weight(.semibold))
+            .disabled(!importEnabled)
+            .accessibilityHint("Opens Photos. Touch and hold for more import options.")
             Button("Export", action: onExport)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.accent)
