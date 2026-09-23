@@ -64,6 +64,11 @@ struct AuthStatus: Codable, Equatable {
     var user: AuthUser?
     /// Present when authenticated via Bearer (Backend PR #46): `"bearer"`.
     var authMethod: String?
+    var dailyLimit: Int?
+    var dailyUsed: Int?
+    var dailyRemaining: Int?
+    /// ISO-8601 timestamp returned by the API.
+    var dailyResetsAt: String?
 }
 
 struct SampleAccessTokenResponse: Codable, Equatable {
@@ -84,4 +89,19 @@ struct MobileGoogleAuthResponse: Codable, Equatable {
 
 struct MobileGoogleAuthRequest: Codable, Equatable {
     var idToken: String
+}
+
+struct MobileDeviceAuthRequest: Codable, Equatable {
+    var deviceInstallId: String
+}
+
+struct MobileDeviceAuthResponse: Codable, Equatable {
+    var accessToken: String
+    var expiresIn: Int
+    var tokenType: String?
+    var user: AuthUser
+}
+
+struct MobileAppleIAPRequest: Codable, Equatable {
+    var signedTransactionJws: String
 }

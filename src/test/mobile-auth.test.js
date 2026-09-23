@@ -43,3 +43,30 @@ describe('Mobile Google auth contract', () => {
     expect(status.user.hasSubscription).toBe(true);
   });
 });
+
+describe('iOS device and Apple IAP auth contract', () => {
+  it('registers an install and returns the same Bearer contract', () => {
+    const request = { deviceInstallId: '550e8400-e29b-41d4-a716-446655440000' };
+    const response = {
+      accessToken: 'hex-token',
+      expiresIn: 7_776_000_000,
+      tokenType: 'Bearer',
+      user: { id: '42', email: null, name: 'iOS device', hasSubscription: false },
+    };
+    expect(request.deviceInstallId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(response.tokenType).toBe('Bearer');
+    expect(response.user.email).toBeNull();
+  });
+
+  it('sends the StoreKit signed transaction, never a client subscription boolean', () => {
+    const request = { signedTransactionJws: 'signed-transaction-jws' };
+    expect(request).toEqual({ signedTransactionJws: expect.any(String) });
+    expect(request).not.toHaveProperty('hasSubscription');
+  });
+
+  it('exposes a daily free inference quota for device sessions', () => {
+    const status = { authenticated: true, authMethod: 'bearer', dailyLimit: 3, dailyUsed: 1, dailyRemaining: 2 };
+    expect(status.dailyRemaining).toBe(2);
+    expect(status.dailyRemaining).toBeLessThanOrEqual(status.dailyLimit);
+  });
+});

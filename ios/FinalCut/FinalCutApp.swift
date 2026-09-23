@@ -9,6 +9,7 @@ struct FinalCutApp: App {
             ContentView()
                 .environmentObject(appModel)
                 .preferredColorScheme(.dark)
+                .task { await appModel.bootstrap() }
         }
     }
 }
@@ -23,13 +24,34 @@ final class AppModel: ObservableObject {
         case editor
     }
 
-    @Published var route: Route = .landing
+    // Open directly into the usable editor; the bundled demo video is loaded there.
+    @Published var route: Route = .editor
     @Published var isAuthenticated = false
     @Published var isSampleMode = false
     @Published var hasUnlockedEditor = false
     @Published var isTestVideoMode = false
 
     let apiClient = APIClient()
+
+    private var didBootstrap = false
+
+    func bootstrap() async {
+        guard !didBootstrap else { return }
+        didBootstrap = true
+        do {
+            _ = try await apiClient.ensureDeviceSession()
+            let status = try await apiClient.fetchAuthStatus()
+            isAuthenticated = status.authenticated
+            if status.user?.hasSubscription == true || (status.dailyRemaining ?? 0) > 0 {
+                hasUnlockedEditor = true
+                route = .editor
+            } else if status.authenticated {
+                route = .paywall
+            }
+        } catch {
+            // Keep the landing/paywall flow usable while offline; inference still requires the server token.
+        }
+    }
 
     func goToSignIn() {
         clearTestVideoMode()

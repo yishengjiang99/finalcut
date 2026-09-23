@@ -5,8 +5,9 @@ import {
   ALLOW_UNAUTH_SAMPLE_MODE,
   SAMPLE_TOKEN_TTL_MS,
   APP_BASE_URL,
+  IOS_FREE_DAILY_INFERENCE_LIMIT,
 } from './config.js';
-import { findUserByApiToken } from '../db.js';
+import { findUserByApiToken, consumeDailyInference } from '../db.js';
 
 export const sampleAccessTokens = new Map();
 
@@ -129,10 +130,37 @@ export function requireActiveSubscription(req, res, next) {
   if (isValidSampleModeRequest(req)) {
     return next();
   }
-  if (!req.user?.has_subscription) {
+  if (!req.user?.has_subscription && !req.user?.device_install_id) {
     return res.status(403).json({ error: 'Active subscription required' });
   }
   next();
+}
+
+/** Premium users bypass the quota; anonymous iOS installs consume one daily inference. */
+export async function requireInferenceAccess(req, res, next) {
+  if (isValidSampleModeRequest(req) || req.user?.has_subscription) return next();
+  if (!req.user?.device_install_id) {
+    return res.status(403).json({ error: 'Active subscription required' });
+  }
+  try {
+    const usage = await consumeDailyInference(req.user.id, IOS_FREE_DAILY_INFERENCE_LIMIT);
+    res.set('X-Inference-Daily-Limit', String(usage.limit));
+    res.set('X-Inference-Daily-Remaining', String(usage.remaining));
+    if (!usage.allowed) {
+      return res.status(429).json({
+        error: 'Daily free inference limit reached',
+        code: 'daily_limit_reached',
+        dailyLimit: usage.limit,
+        dailyUsed: usage.used,
+        dailyRemaining: usage.remaining,
+        resetsAt: usage.resetsAt,
+      });
+    }
+    return next();
+  } catch (error) {
+    console.error('Daily inference usage error:', error);
+    return res.status(500).json({ error: 'Unable to check daily inference limit' });
+  }
 }
 
 export function getBaseUrlFromRequest(req) {

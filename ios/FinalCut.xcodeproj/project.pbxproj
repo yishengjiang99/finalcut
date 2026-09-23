@@ -17,6 +17,7 @@
 		9B2C179F591C4BB683324FB6 /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */; };
 		3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA517631199041918C1F9701 /* APIEndpoints.swift */; };
 		317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADB /* APIClient.swift */; };
+		317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */; };
 		923F4C12D222427682D18271 /* LandingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28F4030CA0743CC82DB69F3 /* LandingView.swift */; };
 		92EF861F56A74C15B759DD05 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1BE1EFFC994AF08CF0D278 /* SignInView.swift */; };
 		B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30393A1FFA234AA49E7981C1 /* PaywallView.swift */; };
@@ -56,6 +57,7 @@
 		D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
 		EA517631199041918C1F9701 /* APIEndpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpoints.swift; sourceTree = "<group>"; };
 		EC090C5F63F34E5687DD1ADB /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		F28F4030CA0743CC82DB69F3 /* LandingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandingView.swift; sourceTree = "<group>"; };
 		FE1BE1EFFC994AF08CF0D278 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		30393A1FFA234AA49E7981C1 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
@@ -147,6 +149,7 @@
 				D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */,
 				EA517631199041918C1F9701 /* APIEndpoints.swift */,
 				EC090C5F63F34E5687DD1ADB /* APIClient.swift */,
+				EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -345,6 +348,7 @@
 				9B2C179F591C4BB683324FB6 /* APIConfig.swift in Sources */,
 				3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */,
 				317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */,
+				317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */,
 				923F4C12D222427682D18271 /* LandingView.swift in Sources */,
 				92EF861F56A74C15B759DD05 /* SignInView.swift in Sources */,
 				B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */,

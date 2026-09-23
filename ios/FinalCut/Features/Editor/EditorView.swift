@@ -69,7 +69,8 @@ struct EditorView: View {
             if appModel.isTestVideoMode {
                 model.loadBundledTestVideo()
             } else {
-                model.resetBundledTestVideoIfNeeded()
+                // Every editor session starts with an immediately usable bundled demo.
+                model.loadBundledTestVideo()
             }
         }
         .onChange(of: appModel.isTestVideoMode) { _, isTestVideoMode in

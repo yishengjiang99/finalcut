@@ -18,6 +18,7 @@
     "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^3.1.0",
     "axios": "^1.13.5",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

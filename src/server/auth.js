@@ -2,7 +2,16 @@ import express from 'express';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import session from 'express-session';
-import { findUserByGoogleId, findUserByEmail, createUser, createApiToken } from '../db.js';
+import {
+  findUserByGoogleId,
+  findUserByEmail,
+  findUserByDeviceInstallId,
+  createUser,
+  createApiToken,
+  saveAppleTransaction,
+  findAppleTransaction,
+  updateUserAppleSubscription,
+} from '../db.js';
 import {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
@@ -13,7 +22,12 @@ import {
   ALLOW_UNAUTH_SAMPLE_MODE,
   SAMPLE_TOKEN_TTL_MS,
   MOBILE_ACCESS_TOKEN_TTL_MS,
+  IOS_DEVICE_SESSION_TTL_MS,
+  APPLE_IAP_PRODUCT_ID,
+  IOS_FREE_DAILY_INFERENCE_LIMIT,
 } from './config.js';
+import { getDailyInferenceUsage } from '../db.js';
+import { verifyAppleTransaction } from './apple-iap.js';
 import {
   apiLimiter,
   issueSampleAccessToken,
@@ -204,6 +218,94 @@ async function verifyGoogleIdToken(idToken) {
 
 const router = express.Router();
 
+function validateInstallId(value) {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function mobileUserPayload(user) {
+  return {
+    id: String(user.id),
+    email: user.email,
+    name: user.name,
+    hasSubscription: Boolean(user.has_subscription),
+  };
+}
+
+async function dailyQuotaForUser(user) {
+  if (!user?.device_install_id || user.has_subscription) return null;
+  return getDailyInferenceUsage(user.id, IOS_FREE_DAILY_INFERENCE_LIMIT);
+}
+
+/** Register an install and mint its opaque Bearer session. The install ID is random and app-scoped, not a hardware identifier. */
+router.post('/api/auth/mobile/device', apiLimiter, async (req, res) => {
+  try {
+    const deviceInstallId = req.body?.deviceInstallId;
+    if (!validateInstallId(deviceInstallId)) {
+      return res.status(400).json({ error: 'deviceInstallId must be a UUID' });
+    }
+
+    let user = await findUserByDeviceInstallId(deviceInstallId);
+    if (!user) {
+      user = await createUser({ device_install_id: deviceInstallId, name: 'iOS device' });
+    }
+    const { token, expiresInMs } = await createApiToken(user.id, IOS_DEVICE_SESSION_TTL_MS);
+    return res.json({ accessToken: token, expiresIn: expiresInMs, tokenType: 'Bearer', user: mobileUserPayload(user) });
+  } catch (error) {
+    console.error('Mobile device auth error:', error);
+    return res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Authentication failed' });
+  }
+});
+
+/** Verify a StoreKit 2 signed transaction and attach the entitlement to the current install. */
+router.post('/api/auth/mobile/apple-iap', apiLimiter, async (req, res) => {
+  try {
+    await attachBearerUser(req);
+    if (!req.user?.id || req.authMethod !== 'bearer') {
+      return res.status(401).json({ error: 'Device session required' });
+    }
+    const signedTransactionJws = req.body?.signedTransactionJws;
+    const transaction = await verifyAppleTransaction(signedTransactionJws);
+    if (transaction.productId !== APPLE_IAP_PRODUCT_ID) {
+      return res.status(400).json({ error: 'Unsupported Apple product' });
+    }
+    if (!transaction.transactionId || !transaction.originalTransactionId) {
+      return res.status(400).json({ error: 'Apple transaction is missing identifiers' });
+    }
+    if (transaction.revocationDate || (transaction.expiresDate && transaction.expiresDate <= Date.now())) {
+      return res.status(403).json({ error: 'Apple subscription is not active' });
+    }
+
+    const existing = await findAppleTransaction(transaction.originalTransactionId);
+    const accountToken = transaction.appAccountToken || null;
+    if (!existing && accountToken && accountToken.toLowerCase() !== req.user.device_install_id?.toLowerCase()) {
+      return res.status(400).json({ error: 'Apple transaction is linked to a different install' });
+    }
+    if (!existing && !accountToken) {
+      return res.status(400).json({ error: 'Apple transaction is missing app account token' });
+    }
+
+    const expiresAt = transaction.expiresDate ? new Date(transaction.expiresDate) : null;
+    const revokedAt = transaction.revocationDate ? new Date(transaction.revocationDate) : null;
+    await saveAppleTransaction({
+      userId: req.user.id,
+      transactionId: transaction.transactionId,
+      originalTransactionId: transaction.originalTransactionId,
+      productId: transaction.productId,
+      appAccountToken: accountToken,
+      expiresAt,
+      revokedAt,
+    });
+    await updateUserAppleSubscription(req.user.id, true, `apple:${transaction.originalTransactionId}`);
+
+    const refreshedUser = await findUserByDeviceInstallId(req.user.device_install_id);
+    return res.json({ authenticated: true, user: mobileUserPayload(refreshedUser || { ...req.user, has_subscription: true }) });
+  } catch (error) {
+    const status = error.statusCode || 400;
+    if (status >= 500) console.error('Apple IAP verification error:', error);
+    return res.status(status).json({ error: status >= 500 ? 'Apple purchase verification unavailable' : error.message });
+  }
+});
+
 /**
  * Mobile: Google Sign-In SDK idToken → Bearer accessToken.
  * Additive — does not change web cookie/session OAuth.
@@ -333,14 +435,22 @@ router.get('/api/auth/status', apiLimiter, async (req, res) => {
         }
         throw error;
       }
+      const dailyQuota = await dailyQuotaForUser(req.user);
       return res.json({
         authenticated: true,
         authMethod: 'bearer',
         user: {
+          id: String(req.user.id),
           email: req.user.email,
           name: req.user.name,
           hasSubscription: Boolean(req.user.has_subscription),
         },
+        ...(dailyQuota ? {
+          dailyLimit: dailyQuota.limit,
+          dailyUsed: dailyQuota.used,
+          dailyRemaining: dailyQuota.remaining,
+          dailyResetsAt: dailyQuota.resetsAt,
+        } : {}),
       });
     }
 
@@ -359,6 +469,7 @@ router.get('/api/auth/status', apiLimiter, async (req, res) => {
         authenticated: true,
         authMethod: 'session',
         user: {
+          id: String(req.user.id),
           email: req.user.email,
           name: req.user.name,
           hasSubscription: req.user.has_subscription,

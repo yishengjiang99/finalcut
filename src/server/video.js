@@ -7,7 +7,7 @@ import { TMP_DIR, IS_PRODUCTION } from './config.js';
 import {
   videoProcessLimiter,
   requireAuthenticatedUser,
-  requireActiveSubscription,
+  requireInferenceAccess,
   upload,
 } from './middleware.js';
 import { getMimeTypeToFormat, getExtFromMimeType, parseAudioInput } from './utils.js';
@@ -215,7 +215,7 @@ function subtitleTextSignature(srt) {
 // Video processing endpoint
 // Client posts video as a raw body stream; operation, args, and file type are in request headers.
 // For add_audio_track and burn_subtitles (which require secondary inputs), FormData/multipart is used.
-router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   const contentType = (req.headers['content-type'] || '').toLowerCase();
 
   // FormData path: for add_audio_track and burn_subtitles
@@ -837,7 +837,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
 });
 
 // Multi-video transition endpoint
-router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, upload.array('videos', 10), async (req, res) => {
+router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, upload.array('videos', 10), async (req, res) => {
   const tempFiles = [];
   let outputPath = null;
 

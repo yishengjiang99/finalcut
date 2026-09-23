@@ -23,12 +23,13 @@ enum StoreKitPurchaseStub {
             return .unavailable
         }
         do {
-            let result = try await product.purchase()
+            let result = try await product.purchase(options: [.appAccountToken(DeviceIdentity.installUUID)])
             switch result {
             case .success(let verification):
+                let jws = verification.jwsRepresentation
                 let transaction = try checkVerified(verification)
                 await transaction.finish()
-                return .success
+                return .success(jws)
             case .userCancelled:
                 return .cancelled
             case .pending:
@@ -42,15 +43,18 @@ enum StoreKitPurchaseStub {
     }
 
     /// Restores via current entitlements (StoreKit 2).
-    static func restoreEntitlements() async -> Bool {
-        var found = false
+    static func restoreEntitlementJWS() async -> String? {
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                transaction.productID == monthlyProductID {
-                found = true
+                return result.jwsRepresentation
             }
         }
-        return found
+        return nil
+    }
+
+    static func restoreEntitlements() async -> Bool {
+        await restoreEntitlementJWS() != nil
     }
 
     /// True if an active entitlement exists for the placeholder product.
@@ -68,7 +72,7 @@ enum StoreKitPurchaseStub {
     }
 
     enum PurchaseOutcome: Equatable {
-        case success
+        case success(String)
         case cancelled
         case pending
         case unavailable

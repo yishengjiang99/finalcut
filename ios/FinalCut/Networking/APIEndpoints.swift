@@ -4,6 +4,8 @@ enum APIEndpoints {
     static let authStatus = "/api/auth/status"
     static let sampleAccessToken = "/api/sample-access-token"
     static let mobileGoogleAuth = "/api/auth/mobile/google"
+    static let mobileDeviceAuth = "/api/auth/mobile/device"
+    static let mobileAppleIAP = "/api/auth/mobile/apple-iap"
     static let chat = "/api/chat"
     /// Sync process-video (web). iOS prefers async jobs path below.
     static let processVideo = "/api/process-video"

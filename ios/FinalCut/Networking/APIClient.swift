@@ -2,11 +2,11 @@ import Foundation
 
 /// HTTP client for FinalCut backend.
 ///
-/// Auth for this scaffold (Google Sign-In deferred):
+/// Auth uses an opaque Bearer session minted for a Keychain-backed install:
 /// 1. **DEBUG / demo E2E (prod grepawk.com):** `GET /api/sample-access-token`, then send header
 ///    `sample-access-token: <token>` on jobs enqueue, poll, and result downloads.
 ///    Never `Authorization: Bearer <sample-token>`.
-/// 2. Optional unused Bearer (`accessToken`) storage/helpers for a future auth phase — not wired to SignIn
+/// 2. Apple transactions are verified by the server before the Bearer user is marked premium.
 /// 3. Cookie jar via `HTTPCookieStorage` is optional/temporary; do not rely on it as primary
 final class APIClient {
     private let session: URLSession
@@ -51,6 +51,8 @@ final class APIClient {
     var authStatusURL: URL { url(for: APIEndpoints.authStatus) }
     var sampleAccessTokenURL: URL { url(for: APIEndpoints.sampleAccessToken) }
     var mobileGoogleAuthURL: URL { url(for: APIEndpoints.mobileGoogleAuth) }
+    var mobileDeviceAuthURL: URL { url(for: APIEndpoints.mobileDeviceAuth) }
+    var mobileAppleIAPURL: URL { url(for: APIEndpoints.mobileAppleIAP) }
     var chatURL: URL { url(for: APIEndpoints.chat) }
     var processVideoURL: URL { url(for: APIEndpoints.processVideo) }
     var jobsProcessVideoURL: URL { url(for: APIEndpoints.jobsProcessVideo) }
@@ -138,6 +140,35 @@ final class APIClient {
         // Backend returns expiresIn in milliseconds (PR #46).
         accessTokenExpiresAt = Date().addingTimeInterval(TimeInterval(result.expiresIn) / 1000.0)
         return result
+    }
+
+    @discardableResult
+    func registerDevice() async throws -> MobileDeviceAuthResponse {
+        let body = try encoder.encode(MobileDeviceAuthRequest(deviceInstallId: DeviceIdentity.installID))
+        let request = makeRequest(url: mobileDeviceAuthURL, method: "POST", auth: .none, body: body)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        let result = try decoder.decode(MobileDeviceAuthResponse.self, from: data)
+        accessToken = result.accessToken
+        accessTokenExpiresAt = Date().addingTimeInterval(TimeInterval(result.expiresIn) / 1000.0)
+        return result
+    }
+
+    func ensureDeviceSession() async throws {
+        if let accessToken, !accessToken.isEmpty,
+           let expiresAt = accessTokenExpiresAt,
+           expiresAt.timeIntervalSinceNow > 60 {
+            return
+        }
+        _ = try await registerDevice()
+    }
+
+    @discardableResult
+    func syncAppleTransaction(jwsRepresentation: String) async throws -> AuthStatus {
+        try await ensureDeviceSession()
+        let body = try encoder.encode(MobileAppleIAPRequest(signedTransactionJws: jwsRepresentation))
+        let data = try await postAuthorized(url: mobileAppleIAPURL, body: body)
+        return try decoder.decode(AuthStatus.self, from: data)
     }
 
     func fetchSampleAccessToken() async throws -> SampleAccessTokenResponse {

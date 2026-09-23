@@ -102,9 +102,14 @@ struct PaywallView: View {
         defer { isBusy = false }
         let outcome = await StoreKitPurchaseStub.purchaseMonthly()
         switch outcome {
-        case .success:
-            statusMessage = "Purchase succeeded."
-            appModel.unlockEditor()
+        case .success(let jws):
+            do {
+                _ = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
+                statusMessage = "Purchase verified."
+                appModel.unlockEditor()
+            } catch {
+                statusMessage = "Purchase completed, but server verification is pending: \(error.localizedDescription)"
+            }
         case .cancelled:
             statusMessage = "Purchase cancelled."
         case .pending:
@@ -120,12 +125,16 @@ struct PaywallView: View {
     private func restore() async {
         isBusy = true
         defer { isBusy = false }
-        let ok = await StoreKitPurchaseStub.restoreEntitlements()
-        if ok {
+        guard let jws = await StoreKitPurchaseStub.restoreEntitlementJWS() else {
+            statusMessage = "No entitlement found (simulator without transactions is expected)."
+            return
+        }
+        do {
+            _ = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
             statusMessage = "Entitlement restored."
             appModel.unlockEditor()
-        } else {
-            statusMessage = "No entitlement found (simulator without transactions is expected)."
+        } catch {
+            statusMessage = "Entitlement found, but server verification failed: \(error.localizedDescription)"
         }
     }
 }

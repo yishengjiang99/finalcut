@@ -24,6 +24,21 @@ export const MOBILE_ACCESS_TOKEN_TTL_MS = Math.max(
   60_000,
   Number(process.env.MOBILE_ACCESS_TOKEN_TTL_MS || 30 * 24 * 60 * 60 * 1000)
 );
+export const IOS_DEVICE_SESSION_TTL_MS = Math.max(
+  60_000,
+  Number(process.env.IOS_DEVICE_SESSION_TTL_MS || 90 * 24 * 60 * 60 * 1000)
+);
+export const IOS_FREE_DAILY_INFERENCE_LIMIT = Math.max(
+  0,
+  Number(process.env.IOS_FREE_DAILY_INFERENCE_LIMIT || 3)
+);
+export const APPLE_IAP_BUNDLE_ID = process.env.APPLE_IAP_BUNDLE_ID || 'com.ragnus.w2';
+export const APPLE_IAP_PRODUCT_ID = process.env.APPLE_IAP_PRODUCT_ID || 'com.ragnus.w2.subscription.monthly';
+export const APPLE_IAP_ENVIRONMENT = process.env.APPLE_IAP_ENVIRONMENT || 'Production';
+export const APPLE_IAP_APPLE_ID = process.env.APPLE_IAP_APPLE_ID
+  ? Number(process.env.APPLE_IAP_APPLE_ID)
+  : undefined;
+export const APPLE_IAP_ROOT_CERTS_BASE64 = process.env.APPLE_IAP_ROOT_CERTS_BASE64 || '';
 
 // Vitest sets VITEST=true; skip hard-exit so unit tests can import server modules
  // without production secrets. Production still exits when required vars are missing.

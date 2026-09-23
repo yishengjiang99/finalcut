@@ -10,7 +10,7 @@ import {
   apiLimiter,
   videoProcessLimiter,
   requireAuthenticatedUser,
-  requireActiveSubscription,
+  requireInferenceAccess,
 } from './middleware.js';
 import {
   getExtFromMimeType,
@@ -238,7 +238,7 @@ export async function burnSubtitlesIntoVideo(inputPath, srtPath, outputPath) {
 const router = express.Router();
 
 // Caption generation endpoint: extract audio from video and transcribe via OpenAI batch API
-router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   if (!OPENAI_API_KEY) {
     return res.status(503).json({ error: 'OPENAI_API_KEY is not configured. Caption generation is unavailable.' });
   }
@@ -320,7 +320,7 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
 // Uses the OpenAI batch POST /v1/audio/transcriptions for true speaker diarization.
 // The Realtime WSS API does NOT support diarization; only the batch endpoint with
 // response_format:"diarized_json" provides per-segment speaker IDs.
-router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   if (!OPENAI_API_KEY) {
     return res.status(503).json({ error: 'OPENAI_API_KEY is not configured. Speaker diarization is unavailable.' });
   }
@@ -415,7 +415,7 @@ router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthe
 });
 
 // Caption translation endpoint: translate SRT content to another language via Grok chat
-router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   // express.json() is mounted globally — prefer req.body; only fall back to raw stream if empty.
   let parsed = req.body;
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.keys(parsed).length) {

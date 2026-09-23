@@ -6,7 +6,7 @@ import { TMP_DIR, APP_BASE_URL } from './config.js';
 import {
   videoProcessLimiter,
   requireAuthenticatedUser,
-  requireActiveSubscription,
+  requireInferenceAccess,
   upload,
   getBaseUrlFromRequest,
   isValidSampleModeRequest,
@@ -91,7 +91,7 @@ router.post(
   '/api/jobs/process-video',
   videoProcessLimiter,
   requireAuthenticatedUser,
-  requireActiveSubscription,
+  requireInferenceAccess,
   upload.single('video'),
   async (req, res) => {
     try {

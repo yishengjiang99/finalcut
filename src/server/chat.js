@@ -4,6 +4,7 @@ import {
   apiLimiter,
   requireAuthenticatedUser,
   requireActiveSubscription,
+  requireInferenceAccess,
 } from './middleware.js';
 import { enqueueChatInteraction, saveLesson } from '../db.js';
 
@@ -188,7 +189,7 @@ function enqueueChatError({ userId, message, source, requestMessageCount, metada
 // ─── Route ───────────────────────────────────────────────────────────────────
 
 // Proxy endpoint for xAI API with streaming support
-router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   const userId = req.user?.id ?? null;
   try {
     // Basic request validation
