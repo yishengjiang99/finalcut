@@ -182,12 +182,12 @@ final class EditorViewModel: ObservableObject {
     }
 
     func loadBundledTestVideo() {
+        guard canAutoLoadBundledTestVideo else { return }
         guard let url = bundledTestVideoURL else {
             state = .failed
             lastError = "Test video unavailable"
             return
         }
-        guard canAutoLoadBundledTestVideo else { return }
         processingTask?.cancel()
         activeJobId = nil
         messages = []
