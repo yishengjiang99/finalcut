@@ -3,16 +3,26 @@ import SwiftUI
 struct ComposerView: View {
     @Binding var text: String
     var onImport: () -> Void
+    var onImportFiles: () -> Void
     var onSend: () -> Void
+    var importEnabled = true
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            Button(action: onImport) {
+            Menu {
+                Button("Photo Library", systemImage: "photo.on.rectangle", action: onImport)
+                Button("Choose File", systemImage: "folder", action: onImportFiles)
+            } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AppTheme.accent)
+            } primaryAction: {
+                onImport()
             }
             .accessibilityLabel("Import")
+            .accessibilityHint("Opens Photos. Touch and hold for more import options.")
+            .disabled(!importEnabled)
+            .opacity(importEnabled ? 1 : 0.35)
 
             TextField("Describe an edit…", text: $text, axis: .vertical)
                 .lineLimit(1...5)
@@ -42,5 +52,5 @@ struct ComposerView: View {
 }
 
 #Preview {
-    ComposerView(text: .constant(""), onImport: {}, onSend: {})
+    ComposerView(text: .constant(""), onImport: {}, onImportFiles: {}, onSend: {})
 }

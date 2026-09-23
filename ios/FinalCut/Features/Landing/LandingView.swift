@@ -31,8 +31,8 @@ struct LandingView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.accent)
 
-                Button("Skip to Editor (dev)") {
-                    appModel.skipToEditorForDev()
+                Button("Try it now") {
+                    appModel.tryTestVideoNow()
                 }
                 .font(.footnote)
                 .foregroundStyle(AppTheme.textSecondary)

@@ -27,10 +27,12 @@ final class AppModel: ObservableObject {
     @Published var isAuthenticated = false
     @Published var isSampleMode = false
     @Published var hasUnlockedEditor = false
+    @Published var isTestVideoMode = false
 
     let apiClient = APIClient()
 
     func goToSignIn() {
+        isTestVideoMode = false
         route = .signIn
     }
 
@@ -42,11 +44,21 @@ final class AppModel: ObservableObject {
     }
 
     func unlockEditor() {
+        isTestVideoMode = false
         hasUnlockedEditor = true
         route = .editor
     }
 
     func skipToEditorForDev() {
+        isTestVideoMode = false
+        hasUnlockedEditor = true
+        route = .editor
+    }
+
+    func tryTestVideoNow() {
+        isSampleMode = true
+        isTestVideoMode = true
+        apiClient.sampleModeEnabled = true
         hasUnlockedEditor = true
         route = .editor
     }
