@@ -16,7 +16,7 @@ const chatInteractionQueue = [];
 let chatInteractionFlushScheduled = false;
 const CHAT_INTERACTION_BATCH_SIZE = 50;
 const CHAT_INTERACTION_MAX_TEXT_LENGTH = 64_000;
-const CHAT_INTERACTION_TYPES = new Set(['human2ai', 'ai2human']);
+const CHAT_INTERACTION_TYPES = new Set(['human2ai', 'ai2human', 'error']);
 
 function normalizeUserRow(user) {
   if (!user) return null;
@@ -91,13 +91,18 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS chat_interactions (
         id BIGINT PRIMARY KEY AUTO_INCREMENT,
         user_id INT NULL,
-        interaction_type ENUM('human2ai', 'ai2human') NOT NULL,
+        interaction_type ENUM('human2ai', 'ai2human', 'error') NOT NULL,
         content MEDIUMTEXT NOT NULL,
         metadata JSON NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_chat_interactions_user_created (user_id, created_at),
         INDEX idx_chat_interactions_type_created (interaction_type, created_at)
       )
+    `);
+
+    await pool.query(`
+      ALTER TABLE chat_interactions
+      MODIFY interaction_type ENUM('human2ai', 'ai2human', 'error') NOT NULL
     `);
 
     // Mobile API access tokens (Bearer). Store only SHA-256 hashes.

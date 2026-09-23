@@ -529,6 +529,55 @@ export const tools = [
   {
     type: 'function',
     function: {
+      name: 'audio_dynamic_normalize',
+      description: 'Gently tame wide audio volume swings while preserving musical dynamics. Best for classical music, orchestral recordings, and uneven performances. Uses FFmpeg dynaudnorm by default, or a gentle compand curve when mode is "compand".',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            description: 'Processing mode. "dynaudnorm" smooths overall loudness jumps and is best for classical. "compand" applies a gentle compression curve.',
+            enum: ['dynaudnorm', 'compand'],
+            default: 'dynaudnorm'
+          },
+          frame_length: {
+            type: 'number',
+            description: 'dynaudnorm frame length in milliseconds. Larger values preserve musical phrases more naturally. Default: 150.',
+            default: 150
+          },
+          gaussian_size: {
+            type: 'integer',
+            description: 'dynaudnorm Gaussian window size. Higher odd values smooth gain changes and reduce pumping. Default: 31.',
+            default: 31
+          },
+          attacks: {
+            type: 'number',
+            description: 'compand attack time in seconds. Default: 0.3.',
+            default: 0.3
+          },
+          decays: {
+            type: 'number',
+            description: 'compand decay time in seconds. Default: 0.8.',
+            default: 0.8
+          },
+          points: {
+            type: 'string',
+            description: 'compand transfer points from input dB to output dB. Default: "-70/-70|-40/-30|-20/-15|0/-12".',
+            default: '-70/-70|-40/-30|-20/-15|0/-12'
+          },
+          gain: {
+            type: 'number',
+            description: 'compand makeup gain in dB. Keep mild for classical music. Default: 3.',
+            default: 3
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'audio_gate',
       description: 'Apply a noise gate to the audio. Reduces or eliminates audio below a threshold level.',
       parameters: {

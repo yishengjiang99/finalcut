@@ -155,6 +155,19 @@ export function applyOperation(command, operation, parsedArgs = {}) {
       const compRelease = parsedArgs.release ?? 250;
       return command.audioFilters(`acompressor=threshold=${compThreshold}dB:ratio=${compRatio}:attack=${compAttack}:release=${compRelease}`).videoCodec('copy');
     }
+    case 'audio_dynamic_normalize': {
+      const mode = parsedArgs.mode ?? 'dynaudnorm';
+      if (mode === 'compand') {
+        const attacks = parsedArgs.attacks ?? 0.3;
+        const decays = parsedArgs.decays ?? 0.8;
+        const points = parsedArgs.points ?? '-70/-70|-40/-30|-20/-15|0/-12';
+        const gain = parsedArgs.gain ?? 3;
+        return command.audioFilters(`compand=attacks=${attacks}:decays=${decays}:points=${points}:gain=${gain}`).videoCodec('copy');
+      }
+      const frameLength = parsedArgs.frame_length ?? 150;
+      const gaussianSize = parsedArgs.gaussian_size ?? 31;
+      return command.audioFilters(`dynaudnorm=f=${frameLength}:g=${gaussianSize}`).videoCodec('copy');
+    }
     case 'audio_gate': {
       const gateThreshold = parsedArgs.threshold ?? -50;
       const gateRatio = parsedArgs.ratio ?? 2;

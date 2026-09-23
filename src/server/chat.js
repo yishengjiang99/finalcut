@@ -165,10 +165,31 @@ function getLatestUserMessageText(messages) {
   return '';
 }
 
+function serializeError(error) {
+  if (!error) return 'Unknown error';
+  if (error instanceof Error) return error.message || error.name;
+  if (typeof error === 'string') return error;
+  return JSON.stringify(error);
+}
+
+function enqueueChatError({ userId, message, source, requestMessageCount, metadata = {} }) {
+  enqueueChatInteraction({
+    userId,
+    interactionType: 'error',
+    content: message,
+    metadata: {
+      source,
+      requestMessageCount,
+      ...metadata,
+    },
+  });
+}
+
 // ─── Route ───────────────────────────────────────────────────────────────────
 
 // Proxy endpoint for xAI API with streaming support
 router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, async (req, res) => {
+  const userId = req.user?.id ?? null;
   try {
     // Basic request validation
     if (!req.body || typeof req.body !== 'object') {
@@ -179,7 +200,6 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
       return res.status(400).json({ error: 'Invalid messages format' });
     }
 
-    const userId = req.user?.id ?? null;
     const latestUserText = getLatestUserMessageText(req.body.messages);
     enqueueChatInteraction({
       userId,
@@ -212,8 +232,24 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      return res.status(response.status).json({ error: error.message });
+      let errorBody = {};
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = { message: response.statusText };
+      }
+      const message = errorBody.error?.message || errorBody.message || response.statusText || 'xAI API request failed';
+      enqueueChatError({
+        userId,
+        message,
+        source: 'xai_api',
+        requestMessageCount: req.body.messages.length,
+        metadata: {
+          status: response.status,
+          statusText: response.statusText,
+        },
+      });
+      return res.status(response.status).json({ error: message });
     }
 
     // Set headers for Server-Sent Events (SSE)
@@ -303,6 +339,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
       res.end();
     } catch (streamError) {
       console.error('Error streaming response:', streamError);
+      enqueueChatError({
+        userId,
+        message: serializeError(streamError),
+        source: 'xai_stream',
+        requestMessageCount: req.body.messages.length,
+      });
       res.end();
     }
 
@@ -326,8 +368,35 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
     }
   } catch (error) {
     console.error('Error in /api/chat:', error);
+    enqueueChatError({
+      userId,
+      message: serializeError(error),
+      source: 'chat_route',
+      requestMessageCount: Array.isArray(req.body?.messages) ? req.body.messages.length : null,
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+router.post('/api/chat-error', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, (req, res) => {
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  if (!message) {
+    return res.status(400).json({ error: 'Error message is required' });
+  }
+
+  enqueueChatError({
+    userId: req.user?.id ?? null,
+    message,
+    source: 'client',
+    requestMessageCount: Number.isInteger(req.body?.messageCount) ? req.body.messageCount : null,
+    metadata: {
+      name: typeof req.body?.name === 'string' ? req.body.name : null,
+      stack: typeof req.body?.stack === 'string' ? req.body.stack.slice(0, 4000) : null,
+      context: req.body?.context && typeof req.body.context === 'object' ? req.body.context : null,
+    },
+  });
+
+  res.status(202).json({ ok: true });
 });
 
 // Supported formats introspection endpoint

@@ -696,6 +696,133 @@ describe('toolFunctions', () => {
     });
   });
 
+  describe('audio_compressor', () => {
+    it('should reject threshold above 0 dB', async () => {
+      const result = await toolFunctions.audio_compressor(
+        { threshold: 3 },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to apply dynamic compression');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ text: expect.stringContaining('Error applying dynamic compression') })
+      );
+    });
+
+    it('should reject ratios below 1', async () => {
+      const result = await toolFunctions.audio_compressor(
+        { ratio: 0.5 },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toContain('Failed to apply dynamic compression');
+    });
+
+    it('should apply dynamic compression with defaults', async () => {
+      const result = await toolFunctions.audio_compressor(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toBe('Dynamic audio compression applied successfully.');
+      expect(global.fetch).toHaveBeenCalledWith('/api/process-video', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-operation': 'audio_compressor',
+          'x-args': JSON.stringify({
+            threshold: 0,
+            ratio: 4,
+            attack: 20,
+            release: 250
+          })
+        })
+      }));
+      expect(mockSetVideoFileData).toHaveBeenCalled();
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'Processed video (dynamic compression applied):' })
+      );
+    });
+  });
+
+  describe('audio_dynamic_normalize', () => {
+    it('should apply dynaudnorm defaults for classical-friendly normalization', async () => {
+      const result = await toolFunctions.audio_dynamic_normalize(
+        {},
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toBe('Dynamic audio normalization applied successfully.');
+      expect(global.fetch).toHaveBeenCalledWith('/api/process-video', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-operation': 'audio_dynamic_normalize',
+          'x-args': JSON.stringify({
+            mode: 'dynaudnorm',
+            frame_length: 150,
+            gaussian_size: 31
+          })
+        })
+      }));
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'Processed video (dynamic audio normalized):' })
+      );
+    });
+
+    it('should apply gentle compand settings', async () => {
+      const result = await toolFunctions.audio_dynamic_normalize(
+        { mode: 'compand' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toBe('Gentle compand dynamic control applied successfully.');
+      expect(global.fetch).toHaveBeenCalledWith('/api/process-video', expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-operation': 'audio_dynamic_normalize',
+          'x-args': JSON.stringify({
+            mode: 'compand',
+            attacks: 0.3,
+            decays: 0.8,
+            points: '-70/-70|-40/-30|-20/-15|0/-12',
+            gain: 3
+          })
+        })
+      }));
+    });
+
+    it('should reject invalid dynaudnorm Gaussian sizes', async () => {
+      const result = await toolFunctions.audio_dynamic_normalize(
+        { gaussian_size: 30 },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('Failed to apply dynamic audio normalization');
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ text: expect.stringContaining('Error applying dynamic audio normalization') })
+      );
+    });
+
+    it('should reject malformed compand points', async () => {
+      const result = await toolFunctions.audio_dynamic_normalize(
+        { mode: 'compand', points: 'loud please' },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+
+      expect(result).toContain('Failed to apply dynamic audio normalization');
+    });
+  });
+
   describe('audio_delay', () => {
     it('should validate delay parameter', async () => {
       const result = await toolFunctions.audio_delay(
