@@ -92,6 +92,7 @@ describe('VideoPreview Component', () => {
     expect(downloadButton).toBeDisabled();
   });
 
+
   it('hides manual recording controls when caption track is present', () => {
     render(<VideoPreview videoUrl="test-video.mp4" vttUrl="test-captions.vtt" />);
     expect(screen.queryByText(/Start Recording/i)).not.toBeInTheDocument();
