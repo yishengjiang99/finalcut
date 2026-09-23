@@ -174,11 +174,20 @@ jobs:
           set -euo pipefail
           IPA=$(find "$EXPORT_PATH" -name '*.ipa' | head -1)
           echo "Uploading $IPA (build ${{ github.run_number }})"
+          set -o pipefail
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool-upload.log"
+          if grep -Eiq 'UPLOAD FAILED|Validation failed' "$RUNNER_TEMP/altool-upload.log"; then
+            echo "::error::altool upload failed (see log)"
+            exit 1
+          fi
+          if ! grep -Eiq 'UPLOAD SUCCEEDED|No errors uploading|Delivery UUID' "$RUNNER_TEMP/altool-upload.log"; then
+            echo "::error::altool did not report success"
+            exit 1
+          fi
 
       - name: Summary
         if: success()
