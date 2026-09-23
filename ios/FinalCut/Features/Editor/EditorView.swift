@@ -200,7 +200,7 @@ final class EditorViewModel: ObservableObject {
     }
 
     func resetBundledTestVideoIfNeeded() {
-        guard let localVideoURL, localVideoURL == bundledTestVideoURL else { return }
+        guard shouldResetBundledTestVideo else { return }
         processingTask?.cancel()
         activeJobId = nil
         state = .empty
@@ -603,6 +603,17 @@ final class EditorViewModel: ObservableObject {
 
     private var bundledTestVideoURL: URL? {
         Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
+    }
+
+    private var shouldResetBundledTestVideo: Bool {
+        guard let localVideoURL, localVideoURL == bundledTestVideoURL else { return false }
+        guard state == .ready, activeJobId == nil, captionArtifacts == CaptionArtifacts() else { return false }
+        guard composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return messages.isEmpty || (
+            messages.count == 1 &&
+            messages[0].role == .system &&
+            messages[0].content == "Loaded test video"
+        )
     }
 }
 
