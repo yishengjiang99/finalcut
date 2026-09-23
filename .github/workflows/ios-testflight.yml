@@ -180,11 +180,12 @@ jobs:
             --file "$IPA" \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool-upload.log"
-          if grep -Eiq 'UPLOAD FAILED|Validation failed' "$RUNNER_TEMP/altool-upload.log"; then
-            echo "::error::altool upload failed (see log)"
+          # Apple may still exit 0 while rejecting the package — fail hard on validation noise.
+          if grep -Eiq 'UPLOAD FAILED|Validation failed|STATE_ERROR\.VALIDATION_ERROR|Failed to upload package|ERROR:\s*\[altool' "$RUNNER_TEMP/altool-upload.log"; then
+            echo "::error::altool upload/validation failed (see log)"
             exit 1
           fi
-          if ! grep -Eiq 'UPLOAD SUCCEEDED|No errors uploading|Delivery UUID' "$RUNNER_TEMP/altool-upload.log"; then
+          if ! grep -Eiq 'UPLOAD SUCCEEDED|No errors uploading|Delivery UUID|The package was successfully uploaded' "$RUNNER_TEMP/altool-upload.log"; then
             echo "::error::altool did not report success"
             exit 1
           fi
