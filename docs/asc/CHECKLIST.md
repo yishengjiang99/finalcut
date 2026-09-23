@@ -1,6 +1,8 @@
+**Apple ID:** `6815060815` · **Bundle:** `com.ragnus.w2` · **SKU:** `finalcap-ai`
+
 # FinalCap iOS — App Store submission checklist
 
-Bundle ID: `com.grepawk.finalcut`  
+Bundle ID: `com.ragnus.w2`  
 App Name: `FinalCap - AI Video Editor` · Display name: `FinalCap`  
 API: `https://grepawk.com`  
 Owner: FinalCut iOS + Design; CoS gates submit.
@@ -19,7 +21,7 @@ Legend: `[ ]` open · `[x]` done · `N/A` not in scope for this version.
 - [ ] Import → one chat edit → export works on device (not only simulator)
 - [ ] Long FFmpeg edits use async jobs + poll; burn-in captions use sync `POST /api/process-video` per Design
 - [ ] Absolute `resultUrl` downloads work with auth after backgrounding
-- [ ] StoreKit product `com.grepawk.finalcut.subscription.monthly` configured in ASC + `.storekit` file
+- [ ] StoreKit product `com.ragnus.w2.subscription.monthly` configured in ASC + `.storekit` file
 - [ ] Purchase + **Restore** gate a real server entitlement (or Review notes explain free path clearly)
 - [ ] No Stripe Checkout / web billing unlock inside the iOS app
 - [ ] `ITSAppUsesNonExemptEncryption` / export compliance = NO (HTTPS only) — see [`EXPORT_COMPLIANCE.md`](EXPORT_COMPLIANCE.md)

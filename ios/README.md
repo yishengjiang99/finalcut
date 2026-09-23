@@ -8,9 +8,9 @@ Native SwiftUI shell for **FinalCap** (iOS 17+).
 |--------|------|
 | Home-screen display name (`CFBundleDisplayName`) | **FinalCap** |
 | App Store App Name | **FinalCap - AI Video Editor** |
-| Bundle ID | `com.grepawk.finalcut` (**unchanged**) |
+| Bundle ID | `com.ragnus.w2` (**unchanged**) |
 | Xcode target / scheme / folders / types | FinalCut (**unchanged**) |
-| StoreKit product id | `com.grepawk.finalcut.subscription.monthly` (**unchanged**) |
+| StoreKit product id | `com.ragnus.w2.subscription.monthly` (**unchanged**) |
 
 `INFOPLIST_KEY_CFBundleDisplayName = FinalCap` is set on the FinalCut target for Debug and Release in `FinalCut.xcodeproj/project.pbxproj`.
 
@@ -25,10 +25,10 @@ Native SwiftUI shell for **FinalCap** (iOS 17+).
 
 | Setting | Value |
 |--------|--------|
-| Bundle ID | `com.grepawk.finalcut` |
+| Bundle ID | `com.ragnus.w2` |
 | Deployment target | iOS 17.0 |
 | Default API base URL | `https://grepawk.com` |
-| IAP product (placeholder) | `com.grepawk.finalcut.subscription.monthly` |
+| IAP product (placeholder) | `com.ragnus.w2.subscription.monthly` |
 
 Override the API base URL at runtime via `APIConfig.shared.baseURL`.
 
@@ -45,7 +45,7 @@ Override the API base URL at runtime via `APIConfig.shared.baseURL`.
 ## Paywall — StoreKit 2 (not Stripe)
 
 - Uses StoreKit 2 placeholders: `Product.products`, `purchase()`, `Transaction.currentEntitlements`.
-- Placeholder product id: **`com.grepawk.finalcut.subscription.monthly`** (configure in App Store Connect or a StoreKit Configuration file).
+- Placeholder product id: **`com.ragnus.w2.subscription.monthly`** (configure in App Store Connect or a StoreKit Configuration file).
 - Local StoreKit config: **`FinalCut/StoreKit/FinalCut.storekit`** — attached to the shared **FinalCut** scheme (`FinalCut.xcodeproj/xcshareddata/xcschemes/FinalCut.xcscheme`) for simulator IAP testing.
 - PaywallView: **Subscribe** / **Restore purchases** call stub helpers; they no-op gracefully when products are missing (typical simulator).
 - **Does not** open Stripe Checkout URLs or use `ASWebAuthenticationSession` for billing.

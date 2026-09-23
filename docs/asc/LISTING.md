@@ -1,13 +1,17 @@
 # FinalCap — App Store listing draft
 
-**Status:** DRAFT — confirm display name + copy with Design / CoS before pasting into ASC.  
-**Bundle ID:** `com.grepawk.finalcut`  
+**Status:** LIVE in ASC (screenshots + en-US copy uploaded 2026-09-22 PT).  
+**App Name:** `FinalCap - AI Video Editor`  
+**Apple ID:** `6815060815`  
+**Bundle ID:** `com.ragnus.w2`  
+**SKU:** `finalcap-ai`  
 **Primary category:** Photo & Video  
 **Secondary:** Productivity (optional)
 
 Do **not** use “Grok”, “Final Cut Pro”, or Apple product names in the App Name field.
 
 ---
+
 
 ## App Name (≤30)
 
