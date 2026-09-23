@@ -1038,7 +1038,9 @@ export const toolFunctions = {
       const burnedUrl = URL.createObjectURL(new Blob([burned], { type: 'video/mp4' }));
       const dual = translatedSrt ? ` Dual-track burn-in (translated ${translateLanguage} + original).` : '';
       addMessage({
-        text: `Captions burned in (${langDesc}).${dual} Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"`,
+        // Do not echo the caption text in the chat bubble above the burned
+        // video; the text is already present in the rendered video.
+        text: `Captions burned in (${langDesc}).${dual}`,
         videoUrl: burnedUrl,
         mimeType: 'video/mp4',
       });

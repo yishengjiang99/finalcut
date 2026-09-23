@@ -34,11 +34,18 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     // Render active subtitle cues onto canvas (no native overlay)
     const track = video.textTracks && video.textTracks[0];
     if (track && track.activeCues && track.activeCues.length > 0) {
-      const fontSize = Math.max(16, Math.floor(canvas.height * 0.045));
+      // Keep captions readable without letting them cover most of a vertical clip.
+      const fontSize = Math.max(14, Math.min(30, Math.floor(canvas.height * 0.032)));
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.textAlign = 'center';
+      const seenTexts = new Set();
       for (let i = 0; i < track.activeCues.length; i++) {
         const cue = track.activeCues[i];
+        const cueKey = String(cue.text || '').replace(/\s+/g, ' ').trim();
+        // Browsers can expose the same cue more than once while a VTT track is
+        // loading. Never composite duplicate text into the same frame.
+        if (!cueKey || seenTexts.has(cueKey)) continue;
+        seenTexts.add(cueKey);
         const rawLines = (() => {
           try {
             const div = document.createElement('div');
@@ -46,7 +53,25 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             return (div.textContent || '').split('\n');
           } catch (_) { return (cue.text || '').split('\n'); }
         })();
-        const lines = rawLines;
+        const maxTextWidth = canvas.width * 0.82;
+        const wrappedLines = [];
+        rawLines.forEach((rawLine) => {
+          const words = String(rawLine).trim().split(/\s+/).filter(Boolean);
+          let line = '';
+          words.forEach((word) => {
+            const next = line ? `${line} ${word}` : word;
+            if (line && ctx.measureText(next).width > maxTextWidth) {
+              wrappedLines.push(line);
+              line = word;
+            } else {
+              line = next;
+            }
+          });
+          if (line) wrappedLines.push(line);
+        });
+        const lines = wrappedLines.length > 2
+          ? [wrappedLines[0], `${wrappedLines.slice(1).join(' ')}…`]
+          : wrappedLines;
         const lineHeight = fontSize * 1.4;
         const totalHeight = lines.length * lineHeight;
         const baseY = canvas.height * 0.88 - totalHeight / 2;

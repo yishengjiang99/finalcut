@@ -200,6 +200,18 @@ export function buildFadeFilter(numVideos, duration, hasAudio) {
 
 const router = express.Router();
 
+// A translation request can occasionally return the source text unchanged
+// (for example, when the requested language matches the detected language).
+// Burning both tracks would make every caption appear twice.
+function subtitleTextSignature(srt) {
+  return String(srt || '')
+    .replace(/^\s*\d+\s*$/gm, '')
+    .replace(/^\s*\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->.*$/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase();
+}
+
 // Video processing endpoint
 // Client posts video as a raw body stream; operation, args, and file type are in request headers.
 // For add_audio_track and burn_subtitles (which require secondary inputs), FormData/multipart is used.
@@ -242,7 +254,9 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
         return res.status(400).json({ error: `position must be one of: ${validPositions.join(', ')}` });
       }
 
-      const hasTranslation = typeof translatedSrtContent === 'string' && translatedSrtContent.trim().length > 0;
+      const hasTranslation = typeof translatedSrtContent === 'string'
+        && translatedSrtContent.trim().length > 0
+        && subtitleTextSignature(translatedSrtContent) !== subtitleTextSignature(srtContent);
 
       let inputPath = null;
       let srtPath = null;
@@ -262,7 +276,9 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
         const ASS_ALIGN_BOTTOM = 2;
         const ASS_ALIGN_TOP = 8;
         const alignment = position === 'top' ? ASS_ALIGN_TOP : ASS_ALIGN_BOTTOM;
-        let forceStyle = `FontSize=20,Alignment=${alignment}`;
+        // Social clips are commonly portrait-oriented; keep the burn compact
+        // and leave room for the picture instead of covering the frame.
+        let forceStyle = `FontSize=14,Alignment=${alignment},MarginV=28,Outline=1,Shadow=0,WrapStyle=2`;
         if (style === 'white_on_black') {
           // White text (&H00FFFFFF) on semi-transparent black background (&H80000000, alpha=0x80)
           forceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0';
@@ -286,7 +302,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
 
           // Translated track is placed at the opposite end of the video
           const translatedAlignment = position === 'top' ? ASS_ALIGN_BOTTOM : ASS_ALIGN_TOP;
-          let translatedForceStyle = `FontSize=18,Alignment=${translatedAlignment}`;
+          let translatedForceStyle = `FontSize=12,Alignment=${translatedAlignment},MarginV=28,Outline=1,Shadow=0,WrapStyle=2`;
           if (style === 'white_on_black') {
             translatedForceStyle += ',PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0';
           } else if (style === 'yellow') {
