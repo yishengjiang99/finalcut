@@ -37,6 +37,18 @@ const welcomeMessage = {
   showSampleLinks: true
 };
 
+export const isDownloadOnlyAttachment = (msg) => {
+  return msg?.videoType === 'subtitle-srt' || (
+    msg?.mimeType &&
+    !msg.mimeType.startsWith('video/') &&
+    !msg.mimeType.startsWith('audio/')
+  );
+};
+
+export const shouldRenderVideoPreview = (msg) => {
+  return Boolean(msg?.videoUrl) && !isDownloadOnlyAttachment(msg);
+};
+
 export default function App() {
   const [showLanding, setShowLanding] = useState(true); // Show landing page initially
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
@@ -550,14 +562,26 @@ export default function App() {
               )}
               {msg.videoUrl && (
                 <div style={{ marginTop: '8px' }}>
-                  {msg.videoUrl}
-                  <VideoPreview
-                    key={`preview-${msg.id}`}
-                    videoUrl={msg.videoUrl}
-                    title={getVideoTitle(msg.videoType)}
-                    mimeType={msg.mimeType}
-                    vttUrl={msg.vttUrl || null}
-                  />
+                  {shouldRenderVideoPreview(msg) ? (
+                    <>
+                      {msg.videoUrl}
+                      <VideoPreview
+                        key={`preview-${msg.id}`}
+                        videoUrl={msg.videoUrl}
+                        title={getVideoTitle(msg.videoType)}
+                        mimeType={msg.mimeType}
+                        vttUrl={msg.vttUrl || null}
+                      />
+                    </>
+                  ) : (
+                    <a
+                      href={msg.videoUrl}
+                      download={msg.videoType === 'subtitle-srt' ? 'captions.srt' : undefined}
+                      style={{ color: '#9fb7d9' }}
+                    >
+                      Download
+                    </a>
+                  )}
                 </div>
               )}
             </div>

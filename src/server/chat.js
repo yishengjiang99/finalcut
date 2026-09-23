@@ -5,7 +5,7 @@ import {
   requireAuthenticatedUser,
   requireActiveSubscription,
 } from './middleware.js';
-import { getRecentLessons, saveLesson } from '../db.js';
+import { enqueueChatInteraction, getRecentLessons, saveLesson } from '../db.js';
 
 const router = express.Router();
 
@@ -141,6 +141,30 @@ function buildSystemMessage(recentLessons) {
   return { role: 'system', content };
 }
 
+function messageContentToText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map(part => {
+      if (typeof part === 'string') return part;
+      if (part?.type === 'text' && typeof part.text === 'string') return part.text;
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function getLatestUserMessageText(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === 'user') {
+      return messageContentToText(message.content);
+    }
+  }
+  return '';
+}
+
 // ─── Route ───────────────────────────────────────────────────────────────────
 
 // Proxy endpoint for xAI API with streaming support
@@ -156,6 +180,16 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
     }
 
     const userId = req.user?.id ?? null;
+    const latestUserText = getLatestUserMessageText(req.body.messages);
+    enqueueChatInteraction({
+      userId,
+      interactionType: 'human2ai',
+      content: latestUserText,
+      metadata: {
+        authMethod: req.authMethod || (req.headers['sample-access-token'] ? 'sample' : null),
+        messageCount: req.body.messages.length,
+      },
+    });
 
     // Build injected messages: prepend system message with output contract + recent lessons
     const recentLessons = userId ? await getRecentLessons(userId) : [];
@@ -271,6 +305,17 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
       console.error('Error streaming response:', streamError);
       res.end();
     }
+
+    // Queue model response storage after stream ends; this never blocks the client.
+    enqueueChatInteraction({
+      userId,
+      interactionType: 'ai2human',
+      content: assistantText,
+      metadata: {
+        model: 'grok-3',
+        streamed: true,
+      },
+    });
 
     // Persist lesson after stream ends (errors are logged inside saveLesson)
     if (userId) {
