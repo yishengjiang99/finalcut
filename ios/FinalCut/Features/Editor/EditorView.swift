@@ -188,7 +188,7 @@ final class EditorViewModel: ObservableObject {
             lastError = "Test video unavailable"
             return
         }
-        guard localVideoURL == nil else { return }
+        guard canAutoLoadBundledTestVideo else { return }
         processingTask?.cancel()
         activeJobId = nil
         messages = []
@@ -609,8 +609,15 @@ final class EditorViewModel: ObservableObject {
         Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
     }
 
+    private var canAutoLoadBundledTestVideo: Bool {
+        guard localVideoURL == nil else { return false }
+        guard state == .empty, activeJobId == nil, captionArtifacts == CaptionArtifacts() else { return false }
+        guard composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return messages.isEmpty
+    }
+
     private var shouldResetBundledTestVideo: Bool {
-        guard let localVideoURL, localVideoURL == bundledTestVideoURL else { return false }
+        guard isBundledTestVideoLoaded else { return false }
         guard state == .ready, activeJobId == nil, captionArtifacts == CaptionArtifacts() else { return false }
         guard composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         return messages.isEmpty || (
@@ -618,6 +625,11 @@ final class EditorViewModel: ObservableObject {
             messages[0].role == .system &&
             messages[0].content == "Loaded test video"
         )
+    }
+
+    private var isBundledTestVideoLoaded: Bool {
+        guard let localVideoURL else { return false }
+        return localVideoURL.standardizedFileURL == bundledTestVideoURL?.standardizedFileURL
     }
 }
 
