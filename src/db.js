@@ -13,6 +13,14 @@ const dbConfig = {
 
 let pool = null;
 
+function normalizeUserRow(user) {
+  if (!user) return null;
+  return {
+    ...user,
+    has_subscription: Boolean(user.has_subscription),
+  };
+}
+
 // Create connection pool
 export function getPool() {
   if (!pool) {
@@ -97,13 +105,13 @@ export async function initDatabase() {
 export async function findUserByEmail(email) {
   const pool = getPool();
   const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-  return rows[0] || null;
+  return normalizeUserRow(rows[0]);
 }
 
 export async function findUserByGoogleId(googleId) {
   const pool = getPool();
   const [rows] = await pool.query('SELECT * FROM users WHERE google_id = ?', [googleId]);
-  return rows[0] || null;
+  return normalizeUserRow(rows[0]);
 }
 
 export async function createUser(userData) {
@@ -123,7 +131,7 @@ export async function createUser(userData) {
     throw new Error('Failed to fetch user record after insertion');
   }
   
-  return rows[0];
+  return normalizeUserRow(rows[0]);
 }
 
 export async function updateUserSubscription(email, hasSubscription, subscriptionId = null) {
