@@ -1,13 +1,15 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { tools } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 
 export function filterMessagesForInference(messages) {
-  return messages
-    .filter(message => !message?.excludeFromAPI)
-    .map(({ apiContent, ...message }) => (
-      apiContent ? { ...message, content: apiContent } : message
-    ));
+  const latestUserMessage = [...messages]
+    .reverse()
+    .find(message => message?.role === 'user' && !message?.excludeFromAPI && !message?.apiContent);
+
+  return latestUserMessage
+    ? [{ role: 'user', content: latestUserMessage.content }]
+    : [];
 }
 
 async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
@@ -43,8 +45,6 @@ export function useCallAPI({
   addMessage,
   uploadedVideos,
 }) {
-  const callAPIRef = useRef(null);
-
   const callAPI = useCallback(async (currentMessages, options = {}) => {
     const forcedSampleToken = options.sampleAccessToken || null;
     const shouldUseSampleAuth = Boolean(forcedSampleToken || (isSampleMode && sampleAccessToken));
@@ -223,7 +223,6 @@ export function useCallAPI({
           // Hide spinner as soon as video processing is done, before the follow-up API call
           setProcessing(false);
         }
-        await callAPIRef.current(currentMessages);
       }
     } catch (error) {
       await reportChatError(error, {
@@ -241,8 +240,6 @@ export function useCallAPI({
       setIsCallingAPI(false); // Clear loading state after API call completes
     }
   }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos]);
-
-  callAPIRef.current = callAPI;
 
   return callAPI;
 }

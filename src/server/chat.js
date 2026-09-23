@@ -5,7 +5,7 @@ import {
   requireAuthenticatedUser,
   requireActiveSubscription,
 } from './middleware.js';
-import { enqueueChatInteraction, getRecentLessons, saveLesson } from '../db.js';
+import { enqueueChatInteraction, saveLesson } from '../db.js';
 
 const router = express.Router();
 
@@ -211,11 +211,6 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
       },
     });
 
-    // Build injected messages: prepend system message with output contract + recent lessons
-    const recentLessons = userId ? await getRecentLessons(userId) : [];
-    const systemMessage = buildSystemMessage(recentLessons);
-    const injectedMessages = [systemMessage, ...req.body.messages];
-
     // Enable streaming for xAI API
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -225,7 +220,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireActiveSubs
       },
       body: JSON.stringify({
         ...req.body,
-        messages: injectedMessages,
+        messages: req.body.messages,
         model: 'grok-3', // Specify the new model here
         stream: true // Enable streaming
       })
