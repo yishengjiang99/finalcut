@@ -73,11 +73,15 @@ struct EditorView: View {
             }
         }
         .onChange(of: appModel.isTestVideoMode) { _, isTestVideoMode in
+            model.apiClient = appModel.apiClient
             if isTestVideoMode {
                 model.loadBundledTestVideo()
             } else {
                 model.resetBundledTestVideoIfNeeded()
             }
+        }
+        .onChange(of: appModel.isSampleMode) { _, _ in
+            model.apiClient = appModel.apiClient
         }
         .overlay(alignment: .top) {
             if model.state == .failed, let err = model.lastError {
