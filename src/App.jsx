@@ -34,6 +34,7 @@ const welcomeMessage = {
   role: 'assistant',
   content: 'Welcome to FinalCap! Upload a video or audio file to get started. Try these sample commands:',
   id: 0,
+  excludeFromAPI: true,
   showSampleLinks: true
 };
 
@@ -209,7 +210,7 @@ export default function App() {
     vttUrl = null
   }) => {
     const id = messageIdCounterRef.current++;
-    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, showSampleLinks, vttUrl }]);
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, excludeFromAPI: true, showSampleLinks, vttUrl }]);
   };
 
   const getVideoTitle = (videoType) => {
@@ -241,6 +242,7 @@ export default function App() {
       const uploadingMessage = { 
         role: 'user', 
         content: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`, 
+        excludeFromAPI: true,
         id: messageIdCounterRef.current++ 
       };
       setMessages(prev => [...prev, uploadingMessage]);
@@ -298,22 +300,19 @@ export default function App() {
         videoUrl: video.url,
         videoType: 'original',
         mimeType: video.mimeType,
+        excludeFromAPI: true,
         id: messageIdCounterRef.current++
       }));
 
       const summaryMessage = { 
         role: 'user', 
         content: `${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}.`, 
+        excludeFromAPI: true,
         id: messageIdCounterRef.current++ 
       };
 
-      // Build complete message history for API call
-      const messagesForAPI = [...messages, uploadingMessage, ...uploadedMessages, summaryMessage];
-
       // Update UI state with uploaded messages
       setMessages(prev => [...prev, ...uploadedMessages, summaryMessage]);
-
-      await callAPI(messagesForAPI);
     } catch (error) {
       addMessage({ text: 'Error uploading files: ' + error.message });
     }
@@ -353,7 +352,7 @@ export default function App() {
     const sampleVideoUrl = '/BigBuckBunny.mp4';
     
     try {
-      const token = await getSampleAccessToken();
+      await getSampleAccessToken();
 
       // Fetch the sample video
       const response = await fetch(sampleVideoUrl);
@@ -375,13 +374,11 @@ export default function App() {
       setCurrentFileMimeType('video/mp4');
       
       // Show selected video
-      const uploadedMessage = { role: 'user', content: 'Selected sample video:', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', id: messageIdCounterRef.current++ };
-      const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', id: messageIdCounterRef.current++ };
+      const uploadedMessage = { role: 'user', content: 'Selected sample video:', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', excludeFromAPI: true, id: messageIdCounterRef.current++ };
+      const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', excludeFromAPI: true, id: messageIdCounterRef.current++ };
       
-      const messagesForAPI = [...messages, uploadedMessage, userMessage];
       setMessages(prev => [...prev, uploadedMessage, userMessage]);
       
-      await callAPI(messagesForAPI, { sampleAccessToken: token });
     } catch (error) {
       addMessage({ text: 'Error loading sample video. Please upload your own video.' });
     }
