@@ -300,7 +300,7 @@ export default function App() {
         videoUrl: video.url,
         videoType: 'original',
         mimeType: video.mimeType,
-        excludeFromAPI: true,
+        apiContent: `A ${video.isAudio ? 'audio' : 'video'} file is available for editing.`,
         id: messageIdCounterRef.current++
       }));
 
@@ -374,7 +374,7 @@ export default function App() {
       setCurrentFileMimeType('video/mp4');
       
       // Show selected video
-      const uploadedMessage = { role: 'user', content: 'Selected sample video:', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', excludeFromAPI: true, id: messageIdCounterRef.current++ };
+      const uploadedMessage = { role: 'user', content: 'Selected sample video:', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', id: messageIdCounterRef.current++ };
       const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', excludeFromAPI: true, id: messageIdCounterRef.current++ };
       
       setMessages(prev => [...prev, uploadedMessage, userMessage]);

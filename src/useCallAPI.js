@@ -3,7 +3,11 @@ import { tools } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 
 export function filterMessagesForInference(messages) {
-  return messages.filter(message => !message?.excludeFromAPI);
+  return messages
+    .filter(message => !message?.excludeFromAPI)
+    .map(({ apiContent, ...message }) => (
+      apiContent ? { ...message, content: apiContent } : message
+    ));
 }
 
 async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
