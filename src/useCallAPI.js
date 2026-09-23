@@ -2,6 +2,10 @@ import { useCallback, useRef } from 'react';
 import { tools } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 
+export function filterMessagesForInference(messages) {
+  return messages.filter(message => !message?.excludeFromAPI);
+}
+
 async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
   try {
     await fetch('/api/chat-error', {
@@ -54,7 +58,7 @@ export function useCallAPI({
         },
         body: JSON.stringify({
           model: 'grok-beta',
-          messages: currentMessages,
+          messages: filterMessagesForInference(currentMessages),
           tools: tools,
           tool_choice: 'auto'
         })
