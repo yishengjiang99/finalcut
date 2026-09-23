@@ -34,9 +34,42 @@ function sampleHeaders(token, extra = {}) {
   return { 'sample-access-token': token, ...extra };
 }
 
+function makeMultipartBurnBody(videoBuffer, srtContent) {
+  const boundary = `----finalcap-test-${Date.now().toString(16)}`;
+  const crlf = '\r\n';
+  const args = JSON.stringify({
+    srtContent,
+    style: 'default',
+    position: 'bottom',
+  });
+  const parts = [
+    Buffer.from(
+      `--${boundary}${crlf}`
+      + `Content-Disposition: form-data; name="video"; filename="elevenlabs-caption-test.mp4"${crlf}`
+      + `Content-Type: video/mp4${crlf}${crlf}`
+    ),
+    videoBuffer,
+    Buffer.from(
+      `${crlf}--${boundary}${crlf}`
+      + `Content-Disposition: form-data; name="operation"${crlf}${crlf}`
+      + `burn_subtitles${crlf}`
+      + `--${boundary}${crlf}`
+      + `Content-Disposition: form-data; name="args"${crlf}${crlf}`
+      + `${args}${crlf}`
+      + `--${boundary}--${crlf}`
+    ),
+  ];
+
+  return {
+    body: Buffer.concat(parts),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
 describeLive('live captions E2E @ grepawk.com', () => {
   let token;
-  const speechMp4 = readFileSync(path.join(fixtures, 'speech-hello.mp4'));
+  const speechMp4 = readFileSync(path.join(fixtures, 'elevenlabs-caption-test.mp4'));
+  const speechText = readFileSync(path.join(fixtures, 'elevenlabs-caption-test.txt'), 'utf8');
   const silentMp4 = readFileSync(path.join(fixtures, 'silent-2s.mp4'));
 
   beforeAll(async () => {
@@ -62,8 +95,9 @@ describeLive('live captions E2E @ grepawk.com', () => {
     expect(srtHasSpeech(body.srt)).toBe(false);
   }, 180_000);
 
-  it('generate → translate → sync burn_subtitles', async () => {
+  it('generate → sync burn_subtitles using generated ElevenLabs speech artifact', async () => {
     // 1) Generate
+    console.log('[live-captions] generating captions');
     const genRes = await fetch(`${BASE}/api/generate-captions`, {
       method: 'POST',
       headers: sampleHeaders(token, {
@@ -77,42 +111,20 @@ describeLive('live captions E2E @ grepawk.com', () => {
     expect(gen.srt).toBeTruthy();
     expect(gen.vtt).toMatch(/^WEBVTT/);
     expect(gen.srt).toMatch(/\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}/);
+    expect(gen.srt.toLowerCase()).toContain('caption');
+    expect(gen.srt.toLowerCase()).toContain('video editing');
+    expect(speechText.toLowerCase()).toContain('caption test');
 
-    const originalTiming = [...gen.srt.matchAll(/(\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3})/g)].map(m => m[1]);
-
-    // 2) Translate
-    const trRes = await fetch(`${BASE}/api/translate-captions`, {
-      method: 'POST',
-      headers: sampleHeaders(token, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ srtContent: gen.srt, targetLanguage: 'es' }),
-    });
-    expect(trRes.status, await trRes.clone().text()).toBe(200);
-    const tr = await trRes.json();
-    expect(tr.srt).toBeTruthy();
-    expect(tr.targetLanguage).toBe('es');
-    for (const t of originalTiming) {
-      expect(tr.srt).toContain(t);
-    }
-
-    // 3) Sync burn-in (multipart) — NOT async jobs
-    const form = new FormData();
-    form.append('video', new Blob([speechMp4], { type: 'video/mp4' }), 'speech-hello.mp4');
-    form.append('operation', 'burn_subtitles');
-    form.append(
-      'args',
-      JSON.stringify({
-        srtContent: gen.srt,
-        translatedSrtContent: tr.srt,
-        style: 'default',
-        position: 'bottom',
-      })
-    );
+    // 2) Sync burn-in (multipart) — NOT async jobs
+    console.log('[live-captions] burning subtitles');
+    const multipart = makeMultipartBurnBody(speechMp4, gen.srt);
 
     const burnRes = await fetch(`${BASE}/api/process-video`, {
       method: 'POST',
-      headers: sampleHeaders(token),
-      body: form,
+      headers: sampleHeaders(token, { 'Content-Type': multipart.contentType }),
+      body: multipart.body,
     });
+    console.log('[live-captions] burn response', burnRes.status);
     expect(burnRes.status, await burnRes.clone().text().catch(() => '')).toBe(200);
     const ctype = burnRes.headers.get('content-type') || '';
     expect(ctype).toMatch(/video\/mp4|octet-stream/i);

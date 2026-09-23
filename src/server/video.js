@@ -221,7 +221,12 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       return res.status(400).json({ error: 'Use streaming request (video body + x-operation header) for this operation' });
     }
 
-    const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+    let parsedArgs;
+    try {
+      parsedArgs = typeof args === 'string' ? JSON.parse(args) : (args || {});
+    } catch {
+      return res.status(400).json({ error: 'Invalid args JSON' });
+    }
 
     if (operation === 'burn_subtitles') {
       const { srtContent, translatedSrtContent, style = 'default', position = 'bottom' } = parsedArgs;
@@ -242,6 +247,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       let inputPath = null;
       let srtPath = null;
       let translatedSrtPath = null;
+      let outputPath = null;
       try {
         const tmpDir = TMP_DIR;
         inputPath = path.join(tmpDir, `input-${randomUUID()}.mp4`);
@@ -296,10 +302,11 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
           videoFilter = `subtitles=filename='${escapedSrtPath}':force_style='${forceStyle}'`;
         }
 
-        const outputChunks = await new Promise((resolve, reject) => {
+        outputPath = path.join(tmpDir, `burned-${randomUUID()}.mp4`);
+
+        await new Promise((resolve, reject) => {
           const ffmpegLoglevel = IS_PRODUCTION ? 'error' : 'debug';
           const ffmpegStderr = [];
-          const chunks = [];
           const command = ffmpeg(inputPath)
             .videoFilters(videoFilter)
             // Subtitle burn-in requires video re-encode; use explicit MP4-compatible codecs.
@@ -310,9 +317,8 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
               '-c:v libx264',
               '-pix_fmt yuv420p',
               '-c:a aac',
-              '-movflags frag_keyframe+empty_moov+default_base_moof'
+              '-movflags +faststart'
             ])
-            .toFormat('mp4')
             .on('start', (commandLine) => {
               if (!IS_PRODUCTION) {
                 console.error('FFmpeg command (burn_subtitles):', commandLine);
@@ -332,15 +338,13 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
               }
               reject(err);
             })
-            .on('end', () => resolve(chunks));
-
-          const ffmpegStream = command.pipe();
-          ffmpegStream.on('data', (chunk) => { chunks.push(chunk); });
-          ffmpegStream.on('error', reject);
+            .on('end', resolve)
+            .save(outputPath);
         });
 
-        const outputBuffer = Buffer.concat(outputChunks);
+        const outputBuffer = await fs.readFile(outputPath);
         res.set('Content-Type', 'video/mp4');
+        res.set('Content-Length', String(outputBuffer.length));
         res.send(outputBuffer);
       } catch (error) {
         console.error('FFmpeg error (burn_subtitles):', error);
@@ -355,7 +359,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
           res.status(500).json({ error: error.message || 'Failed to burn subtitles' });
         }
       } finally {
-        [inputPath, srtPath, translatedSrtPath].forEach(p => p && fs.unlink(p).catch(() => {}));
+        [inputPath, srtPath, translatedSrtPath, outputPath].forEach(p => p && fs.unlink(p).catch(() => {}));
       }
       return;
     }

@@ -449,8 +449,11 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
   }
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
     const xaiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
@@ -474,7 +477,7 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
           }
         ]
       })
-    });
+    }).finally(() => clearTimeout(timeout));
 
     if (!xaiResponse.ok) {
       const errBody = await xaiResponse.json().catch(() => ({}));
@@ -494,7 +497,12 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
     res.json({ srt: translatedSrt, vtt: translatedVtt, targetLanguage: normalizedTarget });
   } catch (error) {
     console.error('Error translating captions:', error);
-    if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to translate captions' });
+    if (!res.headersSent) {
+      const timedOut = error?.name === 'AbortError';
+      res.status(timedOut ? 504 : 500).json({
+        error: timedOut ? 'Caption translation timed out' : (error.message || 'Failed to translate captions'),
+      });
+    }
   }
 });
 
