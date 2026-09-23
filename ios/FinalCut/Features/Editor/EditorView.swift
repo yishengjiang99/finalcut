@@ -73,7 +73,6 @@ struct EditorView: View {
             }
         }
         .onChange(of: appModel.isTestVideoMode) { _, isTestVideoMode in
-            model.apiClient = appModel.apiClient
             if isTestVideoMode {
                 model.loadBundledTestVideo()
             } else {
