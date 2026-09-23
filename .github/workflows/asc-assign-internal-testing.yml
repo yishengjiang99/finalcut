@@ -1,0 +1,97 @@
+name: ASC assign Internal Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        required: true
+        type: string
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign build to Internal Testing group(s)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          import jwt
+
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          issuer = os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          build_number = os.environ['BUILD_NUMBER'].strip()
+          bundle_id = os.environ['BUNDLE_ID'].strip()
+          now = int(time.time())
+          token = jwt.encode(
+            {'iss': issuer, 'iat': now, 'exp': now + 1200, 'aud': 'appstoreconnect-v1'},
+            p8, algorithm='ES256', headers={'kid': key_id},
+          )
+
+          def api(method, path, body=None):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com' + path,
+              data=data, method=method,
+              headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
+            try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                raw = r.read().decode() or '{}'
+                return r.status, json.loads(raw)
+            except urllib.error.HTTPError as e:
+              err = e.read().decode()
+              raise SystemExit(f'{method} {path} -> {e.code}: {err[:1200]}')
+
+          _, apps = api('GET', f'/v1/apps?filter[bundleId]={bundle_id}')
+          app_id = apps['data'][0]['id']
+          print('app', app_id)
+
+          _, builds = api('GET', f'/v1/builds?filter[app]={app_id}&filter[version]={build_number}&limit=5&sort=-uploadedDate')
+          if not builds.get('data'):
+            raise SystemExit(f'Build {build_number} not found')
+          build = builds['data'][0]
+          build_id = build['id']
+          print('build', build_id, build['attributes'])
+
+          # beta details / missing compliance
+          try:
+            st, detail = api('GET', f'/v1/builds/{build_id}/buildBetaDetail')
+            print('buildBetaDetail', detail.get('data', {}).get('attributes'))
+          except SystemExit as e:
+            print('buildBetaDetail err', e)
+
+          _, groups = api('GET', f'/v1/apps/{app_id}/betaGroups')
+          for g in groups.get('data', []):
+            attrs = g['attributes']
+            print('group', g['id'], attrs.get('name'), 'isInternal', attrs.get('isInternalGroup'), 'hasAccess', attrs.get('hasAccessToAllBuilds'))
+
+          # Assign to all internal groups that don't already have access to all builds
+          for g in groups.get('data', []):
+            attrs = g['attributes']
+            if not attrs.get('isInternalGroup'):
+              continue
+            if attrs.get('hasAccessToAllBuilds'):
+              print('skip (all builds)', attrs.get('name'))
+              continue
+            gid = g['id']
+            # relationship add
+            body = {'data': [{'type': 'builds', 'id': build_id}]}
+            try:
+              st, _ = api('POST', f'/v1/betaGroups/{gid}/relationships/builds', body)
+              print('assigned to', attrs.get('name'), st)
+            except SystemExit as e:
+              print('assign result', attrs.get('name'), e)
+
+          # Also list builds visible / beta build localizations
+          _, rel = api('GET', f'/v1/builds/{build_id}/relationships/betaGroups')
+          print('build betaGroups', rel)
+          PY

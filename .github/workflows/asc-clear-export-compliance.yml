@@ -1,0 +1,104 @@
+name: ASC clear export compliance
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: CFBundleVersion (e.g. 21)
+        required: true
+        type: string
+
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Clear usesNonExemptEncryption for build
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          try:
+            import jwt
+          except ImportError:
+            import subprocess, sys
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'PyJWT', 'cryptography'])
+            import jwt
+
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          issuer = os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          build_number = os.environ['BUILD_NUMBER'].strip()
+          bundle_id = os.environ['BUNDLE_ID'].strip()
+
+          now = int(time.time())
+          token = jwt.encode(
+            {'iss': issuer, 'iat': now, 'exp': now + 1200, 'aud': 'appstoreconnect-v1'},
+            p8,
+            algorithm='ES256',
+            headers={'kid': key_id},
+          )
+
+          def api(method, path, body=None):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com' + path,
+              data=data,
+              method=method,
+              headers={
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json',
+              },
+            )
+            try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                raw = r.read().decode() or '{}'
+                return r.status, json.loads(raw)
+            except urllib.error.HTTPError as e:
+              err = e.read().decode()
+              raise SystemExit(f'{method} {path} -> {e.code}: {err[:800]}')
+
+          # App
+          st, apps = api('GET', f'/v1/apps?filter[bundleId]={bundle_id}')
+          app_id = apps['data'][0]['id']
+          print('app', app_id)
+
+          # Find build by version
+          st, builds = api('GET', f'/v1/builds?filter[app]={app_id}&filter[version]={build_number}&limit=5&sort=-uploadedDate')
+          if not builds.get('data'):
+            # fallback: list recent and match
+            st, builds = api('GET', f'/v1/builds?filter[app]={app_id}&limit=20&sort=-uploadedDate')
+          match = None
+          for b in builds.get('data', []):
+            ver = b.get('attributes', {}).get('version')
+            print('candidate', b['id'], ver, b.get('attributes', {}).get('processingState'), b.get('attributes', {}).get('usesNonExemptEncryption'))
+            if str(ver) == str(build_number):
+              match = b
+              break
+          if not match:
+            raise SystemExit(f'Build {build_number} not found yet')
+
+          build_id = match['id']
+          attrs = match['attributes']
+          print('selected', build_id, attrs)
+          if attrs.get('usesNonExemptEncryption') is False:
+            print('already cleared')
+            raise SystemExit(0)
+
+          # Prefer buildBetaDetail encryption relationship if needed; primary field is on Build
+          body = {
+            'data': {
+              'type': 'builds',
+              'id': build_id,
+              'attributes': {'usesNonExemptEncryption': False},
+            }
+          }
+          st, updated = api('PATCH', f'/v1/builds/{build_id}', body)
+          print('patched', st, updated.get('data', {}).get('attributes', {}).get('usesNonExemptEncryption'))
+          PY

@@ -1,0 +1,142 @@
+name: ASC invite TestFlight testers
+
+on:
+  workflow_dispatch:
+    inputs:
+      emails:
+        description: Comma-separated tester emails
+        required: true
+        type: string
+      group_name:
+        description: Beta group name (empty = first external, else Internal)
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invite beta testers
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          EMAILS: ${{ inputs.emails }}
+          GROUP_NAME: ${{ inputs.group_name }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request, urllib.error, urllib.parse
+          import jwt
+
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          issuer = os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          emails = [e.strip() for e in os.environ['EMAILS'].split(',') if e.strip()]
+          want_group = (os.environ.get('GROUP_NAME') or '').strip()
+          bundle_id = os.environ['BUNDLE_ID'].strip()
+          now = int(time.time())
+          token = jwt.encode(
+            {'iss': issuer, 'iat': now, 'exp': now + 1200, 'aud': 'appstoreconnect-v1'},
+            p8, algorithm='ES256', headers={'kid': key_id},
+          )
+
+          def api(method, path, body=None):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com' + path,
+              data=data, method=method,
+              headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
+            try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                raw = r.read().decode() or '{}'
+                return r.status, json.loads(raw)
+            except urllib.error.HTTPError as e:
+              err = e.read().decode()
+              raise SystemExit(f'{method} {path} -> {e.code}: {err[:2000]}')
+
+          _, apps = api('GET', f'/v1/apps?filter[bundleId]={bundle_id}')
+          if not apps.get('data'):
+            raise SystemExit(f'App not found for {bundle_id}')
+          app_id = apps['data'][0]['id']
+          print('app', app_id)
+
+          _, groups = api('GET', f'/v1/apps/{app_id}/betaGroups?limit=50')
+          groups_data = groups.get('data') or []
+          for g in groups_data:
+            a = g['attributes']
+            print('group', g['id'], a.get('name'), 'internal=', a.get('isInternalGroup'))
+
+          def pick_group():
+            if want_group:
+              for g in groups_data:
+                if (g['attributes'].get('name') or '') == want_group:
+                  return g
+              raise SystemExit(f'Group not found: {want_group}')
+            for g in groups_data:
+              if not g['attributes'].get('isInternalGroup'):
+                return g
+            if groups_data:
+              return groups_data[0]
+            raise SystemExit('No beta groups')
+
+          group = pick_group()
+          gid = group['id']
+          print('using group', gid, group['attributes'].get('name'))
+
+          results = []
+          for email in emails:
+            local = email.split('@')[0][:40]
+            body = {
+              'data': {
+                'type': 'betaTesters',
+                'attributes': {
+                  'email': email,
+                  'firstName': local,
+                  'lastName': 'Tester',
+                },
+                'relationships': {
+                  'betaGroups': {'data': [{'type': 'betaGroups', 'id': gid}]},
+                },
+              }
+            }
+            try:
+              st, resp = api('POST', '/v1/betaTesters', body)
+              tid = resp.get('data', {}).get('id')
+              print('INVITED', email, 'status', st, 'id', tid)
+              results.append({'email': email, 'ok': True, 'id': tid})
+            except SystemExit as e:
+              msg = str(e)
+              print('create_err', email, msg[:500])
+              q = urllib.parse.quote(email)
+              _, found = api('GET', f'/v1/betaTesters?filter[email]={q}&filter[apps]={app_id}&limit=5')
+              testers = found.get('data') or []
+              if not testers:
+                _, found2 = api('GET', f'/v1/betaTesters?filter[email]={q}&limit=5')
+                testers = found2.get('data') or []
+              if not testers:
+                results.append({'email': email, 'ok': False, 'error': msg[:500]})
+                continue
+              tid = testers[0]['id']
+              try:
+                api('POST', f'/v1/betaGroups/{gid}/relationships/betaTesters',
+                    {'data': [{'type': 'betaTesters', 'id': tid}]})
+                print('ADDED_TO_GROUP', email, tid)
+                results.append({'email': email, 'ok': True, 'id': tid, 'existing': True})
+              except SystemExit as e2:
+                em = str(e2)
+                if '409' in em or 'already' in em.lower():
+                  print('ALREADY_IN_GROUP', email, tid)
+                  results.append({'email': email, 'ok': True, 'id': tid, 'existing': True})
+                else:
+                  print('FAIL_ADD', email, em[:500])
+                  results.append({'email': email, 'ok': False, 'error': em[:500]})
+
+          print('RESULTS_JSON', json.dumps(results))
+          if not all(r.get('ok') for r in results):
+            raise SystemExit('One or more invites failed')
+          PY
