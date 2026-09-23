@@ -68,6 +68,15 @@ struct EditorView: View {
             model.apiClient = appModel.apiClient
             if appModel.isTestVideoMode {
                 model.loadBundledTestVideo()
+            } else {
+                model.resetBundledTestVideoIfNeeded()
+            }
+        }
+        .onChange(of: appModel.isTestVideoMode) { _, isTestVideoMode in
+            if isTestVideoMode {
+                model.loadBundledTestVideo()
+            } else {
+                model.resetBundledTestVideoIfNeeded()
             }
         }
         .overlay(alignment: .top) {
@@ -180,6 +189,21 @@ final class EditorViewModel: ObservableObject {
         state = .ready
         showSampleChips = true
         messages.append(ChatMessage(role: .system, content: "Loaded test video"))
+    }
+
+    func resetBundledTestVideoIfNeeded() {
+        guard let localVideoURL, localVideoURL == bundledTestVideoURL else { return }
+        processingTask?.cancel()
+        activeJobId = nil
+        state = .empty
+        messages = []
+        composerText = ""
+        self.localVideoURL = nil
+        photosPickerItem = nil
+        lastError = nil
+        captionArtifacts = CaptionArtifacts()
+        processingOverlay = .editing
+        showSampleChips = true
     }
 
     func applySampleChip(_ chip: String) {
@@ -567,6 +591,10 @@ final class EditorViewModel: ObservableObject {
         case "m4v": return "video/x-m4v"
         default: return "video/mp4"
         }
+    }
+
+    private var bundledTestVideoURL: URL? {
+        Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
     }
 }
 

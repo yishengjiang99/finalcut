@@ -32,7 +32,7 @@ final class AppModel: ObservableObject {
     let apiClient = APIClient()
 
     func goToSignIn() {
-        isTestVideoMode = false
+        clearTestVideoMode()
         route = .signIn
     }
 
@@ -44,13 +44,13 @@ final class AppModel: ObservableObject {
     }
 
     func unlockEditor() {
-        isTestVideoMode = false
+        clearTestVideoMode()
         hasUnlockedEditor = true
         route = .editor
     }
 
     func skipToEditorForDev() {
-        isTestVideoMode = false
+        clearTestVideoMode()
         hasUnlockedEditor = true
         route = .editor
     }
@@ -61,5 +61,11 @@ final class AppModel: ObservableObject {
         apiClient.sampleModeEnabled = true
         hasUnlockedEditor = true
         route = .editor
+    }
+
+    private func clearTestVideoMode() {
+        isSampleMode = false
+        isTestVideoMode = false
+        apiClient.sampleModeEnabled = false
     }
 }
