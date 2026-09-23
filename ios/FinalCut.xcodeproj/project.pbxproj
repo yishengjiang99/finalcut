@@ -262,6 +262,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				1A2B3C4D5E6F7890A1B2C3D4 /* PBXTargetDependency */,
 			);
 			name = FinalCutTests;
 			productName = FinalCutTests;
@@ -304,6 +305,34 @@
 				2773D35A624C430C841FE007 /* FinalCutTests */,
 			);
 		};
+
+/* Begin PBXReferenceProxy section */
+		1A2B3C4D5E6F7890A1B2C3D5 /* FinalCut.app */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.application;
+			path = FinalCut.app;
+			remoteRef = 1A2B3C4D5E6F7890A1B2C3D6 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+/* End PBXReferenceProxy section */
+
+/* Begin PBXContainerItemProxy section */
+		1A2B3C4D5E6F7890A1B2C3D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E983094B601743CCA257AE26 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 222FA0522493476C89FA9258;
+			remoteInfo = FinalCut;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		1A2B3C4D5E6F7890A1B2C3D4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 222FA0522493476C89FA9258 /* FinalCut */;
+			TargetAttributes = 1A2B3C4D5E6F7890A1B2C3D6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
