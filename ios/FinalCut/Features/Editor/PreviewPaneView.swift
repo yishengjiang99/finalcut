@@ -8,22 +8,13 @@ struct PreviewPaneView: View {
     /// Dimmer copy while `processing` (Design: “Generating captions…” / “Translating…” / burn-in).
     var processingMessage: String = ProcessingOverlayKind.editing.message
 
-    @State private var player: AVPlayer?
+    @State private var player = AVPlayer()
 
     var body: some View {
         ZStack {
             AppTheme.surface
-            if let videoURL, state == .ready || state == .processing {
+            if videoURL != nil {
                 VideoPlayer(player: player)
-                    .onAppear { attachPlayer(url: videoURL) }
-                    .onChange(of: videoURL) { _, newURL in
-                        // videoURL is non-optional inside `if let videoURL` — newURL is URL
-                        attachPlayer(url: newURL)
-                    }
-                    .onDisappear {
-                        player?.pause()
-                        player = nil
-                    }
             } else {
                 emptyState
             }
@@ -46,6 +37,11 @@ struct PreviewPaneView: View {
             }
         }
         .accessibilityIdentifier("Preview")
+        .onAppear { attachPlayer(url: videoURL) }
+        .onChange(of: videoURL) { _, newURL in
+            attachPlayer(url: newURL)
+        }
+        .onDisappear { player.pause() }
     }
 
     private var emptyState: some View {
@@ -74,9 +70,11 @@ struct PreviewPaneView: View {
         }
     }
 
-    private func attachPlayer(url: URL) {
-        player?.pause()
-        player = AVPlayer(url: url)
+    private func attachPlayer(url: URL?) {
+        let currentURL = (player.currentItem?.asset as? AVURLAsset)?.url
+        guard currentURL != url else { return }
+        player.pause()
+        player.replaceCurrentItem(with: url.map { AVPlayerItem(url: $0) })
     }
 }
 

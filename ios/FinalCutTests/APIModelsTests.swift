@@ -240,6 +240,7 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNotEqual(ProcessingOverlayKind.burningSubtitles.message, "Editing…")
     }
 
+    @MainActor
     func testCaptionIntentDetection() {
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Generate captions"), .generate)
         XCTAssertEqual(EditorViewModel.detectCaptionIntent("Add captions"), .generate)

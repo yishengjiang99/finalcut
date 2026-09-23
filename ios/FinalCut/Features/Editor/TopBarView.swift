@@ -2,7 +2,9 @@ import SwiftUI
 
 struct TopBarView: View {
     var onImport: () -> Void
+    var onImportFiles: () -> Void
     var onExport: () -> Void
+    var importEnabled = true
 
     var body: some View {
         HStack {
@@ -10,8 +12,17 @@ struct TopBarView: View {
                 .font(.headline)
                 .foregroundStyle(AppTheme.textPrimary)
             Spacer()
-            Button("Import", action: onImport)
-                .font(.subheadline.weight(.semibold))
+            Menu {
+                Button("Photo Library", systemImage: "photo.on.rectangle", action: onImport)
+                Button("Choose File", systemImage: "folder", action: onImportFiles)
+            } label: {
+                Text("Import")
+            } primaryAction: {
+                onImport()
+            }
+            .font(.subheadline.weight(.semibold))
+            .disabled(!importEnabled)
+            .accessibilityHint("Opens Photos. Touch and hold for more import options.")
             Button("Export", action: onExport)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.accent)
@@ -27,5 +38,5 @@ struct TopBarView: View {
 }
 
 #Preview {
-    TopBarView(onImport: {}, onExport: {})
+    TopBarView(onImport: {}, onImportFiles: {}, onExport: {})
 }

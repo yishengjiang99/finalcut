@@ -30,7 +30,19 @@
 		3BFA0055043342C584FB23D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD12BBC329E457BBA7331E4 /* AppTheme.swift */; };
 		2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 01F8F90184F0448FAD35E158 /* Assets.xcassets */; };
 		876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */; };
+		F0583706C16045F3940B2A01 /* ImportedVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0583706C16045F3940B2A02 /* ImportedVideo.swift */; };
+		F0583706C16045F3940B2A03 /* VideoImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0583706C16045F3940B2A04 /* VideoImportTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F0583706C16045F3940B2A05 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E983094B601743CCA257AE26 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 222FA0522493476C89FA9258;
+			remoteInfo = FinalCut;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		B2EA2AC7EC9D4B6BBC3F0AA3 /* StoreKitPurchaseStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitPurchaseStub.swift; sourceTree = "<group>"; };
@@ -56,6 +68,8 @@
 		1DD12BBC329E457BBA7331E4 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelsTests.swift; sourceTree = "<group>"; };
+		F0583706C16045F3940B2A02 /* ImportedVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedVideo.swift; sourceTree = "<group>"; };
+		F0583706C16045F3940B2A04 /* VideoImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoImportTests.swift; sourceTree = "<group>"; };
 		14F6988B52314F80AA539724 /* FinalCut.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FinalCut.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA5CF65882224BB0B955C889 /* FinalCutTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinalCutTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F64789A0B1C2D3 /* FinalCut.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = FinalCut.storekit; sourceTree = "<group>"; };
@@ -116,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				E8402916397845F3B4C09078 /* EditorState.swift */,
+				F0583706C16045F3940B2A02 /* ImportedVideo.swift */,
 				1757341EC3204483A2CA6BB9 /* AuthStatus.swift */,
 				9115AF75087B40C59011297D /* ChatMessage.swift */,
 				A734703E6A0A411DA9D86458 /* APIModels.swift */,
@@ -203,6 +218,7 @@
 			isa = PBXGroup;
 			children = (
 				428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */,
+				F0583706C16045F3940B2A04 /* VideoImportTests.swift */,
 			);
 			path = FinalCutTests;
 			sourceTree = "<group>";
@@ -245,6 +261,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				F0583706C16045F3940B2A06 /* PBXTargetDependency */,
 			);
 			name = FinalCutTests;
 			productName = FinalCutTests;
@@ -308,6 +325,7 @@
 				9F319DEF88764177A7261FB2 /* FinalCutApp.swift in Sources */,
 				BF632DFF66964B5F9456C5F8 /* ContentView.swift in Sources */,
 				AAB276A57F434CE499CC1C50 /* EditorState.swift in Sources */,
+				F0583706C16045F3940B2A01 /* ImportedVideo.swift in Sources */,
 				317950504C7143A58FD82180 /* AuthStatus.swift in Sources */,
 				6D90E1DDAD3249CB9C78899D /* ChatMessage.swift in Sources */,
 				62D49576725A4D2B9BB476F0 /* APIModels.swift in Sources */,
@@ -334,10 +352,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */,
+				F0583706C16045F3940B2A03 /* VideoImportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F0583706C16045F3940B2A06 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 222FA0522493476C89FA9258 /* FinalCut */;
+			targetProxy = F0583706C16045F3940B2A05 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1366E1B70466411EB4A03854 /* Debug */ = {
