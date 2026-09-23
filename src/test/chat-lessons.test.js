@@ -25,6 +25,7 @@ vi.mock('../server/config.js', () => ({
 vi.mock('../db.js', () => ({
   getRecentLessons: vi.fn().mockResolvedValue([]),
   saveLesson: vi.fn().mockResolvedValue(undefined),
+  enqueueChatInteraction: vi.fn(),
   getPool: vi.fn(),
 }));
 

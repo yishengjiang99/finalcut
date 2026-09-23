@@ -12,6 +12,7 @@
     "test": "vitest --run",
     "server": "node server.js",
     "start": "node server.js",
+    "deploy:grepawk": "./scripts/deploy-grepawk.sh",
     "test:live-captions": "vitest --run src/test/live-captions.e2e.test.js",
     "test:playwright:live-captions": "playwright test tests/playwright/live-captions.spec.js",
     "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js"

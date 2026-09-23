@@ -12,6 +12,11 @@ const dbConfig = {
 };
 
 let pool = null;
+const chatInteractionQueue = [];
+let chatInteractionFlushScheduled = false;
+const CHAT_INTERACTION_BATCH_SIZE = 50;
+const CHAT_INTERACTION_MAX_TEXT_LENGTH = 64_000;
+const CHAT_INTERACTION_TYPES = new Set(['human2ai', 'ai2human']);
 
 function normalizeUserRow(user) {
   if (!user) return null;
@@ -78,6 +83,20 @@ export async function initDatabase() {
         lesson VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX (user_id, created_at)
+      )
+    `);
+
+    // Non-blocking audit log for chat text sent to and returned by the model.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_interactions (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        user_id INT NULL,
+        interaction_type ENUM('human2ai', 'ai2human') NOT NULL,
+        content MEDIUMTEXT NOT NULL,
+        metadata JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_chat_interactions_user_created (user_id, created_at),
+        INDEX idx_chat_interactions_type_created (interaction_type, created_at)
       )
     `);
 
@@ -222,6 +241,71 @@ export async function saveLesson(userId, lesson) {
   }
 }
 
+function normalizeChatContent(content) {
+  if (typeof content === 'string') {
+    return content.slice(0, CHAT_INTERACTION_MAX_TEXT_LENGTH);
+  }
+  if (content == null) {
+    return '';
+  }
+  return JSON.stringify(content).slice(0, CHAT_INTERACTION_MAX_TEXT_LENGTH);
+}
+
+function scheduleChatInteractionFlush() {
+  if (chatInteractionFlushScheduled) return;
+  chatInteractionFlushScheduled = true;
+  setImmediate(flushChatInteractionQueue);
+}
+
+/**
+ * Queue chat text for asynchronous persistence.
+ * This intentionally does not return a promise so request/stream handling never
+ * waits on storage latency.
+ */
+export function enqueueChatInteraction({ userId = null, interactionType, content, metadata = null } = {}) {
+  if (!CHAT_INTERACTION_TYPES.has(interactionType)) {
+    console.error('Invalid chat interaction type:', interactionType);
+    return;
+  }
+
+  const normalizedContent = normalizeChatContent(content).trim();
+  if (!normalizedContent) return;
+
+  chatInteractionQueue.push({
+    userId,
+    interactionType,
+    content: normalizedContent,
+    metadata,
+  });
+  scheduleChatInteractionFlush();
+}
+
+export async function flushChatInteractionQueue() {
+  chatInteractionFlushScheduled = false;
+  const batch = chatInteractionQueue.splice(0, CHAT_INTERACTION_BATCH_SIZE);
+  if (batch.length === 0) return;
+
+  try {
+    const pool = getPool();
+    const values = batch.map(item => [
+      item.userId,
+      item.interactionType,
+      item.content,
+      item.metadata ? JSON.stringify(item.metadata) : null,
+    ]);
+    await pool.query(
+      'INSERT INTO chat_interactions (user_id, interaction_type, content, metadata) VALUES ?',
+      [values]
+    );
+  } catch (err) {
+    console.error('Failed to save chat interactions:', err.message);
+  } finally {
+    if (chatInteractionQueue.length > 0) {
+      scheduleChatInteractionFlush();
+    }
+  }
+}
+
 export default {
   getPool,
   initDatabase,
@@ -234,4 +318,6 @@ export default {
   revokeApiToken,
   getRecentLessons,
   saveLesson,
+  enqueueChatInteraction,
+  flushChatInteractionQueue,
 };
