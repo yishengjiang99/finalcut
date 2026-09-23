@@ -11,8 +11,11 @@ struct EditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             TopBarView(
-                onImport: { model.presentImporter = true },
-                onExport: { showExport = true }
+                onImport: { model.presentPhotosPicker = true },
+                onImportFiles: { model.presentImporter = true },
+                onExport: { showExport = true },
+                importEnabled: importEnabled,
+                importLabel: appModel.isTestVideoMode ? "Test video" : "Import"
             )
 
             PreviewPaneView(
@@ -35,8 +38,10 @@ struct EditorView: View {
 
             ComposerView(
                 text: $model.composerText,
-                onImport: { model.presentImporter = true },
-                onSend: { model.sendMessage() }
+                onImport: { model.presentPhotosPicker = true },
+                onImportFiles: { model.presentImporter = true },
+                onSend: { model.sendMessage() },
+                importEnabled: importEnabled
             )
         }
         .background(AppTheme.background.ignoresSafeArea())
@@ -54,13 +59,16 @@ struct EditorView: View {
             allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
             allowsMultipleSelection: false
         ) { result in
-            model.handleImport(result)
+            Task { await model.handleImport(result) }
         }
         .onChange(of: model.photosPickerItem) { _, item in
             Task { await model.loadPhotosPickerItem(item) }
         }
         .onAppear {
             model.apiClient = appModel.apiClient
+            if appModel.isTestVideoMode {
+                model.loadBundledTestVideo()
+            }
         }
         .overlay(alignment: .top) {
             if model.state == .failed, let err = model.lastError {
@@ -73,6 +81,10 @@ struct EditorView: View {
                     .padding(.top, 56)
             }
         }
+    }
+
+    private var importEnabled: Bool {
+        !appModel.isTestVideoMode && model.state != .uploading && model.state != .processing
     }
 }
 
@@ -112,16 +124,21 @@ final class EditorViewModel: ObservableObject {
         case otherEdit
     }
 
-    func handleImport(_ result: Result<[URL], Error>) {
+    func handleImport(_ result: Result<[URL], Error>) async {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             state = .uploading
-            localVideoURL = url
-            state = .ready
-            messages.append(ChatMessage(role: .system, content: "Imported \(url.lastPathComponent)"))
+            lastError = nil
+            do {
+                let video = try await Task.detached {
+                    try ImportedVideo.copy(from: url)
+                }.value
+                finishImport(video, message: "Imported \(url.lastPathComponent)")
+            } catch {
+                state = .failed
+                lastError = error.localizedDescription
+            }
         case .failure(let error):
             state = .failed
             lastError = error.localizedDescription
@@ -131,21 +148,38 @@ final class EditorViewModel: ObservableObject {
     func loadPhotosPickerItem(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         state = .uploading
+        lastError = nil
+        // Reset selection so choosing the same video again triggers another import.
+        defer { photosPickerItem = nil }
         do {
-            if let data = try await item.loadTransferable(type: Data.self) {
-                let tmp = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(UUID().uuidString + ".mov")
-                try data.write(to: tmp)
-                localVideoURL = tmp
-                state = .ready
-                messages.append(ChatMessage(role: .system, content: "Imported from Photos"))
-            } else {
-                state = .empty
+            guard let video = try await item.loadTransferable(type: ImportedVideo.self) else {
+                throw APIError.message("Couldn't load this video from Photos. Try another video.")
             }
+            finishImport(video, message: "Imported from Photos")
         } catch {
             state = .failed
             lastError = error.localizedDescription
         }
+    }
+
+    private func finishImport(_ video: ImportedVideo, message: String) {
+        localVideoURL = video.url
+        captionArtifacts = CaptionArtifacts()
+        state = .ready
+        messages.append(ChatMessage(role: .system, content: message))
+    }
+
+    func loadBundledTestVideo() {
+        guard localVideoURL == nil else { return }
+        guard let url = Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4") else {
+            state = .failed
+            lastError = "Test video unavailable"
+            return
+        }
+        localVideoURL = url
+        state = .ready
+        showSampleChips = true
+        messages.append(ChatMessage(role: .system, content: "Loaded test video"))
     }
 
     func applySampleChip(_ chip: String) {
