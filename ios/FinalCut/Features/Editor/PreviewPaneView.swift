@@ -17,7 +17,8 @@ struct PreviewPaneView: View {
                 VideoPlayer(player: player)
                     .onAppear { attachPlayer(url: videoURL) }
                     .onChange(of: videoURL) { _, newURL in
-                        if let newURL { attachPlayer(url: newURL) }
+                        // videoURL is non-optional inside `if let videoURL` — newURL is URL
+                        attachPlayer(url: newURL)
                     }
                     .onDisappear {
                         player?.pause()
