@@ -2,6 +2,11 @@ name: ASC FinalCap upload listing
 
 on:
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Also replace screenshots from docs/asc/screenshots (text-only when false)"
+        type: boolean
+        default: false
 
 jobs:
   upload:
@@ -11,15 +16,18 @@ jobs:
       - name: Checkout finalcut
         uses: actions/checkout@v4
 
-      - name: Upload listing + screenshots to ASC
+      - name: Upload listing (and optionally screenshots) to ASC
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           APP_APPLE_ID: "6815060815"
-          SHOT_DIR: assets/app-store/screenshots
+          LISTING_JSON: docs/asc/listing.en-US.json
+          SHOT_DIR: docs/asc/screenshots
+          UPLOAD_SCREENSHOTS: ${{ inputs.screenshots }}
         run: |
           set -euo pipefail
           pip install -q PyJWT cryptography
-          test -d "$SHOT_DIR"
+          test -f "$LISTING_JSON"
+          if [ "$UPLOAD_SCREENSHOTS" = "true" ]; then test -d "$SHOT_DIR"; fi
           python3 .github/scripts/upload_finalcap_asc.py

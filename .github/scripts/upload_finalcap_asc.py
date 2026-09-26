@@ -14,45 +14,30 @@ import jwt
 
 APPLE_ID = os.environ.get("APP_APPLE_ID", "6815060815").strip()
 BUNDLE_HINT = "com.ragnus.w2"
-SHOT_DIR = Path(os.environ.get("SHOT_DIR", "assets/app-store/screenshots"))
+SHOT_DIR = Path(os.environ.get("SHOT_DIR", "docs/asc/screenshots"))
 
-NAME = "FinalCap - AI Video Editor"
-SUBTITLE = "AI video edit in chat"
-PROMO = (
-    "Import a clip, describe the edit in chat, preview, and export — captions, "
-    "trims, and AI-assisted cuts on your iPhone. Subscribe in-app. Privacy policy on the Support site."
-)
-DESCRIPTION = """FinalCap turns short videos into finished clips with a chat-first editor.
+LISTING_JSON = Path(os.environ.get("LISTING_JSON", "docs/asc/listing.en-US.json"))
+UPLOAD_SCREENSHOTS = os.environ.get("UPLOAD_SCREENSHOTS", "false").strip().lower() == "true"
 
-IMPORT
-• Bring a clip from Photos
-• Preview on a darkroom-style timeline
+_L = json.loads(LISTING_JSON.read_text(encoding="utf-8"))
+NAME = _L["name"]
+SUBTITLE = _L["subtitle"]
+PROMO = _L["promotionalText"]
+DESCRIPTION = _L["description"]
+KEYWORDS = _L["keywords"]
+SUPPORT_URL = _L["supportUrl"]
+MARKETING_URL = _L["marketingUrl"]
+PRIVACY_URL = _L["privacyPolicyUrl"]
 
-EDIT IN CHAT
-• Ask for trims, captions, burns, and other server-side edits
-• Watch progress while the job runs
-• Preview the result before you export
-
-CAPTIONS
-• Generate captions from speech
-• Translate and burn subtitles into the frame when you want them baked in
-
-EXPORT
-• Save the finished clip back to your library
-• Share when you’re happy
-
-SUBSCRIPTION
-Pro unlocks via Apple In-App Purchase (StoreKit). Web billing on grepawk.com does not replace iOS IAP for in-app unlocks.
-
-FinalCap is built by grepawk — a video editor with an AI chat loop, not a camera app."""
-KEYWORDS = "video editor,captions,subtitles,trim,AI edit,chat,export,reels,short video"
-WHATS_NEW = (
-    "First release: import a video, edit with chat, generate/burn captions, and export. "
-    "Subscription via Apple In-App Purchase."
-)
-SUPPORT_URL = "https://grepawk.com/legal/support.html"
-MARKETING_URL = "https://grepawk.com"
-PRIVACY_URL = "https://grepawk.com/legal/privacy.html"
+for _field, _value, _limit in (
+    ("name", NAME, 30),
+    ("subtitle", SUBTITLE, 30),
+    ("keywords", KEYWORDS, 100),
+    ("promotionalText", PROMO, 170),
+    ("description", DESCRIPTION, 4000),
+):
+    if len(_value) > _limit:
+        raise SystemExit(f"{_field} is {len(_value)} chars, limit {_limit}")
 
 
 def token() -> str:
@@ -173,9 +158,9 @@ def main():
                 "id": loc_id,
                 "attributes": {
                     "description": DESCRIPTION,
-                    "keywords": KEYWORDS[:100],
+                    "keywords": KEYWORDS,
                     "marketingUrl": MARKETING_URL,
-                    "promotionalText": PROMO[:170],
+                    "promotionalText": PROMO,
                     "supportUrl": SUPPORT_URL,
                     # whatsNew is not editable on the first App Store version
                 },
@@ -194,8 +179,8 @@ def main():
             None,
         )
         attrs = {
-            "name": NAME[:30],
-            "subtitle": SUBTITLE[:30],
+            "name": NAME,
+            "subtitle": SUBTITLE,
             "privacyPolicyUrl": PRIVACY_URL,
         }
         if info_loc is None:
@@ -225,13 +210,18 @@ def main():
             )
             print("patched appInfoLocalization", info_loc["id"])
 
-    # Screenshot sets
+    # Screenshot sets (only when asked, so a text-only run never wipes existing shots)
+    if not UPLOAD_SCREENSHOTS:
+        print("SUCCESS FinalCap ASC listing text uploaded (screenshots skipped)")
+        return
     if not SHOT_DIR.is_dir():
         raise SystemExit(f"Missing screenshot dir {SHOT_DIR.resolve()}")
 
     mapping = {
-        "APP_IPHONE_67": sorted(SHOT_DIR.glob("iphone67-*.png")),
-        "APP_IPHONE_65": sorted(SHOT_DIR.glob("iphone65-*.png")),
+        # 6.9" iPhone (1320x2868) uses the APP_IPHONE_67 display type.
+        "APP_IPHONE_67": sorted(SHOT_DIR.glob("iphone69-*.png")),
+        # 13" iPad (2064x2752) uses the APP_IPAD_PRO_3GEN_129 display type.
+        "APP_IPAD_PRO_3GEN_129": sorted(SHOT_DIR.glob("ipad13-*.png")),
     }
     st, sets = api("GET", f"/v1/appStoreVersionLocalizations/{loc_id}/appScreenshotSets")
     by_type = {s["attributes"]["screenshotDisplayType"]: s for s in sets.get("data", [])}
