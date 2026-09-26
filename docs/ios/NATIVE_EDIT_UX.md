@@ -92,6 +92,12 @@ The top bar is a **single row, about 44 pt tall**, with everything vertically ce
 - If it's still too narrow after that (large Dynamic Type), the "FinalCap" title truncates before Import or Export.
 - Verify at 375 pt wide (iPhone SE) and at Dynamic Type sizes up to XL.
 
+**While edits are unlimited** (server returns `unlimited: true`):
+- Hide the free-edit count entirely. The row is title, Import, Export, Upgrade.
+- Never open the paywall automatically. Upgrade still opens it when tapped.
+- The paywall must not sell "Unlimited AI edits" while edits are already unlimited. That's misleading to users and a likely App Review problem. Swap the subhead to: "Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return." Restore the original subhead when `unlimited` is false.
+
+
 ## 7a. Dictation (mic button in the composer)
 
 Speech is recognized on the device only. Audio is never uploaded.
@@ -168,6 +174,7 @@ These apply only when a step actually goes to the server. Map the `code` field t
 | `dictation.listening` | Listening… |
 | `dictation.unavailable` | Dictation isn't available on this device. |
 | `dictation.permissionDenied` | Turn on Microphone and Speech Recognition for FinalCap in Settings. |
+| `paywall.subhead.unlimitedPeriod` | Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return. |
 | `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. |
 
 ## 11. Out of scope for this slice
