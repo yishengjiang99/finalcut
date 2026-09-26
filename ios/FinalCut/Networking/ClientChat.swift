@@ -101,7 +101,12 @@ struct ClientToolResult: Equatable {
 
     var content: JSONValue {
         var object: [String: JSONValue] = ["ok": .bool(ok), "executedOn": .string(executedOn.rawValue)]
-        if let error { object["error"] = .string(error) }
+        if let error {
+            // `error` is always a stable code; `code` mirrors it for the server contract
+            // (e.g. {ok:false, error:"unsupported_on_device", code:"unsupported_on_device", executedOn:"device"}).
+            object["error"] = .string(error)
+            object["code"] = .string(error)
+        }
         if let output { object["output"] = .object(output) }
         return .object(object)
     }

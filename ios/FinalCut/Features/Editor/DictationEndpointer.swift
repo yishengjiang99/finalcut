@@ -50,10 +50,15 @@ struct DictationEndpointer: Equatable {
     mutating func tick(now: TimeInterval) -> Action {
         let cleaned = Self.clean(transcript)
         if cleaned.isEmpty {
-            return now - lastSpeech >= Self.noSpeechTimeout ? .stop : .none
+            return elapsed(since: lastSpeech, now: now, atLeast: Self.noSpeechTimeout) ? .stop : .none
         }
         let delay = Self.endsSentence(transcript) ? Self.punctuationDelay : Self.silenceDelay
-        return now - lastChange >= delay ? send(now: now) : .none
+        return elapsed(since: lastChange, now: now, atLeast: delay) ? send(now: now) : .none
+    }
+
+    /// Tolerates floating-point clock noise (1.4 - 1.0 < 0.4 in binary).
+    private func elapsed(since start: TimeInterval, now: TimeInterval, atLeast delay: TimeInterval) -> Bool {
+        now - start + 1e-6 >= delay
     }
 
     private mutating func send(now: TimeInterval) -> Action {

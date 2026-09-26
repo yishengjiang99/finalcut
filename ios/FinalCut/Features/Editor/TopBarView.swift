@@ -14,6 +14,11 @@ struct TopBarView: View {
     var freeRemaining: Int?
     var onSettings: () -> Void = {}
 
+    /// The free counter shows only with a real remaining count and no unlimited period.
+    static func visibleFreeRemaining(unlimited: Bool, remaining: Int?) -> Int? {
+        unlimited ? nil : remaining
+    }
+
     /// Single ~44 pt row; the Upgrade capsule never wraps, the free-count label gives way first.
     static let rowHeight: CGFloat = 44
 

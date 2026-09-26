@@ -24,7 +24,7 @@ struct EditorView: View {
                 exportVisible: model.localVideoURL != nil,
                 exportEnabled: model.state != .processing && model.state != .uploading,
                 showUpgrade: !appModel.hasSubscription,
-                freeRemaining: appModel.isUnlimited ? nil : appModel.dailyRemaining,
+                freeRemaining: TopBarView.visibleFreeRemaining(unlimited: appModel.isUnlimited, remaining: appModel.dailyRemaining),
                 onSettings: { showSettings = true }
             )
 
@@ -525,11 +525,12 @@ final class EditorViewModel: ObservableObject {
 
     private func startTurn(text: String) {
         lastError = nil
-        var route = EditorRoute.route(for: text)
-        if case .captions = route, !cloudProcessingEnabled {
+        var resolved = EditorRoute.route(for: text)
+        if case .captions = resolved, !cloudProcessingEnabled {
             // Server captions need an upload; with Cloud processing off the model decides.
-            route = .chat(text)
+            resolved = .chat(text)
         }
+        let route = resolved
         turnOutcome = EditTurnOutcome()
         turnPrompt = text
         if case .captions = route, isPhoto {
@@ -545,7 +546,6 @@ final class EditorViewModel: ObservableObject {
         }
         state = .processing
 
-        let route = route
         processingTask?.cancel()
         processingTask = Task {
             switch route {

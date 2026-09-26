@@ -54,6 +54,10 @@
 		535B8CE990243F1021B58A77 /* ExportController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DD349B02EA9B4A707B4C46 /* ExportController.swift */; };
 		94E4ED920C357B6302A7E553 /* DictationEndpointer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */; };
 		BD2093D6FF56B1A36990B792 /* DictationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75730428B69D0391857303A /* DictationController.swift */; };
+		44AB0C1BEE785D20EA104041 /* DictationEndpointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 789DFE9E7D256BE002F331A6 /* DictationEndpointerTests.swift */; };
+		4F96A17ADA941170D4D4E555 /* NativeToolParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E8C3EA03F6E7577F5BC9738 /* NativeToolParserTests.swift */; };
+		C3E3CC33FE21D6291D0C91E1 /* NativeToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F70B4C1048A11E132B7D1E /* NativeToolTests.swift */; };
+		F3AEEBB2787D7FACC1822FF8 /* NoUploadAndHeadersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697C9B433CDD481962E9C53A /* NoUploadAndHeadersTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -117,6 +121,10 @@
 		69DD349B02EA9B4A707B4C46 /* ExportController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportController.swift; sourceTree = "<group>"; };
 		5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationEndpointer.swift; sourceTree = "<group>"; };
 		F75730428B69D0391857303A /* DictationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationController.swift; sourceTree = "<group>"; };
+		789DFE9E7D256BE002F331A6 /* DictationEndpointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationEndpointerTests.swift; sourceTree = "<group>"; };
+		4E8C3EA03F6E7577F5BC9738 /* NativeToolParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeToolParserTests.swift; sourceTree = "<group>"; };
+		F3F70B4C1048A11E132B7D1E /* NativeToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeToolTests.swift; sourceTree = "<group>"; };
+		697C9B433CDD481962E9C53A /* NoUploadAndHeadersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoUploadAndHeadersTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -272,6 +280,10 @@
 		31046C18DC344075B32836E8 /* FinalCutTests */ = {
 			isa = PBXGroup;
 			children = (
+				697C9B433CDD481962E9C53A /* NoUploadAndHeadersTests.swift */,
+				F3F70B4C1048A11E132B7D1E /* NativeToolTests.swift */,
+				4E8C3EA03F6E7577F5BC9738 /* NativeToolParserTests.swift */,
+				789DFE9E7D256BE002F331A6 /* DictationEndpointerTests.swift */,
 				D8F556E1C2A830B96A1C5F84 /* TopBarLayoutTests.swift */,
 				30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */,
 				68C3D23240D4E22F930DAA98 /* EditRoutingAndMediaTypeTests.swift */,
@@ -437,6 +449,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F3AEEBB2787D7FACC1822FF8 /* NoUploadAndHeadersTests.swift in Sources */,
+				C3E3CC33FE21D6291D0C91E1 /* NativeToolTests.swift in Sources */,
+				4F96A17ADA941170D4D4E555 /* NativeToolParserTests.swift in Sources */,
+				44AB0C1BEE785D20EA104041 /* DictationEndpointerTests.swift in Sources */,
 				C20B004DB7D14DD01FB6F475 /* TopBarLayoutTests.swift in Sources */,
 				28542D32807FA0E724E71D63 /* PhotoModeTests.swift in Sources */,
 				1C91E72D0BE8A8E76AD6FFD8 /* EditRoutingAndMediaTypeTests.swift in Sources */,
@@ -500,7 +516,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -536,7 +552,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -571,7 +587,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
@@ -589,7 +605,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
