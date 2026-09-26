@@ -49,6 +49,16 @@ enum ScreenshotFixtures {
 
     static var isActive: Bool { requested != nil }
 
+    /// `-ScreenshotPreview still`: show a PNG of the clip's first frame (photo preview path)
+    /// instead of the AVKit player.
+    static var previewAsStill: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-ScreenshotPreview"), i + 1 < args.count {
+            return args[i + 1] == "still"
+        }
+        return false
+    }
+
     private static var didApply = false
 
     /// Seeds the Editor for the requested state. No-op without the launch argument.
@@ -60,7 +70,10 @@ enum ScreenshotFixtures {
         model.state = .processing
         model.processingOverlay = .editing
         Task { @MainActor in
-            let clip = await renderClip(for: state)
+            var clip = await renderClip(for: state)
+            if previewAsStill, let video = clip {
+                clip = await ScreenshotClipRenderer.stillFrame(of: video) ?? video
+            }
             model.localVideoURL = clip
             model.state = .ready
             model.composerText = composerText(for: state)
@@ -217,6 +230,21 @@ enum ScreenshotClipRenderer {
                 }
             }
         }
+        return url
+    }
+
+    /// First frame of `video` as a PNG next to it (same name, .png).
+    static func stillFrame(of video: URL) async -> URL? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: video))
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        guard let (cgImage, _) = try? await generator.image(at: .zero),
+              let data = UIImage(cgImage: cgImage).pngData() else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ScreenshotFixtures", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(video.deletingPathExtension().lastPathComponent + ".png")
+        do { try data.write(to: url) } catch { return nil }
         return url
     }
 

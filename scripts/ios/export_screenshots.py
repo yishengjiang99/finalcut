@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export ScreenshotTests PNG attachments from an .xcresult, verify size, rename, flatten alpha.
 
-usage: export_screenshots.py <bundle.xcresult> <out_dir> <prefix> <WIDTHxHEIGHT>
+usage: export_screenshots.py <bundle.xcresult> <out_dir> <prefix> <WIDTHxHEIGHT> [diag_dir]
 
 Attachments are named "NN-<slug>" by FinalCutUITests/ScreenshotTests.swift. Output files are
 <out_dir>/<prefix>-NN-<slug>.png. Exits non-zero unless all six frames exist at the exact size.
@@ -41,6 +41,7 @@ def flatten_png(path):
 
 def main():
     bundle, out_dir, prefix, size = sys.argv[1:5]
+    diag_dir = sys.argv[5] if len(sys.argv) > 5 else None
     want_w, want_h = (int(x) for x in size.lower().split("x"))
     os.makedirs(out_dir, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="xcattach-")
@@ -57,6 +58,11 @@ def main():
                 slug = m2
             if slug:
                 found[slug] = os.path.join(tmp, att["exportedFileName"])
+            elif diag_dir and human.startswith("00-"):
+                # Diagnostic attachments (not ASC frames) go to the diagnostics folder.
+                os.makedirs(diag_dir, exist_ok=True)
+                shutil.copyfile(os.path.join(tmp, att["exportedFileName"]),
+                                os.path.join(diag_dir, f"{prefix}-{human.split('_')[0].removesuffix('.png')}.png"))
     errors = []
     for slug in EXPECTED:
         src = found.get(slug)

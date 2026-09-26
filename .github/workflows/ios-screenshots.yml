@@ -138,8 +138,10 @@ jobs:
             sleep 5
             sb_args=(--dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100)
             # ISO time also pins the iPad date (Tue Jan 9); fall back to a plain 9:41.
-            xcrun simctl status_bar "$udid" override --time "2007-01-09T09:41:00+00:00" "${sb_args[@]}" \
+            xcrun simctl status_bar "$udid" override --time "2007-01-09T09:41:00.000Z" "${sb_args[@]}" \
               || xcrun simctl status_bar "$udid" override --time "9:41" "${sb_args[@]}"
+            mkdir -p "$RUNNER_TEMP/diag"
+            xcrun simctl io "$udid" screenshot "$RUNNER_TEMP/diag/$prefix-home-after-override.png" || true
             rm -rf "$prefix.xcresult"
             xcodebuild \
               -project FinalCut.xcodeproj \
@@ -151,7 +153,7 @@ jobs:
               -resultBundlePath "$prefix.xcresult" \
               CODE_SIGNING_ALLOWED=NO \
               test-without-building
-            "$RUNNER_TEMP/venv/bin/python" ../scripts/ios/export_screenshots.py "$prefix.xcresult" "$OUT" "$prefix" "$expect"
+            "$RUNNER_TEMP/venv/bin/python" ../scripts/ios/export_screenshots.py "$prefix.xcresult" "$OUT" "$prefix" "$expect" "$RUNNER_TEMP/diag"
             xcrun simctl status_bar "$udid" clear || true
             xcrun simctl shutdown "$udid" || true
             echo "::endgroup::"
@@ -177,6 +179,14 @@ jobs:
           name: asc-screenshots-build11-${{ github.sha }}
           path: screenshots/*.png
           if-no-files-found: error
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots-diagnostics
+          path: ${{ runner.temp }}/diag
+          if-no-files-found: ignore
 
       - name: Upload xcresults on failure
         if: failure()

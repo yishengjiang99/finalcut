@@ -20,6 +20,12 @@ final class ScreenshotTests: XCTestCase {
         app?.terminate()
     }
 
+    /// Diagnostic (not an ASC frame): editor with a still-image preview instead of the AVKit player.
+    func test00ProbeStill() throws {
+        try launch(state: "editor", readyText: "Loaded sample clip", extraArguments: ["-ScreenshotPreview", "still"])
+        capture("00-probe-still")
+    }
+
     func test01Editor() throws {
         try launch(state: "editor", readyText: "Loaded sample clip")
         capture("01-editor")
@@ -61,9 +67,9 @@ final class ScreenshotTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func launch(state: String, readyText: String) throws {
+    private func launch(state: String, readyText: String, extraArguments: [String] = []) throws {
         app = XCUIApplication()
-        app.launchArguments += ["-ScreenshotState", state]
+        app.launchArguments += ["-ScreenshotState", state] + extraArguments
         app.launch()
         // Wait for the fixture to finish rendering its preview clip and seed the chat.
         let ready = app.staticTexts[readyText]
