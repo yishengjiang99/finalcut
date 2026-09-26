@@ -17,11 +17,14 @@ final class KeyboardAndMicUITests: XCTestCase {
         XCTAssertTrue(loaded, "sample clip loaded (video chips visible)")
     }
 
-    /// The composer, by its placeholder (the player's timecode can also surface as a TextView).
-    private var field: XCUIElement {
-        let composer = NSPredicate(format: "placeholderValue == %@", "Describe an edit…")
-        let textField = app.textFields.matching(composer).firstMatch
-        return textField.exists ? textField : app.textViews.matching(composer).firstMatch
+    /// The composer is the only TextField (the player's timecode can surface as a TextView,
+    /// and the placeholder attribute disappears once there's text).
+    private var field: XCUIElement { app.textFields.firstMatch }
+
+    /// The composer mic, not the software keyboard's own "Dictate" key.
+    private var composerMicExists: Bool {
+        let dictate = NSPredicate(format: "label == %@", "Dictate")
+        return app.buttons.matching(dictate).count > app.keyboards.buttons.matching(dictate).count
     }
 
     /// Taps into the composer and waits for focus (retrying once: the first tap can land while
@@ -39,7 +42,8 @@ final class KeyboardAndMicUITests: XCTestCase {
     }
 
     private func hasKeyboardFocus(_ element: XCUIElement) -> Bool {
-        (element.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+        guard element.exists else { return false }
+        return (element.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
     }
 
     func testTappingPreviewDismissesKeyboard() throws {
@@ -70,11 +74,12 @@ final class KeyboardAndMicUITests: XCTestCase {
     func testMicShowsWhenFieldIsEmptyBeforePermissionIsAsked() throws {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Dictate"].waitForExistence(timeout: 5), "mic in the trailing slot")
+        XCTAssertTrue(composerMicExists)
         XCTAssertFalse(app.buttons["Send"].exists)
 
         focusField()
         field.typeText("x")
         XCTAssertTrue(app.buttons["Send"].waitForExistence(timeout: 5), "Send replaces the mic once there's text")
-        XCTAssertFalse(app.buttons["Dictate"].exists)
+        XCTAssertFalse(composerMicExists, "the composer mic gives way to Send")
     }
 }
