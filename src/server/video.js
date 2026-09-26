@@ -12,9 +12,11 @@ import {
 } from './middleware.js';
 import { getMimeTypeToFormat, getExtFromMimeType, parseAudioInput } from './utils.js';
 import { detectMediaType, MEDIA_TYPE_IMAGE } from './mediaType.js';
+import { isIosGroupedTool } from './iosGroupedTools.js';
 import {
   OpValidationError,
   unsupportedForPhotoError,
+  notAvailableOnServerError,
   applyTrim,
   assertOperationSupported,
   buildVisualFilter,
@@ -908,6 +910,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       return res.status(400).json({ error: 'crossfade_transition requires special multi-video handling' });
 
     default:
+      if (isIosGroupedTool(operation)) return res.status(400).json(notAvailableOnServerError(operation).toJSON());
       return res.status(400).json({ error: `Unknown operation: ${operation}` });
   }
 

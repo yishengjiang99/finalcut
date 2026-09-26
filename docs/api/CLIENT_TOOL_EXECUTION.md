@@ -69,11 +69,12 @@ list. It identifies itself with its User-Agent:
 User-Agent: FinalCap-iOS/<build>        e.g. FinalCap-iOS/10   (build = CFBundleVersion, integer)
 ```
 
-The rule lives in `src/server/iosToolAllowlist.js` (`IOS_TOOL_ALLOWLIST`, `{ toolName: minBuild }`), with UA
+The rule lives in `src/server/iosToolAllowlist.js` (`IOS_TOOL_ALLOWLIST`, `{ toolName: minBuild }` or
+`{ toolName: { minBuild, maxBuild } }`, both inclusive), with UA
 parsing in `src/server/clientInfo.js` (`^FinalCap-iOS/(\d+)`). For a UA starting with
 `FinalCap-iOS`:
 
-- A tool is offered only if it is on the allowlist **and** `build >= minBuild`, intersected
+- A tool is offered only if it is on the allowlist **and** `minBuild <= build <= maxBuild`, intersected
   with the tools valid for `media.type`.
 - A missing or unparseable build (`FinalCap-iOS`, `FinalCap-iOS/abc`) or a build older than
   every entry gets **no** tools. It never falls back to the full list.
@@ -100,6 +101,11 @@ get_video_dimensions, get_supported_formats, convert_video_format, convert_image
 **generate_captions** (on-device speech, no translation). That's 21 tools. `translate_captions` and
 `burn_subtitles` are not tools the model sees and are not allowlisted. To ship a tool on device in
 a later build, add `tool_name: <build>` to the allowlist.
+
+Grouped effect tools (`channel_mixer`, `color_adjust`, `apply_filter`, `stylize`, `blur_sharpen`,
+`lut`, `vignette_grain`, `segment`, `audio_effect`) are iOS-only definitions gated on
+`GROUPED_EFFECTS_MIN_BUILD`, which is currently off for every real build. From that build on, the
+four `adjust_*` tools are retired and iOS gets 26 tools. See [`IOS_GROUPED_TOOLS.md`](./IOS_GROUPED_TOOLS.md).
 
 ## 1. First turn
 

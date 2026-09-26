@@ -8,7 +8,7 @@ import {
 } from './middleware.js';
 import { enqueueChatInteraction, saveLesson } from '../db.js';
 import { PHOTO_SUPPORTED_OPS, PHOTO_OUTPUT_FORMATS, COLOR_FILTER_PRESETS } from './ffmpegOps.js';
-import { buildToolsSchema, toolsForMediaType } from './toolsSchema.js';
+import { buildToolsSchema, offeredToolsFor } from './toolsSchema.js';
 import {
   CLIENT_SCHEMA_VERSION,
   CLIENT_EXECUTION_INSTRUCTIONS,
@@ -286,8 +286,8 @@ async function handleClientExecution(req, res, userId) {
   const unsupportedTools = unsupportedToolsInTurn(conversation);
   const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
 
-  // FinalCap-iOS UA → only allowlisted on-device tools; any other UA → unchanged.
-  const offeredTools = filterToolsForUserAgent(toolsForMediaType(media?.type), req.get('user-agent'))
+  // FinalCap-iOS UA → only allowlisted on-device tools (incl. iOS-only grouped tools); any other UA → unchanged.
+  const offeredTools = offeredToolsFor({ userAgent: req.get('user-agent'), mediaType: media?.type })
     .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
   const contextLines = [
     CLIENT_EXECUTION_INSTRUCTIONS,

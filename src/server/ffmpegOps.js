@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import { getMimeTypeToFormat } from './utils.js';
 import { IMAGE_FORMATS, MEDIA_TYPE_IMAGE, MEDIA_TYPE_VIDEO } from './mediaType.js';
+import { IOS_GROUPED_TOOL_MEDIA_TYPES, isIosGroupedTool } from './iosGroupedTools.js';
 
 const AUDIO_CONTENT_TYPES = {
   mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
@@ -18,6 +19,7 @@ export const ERROR_CODES = {
   UNSUPPORTED_FOR_PHOTO: 'unsupported_for_photo',
   INVALID_ARGUMENTS: 'invalid_arguments',
   UNSUPPORTED_IMAGE_FORMAT: 'unsupported_image_format',
+  NOT_AVAILABLE_ON_SERVER: 'not_available_on_server',
 };
 
 export class OpValidationError extends Error {
@@ -47,6 +49,27 @@ export function unsupportedForPhotoError(operation, message) {
     400,
     { code: ERROR_CODES.UNSUPPORTED_FOR_PHOTO, details: { operation, mediaType: 'image' } }
   );
+}
+
+/** Error for an on-device-only tool (the iOS grouped effect tools have no FFmpeg implementation). */
+export function notAvailableOnServerError(operation) {
+  return new OpValidationError(
+    `Operation "${operation}" runs only on the FinalCap iOS device and is not available on the server`,
+    400,
+    { code: ERROR_CODES.NOT_AVAILABLE_ON_SERVER, details: { operation } }
+  );
+}
+
+/**
+ * Throw for iOS-only grouped tools: unsupported_for_photo when the tool is video-only and the
+ * input is a photo (audio_effect), otherwise not_available_on_server. No-op for other operations.
+ */
+export function assertServerCanRun(operation, mediaType) {
+  if (!isIosGroupedTool(operation)) return;
+  if (mediaType === MEDIA_TYPE_IMAGE && !IOS_GROUPED_TOOL_MEDIA_TYPES[operation].includes('image')) {
+    throw unsupportedForPhotoError(operation);
+  }
+  throw notAvailableOnServerError(operation);
 }
 
 // ─── Time parsing / trim (guards against `-ss undefined`) ────────────────────
@@ -269,6 +292,7 @@ export const PHOTO_OUTPUT_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
  * Throw a 400 OpValidationError when an operation cannot run on the given media type.
  */
 export function assertOperationSupported(operation, mediaType) {
+  assertServerCanRun(operation, mediaType);
   if (mediaType !== MEDIA_TYPE_IMAGE) return;
   if (!PHOTO_SUPPORTED_OPS.includes(operation)) {
     throw unsupportedForPhotoError(operation);

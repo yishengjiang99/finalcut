@@ -49,6 +49,7 @@ import { toolsForMediaType } from '../server/toolsSchema.js';
 import {
   IOS_TOOL_ALLOWLIST,
   filterToolsForUserAgent,
+  iosBuildRange,
   isToolAllowedForIosBuild,
   parseFinalCapIosUserAgent,
 } from '../server/iosToolAllowlist.js';
@@ -113,7 +114,8 @@ const WEB_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.
 const OLD_IOS_UA = 'FinalCap/9 CFNetwork/1498.700.2 Darwin/23.6.0'; // default URLSession UA (build 9)
 const ios = (build) => `FinalCap-iOS/${build}`;
 const names = (list) => list.map(t => t.function.name);
-const allowlisted = Object.keys(IOS_TOOL_ALLOWLIST);
+// Build 10's allowlist (the grouped effect tools are gated separately; see ios-grouped-tools.test.js).
+const allowlisted = Object.keys(IOS_TOOL_ALLOWLIST).filter(n => isToolAllowedForIosBuild(n, 10));
 
 function chatAs(ua, body) {
   return postChat(body, { 'sample-access-token': token, 'User-Agent': ua });
@@ -176,7 +178,7 @@ describe('allowlist thresholds', () => {
     for (const serverOnly of ['translate_captions', 'burn_subtitles']) expect(allowlisted).not.toContain(serverOnly);
     for (const name of allowlisted) {
       expect(names(tools)).toContain(name);
-      expect(IOS_TOOL_ALLOWLIST[name]).toBe(10);
+      expect(iosBuildRange(IOS_TOOL_ALLOWLIST[name]).minBuild).toBe(10);
     }
     expect(Object.isFrozen(IOS_TOOL_ALLOWLIST)).toBe(true);
   });
