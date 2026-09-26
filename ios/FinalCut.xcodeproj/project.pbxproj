@@ -51,6 +51,9 @@
 		C3E2C948BA25EC677B85D61B /* NativeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3283254A505B321C9D96006D /* NativeExporter.swift */; };
 		707D2D2D1D88009FCF19F067 /* NativeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575568583615C85654CD56E5 /* NativeSettings.swift */; };
 		B8B3C73F378D1B1DB7BDB78D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */; };
+		535B8CE990243F1021B58A77 /* ExportController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DD349B02EA9B4A707B4C46 /* ExportController.swift */; };
+		94E4ED920C357B6302A7E553 /* DictationEndpointer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */; };
+		BD2093D6FF56B1A36990B792 /* DictationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75730428B69D0391857303A /* DictationController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -111,6 +114,9 @@
 		3283254A505B321C9D96006D /* NativeExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeExporter.swift; sourceTree = "<group>"; };
 		575568583615C85654CD56E5 /* NativeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSettings.swift; sourceTree = "<group>"; };
 		F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		69DD349B02EA9B4A707B4C46 /* ExportController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportController.swift; sourceTree = "<group>"; };
+		5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationEndpointer.swift; sourceTree = "<group>"; };
+		F75730428B69D0391857303A /* DictationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -232,6 +238,8 @@
 		E1D86FFA0C5F47868EBAFE01 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
+				F75730428B69D0391857303A /* DictationController.swift */,
+				5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */,
 				F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */,
 				751EBD51C12C4CAA92EE20F6 /* EditorView.swift */,
 				239CC4AAE2644796B435B528 /* TopBarView.swift */,
@@ -246,6 +254,7 @@
 		0DC3C8A5EDC24D8FAE8CC12B /* Export */ = {
 			isa = PBXGroup;
 			children = (
+				69DD349B02EA9B4A707B4C46 /* ExportController.swift */,
 				A0046DC48A773DF8F5824962 /* PhotoLibrarySaver.swift */,
 				2A775571821445ABA7BF61C5 /* ExportSheet.swift */,
 			);
@@ -381,6 +390,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BD2093D6FF56B1A36990B792 /* DictationController.swift in Sources */,
+				94E4ED920C357B6302A7E553 /* DictationEndpointer.swift in Sources */,
+				535B8CE990243F1021B58A77 /* ExportController.swift in Sources */,
 				B8B3C73F378D1B1DB7BDB78D /* SettingsView.swift in Sources */,
 				707D2D2D1D88009FCF19F067 /* NativeSettings.swift in Sources */,
 				C3E2C948BA25EC677B85D61B /* NativeExporter.swift in Sources */,
@@ -497,6 +509,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save your edited photos and videos to your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import photos and videos to edit in FinalCap.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FinalCap uses the microphone so you can speak your edit requests.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "FinalCap turns your speech into text on your iPhone. Your voice isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -531,6 +545,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save your edited photos and videos to your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import photos and videos to edit in FinalCap.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FinalCap uses the microphone so you can speak your edit requests.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "FinalCap turns your speech into text on your iPhone. Your voice isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

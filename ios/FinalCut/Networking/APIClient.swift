@@ -37,9 +37,18 @@ final class APIClient {
         configuration.httpCookieAcceptPolicy = .onlyFromMainDocumentDomain
         configuration.httpShouldSetCookies = true
         configuration.httpCookieStorage = HTTPCookieStorage.shared
+        configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent]
         self.session = session ?? URLSession(configuration: configuration)
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
+    }
+
+    /// `FinalCap-iOS/<CFBundleVersion>` so the server can apply the per-build iOS tool allowlist.
+    static var userAgent: String { userAgent(bundle: .main) }
+
+    static func userAgent(bundle: Bundle) -> String {
+        let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        return "FinalCap-iOS/\(build)"
     }
 
     // MARK: - URL builders
@@ -83,6 +92,8 @@ final class APIClient {
     ) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        // Also per request: injected sessions (tests, shared sessions) skip the config header.
+        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         if let contentType, body != nil {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }

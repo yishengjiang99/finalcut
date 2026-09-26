@@ -2,7 +2,7 @@ import Foundation
 import Photos
 import UniformTypeIdentifiers
 
-/// Saves an edited photo to the library in its original format (JPEG/PNG bytes as-is).
+/// Saves edited photos (original format bytes as-is) and rendered videos to the library.
 enum PhotoLibrarySaver {
     enum SaveError: Error, Equatable {
         case notAuthorized
@@ -27,6 +27,21 @@ enum PhotoLibrarySaver {
             try await PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
                 request.addResource(with: .photo, data: data, options: options)
+            }
+        } catch {
+            throw SaveError.failed
+        }
+    }
+
+    static func saveVideo(at url: URL) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else { throw SaveError.notAuthorized }
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset()
+                let options = PHAssetResourceCreationOptions()
+                options.originalFilename = url.lastPathComponent
+                request.addResource(with: .video, fileURL: url, options: options)
             }
         } catch {
             throw SaveError.failed

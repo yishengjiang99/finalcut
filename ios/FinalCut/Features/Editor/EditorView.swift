@@ -10,6 +10,7 @@ struct EditorView: View {
     @StateObject private var model = EditorViewModel()
     @State private var showExport = false
     @State private var showSettings = false
+    @StateObject private var dictation = DictationController()
     /// Observed so chips and routing refresh when Settings → Cloud processing changes.
     @AppStorage(NativeSettings.cloudProcessingKey) private var cloudProcessing = false
 
@@ -71,7 +72,8 @@ struct EditorView: View {
                 text: $model.composerText,
                 photosPickerItem: $model.photosPickerItem,
                 onSend: { model.sendMessage() },
-                importEnabled: importEnabled
+                importEnabled: importEnabled,
+                dictation: dictation
             )
         }
         .background(AppTheme.background.ignoresSafeArea())
@@ -97,7 +99,14 @@ struct EditorView: View {
             model.onInferenceFinished = { [weak appModel] in
                 Task { await appModel?.refreshQuota() }
             }
+            // Dictation fills the composer live and queues each finished request.
+            dictation.onTranscript = { [weak model] text in model?.composerText = text }
+            dictation.onSend = { [weak model] text in
+                model?.composerText = ""
+                model?.submitPrompt(text)
+            }
         }
+        .onDisappear { dictation.stop() }
         .overlay(alignment: .top) {
             if model.state == .failed, model.importError == nil, let err = model.lastError {
                 Text(err)
