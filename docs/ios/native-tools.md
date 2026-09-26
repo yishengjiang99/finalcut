@@ -1,216 +1,135 @@
 # FinalCap iOS: native tool mapping (on-device execution)
 
-**Status:** v1 of the mapping. Phase 2 (`NativeToolExecutor`) implements the rows marked **Native** below.
+**Status:** v2 (replaces v1 from PR #86). Product rule changed: **no uploads on iOS by default.**
 **Owner:** FinalCut iOS
-**Related:**
-- Design handoff: [`docs/ios/NATIVE_EDIT_UX.md`](NATIVE_EDIT_UX.md) (PR #83). It defines edit cards, the On device / Cloud badge, the export-only blocking dimmer, the opt-in cloud fallback, and flattening.
-- Backend `execution: "client"` chat mode. The draft contract is summarized in [section 5](#5-client-side-json-contract-executionclient). The final schema will be served from `GET /api/tools/schema` (Backend PR pending, no open PR at the time of writing).
-- Tool sources of truth: `src/tools.js` (the schema the model sees), `src/toolFunctions.js` (web runners and arg validation), and `src/server/ffmpegOps.js` (server FFmpeg implementation, the **server fallback**).
+**Source of truth for tools:** [`docs/api/tools-schema.v1.json`](../api/tools-schema.v1.json) (`schemaVersion: "1"`, 46 tools), served live at `GET /api/tools/schema`.
+**Related:** [`docs/api/CLIENT_TOOL_EXECUTION.md`](../api/CLIENT_TOOL_EXECUTION.md) (client-mode contract, Backend #85), [`NATIVE_EDIT_UX.md`](NATIVE_EDIT_UX.md) (edit cards, badges, photo mode, error codes), [`docs/PHOTO_SUPPORT.md`](../PHOTO_SUPPORT.md) (server photo pipeline, cloud path only).
 
-## 0. Product rule (replaces v1)
+## 0. Product rule
 
-The old v1 rule said heavy edits go to the Node/FFmpeg server. It is replaced. The chat model's tool calls now go to the iOS app, and the app applies them **on device** to a non-destructive edit stack. The user does not upload the video or download results. The model receives media metadata and up to 4 thumbnails only.
-
-The server path remains only as an **explicit, per-step, user-approved fallback** for tools with no native version (the **GAP** rows). Every result reports `executedOn: "device" | "server"`.
-
-We do **not** bundle FFmpeg (see [section 4](#4-is-a-small-lgpl-ffmpeg-build-ever-justified)).
+- The chat model's tool calls are executed **on the iPhone** against a non-destructive edit stack. The preview updates immediately from a composed `AVPlayerItem`; a file is written **only on export**.
+- **Nothing is uploaded by default.** The model receives media metadata (type, duration, width, height, fps, hasAudio) and up to 4 JPEG thumbnails through `/api/chat` in `execution: "client"` mode. That is the only data that leaves the device.
+- A tool with no on-device implementation returns `{ "ok": false, "error": "unsupported_on_device", "executedOn": "device" }` to the model, which can pick another approach or explain.
+- The server path (`/api/jobs/process-video`) runs **only** when the user turns on **Settings → Allow cloud processing** (default **off**). Photos going to the cloud path are converted HEIC/HEIF → upright JPEG first (prod FFmpeg 4.4 has no HEIF decoder); on-device photo edits need no conversion.
+- We do **not** bundle FFmpeg (section 4).
 
 ## 1. Native building blocks
 
 | Block | Used for |
 |---|---|
-| `AVMutableComposition` (`insertTimeRange`, `removeTimeRange`, `scaleTimeRange`, `insertEmptyTimeRange`) | Timeline edits: trim, speed, audio delay (and later multi-clip transitions) |
-| `AVMutableVideoComposition.videoComposition(with:applyingCIFiltersWithHandler:)` + custom `renderSize` | The whole frame pipeline, run as an ordered chain of Core Image ops over the source frame. One pipeline serves preview, thumbnails (`AVAssetImageGenerator.videoComposition`) and export |
-| Core Image: `CIColorControls`, `CIHueAdjust`, `CIColorMatrix`, `CIColorInvert`, `CITemperatureAndTint`, `CIPhotoEffect*`, affine transforms, `cropped(to:)`, source-over compositing | Color, filters, crop, rotate, flip, resize, pad, text overlay, video fades |
-| Text: a `CGImage` rendered once per edit with Core Text / UIKit (`NSAttributedString`), then composited as a `CIImage` inside the same CI handler | `add_text`. We chose this over `AVVideoCompositionCoreAnimationTool` because the Core Animation tool is **export-only**: it does not render in `AVPlayer`, so preview would need a separate `AVSynchronizedLayer` path. CI text keeps preview and export identical |
-| `AVMutableAudioMix` + `AVMutableAudioMixInputParameters` (`setVolumeRamp`) | Fades (volume ramps) |
-| `MTAudioProcessingTap` on the audio-mix input parameters (runs in `AVPlayerItem` and `AVAssetExportSession`) | Gain > 1.0 (audio-mix volume clamps at 1.0), biquad EQ (high-pass, low-pass, bass and treble shelf, peaking), pan |
-| `AVPlayerItem(asset: composition)` + `.videoComposition` + `.audioMix` + `audioTimePitchAlgorithm = .spectral` | Live preview. Nothing is rendered until export |
-| `AVAssetExportSession` (preset HighestQuality, `outputFileType` .mp4 / .mov / .m4a) | Export, plus the flatten step before a cloud fallback. `AVAssetWriter` is the upgrade path if we need bitrate control or WAV |
+| `AVMutableComposition` (`insertTimeRange`, `removeTimeRange`, `scaleTimeRange`, `insertEmptyTimeRange`) | Timeline: trim, speed, audio delay, silence removal, (multi-clip concat/transitions later) |
+| `AVMutableVideoComposition(asset:applyingCIFiltersWithHandler:)` + custom `renderSize` | One ordered Core Image chain per frame: crop, rotate, flip, resize/pad, color controls, color filters, text, captions burn-in, single-clip fade. Same object drives preview (`AVPlayerItem.videoComposition`), thumbnails (`AVAssetImageGenerator`) and export |
+| Text and captions | Rendered once per string to a `CGImage` (Core Text) and composited in the CI handler at the frame's `compositionTime`. This is the preview-capable equivalent of `AVVideoCompositionCoreAnimationTool` (which is export-only and needs a separate `AVSynchronizedLayer` for preview); preview and export stay pixel-identical |
+| `AVMutableAudioMix` (`setVolume`, `setVolumeRamp`) | Volume ≤ 1, fades |
+| Offline audio render: `AVAssetReader` (composition + audio mix) → PCM → `AVAudioEngine` manual rendering (`AVAudioUnitEQ`, `AVAudioUnitDelay`, `AUDynamicsProcessor`, `AUPeakLimiter`) and small Swift DSP (biquads, gain, pan, LFO, gate, reverse) → `.caf` → re-inserted as the composition's audio track | Gain > 1, EQ/filters, echo, pan, dynamics, tremolo, reverse, normalize |
+| Core Image on `CIImage(contentsOf:)` with orientation applied | Photos: every frame tool above, written with `CIContext` (`jpeg`/`png`/`heif` representation) on export |
+| `AVAssetExportSession` | Export (mp4/mov/m4a) with progress and Cancel. Background continuation: `BGContinuedProcessingTask` (iOS 26+), `beginBackgroundTask` (iOS 17–25) |
+| Speech: `SpeechAnalyzer`/`SpeechTranscriber` (iOS 26+), `SFSpeechRecognizer` with `requiresOnDeviceRecognition = true` (iOS 17–25) | On-device captions → SRT/VTT, burn-in via the CI text path |
 
-## 2. Tool-by-tool mapping
+## 2. Tool-by-tool mapping (all 46 schema tools)
 
-Tool names are the names the model calls (`src/tools.js`). Args are exactly the server/web args, and `*` marks a required arg. "Server op" is the `ffmpegOps` operation the fallback uses when it differs from the tool name.
+`*` = required arg. "Build" = the TestFlight build the native path ships in ("10" = build 10, "next" = follow-up). Status is **Native**, **Partial** (some arg values native, the rest `unsupported_on_device`) or **GAP** (always `unsupported_on_device` unless cloud processing is allowed).
 
-### 2.1 Priority tools
+### 2.1 Timeline and frame
 
-| Tool | Args | Native mapping | Status |
-|---|---|---|---|
-| `trim_video` | `start*`: string (seconds or `[[HH:]MM:]SS[.ms]`), `end*`: string | Parse like `parseTimeToSeconds`, then `composition.removeTimeRange` outside `[start, end)` on the current timeline. Validates `end > start` and `start < duration`, and clamps `end` to the duration | **Native** |
-| `adjust_speed` (server op `speed_video`) | `speed*`: number > 0 | `composition.scaleTimeRange(full, toDuration: d / speed)` on all tracks. Pitch is preserved with `audioTimePitchAlgorithm = .spectral` on the player item and export session (the equivalent of `atempo`). Range 0.25 to 4 | **Native** |
-| `crop_video` | `x*`, `y*`, `width*`, `height*`: integer (top-left origin, pixels of the **current** frame) | CI `cropped(to:)` (y flipped for CI's bottom-left origin) and translate to origin. `renderSize` becomes `width × height`, rounded to even for H.264. Validated against the current canvas, so crops chain | **Native** |
-| `rotate_video` | `angle*`: number, degrees, clockwise positive | Multiples of 90: affine rotate, with the canvas swapped for 90 and 270. Other angles: rotate about the center on the same canvas with black fill (matches the server's video `rotate=` behavior) | **Native** (divergence: the server keeps the canvas even for 90°. Native swaps it, like the server's photo path) |
-| `flip_video_horizontal` | none | CI affine `scaleX: -1` + translate | **Native** |
-| `flip_video_vertical` | none | CI affine `scaleY: -1` + translate | **Native** |
-| `adjust_brightness` | `brightness*`: -1…1 | `CIColorControls.inputBrightness` (same -1…1 additive scale as `eq=brightness`) | **Native** |
-| `adjust_contrast` | `contrast*`: 0…3 | `CIColorControls.inputContrast` | **Native** |
-| `adjust_saturation` | `saturation*`: 0…3 (0 = grayscale) | `CIColorControls.inputSaturation` | **Native** |
-| `adjust_hue` | `degrees*`: -360…360 | `CIHueAdjust.inputAngle` in radians | **Native** |
-| `apply_color_filter` | `filter*`: red, green, blue, yellow, cyan, magenta, sepia, grayscale, black_and_white, invert, warm, cool, vintage; `intensity`: 0…1 = 1 | `CIColorMatrix` using the **same 3×3 matrices as `buildColorFilter`**, mixed with identity by `intensity` (tints, sepia, grayscale, b&w). `CIColorInvert` for invert. `CITemperatureAndTint` for warm and cool, scaled by intensity. `CIPhotoEffectTransfer` for vintage (closest built-in to `curves=preset=vintage`, which is an approximation) | **Native** |
-| `add_text` | `text*`: string; `x` = 10; `y` = 10; `fontsize` = 24; `color` = "white" (name or `#hex`) | Text rendered once to a `CGImage` (system font, size in output pixels, color parsed from the same names and hex as `safeColor`), composited at top-left `(x, y)` on the current canvas | **Native** |
-| `adjust_audio_volume` (server op `adjust_volume`) | `volume*`: ≥ 0 (1 = unchanged, 2 = double) | `MTAudioProcessingTap` gain (0…4). The audio-mix volume alone cannot exceed 1.0 | **Native** |
-| `audio_fade` | `type*`: in or out; `duration*`: seconds > 0 | `setVolumeRamp` 0→1 over `[0, d]` (in) or 1→0 over `[D−d, D]` (out). Anchored to the **final** timeline, so the fade stays at the start or end after later trims | **Native** (the server reads an undocumented `start` arg, so `afade st=undefined`: a server bug, reported to Backend) |
-| `add_video_transition` | `transition*`: crossfade, fade, dissolve, wipe_left, wipe_right, wipe_up, wipe_down, slide_left, slide_right, slide_up, slide_down; `duration` = 1 | **Single clip (today's iOS):** `fade` means fade from and to black in the CI handler (the equivalent of the server's `fade_transition`). **Multi-clip (not yet in the iOS UI):** two alternating composition tracks overlapping by `duration`. crossfade and dissolve use `AVMutableVideoCompositionLayerInstruction.setOpacityRamp`, wipes use `setCropRectangleRamp`, slides use `setTransformRamp`, and audio uses paired volume ramps | **Native** for single-clip `fade`. Other types on a single clip return a validation error ("needs ≥ 2 clips"). Multi-clip is **Planned** (blocked on multi-clip import, not on the server) |
+| Tool | Args | Native implementation | Status | Build |
+|---|---|---|---|---|
+| `trim_video` | `start*`, `end*` (seconds or `[[HH:]MM:]SS[.ms]`) | Composition `removeTimeRange` outside `[start, end)` on the current timeline; validates `end > start`, clamps to duration | Native | 10 |
+| `adjust_speed` | `speed*` (0.25–4) | Composition `scaleTimeRange(full → d/speed)`; pitch kept with `audioTimePitchAlgorithm = .spectral` | Native | 10 |
+| `crop_video` | `x*`, `y*`, `width*`, `height*` (top-left origin, current canvas px) | CI `cropped(to:)` (y flipped) + translate; `renderSize` = crop (even) | Native | 10 |
+| `rotate_video` | `angle*` (deg, clockwise) | 90° multiples: affine + canvas swap; other angles: rotate about centre, same canvas, black fill | Native | 10 |
+| `flip_video_horizontal` | – | CI affine `scaleX: -1` | Native | 10 |
+| `flip_video_vertical` | – | CI affine `scaleY: -1` | Native | 10 |
+| `resize_video` | `width*`, `height*` (one may be -1) | CI Lanczos scale + `renderSize` (even) | Native | 10 |
+| `resize_video_preset` | `preset*` 9:16, 16:9, 1:1, 2:3, 3:2 | Aspect-fit onto a black canvas of the preset size (pad, as the description promises) | Native | 10 |
+| `adjust_brightness` | `brightness*` (-1…1) | `CIColorControls.inputBrightness` | Native | 10 |
+| `adjust_contrast` | `contrast*` (0…3) | `CIColorControls.inputContrast` | Native | 10 |
+| `adjust_saturation` | `saturation*` (0…3) | `CIColorControls.inputSaturation` | Native | 10 |
+| `adjust_hue` | `degrees*` | `CIHueAdjust` (radians) | Native | 10 |
+| `apply_color_filter` | `filter*` red, green, blue, yellow, cyan, magenta, sepia, grayscale, black_and_white, invert, warm, cool, vintage; `intensity` 0…1 | `CIColorMatrix` with the server's `buildColorFilter` matrices mixed with identity by intensity; warm/cool as colour-matrix channel gains (R/B), `CIColorInvert`, `CIPhotoEffectTransfer` for vintage, black_and_white = grayscale + high contrast | Native | 10 |
+| `add_text` | `text*`; `x`=10, `y`=10, `fontsize`=24, `color`="white" | Core Text → `CGImage`, composited top-left at (x, y) in the CI chain | Native | 10 |
+| `add_video_transition` | `transition*`, `duration`=1 | Single clip: `fade` = fade from/to black in the CI chain. Other types need ≥ 2 clips (multi-clip import not in the iOS UI yet) | Partial | next |
+| `get_video_dimensions` | – | Local query of the **edited** clip (size, duration, fps, hasAudio) | Native | 10 |
+| `get_supported_formats` | – | Local answer: video mp4, mov; audio m4a, wav; image jpg, png, heic | Native | 10 |
 
-### 2.2 Other frame and format tools
+### 2.2 Audio
 
-| Tool | Args | Native mapping | Status |
-|---|---|---|---|
-| `resize_video` | `width*`, `height*`: integer, one side may be -1 (keep aspect) | CI scale (Lanczos) + `renderSize`, rounded to even | **Native** |
-| `resize_video_preset` (server op `resize_video` with preset dims) | `preset*`: 9:16, 16:9, 1:1, 2:3, 3:2 | Aspect-fit into the preset size (1080×1920, 1920×1080, 1080×1080, 1080×1620, 1620×1080) on a black canvas (pad). The server stretches with `scale=`; the tool description promises padding, so native follows the description | **Native** |
-| `get_video_dimensions` | none | Query only (no stack entry): `load(.duration)`, video track `naturalSize` + `preferredTransform`, `nominalFrameRate`, `formatDescriptions` codec, `hasAudio`. Reports the **edited** dimensions and duration too | **Native** |
-| `get_supported_formats` | none | Query only: returns what the device export supports (video: mp4, mov; audio: m4a). Other formats are listed as cloud-only | **Native** |
-| `convert_video_format` | `format*`: mp4, mov, webm, avi, mkv, flv, ogv; `codec` = auto | mp4 and mov are an export setting (`outputFileType`), with no re-render until export. webm, avi, mkv, flv and ogv have no AVFoundation writer | **Native** (mp4, mov) / **GAP** (others): server `convert_video_format` |
-| `extract_audio` | `format` = mp3 (mp3, wav, aac, ogg, flac, m4a); `bitrate` = 192k | m4a uses `AVAssetExportPresetAppleM4A` on the edited composition | **Native** (m4a) / **GAP** (mp3, wav, aac, ogg, flac): server `extract_audio`. WAV can move native via `AVAssetWriter` LPCM later |
-| `convert_audio_format` | `format*`: mp3, wav, aac, ogg, flac, m4a, wma; `bitrate` = 192k | Same as `extract_audio` | **Native** (m4a) / **GAP** (others) |
-| `convert_image_format` | `format*`: jpg, png, webp | Photo-only tool. The iOS app imports videos only today. When photos land: `CGImageDestination` for jpg, png and heic (ImageIO cannot write webp, so webp stays GAP) | **GAP / N/A** (server photo pipeline) |
+| Tool | Args | Native implementation | Status | Build |
+|---|---|---|---|---|
+| `adjust_audio_volume` | `volume*` (≥ 0) | ≤ 1: audio-mix `setVolume`; > 1: offline render gain (clipped) | Native | 10 |
+| `audio_fade` | `type*` in/out, `duration*`, optional `start` (Backend #92) | Audio-mix `setVolumeRamp` anchored to the final timeline (fade in from `start`/0, fade out ending at clip end) | Native | 10 |
+| `audio_delay` | `delay*` ms | Composition `insertEmptyTimeRange` on the audio track, truncated at the video end | Native | next |
+| `audio_highpass` | `frequency*` | Offline render: RBJ biquad HP, Q 0.707 (`AVAudioUnitEQ` .highPass) | Native | next |
+| `audio_lowpass` | `frequency*` | Offline render: biquad LP | Native | next |
+| `adjust_bass` | `gain*` dB | Offline render: low shelf 100 Hz | Native | next |
+| `adjust_treble` | `gain*` dB | Offline render: high shelf 3 kHz | Native | next |
+| `audio_equalizer` | `frequency*`, `width`=200, `gain*` | Offline render: peaking EQ, Q = f / width | Native | next |
+| `audio_pan` | `pan*` (-1…1) | Offline render: server's linear law; mono unchanged | Native | next |
+| `audio_echo` | `delay*` ms, `decay*` | Offline render: feedback delay line (`AVAudioUnitDelay` equivalent) | Native | next |
+| `audio_tremolo` | `frequency`=5, `depth`=0.5 | Offline render: LFO gain | Native | next |
+| `audio_reverse` | – | Offline render: PCM reversed | Native | next |
+| `normalize_audio` | `target*` LUFS | Offline: BS.1770 loudness analysis → static gain (approximation of 2-pass `loudnorm`) | Native | next |
+| `audio_compressor` | `threshold`, `ratio`, `attack`, `release` | Offline render: feed-forward compressor (`AUDynamicsProcessor` equivalent) | Native | next |
+| `audio_limiter` | `level`, `attack`, `release` | Offline render: peak limiter (`AUPeakLimiter` equivalent) | Native | next |
+| `audio_gate` | `threshold`, `ratio`, `attack`, `release` | Offline render: downward expander/gate | Native | next |
+| `audio_silence_remove` | `start_threshold`, `start_duration`, `stop_threshold`, `stop_duration` | `AVAssetReader` level scan → composition `removeTimeRange` for silent spans | Native | next |
+| `audio_chorus` | `in_gain`, `out_gain`, `delays`, `decays`, `speeds`, `depths` | No Apple AU; would need custom modulated-delay DSP | GAP | – |
+| `audio_flanger` | `delay`, `depth`, `regen`, `width`, `speed` | No Apple AU; custom DSP | GAP | – |
+| `audio_phaser` | `in_gain`, `out_gain`, `delay`, `decay`, `speed` | No Apple AU; custom all-pass chain | GAP | – |
+| `audio_vibrato` | `frequency`, `depth` | No Apple AU; custom pitch-modulation DSP | GAP | – |
+| `audio_stereo_widen` | `delay`, `feedback`, `crossfeed` | No Apple AU; custom DSP | GAP | – |
+| `audio_dynamic_normalize` | `mode` dynaudnorm/compand + params | No equivalent to dynaudnorm/compand curves | GAP | – |
+| `add_audio_track` | `audioFile*`, `mode`, `volume` | Mechanically native (second composition audio track), but the contract has no way to reference user-picked audio (the model can't supply bytes) | GAP | – |
 
-### 2.3 Audio tools
+### 2.3 Captions and formats
 
-| Tool | Args | Native mapping | Status |
-|---|---|---|---|
-| `audio_highpass` (server op `highpass_filter`) | `frequency*` = 200 Hz | Tap: RBJ biquad high-pass, Q 0.707 (same as ffmpeg `highpass` default) | **Native** |
-| `audio_lowpass` (server op `lowpass_filter`) | `frequency*` = 3000 Hz | Tap: RBJ biquad low-pass, Q 0.707 | **Native** |
-| `adjust_bass` (server op `bass_adjustment`) | `gain*`: -20…20 dB | Tap: low-shelf at 100 Hz (ffmpeg `bass` default f = 100) | **Native** |
-| `adjust_treble` (server op `treble_adjustment`) | `gain*`: -20…20 dB | Tap: high-shelf at 3000 Hz (ffmpeg `treble` default f = 3000) | **Native** |
-| `audio_equalizer` (server op `equalizer`) | `frequency*`; `width` = 200 Hz; `gain*`: -20…20 dB | Tap: RBJ peaking EQ, Q = f / width (width_type = h) | **Native** |
-| `audio_pan` | `pan*`: -1…1 | Tap: same linear law as the server (`pan<0` attenuates R by `1+pan`; `pan>0` attenuates L). A mono source is unchanged, as on the server | **Native** |
-| `audio_delay` (server op `delay_audio`) | `delay*`: ms ≥ 0 | Composition: `insertEmptyTimeRange` at 0 on the audio track, then truncate at the video end | **Native** |
-| `normalize_audio` | `target*`: LUFS ≤ 0 = -16 | Would need a loudness analysis pass (`AVAssetReader`, BS.1770 K-weighting), then tap gain. Feasible, but not true `loudnorm` (two-pass dynamic) | **GAP**: server `normalize_audio`. Planned native (static-gain approximation) |
-| `audio_echo` (server op `echo_effect`) | `delay*`: ms; `decay*`: 0…1 | Tap with a delay line (feasible) | **GAP**: server `echo_effect`. Planned native (tap delay line) |
-| `audio_tremolo` | `frequency` = 5; `depth` = 0.5 | Tap with an LFO gain (feasible) | **GAP**: server `audio_tremolo`. Planned native |
-| `audio_reverse` | none | Needs the whole track reversed: offline `AVAssetReader` → reversed PCM file → re-insert | **GAP**: server `audio_reverse` |
-| `audio_chorus` | `in_gain`, `out_gain`, `delays`, `decays`, `speeds`, `depths` | No AVFoundation equivalent in the composition path (the AVAudioUnit effects are AVAudioEngine-only) | **GAP**: server `audio_chorus` |
-| `audio_flanger` | `delay`, `depth`, `regen`, `width`, `speed` | Same as chorus | **GAP**: server `audio_flanger` |
-| `audio_phaser` | `in_gain`, `out_gain`, `delay`, `decay`, `speed` | Same as chorus | **GAP**: server `audio_phaser` |
-| `audio_vibrato` | `frequency` = 5; `depth` = 0.5 | Same as chorus (pitch modulation) | **GAP**: server `audio_vibrato` |
-| `audio_compressor` | `threshold` = 0 dB (-60…0); `ratio` = 4 (1…20); `attack` = 20 ms; `release` = 250 ms | `AUDynamicsProcessor` exists but only via AVAudioEngine offline render, not in the live composition | **GAP**: server `audio_compressor` |
-| `audio_dynamic_normalize` | `mode` = dynaudnorm (dynaudnorm or compand); dynaudnorm: `frame_length` = 150, `gaussian_size` = 31; compand: `attacks` = 0.3, `decays` = 0.8, `points`, `gain` = 3 | None | **GAP**: server `audio_dynamic_normalize` |
-| `audio_gate` | `threshold` = -50 dB; `ratio` = 2; `attack` = 20; `release` = 250 | None (would need a custom tap gate) | **GAP**: server `audio_gate` |
-| `audio_limiter` | `level` = 1 (0.5…1); `attack` = 5; `release` = 50 | `AUPeakLimiter` is AVAudioEngine-only | **GAP**: server `audio_limiter` |
-| `audio_stereo_widen` | `delay` = 20; `feedback` = 0.3; `crossfeed` = 0.3 | None | **GAP**: server `audio_stereo_widen` |
-| `audio_silence_remove` | `start_threshold` = -50; `start_duration` = 0.5; `stop_threshold` = -50; `stop_duration` = 0.5 | Feasible later: an `AVAssetReader` level scan, then `trim` edits | **GAP**: server `audio_silence_remove`. Planned native (scan + trim) |
-| `add_audio_track` | `audioFile*`: string (base64 or file ref); `mode` = replace (replace or mix); `volume` = 1 (0…2) | Mechanically trivial natively (second `AVURLAsset` inserted into a new composition audio track, plus a volume param). Blocked on the contract: the model cannot supply audio bytes, so we need a media-reference scheme for user-picked audio | **GAP** (sync multipart server `add_audio_track`; not available via jobs) |
-| `generate_captions` | `language` = auto; `translate_language`; `style` = default (default, white_on_black, yellow); `position` = bottom (bottom or top); `burn_in` = true | Speech-to-text and translation are server features (OpenAI STT, Grok translate). Burn-in itself could be native (CI text per SRT cue). Planned optimization: upload **audio only** (m4a from the device) instead of the video | **GAP**: server `/api/generate-captions` (+ `/api/translate-captions`, + sync `burn_subtitles`) |
+| Tool | Args | Native implementation | Status | Build |
+|---|---|---|---|---|
+| `generate_captions` | `language`=auto, `translate_language`, `style`, `position`, `burn_in`=true | On-device speech (SpeechTranscriber iOS 26+, SFSpeechRecognizer on-device iOS 17–25) → SRT/VTT; burn-in via CI text per cue. `translate_language` has no on-device translator in the edit path → `unsupported_on_device` for that part | Partial | next |
+| `convert_video_format` | `format*` mp4, webm, mov, avi, mkv, flv, ogv | mp4/mov = export container setting; others have no AVFoundation writer | Partial | 10 (mp4/mov) |
+| `extract_audio` | `format` mp3, wav, aac, ogg, flac, m4a | m4a (`AVAssetExportPresetAppleM4A`), wav (`AVAssetWriter` LPCM); others not writable | Partial | next |
+| `convert_audio_format` | `format*` mp3, wav, aac, ogg, flac, m4a, wma | Same as `extract_audio` | Partial | next |
+| `convert_image_format` | `format*` jpg, png, webp | Photos: `CIContext` jpeg/png representation on export; ImageIO can't write webp | Partial | 10 (jpg/png) |
 
-### 2.4 Legacy names (web `toolFunctions` only, not in the schema)
+### 2.4 Summary
 
-`toolFunctions.js` also exposes these names. The model does not see them (they are not in `tools.js`), but the executor accepts them as **aliases** so a replayed or legacy call still resolves:
+- **Native (33):** trim_video, adjust_speed, crop_video, rotate_video, flip_video_horizontal, flip_video_vertical, resize_video, resize_video_preset, adjust_brightness, adjust_contrast, adjust_saturation, adjust_hue, apply_color_filter, add_text, get_video_dimensions, get_supported_formats, adjust_audio_volume, audio_fade, audio_delay, audio_highpass, audio_lowpass, adjust_bass, adjust_treble, audio_equalizer, audio_pan, audio_echo, audio_tremolo, audio_reverse, normalize_audio, audio_compressor, audio_limiter, audio_gate, audio_silence_remove.
+- **Partial (6):** add_video_transition (single-clip fade), generate_captions (no on-device translation), convert_video_format (mp4/mov), extract_audio (m4a/wav), convert_audio_format (m4a/wav), convert_image_format (jpg/png).
+- **GAP (7):** audio_chorus, audio_flanger, audio_phaser, audio_vibrato, audio_stereo_widen, audio_dynamic_normalize, add_audio_track.
+- **Build 10 scope:** the 18 tools marked "10" plus mp4/mov and jpg/png formats, photo mode, and the no-upload default. Everything marked "next" returns `unsupported_on_device` in build 10.
 
-| Legacy name | Canonical tool |
-|---|---|
-| `adjust_volume` | `adjust_audio_volume` |
-| `highpass_filter` / `lowpass_filter` | `audio_highpass` / `audio_lowpass` |
-| `echo_effect` | `audio_echo` |
-| `bass_adjustment` / `treble_adjustment` | `adjust_bass` / `adjust_treble` |
-| `equalizer` | `audio_equalizer` |
-| `delay_audio` | `audio_delay` |
-| `get_video_info` | `get_video_dimensions` |
-| `resize_to_aspect_ratio` (`ratio`, `fit`) | `resize_video_preset` (`preset`) |
-| `convert_to_format` | stub on web ("not yet implemented"). **GAP**, no-op |
+Legacy aliases (`adjust_volume`, `highpass_filter`, `lowpass_filter`, `echo_effect`, `bass_adjustment`, `treble_adjustment`, `equalizer`, `delay_audio`, `speed_video`, `get_video_info`) resolve to the canonical tool before dispatch.
 
-Found while auditing: `audio_chorus`, `audio_flanger`, `audio_phaser`, `audio_vibrato`, `audio_tremolo`, `audio_gate`, `audio_stereo_widen`, `audio_reverse`, `audio_limiter`, `audio_silence_remove` and `audio_pan` are in the model schema and in `ffmpegOps`, but have **no** `toolFunctions` runner. On web today, these calls throw `toolFunctions[funcName] is not a function`. That is a web issue for Backend/Web and does not affect iOS client mode.
+## 3. Edit stack
 
-### 2.5 Summary
-
-The schema has 46 tools: 26 native, 3 partially native, and 17 GAP.
-
-
-- **Native (26):** trim_video, adjust_speed, crop_video, rotate_video, flip_video_horizontal, flip_video_vertical, resize_video, resize_video_preset, adjust_brightness, adjust_contrast, adjust_saturation, adjust_hue, apply_color_filter, add_text, adjust_audio_volume, audio_fade, audio_highpass, audio_lowpass, adjust_bass, adjust_treble, audio_equalizer, audio_pan, audio_delay, add_video_transition (single-clip `fade`), get_video_dimensions, get_supported_formats
-- **Partially native (3):** convert_video_format (mp4, mov), extract_audio (m4a), convert_audio_format (m4a). The other formats are GAP and go to the server.
-- **GAP, server fallback (17):** normalize_audio, audio_echo, audio_tremolo, audio_reverse, audio_chorus, audio_flanger, audio_phaser, audio_vibrato, audio_compressor, audio_dynamic_normalize, audio_gate, audio_limiter, audio_stereo_widen, audio_silence_remove, add_audio_track, generate_captions, plus convert_image_format (photo-only, N/A in the video app).
-- **Planned native next (no FFmpeg needed):** audio_echo and audio_tremolo (tap), normalize_audio (static gain), audio_silence_remove (scan + trim), multi-clip transitions, extract_audio/convert_audio_format to wav (`AVAssetWriter`), captions burn-in (CI text).
-
-## 3. Edit stack semantics (what the executor does)
-
-- **Value types.** `EditStack` is a struct holding `[EditEntry]`. Each entry holds `id`, `toolCallId`, `tool`, a typed `EditOperation` enum, `enabled`, and `executedOn`. The base clip is a URL. Nothing mutates the source file.
-- **Order.** Timeline ops (trim, speed, audio delay) apply to the composition in stack order, so later trims use the current timeline. Frame ops form an ordered CI chain, so a crop after a rotate uses rotated coordinates. **Anchored** ops (audio fade, the single-clip video fade) apply to the final timeline.
-- **Validation.** Args are validated with the same rules as `toolFunctions.js` and `ffmpegOps.js`, plus against the current canvas and duration from a dry-run fold of the stack. Failures return `ok: false` with an error. The stack is not changed.
-- **Undo, toggle and delete** follow NATIVE_EDIT_UX §3. Removing an entry re-validates the entries after it. Entries that become invalid (for example a crop that no longer fits) are removed with it, and the card reports "Also removes N later edits".
-- **Preview.** `AVPlayerItem(asset: composition)` with `videoComposition`, `audioMix` and a spectral pitch algorithm, rebuilt when the stack changes. Nothing renders until export.
-- **Export.** `AVAssetExportSession` with determinate progress and Cancel. On cancel, the stack is untouched.
-- **Cloud step (flattening).** Only after the user taps "Process in cloud":
-  1. Export (flatten) the current stack to a file.
-  2. Upload it to the server op (`/api/jobs/process-video`, or the sync route for captions).
-  3. The downloaded result becomes the **new base**, with an empty stack.
-  4. The pre-cloud `(base, stack)` pair is pushed onto `history`. Undoing the cloud step pops it and restores the previous base and edits. Later device edits stack on the new base.
+- `EditStack` is a value type: `base` (source URL, never modified) + ordered `[EditEntry]` (`id`, `toolCallId`, `tool`, typed `NativeOp`, `executedOn`).
+- Timeline ops fold into an `AVMutableComposition` in stack order. Frame ops form an ordered CI chain evaluated per frame, so a crop after a rotate uses rotated coordinates. Fades are anchored to the final timeline.
+- Every call is validated against the folded canvas/duration before it is pushed; a failure returns `{ok:false, error, executedOn:"device"}` and leaves the stack unchanged.
+- Undo pops the last entry. The preview item is rebuilt from the stack after every change (cheap: no rendering until export).
+- A cloud step (only with **Allow cloud processing** on) flattens the stack to a file, uploads it, and the result becomes the new base; the pre-cloud `(base, stack)` stays in history for undo.
 
 ## 4. Is a small LGPL FFmpeg build ever justified?
 
-**Default: no, and nothing in this audit changes that.**
+No. The GAP list is six niche audio effects plus `add_audio_track` (a contract gap, not a codec gap) and exotic containers. All can be done later with custom DSP or stay unsupported. FFmpeg on iOS would add 10–30 MB, LGPL relinking obligations, no GPL encoders, and a build we own (ffmpeg-kit is retired).
 
-- **What it would buy:** the GAP list is almost entirely audio effects (chorus, flanger, phaser, vibrato, compressor, gate, limiter, dynaudnorm/compand, stereowiden, loudnorm, silence removal, reverse) and exotic containers (webm, mkv, avi, flv, ogv, mp3, ogg, flac, wma).
-- **Why that does not justify it:**
-  1. The priority tools are 100% native. The GAPs are low-frequency requests, and the server fallback already covers them with an explicit opt-in.
-  2. Most audio GAPs can move native without FFmpeg. We can use more tap DSP (echo, tremolo, gate) or an AVAudioEngine offline render with Apple's `AUDynamicsProcessor`, `AUPeakLimiter`, `AUDelay` and `AUDistortion` at export time (compressor, limiter, chorus-like effects), or an analysis pass (normalize, silence removal).
-  3. The containers matter little on iOS. Photos and share targets want mp4/mov/m4a, and the outliers are a cloud step.
-  4. Cost and risk. ffmpeg-kit is retired upstream, so we would own the build. LGPL on iOS in practice means dynamic frameworks, shipping relinkable objects or source-offer obligations, and no GPL components (so no x264/x265 and several filters). It adds 10 to 30 MB to the binary and complicates App Store review.
-- **When we would revisit:** only if a real product requirement needs something that is (a) not doable with AVFoundation, Core Image, Core Audio or AVAudioEngine, (b) frequent enough that the cloud-step upload is an unacceptable UX or privacy cost, and (c) coverable by an LGPL-only filter set (for example on-device webm/VP9 export for a named partner integration). None of these apply today.
+## 5. Client-mode contract (as implemented)
 
-## 5. Client-side JSON contract (`execution: "client"`)
+Per [`CLIENT_TOOL_EXECUTION.md`](../api/CLIENT_TOOL_EXECUTION.md):
 
-This is the Backend **draft**, which iOS implements now. Final field names come from Backend's PR and `GET /api/tools/schema` (`schemaVersion: "1"`). All encoding and decoding lives in `ClientToolContract.swift`, so a rename is a one-file change. Decoding is lenient (for example, `arguments` is accepted as an object or a JSON string).
+- Request `POST /api/chat`: `{ execution: "client", messages, media: {type, duration, width, height, fps, hasAudio}, thumbnails? }`. `thumbnails` are raw base64 or data URLs, at most 4, each at most 300 KB.
+- Response: `{ schemaVersion: "1", status: "tool_calls" | "final", toolCalls: [{id, name, arguments}], messages, round, maxRounds, message? }`. The final text is the string `message`. The server echoes `messages`; iOS continues from the echo.
+- Tool results are appended as `{ role: "tool", tool_call_id, content: { ok, error?, executedOn: "device" | "server", output?: { duration, width, height } } }`.
+- Rounds are capped server-side (`maxRounds` 6); iOS only loops until `status: "final"` (plus a defensive local cap).
 
-### 5.1 Request (iOS → `POST /api/chat`)
-
-```json
-{
-  "execution": "client",
-  "schemaVersion": "1",
-  "messages": [
-    { "role": "user", "content": "make it black and white and trim to the first 5 seconds" }
-  ],
-  "media": { "type": "video", "duration": 6.0, "width": 1280, "height": 720, "fps": 30, "hasAudio": true },
-  "thumbnails": ["data:image/jpeg;base64,/9j/…"]
-}
-```
-
-- `media` describes the **current edited** clip (after the stack), so the model reasons about what the user sees.
-- `thumbnails` holds at most 4 JPEGs, longest side ≤ 512 px, quality 0.6. They are sampled evenly from the edited composition via `AVAssetImageGenerator` + `videoComposition`. The field name and encoding (data URLs) are **placeholders** until Backend's schema lands.
-
-### 5.2 Response (server → iOS)
-
-```json
-{ "schemaVersion": "1", "status": "tool_calls",
-  "toolCalls": [ { "id": "call_1", "name": "apply_color_filter", "arguments": { "filter": "black_and_white" } },
-                 { "id": "call_2", "name": "trim_video", "arguments": { "start": "0", "end": "5" } } ] }
-```
-
-`arguments` has **exactly** the shape of today's toolFunctions args (section 2). A final turn looks like `{ "schemaVersion": "1", "status": "final", "message": { "role": "assistant", "content": "Done." } }`. iOS also accepts `content` or `text` at the top level until the field is final.
-
-### 5.3 Tool results (iOS → `POST /api/chat`, same conversation)
-
-For each call, in call order, iOS appends the assistant turn with its `tool_calls` and then one tool message per call:
-
-```json
-{ "role": "tool", "tool_call_id": "call_1", "name": "apply_color_filter",
-  "content": "{\"ok\":true,\"executedOn\":\"device\"}" }
-```
-
-The result object is `{ ok, error?, executedOn: "device" | "server" }`. iOS may add `summary` (for example `"Trimmed to 0:00–0:05 (5.0 s)"`) and `media` (the updated media object) so the model sees the effect. It is sent as a JSON string in `content`, the OpenAI-compatible shape; this is a **placeholder** if Backend prefers an object.
-
-| Situation | Result |
+| Situation | Tool result |
 |---|---|
-| Applied on device | `{ ok: true, executedOn: "device" }` |
-| Validation error on device | `{ ok: false, error: "<message>", executedOn: "device" }` |
-| GAP, user tapped "Process in cloud" and it succeeded | `{ ok: true, executedOn: "server" }` |
-| GAP, cloud step failed | `{ ok: false, error: "<server error>", executedOn: "server" }` |
-| GAP, user tapped "Skip this step" | `{ ok: false, error: "skipped_by_user", executedOn: "device" }`. Backend tells the model the step was declined |
-| Unknown tool | `{ ok: false, error: "unknown_tool", executedOn: "device" }` |
-
-The loop repeats until `status: "final"`. Rounds are **capped server-side**, so iOS has no retry or round logic of its own beyond handling `final` (plus a defensive local cap of 8 rounds against a misbehaving server).
-
-### 5.4 Behavior when client mode isn't live
-
-The client path sits behind `NativeEditingFlags.clientExecution` (UserDefaults key `native.clientExecution`, default **off** until Backend ships). With the flag off, the existing path is unchanged (captions three-step flow, jobs API). With the flag on, a server response that is not client-mode JSON (for example an SSE stream from an older server, or HTTP 400) falls back to the existing path for that message.
-
-### 5.5 Depends on Backend (open items)
-
-1. The final names for `thumbnails` and the final-message field, plus whether the tool `content` is a string or an object.
-2. `GET /api/tools/schema`. iOS will diff it against `NativeToolExecutor.supportedTools` at launch and treat any tool it doesn't know as a GAP.
-3. `mediaType` on job results (for cloud steps on photos, later).
-4. The server `audio_fade` `start` bug (`afade st=undefined`) affects cloud parity only. Native doesn't use `start`.
+| Applied on device | `{ ok: true, executedOn: "device", output: { duration, width, height } }` |
+| Invalid / missing args | `{ ok: false, error: "invalid_arguments", executedOn: "device" }` |
+| Photo, video-only tool | `{ ok: false, error: "unsupported_for_photo", executedOn: "device" }` |
+| No native implementation (default) | `{ ok: false, error: "unsupported_on_device", executedOn: "device" }` |
+| Cloud processing allowed, server succeeded | `{ ok: true, executedOn: "server" }` |
+| Cloud processing allowed, server failed | `{ ok: false, error: "<stable code>", executedOn: "server" }` |
 
 ## 6. Privacy
 
-Thumbnails and metadata go to the model. Full video is uploaded only on a cloud step the user approves. See `docs/asc/PRIVACY_NUTRITION.md` and `public/legal/privacy.html`, which are updated in the same change as the client-mode wiring.
+Media stays on the device. The model gets metadata and up to 4 thumbnails per chat turn. Full media is uploaded only when the user has turned on **Allow cloud processing** and a step needs it. See `docs/asc/PRIVACY_NUTRITION.md` and `public/legal/privacy.html`.
