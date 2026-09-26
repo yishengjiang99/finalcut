@@ -10,11 +10,24 @@ Any other value than `"client"` is rejected with 400.
 ## Auth and quota
 
 Same as normal chat: `Authorization: Bearer <accessToken>`, `sample-access-token`,
-or a session cookie. Every POST (first turn and every tool-result continuation)
-counts as one chat turn against the free daily inference quota (`429
-daily_limit_reached` when exhausted; subscribers are unlimited).
-With `FREE_EDITS_IOS=unlimited`, iOS clients are never limited but each request is still
-counted. See [`FREE_EDITS_IOS.md`](./FREE_EDITS_IOS.md).
+or a session cookie. The free daily inference quota (`429 daily_limit_reached` when
+exhausted; subscribers are unlimited) is charged **once per edit turn**:
+
+- The first POST of a turn (a new user message) is charged.
+- Every `status: "tool_calls"` response carries a top-level `turnToken` (opaque string).
+  Echo the **latest** one as a top-level `turnToken` in the next continuation POST (see §2).
+  Each round issues a new token; each token works for one continuation. A continuation
+  with a valid token is not charged, and is allowed even if the quota ran out mid-turn
+  (response header `X-Inference-Charged: false`).
+- A missing, reused, expired (30 min) or mismatched token is not an error: the request is
+  charged like a new turn. Clients that don't send it (build 9) are charged per POST.
+- If the phone asks the server to run one of the turn's tool calls (a metered media route
+  such as `/api/jobs/process-video`), send headers `X-Turn-Token: <latest turnToken>` and
+  `X-Tool-Call-Id: <toolCalls[i].id>`. Each tool call id runs free once; anything else is
+  charged per request as before.
+
+With `FREE_EDITS_IOS=unlimited`, iOS clients are never limited, and usage is counted with
+the same per-turn rule. See [`FREE_EDITS_IOS.md`](./FREE_EDITS_IOS.md).
 
 ## Tool schema
 
@@ -127,7 +140,8 @@ Response:
   ],
   "round": 1,
   "maxRounds": 6,
-  "thumbnailsSentAsImages": false
+  "thumbnailsSentAsImages": false,
+  "turnToken": "v1.eyJ1Ijoi…"
 }
 ```
 
@@ -137,11 +151,13 @@ If the model's arguments are not valid JSON, the call has `"arguments": {}` and
 ## 2. Continue with tool results
 
 Execute each tool call on the device. Then POST `messages` from the previous response
-with one OpenAI-style tool message appended per call:
+with one OpenAI-style tool message appended per call, plus the `turnToken` from that
+response (so the continuation isn't charged as a new turn):
 
 ```json
 {
   "execution": "client",
+  "turnToken": "v1.eyJ1Ijoi…",
   "media": { "type": "image", "width": 4032, "height": 3024 },
   "messages": [
     …previous messages…,

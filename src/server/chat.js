@@ -26,6 +26,7 @@ import {
   validateMedia,
 } from './clientExecution.js';
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
+import { issueTurnToken, turnIdFor } from './turnToken.js';
 import { filterToolsForUserAgent } from './iosToolAllowlist.js';
 
 const router = express.Router();
@@ -374,6 +375,12 @@ async function handleClientExecution(req, res, userId) {
         },
       })),
     };
+    // Echo on the continuation (body.turnToken) so it isn't charged as a new turn.
+    const turnToken = issueTurnToken({
+      userId,
+      turnId: turnIdFor(conversation),
+      toolCallIds: assistantMessage.tool_calls.map(c => c.id),
+    });
     return res.json({
       schemaVersion: CLIENT_SCHEMA_VERSION,
       status: 'tool_calls',
@@ -382,6 +389,7 @@ async function handleClientExecution(req, res, userId) {
       round: rounds + 1,
       maxRounds: MAX_TOOL_ROUNDS,
       thumbnailsSentAsImages: thumbnailsAsImages,
+      ...(turnToken ? { turnToken } : {}),
     });
   }
 

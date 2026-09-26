@@ -67,9 +67,27 @@ With the variable unset, every response is exactly as before (numeric `dailyLimi
 
 ## Usage numbers while unlimited
 
-- Every metered request from an iOS user increments `daily_inference_usage.inference_count`
+- Metered requests from an iOS user increment `daily_inference_usage.inference_count`
   with no cap (`recordDailyInference`). Counting errors are logged and never block the request.
+- Counting follows the same per-edit-turn rule as the limit: a client-mode continuation that
+  echoes a valid `turnToken`, and a media-route run with valid `X-Turn-Token` +
+  `X-Tool-Call-Id`, are not counted. See the "Auth and quota" section of
+  [`CLIENT_TOOL_EXECUTION.md`](./CLIENT_TOOL_EXECUTION.md).
 - Client-mode chat final answers are logged (`chat_interactions`, `ai2human`) with
   `metadata: { execution: "client", toolRounds, okToolResults, editTurnCompleted, iosClient }`.
   `editTurnCompleted` is true when the turn applied at least one tool with `ok: true` on the
   device. That counts completed on-device edit turns for when a limit returns.
+
+## When the limit is on (variable unset)
+
+- The limit is enforced atomically: `consumeDailyInference` only increments while
+  `inference_count < IOS_FREE_DAILY_INFERENCE_LIMIT` (default 3), so at most that many
+  charged requests succeed per user per UTC day, even when they arrive concurrently.
+- Client-mode chat is charged once per edit turn (`turnToken`, see above). Server-mode
+  streaming chat is still charged per request. Media routes (jobs, sync processing,
+  captions) are charged per request unless they carry a valid `X-Turn-Token` +
+  `X-Tool-Call-Id` from the current turn.
+- `turnToken` is an HMAC-signed token keyed by `TURN_TOKEN_SECRET`, falling back to
+  `SESSION_SECRET` (and a random per-process key if neither is set, which invalidates
+  tokens on restart). One-time redemption is tracked in memory, so this assumes a single
+  server instance.
