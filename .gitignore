@@ -3,6 +3,9 @@ dist
 ios/build
 ios/build-device
 .env*
+.env.*
+# Only the placeholder template is tracked. Real values live in .env on the host.
+!.env.example
 ffmpegwasm/bin
 ffmpegwasm/emsdk
 ffmpeg-8.0.1
