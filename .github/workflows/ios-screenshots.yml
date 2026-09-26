@@ -136,9 +136,10 @@ jobs:
             xcrun simctl bootstatus "$udid" -b
             xcrun simctl ui "$udid" appearance dark
             sleep 5
-            xcrun simctl status_bar "$udid" override \
-              --time "2007-01-09T09:41:00Z" --dataNetwork wifi --wifiMode active --wifiBars 3 \
-              --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100
+            sb_args=(--dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100)
+            # ISO time also pins the iPad date (Tue Jan 9); fall back to a plain 9:41.
+            xcrun simctl status_bar "$udid" override --time "2007-01-09T09:41:00+00:00" "${sb_args[@]}" \
+              || xcrun simctl status_bar "$udid" override --time "9:41" "${sb_args[@]}"
             rm -rf "$prefix.xcresult"
             xcodebuild \
               -project FinalCut.xcodeproj \
