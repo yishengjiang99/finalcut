@@ -107,3 +107,21 @@ Final captures come from build 12. Frames are 6.9" iPhone (1320×2868, files `ip
 ## Localization
 
 English (U.S.) only for 1.0.
+
+## Screenshots: framed PNGs
+
+The files in `docs/asc/screenshots/` are generated. Don't edit them by hand.
+
+- **Raw frames** go in `docs/asc/screenshots-raw/`, straight from the iOS Screenshots workflow artifact (`iphone69-NN-*.png` at 1320×2868, `ipad13-NN-*.png` at 2064×2752). The uploader only reads the top level of `docs/asc/screenshots/`, so it never sees these.
+- **Captions** and the raw frame for each slot are in `docs/asc/screenshot-captions.json`. Frame 1's pending build 12 caption is stored there as `caption_build12`.
+- **Regenerate** from the repo root (`pip install pillow` once):
+
+  ```
+  python3 scripts/asc/compose_screenshots.py
+  ```
+
+  Add `--build12` to use `caption_build12` for frame 1. The script writes `iphone69-NN-<slug>.png` and `ipad13-NN-<slug>.png`, checks that every file is the exact size, RGB and has no alpha, and removes stale frames. The font is Inter Bold (`scripts/asc/fonts/`, SIL OFL).
+- **Build 12 swap:** replace the files in `docs/asc/screenshots-raw/` with the build 12 captures (same names), rerun with `--build12`, and commit.
+- **Upload:** run the "ASC FinalCap upload listing" workflow with `screenshots: true`. That replaces every screenshot in both sets.
+
+Current frames come from build 11 (iOS Screenshots run 36274857531).
