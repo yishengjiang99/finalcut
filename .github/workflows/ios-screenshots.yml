@@ -6,6 +6,12 @@ name: iOS Screenshots
 
 on:
   workflow_dispatch:
+    inputs:
+      xcode_major:
+        description: "Xcode major to build with (26 = same SDK as ios-testflight; 16 = legacy chrome)"
+        type: choice
+        options: ['26', '16']
+        default: '26'
   push:
     # Temp branch for the build-11 first pass (workflow_dispatch needs the file on main first).
     branches: [tmp/asc-screenshots]
@@ -31,12 +37,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Select Xcode
+        env:
+          XCODE_MAJOR: ${{ inputs.xcode_major || '26' }}
         run: |
           set -euo pipefail
-          # Xcode 16.x ships iPhone 16 Pro Max + iPad Pro 13-inch (M4) simulators; 26 has 17 Pro Max.
-          for app in /Applications/Xcode_16.4.app /Applications/Xcode_16.3.app /Applications/Xcode_16.2.app /Applications/Xcode_26.0.app /Applications/Xcode_26.app /Applications/Xcode.app; do
-            if [[ -d "$app" ]]; then sudo xcode-select -s "$app"; break; fi
-          done
+          ls -d /Applications/Xcode*.app || true
+          # Default to the newest Xcode 26 (same SDK as ios-testflight, so iOS 26 chrome matches
+          # what TestFlight users see); fall back to 16.x.
+          app=$(ls -d /Applications/Xcode_${XCODE_MAJOR}*.app 2>/dev/null | grep -v -i beta | sort -V | tail -n 1 || true)
+          if [[ -z "$app" ]]; then
+            app=$(ls -d /Applications/Xcode_26*.app /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          fi
+          [[ -n "$app" ]] || app=/Applications/Xcode.app
+          sudo xcode-select -s "$app"
           xcodebuild -version
           xcrun simctl list runtimes
 
@@ -77,12 +90,12 @@ jobs:
               sys.exit(f"no simulator for {names}")
 
           iphone = pick(
-              ["iPhone 16 Pro Max", "iPhone 17 Pro Max"],
-              ["com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max", "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max"],
+              ["iPhone 17 Pro Max", "iPhone 16 Pro Max"],
+              ["com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max", "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max"],
           )
           ipad = pick(
-              ["iPad Pro 13-inch (M4)", "iPad Pro 13-inch (M5)"],
-              ["com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB", "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB"],
+              ["iPad Pro 13-inch (M5)", "iPad Pro 13-inch (M4)"],
+              ["com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB", "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB"],
           )
           print("iPhone:", iphone)
           print("iPad:", ipad)
@@ -124,8 +137,8 @@ jobs:
             xcrun simctl ui "$udid" appearance dark
             sleep 5
             xcrun simctl status_bar "$udid" override \
-              --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
-              --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+              --time "2007-01-09T09:41:00Z" --dataNetwork wifi --wifiMode active --wifiBars 3 \
+              --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100
             rm -rf "$prefix.xcresult"
             xcodebuild \
               -project FinalCut.xcodeproj \

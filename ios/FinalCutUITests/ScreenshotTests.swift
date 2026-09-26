@@ -55,7 +55,7 @@ final class ScreenshotTests: XCTestCase {
             print(app.debugDescription)
             XCTFail("export sheet did not appear")
         }
-        settle(2)
+        settle(3)
         capture("06-export")
     }
 

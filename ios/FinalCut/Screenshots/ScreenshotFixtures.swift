@@ -55,7 +55,6 @@ enum ScreenshotFixtures {
     static func applyIfRequested(to model: EditorViewModel) {
         guard let state = requested, !didApply else { return }
         didApply = true
-        UIView.setAnimationsEnabled(false)
         model.apiClient = nil
         model.showSampleChips = false // main's chips include translate / burn-in (not claimed in the listing)
         model.state = .processing
