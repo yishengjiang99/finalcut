@@ -100,9 +100,21 @@ The model receives clip metadata and up to 4 still frames, never the video. Say 
 | `export.rendered.local` | Rendered on your iPhone. |
 | `preview.label` | Preview |
 | `preview.original` | Original |
+| `edit.failed.photoUnsupported` | That works on videos, not photos. |
+| `export.photo.title` | Save photo |
 | `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends a few still frames to the AI so it understands your clip. |
 
-## 7. Out of scope for this slice
+## 7. Photo mode (added after #82)
+
+When the imported asset is a photo (`mediaType: "image"`):
+
+- Hide the timeline stub and the playback controls. The photo is shown aspect-fit in the preview area.
+- Sample chips switch to photo-safe tools: "Make it warm" (`apply_color_filter`), "Black and white" (`apply_color_filter` grayscale), "More contrast" (`adjust_contrast`).
+- Compare (press and hold to see the original) and the Edits strip work the same as for video.
+- The Export sheet title is "Save photo". Save to Photos in the original format (JPEG or PNG per `contentType`). There is no render percentage; show a short spinner.
+- If a tool that doesn't apply to photos comes back as a 400 (trim, audio, captions, speed), show a failed edit card with the copy `edit.failed.photoUnsupported`: "That works on videos, not photos." Never show the raw server error.
+
+## 8. Out of scope for this slice
 
 Multi-track timeline, keyframe UI, per-edit parameter sliders (the chat is still the way to adjust; "make it less bright" produces a new edit or replaces the last one of the same type).
 
