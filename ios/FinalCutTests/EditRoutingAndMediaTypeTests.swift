@@ -21,10 +21,41 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
             EditorRoute.route(for: "Red filter"),
             .tool(name: "apply_color_filter", arguments: ["filter": .string("red")])
         )
-        XCTAssertEqual(EditorRoute.route(for: "Trim silence"), .tool(name: "audio_silence_remove", arguments: [:]))
+        // Gap tools never get a chip shortcut: free text goes to the model.
+        XCTAssertEqual(EditorRoute.route(for: "Trim silence"), .chat("Trim silence"))
         XCTAssertEqual(EditorRoute.route(for: "Generate captions"), .captions(.generate))
         XCTAssertEqual(EditorRoute.route(for: "Translate to Spanish"), .captions(.translate(language: "Spanish")))
         XCTAssertEqual(EditorRoute.route(for: "Burn in"), .captions(.burnIn))
+    }
+
+    func testVideoChipsMatchDesignAndAllRunOnDevice() {
+        XCTAssertEqual(EditorRoute.designVideoChips,
+                       ["Generate captions", "Red filter", "Speed up 2×", "Add a title", "Fade out audio"])
+        let expected = EditorRoute.onDeviceCaptionsAvailable
+            ? EditorRoute.designVideoChips
+            : ["Red filter", "Speed up 2×", "Add a title", "Fade out audio"]
+        XCTAssertEqual(EditorRoute.chips(isPhoto: false), expected)
+        for chip in ["Translate to Spanish", "Burn in", "Trim silence"] {
+            XCTAssertFalse(EditorRoute.chips(isPhoto: false).contains(chip))
+            XCTAssertFalse(EditorRoute.chips(isPhoto: true).contains(chip))
+        }
+
+        let video = NativeCanvas(width: 1280, height: 720, duration: 6, isPhoto: false, hasAudio: true)
+        let photo = NativeCanvas(width: 1280, height: 720, duration: 0, isPhoto: true, hasAudio: false)
+        let all = EditorRoute.chips(isPhoto: false).map { ($0, video) } + EditorRoute.chips(isPhoto: true).map { ($0, photo) }
+        for (chip, canvas) in all {
+            switch EditorRoute.route(for: chip) {
+            case .tool(let name, let arguments):
+                XCTAssertTrue(NativeToolParser.isSupported(name), "\(chip) → \(name) is not native")
+                guard case .success(.apply) = NativeToolParser.plan(tool: name, arguments: arguments, canvas: canvas) else {
+                    return XCTFail("\(chip) → \(name) doesn't plan natively")
+                }
+            case .captions(.generate):
+                XCTAssertTrue(EditorRoute.onDeviceCaptionsAvailable, "\(chip) needs on-device captions")
+            default:
+                XCTFail("\(chip) must map to a native tool or on-device captions")
+            }
+        }
     }
 
     func testNoChipOrRouteProducesAToolWithMissingRequiredArgs() {

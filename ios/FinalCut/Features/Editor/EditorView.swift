@@ -258,7 +258,7 @@ final class EditorViewModel: ObservableObject {
     var onInferenceFinished: (() -> Void)?
 
     /// Sample chips (photo-safe set for photos). Each maps to a correct tool with complete args.
-    var sampleChips: [String] { EditorRoute.chips(isPhoto: isPhoto, cloud: cloudProcessingEnabled) }
+    var sampleChips: [String] { EditorRoute.chips(isPhoto: isPhoto) }
 
     private var processingTask: Task<Void, Never>?
 

@@ -16,8 +16,8 @@ Complete App Store Connect → App Privacy to match **shipping** behavior. Mark 
 
 | Type | Notes |
 |------|--------|
-| Audio / Speech | Captions: audio/video uploaded to **server** for STT — declare **Audio Data** and/or **Videos** as collected if uploaded |
-| Photos / Videos | User-imported video uploaded for processing — declare **Photos or Videos** |
+| Audio / Speech | iOS build 10+: dictation is **on-device only** (`requiresOnDeviceRecognition`); audio is never uploaded, only the text request. Server captions upload audio/video **only** when the user turns on Settings → Cloud processing (default off). |
+| Photos / Videos | iOS build 10+: media **stays on device**; edits render and export on the iPhone. The chat request carries metadata (type, size, duration, hasAudio) and **up to 4 still-frame thumbnails** (≤512 px JPEG) for the model — declare **Photos or Videos** (app functionality, not linked, no tracking) for the thumbnails. Full clips upload only with the opt-in Cloud processing setting. Web still uploads clips for processing. |
 | Search History | N/A unless you add it |
 | Precise Location | Should be **not collected** unless you add location features |
 
@@ -27,7 +27,7 @@ Default: **Do not track** across apps/sites. No third-party ad SDK in v1. If you
 
 ## Nutrition ↔ legal HTML
 
-[`public/legal/privacy.html`](../../public/legal/privacy.html) must list the same uploads: video files, auth identifiers, push tokens (if added), purchase receipts, and diagnostics.
+[`public/legal/privacy.html`](../../public/legal/privacy.html) must list the same uploads: edit-request thumbnails + metadata, opt-in cloud clips (iOS) / video files (web), auth identifiers, push tokens (if added), purchase receipts, and diagnostics. It also states that the microphone is used only for on-device dictation. Local export notifications are on-device (no push token).
 
 ## Explicit non-claims
 

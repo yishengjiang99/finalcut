@@ -200,21 +200,23 @@ enum EditorRoute: Equatable {
     case tool(name: String, arguments: [String: JSONValue])
     case chat(String)
 
-    /// Video chips (all run on the device). Each maps to a correct tool with complete args.
-    static let sampleChips = [
-        "Black and white",
-        "Speed up 2x",
+    /// Design order (NATIVE_EDIT_UX.md): every chip runs on the device.
+    static let designVideoChips = [
+        "Generate captions",
         "Red filter",
-        "Flip",
-        "Fade out",
+        "Speed up 2×",
+        "Add a title",
+        "Fade out audio",
     ]
 
-    /// Server caption chips, shown only when Cloud processing is on.
-    static let cloudChips = [
-        "Generate captions",
-        "Translate to Spanish",
-        "Burn in",
-    ]
+    /// On-device captions (Speech framework) haven't shipped yet; until they do the
+    /// "Generate captions" chip is hidden rather than routed to the server.
+    static let onDeviceCaptionsAvailable = false
+
+    /// Video chips shown in this build.
+    static var sampleChips: [String] {
+        designVideoChips.filter { $0 != "Generate captions" || onDeviceCaptionsAvailable }
+    }
 
     /// Photo-safe chips (NATIVE_EDIT_UX.md §7).
     static let photoChips = [
@@ -223,9 +225,8 @@ enum EditorRoute: Equatable {
         "More contrast",
     ]
 
-    static func chips(isPhoto: Bool, cloud: Bool = false) -> [String] {
-        if isPhoto { return photoChips }
-        return cloud ? cloudChips + sampleChips : sampleChips
+    static func chips(isPhoto: Bool) -> [String] {
+        isPhoto ? photoChips : sampleChips
     }
 
     static func route(for text: String) -> EditorRoute {
@@ -237,11 +238,14 @@ enum EditorRoute: Equatable {
             return .tool(name: "apply_color_filter", arguments: ["filter": .string("grayscale")])
         case "more contrast":
             return .tool(name: "adjust_contrast", arguments: ["contrast": .number(1.3)])
-        case "speed up 2x":
+        case "speed up 2×", "speed up 2x":
             return .tool(name: "adjust_speed", arguments: ["speed": .number(2)])
-        case "flip":
-            return .tool(name: "flip_video_horizontal", arguments: [:])
-        case "fade out":
+        case "add a title":
+            return .tool(name: "add_text", arguments: [
+                "text": .string("My Video"), "x": .number(40), "y": .number(40),
+                "fontsize": .number(64), "color": .string("white"),
+            ])
+        case "fade out audio", "fade out":
             return .tool(name: "audio_fade", arguments: ["type": .string("out"), "duration": .number(1)])
         case "generate captions":
             return .captions(.generate)
@@ -251,8 +255,6 @@ enum EditorRoute: Equatable {
             return .captions(.burnIn)
         case "red filter":
             return .tool(name: "apply_color_filter", arguments: ["filter": .string("red")])
-        case "trim silence":
-            return .tool(name: "audio_silence_remove", arguments: [:])
         default:
             return .chat(trimmed)
         }
