@@ -44,13 +44,15 @@ final class NoUploadWordingUITests: XCTestCase {
         XCTAssertTrue(export.waitForExistence(timeout: 20))
 
         // Apply an edit (a suggestion pill sends its prompt; the edit runs on device).
-        let pill = app.scrollViews.buttons.firstMatch
+        // "Speed up 2×" avoids the Captions pill's speech-permission prompt.
+        let pill = app.buttons["Speed up 2×"]
         if pill.waitForExistence(timeout: 5) { pill.tap() }
         watch("edit", seconds: 6)
 
         // Start an export once the editor is idle.
         let enabled = NSPredicate(format: "isEnabled == true")
-        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: export)], timeout: 60)
+        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: export)], timeout: 90)
+        XCTAssertTrue(export.isEnabled, "editor idle again after the edit")
         export.tap()
         let saveToFiles = app.buttons["Save to Files"]
         XCTAssertTrue(saveToFiles.waitForExistence(timeout: 10))

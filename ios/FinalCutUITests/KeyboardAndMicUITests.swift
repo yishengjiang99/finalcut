@@ -23,8 +23,9 @@ final class KeyboardAndMicUITests: XCTestCase {
 
     /// The composer mic, not the software keyboard's own "Dictate" key.
     private var composerMicExists: Bool {
-        let dictate = NSPredicate(format: "label == %@", "Dictate")
-        return app.buttons.matching(dictate).count > app.keyboards.buttons.matching(dictate).count
+        // The editor's container id ("Editor") marks our buttons; the keyboard's key has its own.
+        let mic = NSPredicate(format: "label == %@ AND identifier == %@", "Dictate", "Editor")
+        return app.buttons.matching(mic).count > 0
     }
 
     /// Focus = the software keyboard is up, or the composer reports keyboard focus
@@ -79,7 +80,8 @@ final class KeyboardAndMicUITests: XCTestCase {
     func testImportMenuOffersPhotosAndFilesButNoCameraOnSimulator() throws {
         let importButton = app.buttons["Import"].firstMatch
         XCTAssertTrue(importButton.waitForExistence(timeout: 10))
-        importButton.tap()
+        // Menu buttons can't be AX-scrolled to visible; tap the button's centre instead.
+        importButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["Choose from Photos"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Choose File"].exists)
         XCTAssertFalse(app.buttons["Take Photo or Video"].exists, "no camera on the simulator")
