@@ -36,18 +36,27 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     var resultThumbnailURLs: [URL]
     /// Soft VTT/SRT download chips under assistant bubbles (captions flow).
     var downloadChips: [CaptionDownloadChip]
+    /// Failed edit card (NATIVE_EDIT_UX.md §8). `content` then holds the card copy.
+    var failureCard: EditFailureCard?
 
     init(
         id: UUID = UUID(),
         role: Role,
         content: String,
         resultThumbnailURLs: [URL] = [],
-        downloadChips: [CaptionDownloadChip] = []
+        downloadChips: [CaptionDownloadChip] = [],
+        failureCard: EditFailureCard? = nil
     ) {
         self.id = id
         self.role = role
         self.content = content
         self.resultThumbnailURLs = resultThumbnailURLs
         self.downloadChips = downloadChips
+        self.failureCard = failureCard
+    }
+
+    /// Assistant message rendering a failed edit card.
+    static func failure(_ card: EditFailureCard) -> ChatMessage {
+        ChatMessage(role: .assistant, content: card.copy, failureCard: card)
     }
 }
