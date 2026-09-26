@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { spawnSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, mkdtempSync, writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
 import express from 'express';
 import { createHealthRouter, probeFfmpeg, resolveCommit } from '../server/health.js';
 
@@ -87,3 +89,42 @@ describe('GET /api/health', () => {
     expect(typeof result.heic).toBe('boolean');
   });
 });
+
+describe('resolveCommit order', () => {
+  const enoent = () => { const e = new Error('nope'); e.code = 'ENOENT'; throw e; };
+  const git = vi.fn(() => 'stale99\n');
+
+  afterEach(() => git.mockClear());
+
+  it('1. GIT_COMMIT env beats REVISION and git', () => {
+    expect(resolveCommit({ env: { GIT_COMMIT: ' abc1234 ' }, readFile: () => 'rev5678\n', git })).toBe('abc1234');
+    expect(git).not.toHaveBeenCalled();
+  });
+
+  it('2. REVISION file beats a (stale) .git and keeps -dirty', () => {
+    expect(resolveCommit({ env: {}, readFile: () => '2461df0-dirty\n', git })).toBe('2461df0-dirty');
+    expect(git).not.toHaveBeenCalled();
+  });
+
+  it('2b. an empty REVISION file yields null without falling back to git', () => {
+    expect(resolveCommit({ env: {}, readFile: () => '\n', git })).toBeNull();
+    expect(git).not.toHaveBeenCalled();
+  });
+
+  it('3. git rev-parse only when no REVISION file exists', () => {
+    expect(resolveCommit({ env: {}, readFile: enoent, git })).toBe('stale99');
+    expect(git).toHaveBeenCalledTimes(1);
+  });
+
+  it('4. null when nothing is available', () => {
+    expect(resolveCommit({ env: {}, readFile: enoent, git: () => { throw new Error('no git'); } })).toBeNull();
+  });
+
+  it('reads REVISION from the given root on disk', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'rev-'));
+    writeFileSync(path.join(dir, 'REVISION'), 'feedbee\n');
+    expect(resolveCommit({ env: {}, root: dir, git })).toBe('feedbee');
+    expect(git).not.toHaveBeenCalled();
+  });
+});
+

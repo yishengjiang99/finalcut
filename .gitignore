@@ -12,3 +12,4 @@ ffmpeg-8.0.1
 **/*.xcuserstate
 **/xcuserdata/
 tmp/
+REVISION
