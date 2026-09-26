@@ -105,7 +105,10 @@ Speech is recognized on the device only. Audio is never uploaded.
 - **Placement:** a mic icon inside the prompt field, trailing edge. When the field has typed text, the mic is replaced by the Send button; clearing the text brings the mic back.
 - **First tap:** request microphone and speech recognition permission (system prompts). If either is denied, show a one-line inline note under the field: "Turn on Microphone and Speech Recognition for FinalCap in Settings." with a Settings link.
 - **Listening:** the mic becomes a red stop button with a soft pulsing ring, the placeholder reads "Listening…", and partial text appears live in the field. A light haptic plays when listening starts and stops. If the keyboard is up, dismiss it.
-- **Finishing:** about 1 second of silence ends the utterance and sends the text as a normal prompt. Tapping stop also finalizes and sends. If nothing was recognized, go back to idle and send nothing.
+- **Sending:** a prompt sends on its own with no confirm step: 0.4 s after a sentence ending in `.`, `?` or `!`, after 1.0 s of silence otherwise, or at once when the recognizer marks the result final. Trailing punctuation is removed before sending. An empty transcript is never sent.
+- **Continuous listening:** after a send, the field clears, the placeholder goes back to "Listening…", and the next thing the user says becomes the next prompt. Tapping stop ends dictation and sends anything already recognized.
+- **Queued prompts:** if an edit is still running, the new prompt appears right away as a user bubble with a small "Queued" label, and the label disappears when it starts.
+- **Auto-stop:** if nobody speaks for 30 seconds, stop listening and return the mic to idle, so the microphone isn't left on by accident.
 - **Editing before send:** if the user taps into the field while listening, stop listening and keep the text in the field unsent so they can fix it.
 - **Unavailable:** if the device or language can't do on-device recognition, show the mic dimmed; tapping it shows "Dictation isn't available on this device." There is no server fallback.
 
@@ -175,6 +178,7 @@ These apply only when a step actually goes to the server. Map the `code` field t
 | `dictation.unavailable` | Dictation isn't available on this device. |
 | `dictation.permissionDenied` | Turn on Microphone and Speech Recognition for FinalCap in Settings. |
 | `paywall.subhead.unlimitedPeriod` | Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return. |
+| `dictation.queued` | Queued |
 | `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. |
 
 ## 11. Out of scope for this slice
