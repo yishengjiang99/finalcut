@@ -9,6 +9,7 @@ import { videoRouter } from './src/server/video.js';
 import { chatRouter } from './src/server/chat.js';
 import { jobsRouter } from './src/server/jobs.js';
 import { createHealthRouter } from './src/server/health.js';
+import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 
 const app = express();
 
@@ -21,6 +22,9 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 // Health check first: no auth, no session, no rate limit, no quota.
 // ffmpeg + commit are probed once here at startup.
 app.use(createHealthRouter());
+
+// iOS suggestion pills: public, pre-login, no session/DB (own rate limiter).
+app.use(iosSuggestionsRouter);
 
 // Initialize database
 try {

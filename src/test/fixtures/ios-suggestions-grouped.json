@@ -1,0 +1,14 @@
+{
+  "ttl": 120,
+  "video": [
+    { "id": "t-trim", "label": "Trim", "prompt": "Trim the video to the first 5 seconds.", "tools": ["trim_video"] },
+    { "id": "t-reverb", "label": "Reverb", "prompt": "Add reverb.", "icon": "waveform", "tools": ["audio_effect"] },
+    { "id": "t-min11", "label": "From build 11", "prompt": "Trim the video.", "tools": ["trim_video"], "minBuild": 11 },
+    { "id": "t-max11", "label": "Until build 11", "prompt": "Trim the video.", "tools": ["trim_video"], "maxBuild": 11 }
+  ],
+  "photo": [
+    { "id": "t-grade", "label": "Colour grade", "prompt": "Make it warmer and add more contrast.", "icon": "slider.horizontal.3", "tools": ["color_adjust"] },
+    { "id": "t-reverb-photo", "label": "Reverb", "prompt": "Add reverb.", "tools": ["audio_effect"] },
+    { "id": "t-text", "label": "Text", "prompt": "Add text.", "tools": ["add_text"] }
+  ]
+}
