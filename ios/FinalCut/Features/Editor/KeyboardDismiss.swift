@@ -35,7 +35,24 @@ struct KeyboardDismissInstaller: UIViewRepresentable {
         }
 
         @objc private func dismiss() {
-            installedWindow?.endEditing(true)
+            guard let window = installedWindow else { return }
+            let point = tap.location(in: window)
+            // SwiftUI text fields don't always hit-test as a UITextField/UITextView, so a tap
+            // into the field could otherwise focus it and immediately end editing again.
+            if Self.isTextInput(window.hitTest(point, with: nil)) { return }
+            if let responder = Self.firstResponder(in: window),
+               responder.convert(responder.bounds, to: window).insetBy(dx: -8, dy: -8).contains(point) {
+                return
+            }
+            window.endEditing(true)
+        }
+
+        static func firstResponder(in view: UIView) -> UIView? {
+            if view.isFirstResponder { return view }
+            for sub in view.subviews {
+                if let found = firstResponder(in: sub) { return found }
+            }
+            return nil
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {

@@ -22,13 +22,26 @@ final class KeyboardAndMicUITests: XCTestCase {
         return textView.exists ? textView : app.textFields.firstMatch
     }
 
+    /// Taps into the composer and waits for focus (retrying once: the first tap can land while
+    /// the sample clip's chips are still animating in).
+    private func focusField() {
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        for _ in 0..<3 {
+            field.tap()
+            let focused = NSPredicate { _, _ in self.hasKeyboardFocus(self.field) }
+            let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nil)], timeout: 3)
+            if result == .completed { return }
+        }
+        print(app.debugDescription)
+        XCTFail("composer field never took keyboard focus")
+    }
+
     private func hasKeyboardFocus(_ element: XCUIElement) -> Bool {
         (element.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
     }
 
     func testTappingPreviewDismissesKeyboard() throws {
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
+        focusField()
         field.typeText("make it red")
         XCTAssertTrue(hasKeyboardFocus(field), "field should be focused while typing")
 
@@ -57,7 +70,7 @@ final class KeyboardAndMicUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Dictate"].waitForExistence(timeout: 5), "mic in the trailing slot")
         XCTAssertFalse(app.buttons["Send"].exists)
 
-        field.tap()
+        focusField()
         field.typeText("x")
         XCTAssertTrue(app.buttons["Send"].waitForExistence(timeout: 5), "Send replaces the mic once there's text")
         XCTAssertFalse(app.buttons["Dictate"].exists)
