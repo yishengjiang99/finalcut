@@ -3,8 +3,7 @@ import Foundation
 import UniformTypeIdentifiers
 
 /// A video or photo owned by the app, independent of the picker/provider's temporary access.
-/// Photos are normalised on import (HEIC/HEIF → upright JPEG, see `PhotoTranscoder`) so the
-/// preview, chat metadata and every upload use a format the server can read.
+/// Photos keep their original format; they are edited on the device with Core Image.
 struct ImportedVideo: Transferable, Sendable {
     let url: URL
 
@@ -47,8 +46,12 @@ struct ImportedVideo: Transferable, Sendable {
         do {
             try FileManager.default.copyItem(at: source, to: destination)
             if MediaMIME.isImage(url: destination) || (contentType?.conforms(to: .image) ?? false) {
-                // Never keep (or later upload) HEIC; bake orientation into the pixels.
-                return ImportedVideo(url: try PhotoTranscoder.normalizedPhoto(at: destination))
+                // Photos are edited on the device in their original format (HEIC included).
+                // Only the opt-in cloud path converts to JPEG (`PhotoTranscoder.uploadablePhoto`).
+                guard PhotoTranscoder.decodedType(of: destination) != nil,
+                      PhotoTranscoder.orientedPixelSize(of: destination) != nil else {
+                    throw PhotoTranscoder.TranscodeError.unreadable
+                }
             }
             return ImportedVideo(url: destination)
         } catch {

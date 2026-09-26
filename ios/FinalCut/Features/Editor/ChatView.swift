@@ -4,6 +4,10 @@ struct ChatView: View {
     var messages: [ChatMessage]
     /// Retry for generic failed edit cards (resends the card's prompt).
     var onRetry: ((EditFailureCard) -> Void)? = nil
+    /// User bubbles waiting behind the current edit (shown with a "Queued" label).
+    var queuedIDs: Set<UUID> = []
+    /// Shows a small working indicator under the last message.
+    var isWorking: Bool = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -19,6 +23,12 @@ struct ChatView: View {
                     ForEach(messages) { message in
                         messageBubble(message)
                             .id(message.id)
+                    }
+                    if isWorking {
+                        ProgressView()
+                            .tint(AppTheme.accent)
+                            .padding(.leading, 4)
+                            .accessibilityIdentifier("ChatWorking")
                     }
                 }
                 .padding(16)
@@ -49,6 +59,13 @@ struct ChatView: View {
                     .padding(12)
                     .background(bubbleColor(for: message.role))
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                    .opacity(queuedIDs.contains(message.id) ? 0.6 : 1)
+                if queuedIDs.contains(message.id) {
+                    Text(UXCopy.dictationQueued)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityIdentifier("QueuedLabel")
+                }
                 }
 
                 if !message.downloadChips.isEmpty {
@@ -99,10 +116,12 @@ struct ChatView: View {
 
     /// Failed edit card: fixed copy only, Retry only for generic failures.
     private func failureCardView(_ card: EditFailureCard) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // "Not available on iPhone yet" is informational, not an error: muted styling.
+        let muted = card.kind == .unavailable
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppTheme.danger)
+                Image(systemName: muted ? "iphone.slash" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(muted ? AppTheme.textSecondary : AppTheme.danger)
                 Text(card.copy)
                     .font(.body)
                     .foregroundStyle(AppTheme.textPrimary)
@@ -118,7 +137,7 @@ struct ChatView: View {
         .background(AppTheme.surfaceElevated)
         .overlay(
             RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                .stroke(AppTheme.danger.opacity(0.6), lineWidth: 1)
+                .stroke(muted ? AppTheme.border : AppTheme.danger.opacity(0.6), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
         .accessibilityIdentifier("EditFailureCard")

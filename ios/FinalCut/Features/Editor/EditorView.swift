@@ -9,6 +9,9 @@ struct EditorView: View {
     @EnvironmentObject private var appModel: AppModel
     @StateObject private var model = EditorViewModel()
     @State private var showExport = false
+    @State private var showSettings = false
+    /// Observed so chips and routing refresh when Settings → Cloud processing changes.
+    @AppStorage(NativeSettings.cloudProcessingKey) private var cloudProcessing = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +23,8 @@ struct EditorView: View {
                 exportVisible: model.localVideoURL != nil,
                 exportEnabled: model.state != .processing && model.state != .uploading,
                 showUpgrade: !appModel.hasSubscription,
-                freeRemaining: appModel.dailyRemaining
+                freeRemaining: appModel.isUnlimited ? nil : appModel.dailyRemaining,
+                onSettings: { showSettings = true }
             )
 
             if showsImportPanel {
@@ -34,7 +38,12 @@ struct EditorView: View {
                 PreviewPaneView(
                     state: model.state,
                     videoURL: model.localVideoURL,
-                    processingMessage: model.processingOverlay.message
+                    processingMessage: model.processingOverlay.message,
+                    playerItem: model.previewItem,
+                    photo: model.previewPhoto,
+                    showsDimmer: model.isCloudStepRunning,
+                    canUndo: model.editStack?.canUndo == true && !model.isBusy,
+                    onUndo: { model.undoLastEdit() }
                 )
                 .frame(maxHeight: 240)
                 if let importError = model.importError {
@@ -44,7 +53,12 @@ struct EditorView: View {
 
             Divider().overlay(AppTheme.border)
 
-            ChatView(messages: model.messages, onRetry: { model.retry($0) })
+            ChatView(
+                messages: model.messages,
+                onRetry: { model.retry($0) },
+                queuedIDs: Set(model.queuedPromptIDs),
+                isWorking: model.isBusy
+            )
                 .frame(maxHeight: .infinity)
 
             if model.showSampleChips && model.localVideoURL != nil {
@@ -63,7 +77,10 @@ struct EditorView: View {
         .background(AppTheme.background.ignoresSafeArea())
         .accessibilityIdentifier("Editor")
         .sheet(isPresented: $showExport) {
-            ExportSheet(videoURL: model.localVideoURL, state: model.state)
+            ExportSheet(videoURL: model.localVideoURL, state: model.state, stack: model.editStack)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
         .sheet(isPresented: $appModel.isPaywallPresented) {
             PaywallView()
@@ -204,6 +221,26 @@ final class EditorViewModel: ObservableObject {
     private var turnOutcome = EditTurnOutcome()
     private var turnPrompt = ""
 
+    // MARK: Native editing state
+    /// Non-destructive edit stack for the loaded clip/photo (base file never modified).
+    @Published var editStack: EditStack?
+    /// Composed preview for videos (rebuilt from the stack; nothing rendered until export).
+    @Published var previewItem: AVPlayerItem?
+    /// Rendered preview for photos.
+    @Published var previewPhoto: UIImage?
+    /// True only while a cloud step runs (the only edit that may dim the preview).
+    @Published var isCloudStepRunning = false
+    /// Prompts waiting for the current edit to finish (dictation queue, FIFO).
+    @Published var queuedPromptIDs: [UUID] = []
+    private var queuedPrompts: [(id: UUID, text: String)] = []
+    private(set) var composedVideo: ComposedVideo?
+    private var previewGeneration = 0
+
+    /// Settings → Cloud processing (default off). Off means nothing is ever uploaded.
+    var cloudProcessingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: NativeSettings.cloudProcessingKey)
+    }
+
     /// Shared API client from AppModel (jobs for long FFmpeg edits; captions sync).
     var apiClient: APIClient?
     /// Server reported the free usage limit (402 `paywall` / 429 `daily_limit_reached`).
@@ -212,7 +249,7 @@ final class EditorViewModel: ObservableObject {
     var onInferenceFinished: (() -> Void)?
 
     /// Sample chips (photo-safe set for photos). Each maps to a correct tool with complete args.
-    var sampleChips: [String] { EditorRoute.chips(isPhoto: isPhoto) }
+    var sampleChips: [String] { EditorRoute.chips(isPhoto: isPhoto, cloud: cloudProcessingEnabled) }
 
     private var processingTask: Task<Void, Never>?
 
@@ -268,6 +305,80 @@ final class EditorViewModel: ObservableObject {
         importError = nil
         state = .ready
         messages.append(ChatMessage(role: .system, content: message))
+        startEditing(video.url)
+    }
+
+    // MARK: - Native edit stack
+
+    /// Resets the edit stack to a new base and shows it.
+    func startEditing(_ url: URL) {
+        editStack = nil
+        composedVideo = nil
+        previewItem = nil
+        previewPhoto = nil
+        Task { _ = await ensureStack() }
+    }
+
+    /// The stack for the current `localVideoURL` (created on demand).
+    @discardableResult
+    func ensureStack() async -> EditStack? {
+        guard let url = localVideoURL else { return nil }
+        if let stack = editStack, stack.base == url { return stack }
+        guard let canvas = await Self.loadCanvas(url) else { return nil }
+        let stack = EditStack(base: url, baseCanvas: canvas)
+        editStack = stack
+        await refreshPreview()
+        return stack
+    }
+
+    /// Size/duration/audio of a file, with orientation applied.
+    nonisolated static func loadCanvas(_ url: URL) async -> NativeCanvas? {
+        if MediaMIME.isImage(url: url) {
+            guard let size = PhotoTranscoder.orientedPixelSize(of: url) else { return nil }
+            return NativeCanvas(width: size.width, height: size.height, duration: 0, isPhoto: true, hasAudio: false)
+        }
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let (size, transform) = try? await track.load(.naturalSize, .preferredTransform) else { return nil }
+        let oriented = CGRect(origin: .zero, size: size).applying(transform)
+        let duration = (try? await asset.load(.duration)).map(CMTimeGetSeconds) ?? 0
+        let hasAudio = !((try? await asset.loadTracks(withMediaType: .audio)) ?? []).isEmpty
+        return NativeCanvas(
+            width: Int(abs(oriented.width).rounded()),
+            height: Int(abs(oriented.height).rounded()),
+            duration: duration.isFinite ? duration : 0,
+            isPhoto: false,
+            hasAudio: hasAudio
+        )
+    }
+
+    /// Rebuilds the preview from the stack. Video: new composed `AVPlayerItem` (instant,
+    /// nothing is rendered). Photo: Core Image render of the edited photo.
+    func refreshPreview() async {
+        guard let stack = editStack else { return }
+        previewGeneration += 1
+        let generation = previewGeneration
+        if stack.isPhoto {
+            let image = await Task.detached(priority: .userInitiated) { try? PhotoRenderer.previewImage(stack) }.value
+            guard generation == previewGeneration else { return }
+            previewPhoto = image
+            previewItem = nil
+            composedVideo = nil
+        } else {
+            guard let composed = try? await NativeComposer.compose(stack) else { return }
+            guard generation == previewGeneration else { return }
+            composedVideo = composed
+            previewItem = composed.makePlayerItem()
+            previewPhoto = nil
+        }
+    }
+
+    /// Undo the last edit (Design §3). Never touches the base file.
+    func undoLastEdit() {
+        guard var stack = editStack, stack.undo() else { return }
+        editStack = stack
+        localVideoURL = stack.base
+        Task { await refreshPreview() }
     }
 
     /// Import failed: keep the current clip; photos get the import-step copy + "Choose another".
@@ -337,6 +448,7 @@ final class EditorViewModel: ObservableObject {
         state = .ready
         showSampleChips = true
         messages.append(ChatMessage(role: .system, content: "Loaded sample clip"))
+        startEditing(url)
     }
 
     func resetBundledTestVideoIfNeeded() {
@@ -359,14 +471,56 @@ final class EditorViewModel: ObservableObject {
         sendMessage()
     }
 
+    /// True while a turn (chat round-trip or edit) is running.
+    var isBusy: Bool { state == .processing || state == .uploading }
+
+    /// Sends a prompt now, or queues it (FIFO) while an edit is running. Queued prompts
+    /// show immediately as a user bubble labelled "Queued" (Design #96).
+    func submitPrompt(_ raw: String) {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if isBusy {
+            let message = ChatMessage(role: .user, content: text)
+            messages.append(message)
+            queuedPrompts.append((message.id, text))
+            queuedPromptIDs.append(message.id)
+            return
+        }
+        composerText = text
+        sendMessage()
+    }
+
+    /// Starts the next queued prompt once the editor is idle.
+    private func drainQueueIfIdle() {
+        guard !isBusy, !queuedPrompts.isEmpty else { return }
+        let next = queuedPrompts.removeFirst()
+        queuedPromptIDs.removeAll { $0 == next.id }
+        startTurn(text: next.text)
+    }
+
     func sendMessage() {
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        messages.append(ChatMessage(role: .user, content: text))
         composerText = ""
-        lastError = nil
+        if isBusy {
+            // Keep order: the running edit finishes first.
+            let message = ChatMessage(role: .user, content: text)
+            messages.append(message)
+            queuedPrompts.append((message.id, text))
+            queuedPromptIDs.append(message.id)
+            return
+        }
+        messages.append(ChatMessage(role: .user, content: text))
+        startTurn(text: text)
+    }
 
-        let route = EditorRoute.route(for: text)
+    private func startTurn(text: String) {
+        lastError = nil
+        var route = EditorRoute.route(for: text)
+        if case .captions = route, !cloudProcessingEnabled {
+            // Server captions need an upload; with Cloud processing off the model decides.
+            route = .chat(text)
+        }
         turnOutcome = EditTurnOutcome()
         turnPrompt = text
         if case .captions = route, isPhoto {
@@ -382,6 +536,7 @@ final class EditorViewModel: ObservableObject {
         }
         state = .processing
 
+        let route = route
         processingTask?.cancel()
         processingTask = Task {
             switch route {
@@ -402,6 +557,7 @@ final class EditorViewModel: ObservableObject {
             if !Task.isCancelled {
                 onInferenceFinished?()
             }
+            self.drainQueueIfIdle()
         }
     }
 
@@ -574,7 +730,7 @@ final class EditorViewModel: ObservableObject {
             let out = FileManager.default.temporaryDirectory
                 .appendingPathComponent("burned-\(UUID().uuidString).mp4")
             try burned.write(to: out)
-            localVideoURL = out
+            await rebaseStack(onto: out)
             state = .ready
             processingOverlay = .editing
 
@@ -683,7 +839,7 @@ final class EditorViewModel: ObservableObject {
             try await prepareAuth(client)
             var conversation: [JSONValue] = [ClientChat.userMessage(prompt)]
             var response = try await client.sendClientChat(
-                ClientChatRequest(messages: conversation, media: await currentMedia())
+                ClientChatRequest(messages: conversation, media: await currentMedia(), thumbnails: await currentThumbnails())
             )
             var rounds = 0
             while response.status == "tool_calls", !response.toolCalls.isEmpty, rounds < Self.maxClientRounds {
@@ -704,7 +860,7 @@ final class EditorViewModel: ObservableObject {
                 state = .processing
                 processingOverlay = .editing
                 response = try await client.sendClientChat(
-                    ClientChatRequest(messages: conversation, media: await currentMedia())
+                    ClientChatRequest(messages: conversation, media: await currentMedia(), thumbnails: await currentThumbnails())
                 )
             }
             if let text = response.finalText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
@@ -730,6 +886,7 @@ final class EditorViewModel: ObservableObject {
         if state == .processing || state == .failed {
             state = localVideoURL == nil ? .empty : .ready
         }
+        isCloudStepRunning = false
     }
 
     /// The chat request itself failed. Copy comes from the stable code only.
@@ -767,6 +924,22 @@ final class EditorViewModel: ObservableObject {
     /// Metadata for the model (`media` in the client-mode request). Never uploads the clip.
     func currentMedia() async -> ClientMedia? {
         guard let url = localVideoURL else { return nil }
+        if let stack = await ensureStack() {
+            // The edited clip, as the user sees it.
+            let canvas = stack.canvas
+            if canvas.isPhoto {
+                return ClientMedia(type: "image", width: canvas.width, height: canvas.height)
+            }
+            let fps = try? await AVURLAsset(url: stack.base).loadTracks(withMediaType: .video).first?.load(.nominalFrameRate)
+            return ClientMedia(
+                type: "video",
+                duration: canvas.duration,
+                width: canvas.width,
+                height: canvas.height,
+                fps: fps.flatMap { $0 > 0 ? Double($0) : nil },
+                hasAudio: canvas.hasAudio
+            )
+        }
         if MediaMIME.isImage(url: url) {
             return ClientMedia(type: "image")
         }
@@ -801,6 +974,37 @@ final class EditorViewModel: ObservableObject {
         if call.argumentsError != nil {
             return record(.failure(ServerErrorCode.invalidArguments, on: .device), kind: .invalidArguments)
         }
+        guard var stack = await ensureStack() else {
+            return record(.failure("no_media", on: .device), kind: .generic)
+        }
+        switch NativeToolParser.plan(tool: tool, arguments: call.arguments, canvas: stack.canvas) {
+        case .success(.query(let name)):
+            return record(localQueryResult(name, media: await currentMedia()), kind: nil)
+        case .success(.apply(let op)):
+            stack.push(EditEntry(tool: tool, op: op, toolCallId: call.id))
+            editStack = stack
+            await refreshPreview()
+            messages.append(ChatMessage(role: .system, content: "\(Self.label(for: tool)) · \(UXCopy.onDevice)"))
+            let canvas = stack.canvas
+            var output: [String: JSONValue] = [
+                "width": .number(Double(canvas.width)),
+                "height": .number(Double(canvas.height)),
+            ]
+            if !canvas.isPhoto { output["duration"] = .number((canvas.duration * 1000).rounded() / 1000) }
+            return record(.success(on: .device, output: output), kind: nil)
+        case .failure(.unsupportedForPhoto):
+            messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
+            return record(.failure(ServerErrorCode.unsupportedForPhoto, on: .device), kind: .photoUnsupported)
+        case .failure(.invalidArguments):
+            return record(.failure(ServerErrorCode.invalidArguments, on: .device), kind: .invalidArguments)
+        case .failure(.unsupportedOnDevice):
+            guard cloudProcessingEnabled else {
+                // Default: nothing is uploaded. Quiet card; the model explains in one line.
+                messages.append(.failure(EditFailureCard(kind: .unavailable)))
+                return record(.failure("unsupported_on_device", on: .device), kind: .unavailable)
+            }
+        }
+        // Cloud processing is on and the tool has no native version: server path.
         let media = await currentMedia()
         let plan = ToolCatalog.plan(
             tool: tool,
@@ -840,7 +1044,7 @@ final class EditorViewModel: ObservableObject {
             messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
         case .unsupportedImageFormat:
             showUnsupportedImageFormat()
-        case .invalidArguments, .generic:
+        case .invalidArguments, .generic, .unavailable:
             break // end-of-turn card
         }
         return record(.failure(kind.toolError, on: .server), kind: kind)
@@ -860,12 +1064,69 @@ final class EditorViewModel: ObservableObject {
         default:
             return .success(on: .device, output: [
                 "video": .array(["mp4", "mov"].map { .string($0) }),
-                "audio": .array(["m4a"].map { .string($0) }),
+                "image": .array(["jpg", "png", "heic"].map { .string($0) }),
             ])
         }
     }
 
+    /// Short human label for an edit card.
+    static func label(for tool: String) -> String {
+        let names: [String: String] = [
+            "trim_video": "Trim", "adjust_speed": "Speed", "crop_video": "Crop", "rotate_video": "Rotate",
+            "flip_video_horizontal": "Flip", "flip_video_vertical": "Flip vertical", "resize_video": "Resize",
+            "resize_video_preset": "Aspect ratio", "adjust_brightness": "Brightness", "adjust_contrast": "Contrast",
+            "adjust_saturation": "Saturation", "adjust_hue": "Hue", "apply_color_filter": "Color filter",
+            "add_text": "Text", "adjust_audio_volume": "Volume", "audio_fade": "Fade",
+            "convert_video_format": "Format", "convert_image_format": "Format",
+        ]
+        return names[tool] ?? tool.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    /// Up to 4 small JPEG frames of the edited clip for the model (never the video).
+    func currentThumbnails() async -> [String]? {
+        guard let stack = editStack else { return nil }
+        if stack.isPhoto {
+            guard let image = previewPhoto, let data = Self.thumbnailJPEG(image) else { return nil }
+            return [data.base64EncodedString()]
+        }
+        guard let composed = composedVideo, composed.duration > 0 else { return nil }
+        let generator = composed.makeImageGenerator(maxSize: CGSize(width: 512, height: 512))
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+        var frames: [String] = []
+        for i in 0..<4 {
+            let t = CMTime(seconds: composed.duration * (Double(i) + 0.5) / 4, preferredTimescale: 600)
+            if let cg = try? await generator.image(at: t).image,
+               let data = Self.thumbnailJPEG(UIImage(cgImage: cg)) {
+                frames.append(data.base64EncodedString())
+            }
+        }
+        return frames.isEmpty ? nil : frames
+    }
+
+    /// JPEG ≤ 300 KB (server limit), longest side ≤ 512.
+    static func thumbnailJPEG(_ image: UIImage) -> Data? {
+        let longest = max(image.size.width, image.size.height)
+        let scale = longest > 512 ? 512 / longest : 1
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let small = UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        for quality in [0.6, 0.4, 0.25] {
+            if let data = small.jpegData(compressionQuality: quality), data.count <= 300_000 { return data }
+        }
+        return nil
+    }
+
     private func runCaptionsTool(language: String, translateLanguage: String?, burnIn: Bool) async -> ClientToolResult {
+        // Captions time against the edited clip: bake device edits in before uploading.
+        if let stack = editStack, !stack.entries.isEmpty {
+            isCloudStepRunning = true
+            let flat = await flattenedMediaURL()
+            isCloudStepRunning = false
+            guard let flat else { return record(.failure("render_failed", on: .device), kind: .generic) }
+            await rebaseStack(onto: flat)
+        }
         processingOverlay = .generatingCaptions
         await runGenerateCaptions(language: language)
         guard captionArtifacts.hasSource else {
@@ -893,8 +1154,16 @@ final class EditorViewModel: ObservableObject {
     /// Runs one operation on the async jobs API, then swaps the preview to the result.
     /// The upload carries the file's real MIME type; the result keeps the server's type.
     private func runServerJob(tool: String, operation: String, args: [String: JSONValue]) async -> ClientToolResult {
-        guard let client = apiClient, let mediaURL = localVideoURL else {
+        guard let client = apiClient, localVideoURL != nil else {
             return record(.failure("no_media", on: .server), kind: .generic)
+        }
+        // Cloud steps bake the device edits in first (Design §3 "flatten"); the result becomes
+        // the stack's new base and the pre-cloud state stays undoable.
+        state = .processing
+        isCloudStepRunning = true
+        defer { isCloudStepRunning = false }
+        guard let mediaURL = await flattenedMediaURL() else {
+            return record(.failure("render_failed", on: .device), kind: .generic)
         }
         // Photos upload as JPEG/PNG only — never HEIC (prod FFmpeg has no HEIF decoder).
         let uploadURL: URL
@@ -936,8 +1205,8 @@ final class EditorViewModel: ObservableObject {
             let out = FileManager.default.temporaryDirectory
                 .appendingPathComponent("\(enqueue.jobId).\(ext)")
             try download.data.write(to: out)
-            localVideoURL = out
-            messages.append(ChatMessage(role: .system, content: "Applied \(tool)"))
+            await rebaseStack(onto: out)
+            messages.append(ChatMessage(role: .system, content: "\(Self.label(for: tool)) · \(UXCopy.cloud)"))
             return record(.success(on: .server), kind: nil)
         } catch is CancellationError {
             activeJobId = nil
@@ -950,6 +1219,34 @@ final class EditorViewModel: ObservableObject {
             }
             // Sync error bodies (submit 400/415) carry the same stable codes.
             return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
+        }
+    }
+
+    /// The file a cloud step should upload: the base when there are no device edits, else a
+    /// rendered copy of the current stack.
+    private func flattenedMediaURL() async -> URL? {
+        guard let url = localVideoURL else { return nil }
+        guard let stack = await ensureStack(), !stack.entries.isEmpty else { return url }
+        if stack.isPhoto {
+            return await Task.detached(priority: .userInitiated) { try? PhotoRenderer.exportFile(stack) }.value
+        }
+        guard let composed = try? await NativeComposer.compose(stack) else { return nil }
+        return try? await NativeExporter().export(composed, format: stack.outputFormat, progress: { _ in })
+    }
+
+    /// Cloud result → new stack base (previous state kept for Undo).
+    func rebaseStack(onto url: URL) async {
+        let canvas = await Self.loadCanvas(url)
+        if var stack = editStack, let canvas {
+            if stack.entries.isEmpty == false || stack.base != url {
+                stack.rebase(onto: url, canvas: canvas)
+            }
+            editStack = stack
+            localVideoURL = url
+            await refreshPreview()
+        } else {
+            localVideoURL = url
+            startEditing(url)
         }
     }
 

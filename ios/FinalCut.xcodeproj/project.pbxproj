@@ -42,6 +42,15 @@
 		28C2D5C76EEF55CA22506028 /* PhotoTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2D87EEC6697B55F5CCC8A1 /* PhotoTranscoder.swift */; };
 		EAF7481D7F6387F416A288A6 /* PhotoLibrarySaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0046DC48A773DF8F5824962 /* PhotoLibrarySaver.swift */; };
 		28542D32807FA0E724E71D63 /* PhotoModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */; };
+		E3D6DB142C872E3F67F81CD9 /* NativeOp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D9D1D0EED2C72DF5A85C11 /* NativeOp.swift */; };
+		9DE0038DAD46289881269755 /* FrameRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C0D66EA78A564B0C2401F /* FrameRenderer.swift */; };
+		7CE16CB5EE1B5149089E2480 /* EditStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 196ECF937E05ECB8FD599582 /* EditStack.swift */; };
+		27A13F25654FE765C15EEAD9 /* NativeComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70760B1919EAF7E6F1ACA373 /* NativeComposer.swift */; };
+		C0703B2A8F60A2CE7952C0F8 /* AudioRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8EDECA10A52D55149B0238 /* AudioRenderer.swift */; };
+		D47C41F5ECB36031AFF1A171 /* PhotoRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EF0F225BA281D91E08B35DE /* PhotoRenderer.swift */; };
+		C3E2C948BA25EC677B85D61B /* NativeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3283254A505B321C9D96006D /* NativeExporter.swift */; };
+		707D2D2D1D88009FCF19F067 /* NativeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575568583615C85654CD56E5 /* NativeSettings.swift */; };
+		B8B3C73F378D1B1DB7BDB78D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -93,6 +102,15 @@
 		DF2D87EEC6697B55F5CCC8A1 /* PhotoTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTranscoder.swift; sourceTree = "<group>"; };
 		A0046DC48A773DF8F5824962 /* PhotoLibrarySaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibrarySaver.swift; sourceTree = "<group>"; };
 		30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoModeTests.swift; sourceTree = "<group>"; };
+		66D9D1D0EED2C72DF5A85C11 /* NativeOp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeOp.swift; sourceTree = "<group>"; };
+		4D9C0D66EA78A564B0C2401F /* FrameRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameRenderer.swift; sourceTree = "<group>"; };
+		196ECF937E05ECB8FD599582 /* EditStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditStack.swift; sourceTree = "<group>"; };
+		70760B1919EAF7E6F1ACA373 /* NativeComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeComposer.swift; sourceTree = "<group>"; };
+		BD8EDECA10A52D55149B0238 /* AudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRenderer.swift; sourceTree = "<group>"; };
+		0EF0F225BA281D91E08B35DE /* PhotoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoRenderer.swift; sourceTree = "<group>"; };
+		3283254A505B321C9D96006D /* NativeExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeExporter.swift; sourceTree = "<group>"; };
+		575568583615C85654CD56E5 /* NativeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSettings.swift; sourceTree = "<group>"; };
+		F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -151,6 +169,14 @@
 		4E1A7C0E5B2D4F6A8C9D0E1F /* NativeEditing */ = {
 			isa = PBXGroup;
 			children = (
+				575568583615C85654CD56E5 /* NativeSettings.swift */,
+				3283254A505B321C9D96006D /* NativeExporter.swift */,
+				0EF0F225BA281D91E08B35DE /* PhotoRenderer.swift */,
+				BD8EDECA10A52D55149B0238 /* AudioRenderer.swift */,
+				70760B1919EAF7E6F1ACA373 /* NativeComposer.swift */,
+				196ECF937E05ECB8FD599582 /* EditStack.swift */,
+				4D9C0D66EA78A564B0C2401F /* FrameRenderer.swift */,
+				66D9D1D0EED2C72DF5A85C11 /* NativeOp.swift */,
 			);
 			path = NativeEditing;
 			sourceTree = "<group>";
@@ -206,6 +232,7 @@
 		E1D86FFA0C5F47868EBAFE01 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
+				F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */,
 				751EBD51C12C4CAA92EE20F6 /* EditorView.swift */,
 				239CC4AAE2644796B435B528 /* TopBarView.swift */,
 				5D33353083EA42D7B3ED3397 /* PreviewPaneView.swift */,
@@ -354,6 +381,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B8B3C73F378D1B1DB7BDB78D /* SettingsView.swift in Sources */,
+				707D2D2D1D88009FCF19F067 /* NativeSettings.swift in Sources */,
+				C3E2C948BA25EC677B85D61B /* NativeExporter.swift in Sources */,
+				D47C41F5ECB36031AFF1A171 /* PhotoRenderer.swift in Sources */,
+				C0703B2A8F60A2CE7952C0F8 /* AudioRenderer.swift in Sources */,
+				27A13F25654FE765C15EEAD9 /* NativeComposer.swift in Sources */,
+				7CE16CB5EE1B5149089E2480 /* EditStack.swift in Sources */,
+				9DE0038DAD46289881269755 /* FrameRenderer.swift in Sources */,
+				E3D6DB142C872E3F67F81CD9 /* NativeOp.swift in Sources */,
 				EAF7481D7F6387F416A288A6 /* PhotoLibrarySaver.swift in Sources */,
 				28C2D5C76EEF55CA22506028 /* PhotoTranscoder.swift in Sources */,
 				A21C3037F66A0718DA76217E /* EditErrorUX.swift in Sources */,

@@ -229,7 +229,7 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
         // No apiClient: a server job would fail with "no_media"; a rejected call never gets that far.
         let result = await model.executeToolCall(ClientToolCall(id: "c1", name: "trim_video", arguments: [:]))
         XCTAssertFalse(result.ok)
-        XCTAssertEqual(result.error, "missing_required_args: start, end")
+        XCTAssertEqual(result.error, "invalid_arguments")
         XCTAssertEqual(result.executedOn, .device)
     }
 

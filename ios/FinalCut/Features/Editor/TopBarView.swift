@@ -12,17 +12,27 @@ struct TopBarView: View {
     var showUpgrade = true
     /// Remaining free requests today (shown subtly next to Upgrade when known).
     var freeRemaining: Int?
+    var onSettings: () -> Void = {}
 
     /// Single ~44 pt row; the Upgrade capsule never wraps, the free-count label gives way first.
     static let rowHeight: CGFloat = 44
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("FinalCap")
-                .font(.headline)
+            // Title doubles as the Settings entry; it truncates before Import/Export (Design §7).
+            Button(action: onSettings) {
+                HStack(spacing: 4) {
+                    Text("FinalCap")
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Image(systemName: "gearshape")
+                        .font(.caption)
+                }
                 .foregroundStyle(AppTheme.textPrimary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+            }
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("Settings")
             Spacer(minLength: 4)
 
             PhotosPicker(

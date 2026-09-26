@@ -69,6 +69,10 @@ struct AuthStatus: Codable, Equatable {
     var dailyRemaining: Int?
     /// ISO-8601 timestamp returned by the API.
     var dailyResetsAt: String?
+    /// `true` while editing is free for everyone (no daily limit). Absent → false.
+    var unlimited: Bool?
+
+    var isUnlimited: Bool { unlimited ?? false }
 }
 
 struct SampleAccessTokenResponse: Codable, Equatable {

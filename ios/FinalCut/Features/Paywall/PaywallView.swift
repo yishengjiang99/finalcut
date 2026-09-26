@@ -35,7 +35,9 @@ struct PaywallView: View {
                     .font(.title.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                     .multilineTextAlignment(.center)
-                Text("Unlimited AI edits, captions and translations.\nMonthly subscription billed through the App Store.")
+                Text(appModel.isUnlimited
+                     ? UXCopy.paywallSubheadUnlimited
+                     : "Unlimited AI edits, captions and translations.\nMonthly subscription billed through the App Store.")
                     .font(.footnote)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)

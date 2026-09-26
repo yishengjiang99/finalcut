@@ -200,13 +200,20 @@ enum EditorRoute: Equatable {
     case tool(name: String, arguments: [String: JSONValue])
     case chat(String)
 
-    /// Sample chips shown under the chat. Each maps to a correct tool/flow with complete args.
+    /// Video chips (all run on the device). Each maps to a correct tool with complete args.
     static let sampleChips = [
+        "Black and white",
+        "Speed up 2x",
+        "Red filter",
+        "Flip",
+        "Fade out",
+    ]
+
+    /// Server caption chips, shown only when Cloud processing is on.
+    static let cloudChips = [
         "Generate captions",
         "Translate to Spanish",
         "Burn in",
-        "Red filter",
-        "Trim silence",
     ]
 
     /// Photo-safe chips (NATIVE_EDIT_UX.md §7).
@@ -216,8 +223,9 @@ enum EditorRoute: Equatable {
         "More contrast",
     ]
 
-    static func chips(isPhoto: Bool) -> [String] {
-        isPhoto ? photoChips : sampleChips
+    static func chips(isPhoto: Bool, cloud: Bool = false) -> [String] {
+        if isPhoto { return photoChips }
+        return cloud ? cloudChips + sampleChips : sampleChips
     }
 
     static func route(for text: String) -> EditorRoute {
@@ -229,6 +237,12 @@ enum EditorRoute: Equatable {
             return .tool(name: "apply_color_filter", arguments: ["filter": .string("grayscale")])
         case "more contrast":
             return .tool(name: "adjust_contrast", arguments: ["contrast": .number(1.3)])
+        case "speed up 2x":
+            return .tool(name: "adjust_speed", arguments: ["speed": .number(2)])
+        case "flip":
+            return .tool(name: "flip_video_horizontal", arguments: [:])
+        case "fade out":
+            return .tool(name: "audio_fade", arguments: ["type": .string("out"), "duration": .number(1)])
         case "generate captions":
             return .captions(.generate)
         case "translate to spanish":

@@ -30,6 +30,8 @@ final class AppModel: ObservableObject {
     /// Free daily inference quota (from `GET /api/auth/status` for device installs). Nil when unknown/premium.
     @Published var dailyLimit: Int?
     @Published var dailyRemaining: Int?
+    /// Server says edits are unlimited for now: hide the free count, never auto-open the paywall.
+    @Published var isUnlimited = false
     @Published var isPaywallPresented = false
     @Published var paywallReason: PaywallReason = .upgradeTapped
 
@@ -66,7 +68,8 @@ final class AppModel: ObservableObject {
     func apply(_ status: AuthStatus) {
         isAuthenticated = status.authenticated
         hasSubscription = status.user?.hasSubscription == true
-        if hasSubscription {
+        isUnlimited = status.isUnlimited
+        if hasSubscription || isUnlimited {
             dailyLimit = nil
             dailyRemaining = nil
         } else {
@@ -76,6 +79,8 @@ final class AppModel: ObservableObject {
     }
 
     func presentPaywall(reason: PaywallReason = .upgradeTapped) {
+        // While edits are unlimited, only the Upgrade button opens the paywall.
+        if reason == .usageLimitReached, isUnlimited { return }
         paywallReason = reason
         if reason == .usageLimitReached, !hasSubscription {
             dailyRemaining = 0

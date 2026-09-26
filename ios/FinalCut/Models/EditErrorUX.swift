@@ -13,6 +13,31 @@ enum UXCopy {
     static let savedToPhotos = "Saved to Photos"
     static let saveFailed = "Couldn't save to Photos. Check Photos access in Settings."
     static let videoImportFailed = "Couldn't load this video from Photos. Try another video."
+    static let unavailable = "Not available on iPhone yet"                    // edit.unavailable
+    static let onDevice = "On device"                                          // edit.onDevice
+    static let cloud = "Cloud"                                                 // edit.cloud
+    static let undo = "Undo"                                                   // edit.undo
+    static let cloudSettingTitle = "Cloud processing"                         // cloud.setting.title
+    static let cloudSettingFootnote = "Lets FinalCap upload a clip to our servers for edits your iPhone can't do yet. Off means nothing is ever uploaded." // cloud.setting.footnote
+    static let cloudFlattened = "Earlier edits were baked in by a cloud step." // cloud.flattened
+    static let exportRendering = "Rendering on your iPhone…"                  // export.rendering (+ " {pct}%")
+    static let exportRenderedLocal = "Rendered on your iPhone."               // export.rendered.local
+    static let exportLeaveHint = "You can leave the app. We'll let you know when it's ready." // export.leaveHint
+    static let exportNotifyMe = "Notify me when it's done"                    // export.notifyMe
+    static let exportResuming = "Resuming export…"                            // export.resuming
+    static let notifVideoTitle = "Your video is ready"                        // notif.video.title
+    static let notifVideoBodyPhotos = "Saved to Photos. Tap to open FinalCap." // notif.video.body.photos
+    static let notifPhotoTitle = "Your photo is ready"                        // notif.photo.title
+    static let notifFailedTitle = "Export didn't finish"                      // notif.failed.title
+    static let notifFailedBody = "Open FinalCap to try again."                // notif.failed.body
+    static let dictationListening = "Listening…"                              // dictation.listening
+    static let dictationUnavailable = "Dictation isn't available on this device." // dictation.unavailable
+    static let dictationPermissionDenied = "Turn on Microphone and Speech Recognition for FinalCap in Settings." // dictation.permissionDenied
+    static let dictationQueued = "Queued"                                      // dictation.queued
+    static let paywallSubheadUnlimited = "Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return." // paywall.subhead.unlimitedPeriod
+    static let privacyFirstRun = "Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip." // privacy.firstRun
+
+    static func exportRendering(percent: Int) -> String { "\(exportRendering) \(percent)%" }
 }
 
 /// Stable server error codes (Backend #88), shared by sync error bodies and failed job polls.
@@ -32,6 +57,8 @@ enum EditFailureKind: String, Codable, Equatable {
     case unsupportedImageFormat
     /// Anything else / no code → failed card with Retry.
     case generic
+    /// No native version and Cloud processing is off → muted card, no Retry (§1 `unavailable`).
+    case unavailable
 
     static func from(code: String?) -> EditFailureKind {
         switch code?.lowercased() {
@@ -49,6 +76,7 @@ enum EditFailureKind: String, Codable, Equatable {
         case .invalidArguments: return ServerErrorCode.invalidArguments
         case .unsupportedImageFormat: return ServerErrorCode.unsupportedImageFormat
         case .generic: return "edit_failed"
+        case .unavailable: return "unsupported_on_device"
         }
     }
 
@@ -58,6 +86,7 @@ enum EditFailureKind: String, Codable, Equatable {
         case .invalidArguments: return UXCopy.invalidArgs
         case .unsupportedImageFormat: return UXCopy.importFailedFormat
         case .generic: return UXCopy.generic
+        case .unavailable: return UXCopy.unavailable
         }
     }
 

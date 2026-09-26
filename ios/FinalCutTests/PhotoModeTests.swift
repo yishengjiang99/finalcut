@@ -66,30 +66,32 @@ final class PhotoModeTests: XCTestCase {
 
     // MARK: - HEIC → JPEG on device (never upload HEIC)
 
-    func testHEICImportBecomesUprightJPEGAndKeepsOrientation() throws {
+    func testHEICImportStaysHEICForOnDeviceEditing() throws {
         let heic = try requireHEIC(orientation: 6)
-        XCTAssertEqual(PhotoTranscoder.orientedPixelSize(of: heic)?.width, 20)
-
         let imported = try ImportedVideo.copy(from: heic, contentType: .heic)
         defer { try? FileManager.default.removeItem(at: imported.url.deletingLastPathComponent()) }
-
         XCTAssertTrue(imported.isPhoto)
-        XCTAssertEqual(imported.url.pathExtension, "jpg")
-        XCTAssertEqual(imported.mimeType, "image/jpeg")
-        XCTAssertEqual(PhotoTranscoder.decodedType(of: imported.url), .jpeg)
-        XCTAssertEqual(PhotoTranscoder.orientation(of: imported.url), 1)
-        // Orientation 6 baked into the pixels: 40x20 landscape → 20x40 portrait.
+        XCTAssertEqual(imported.url.pathExtension.lowercased(), "heic")
+        // Oriented size is what the editor works with.
         let size = try XCTUnwrap(PhotoTranscoder.orientedPixelSize(of: imported.url))
         XCTAssertEqual(size.width, 20)
         XCTAssertEqual(size.height, 40)
+    }
+
+    func testCloudPathConvertsHEICToUprightJPEG() throws {
+        let heic = try requireHEIC(orientation: 6, name: "cloud.HEIC")
+        let upload = try PhotoTranscoder.uploadablePhoto(at: heic)
+        XCTAssertEqual(upload.pathExtension, "jpg")
+        XCTAssertEqual(PhotoTranscoder.decodedType(of: upload), .jpeg)
+        XCTAssertEqual(PhotoTranscoder.orientation(of: upload), 1)
+        let size = try XCTUnwrap(PhotoTranscoder.orientedPixelSize(of: upload))
+        XCTAssertEqual(size.width, 20)
+        XCTAssertEqual(size.height, 40)
         // EXIF 6: the original left (red) column is the visual top.
-        let top = try pixel(imported.url, x: 10, y: 3)
-        let bottom = try pixel(imported.url, x: 10, y: 36)
+        let top = try pixel(upload, x: 10, y: 3)
+        let bottom = try pixel(upload, x: 10, y: 36)
         XCTAssertGreaterThan(top.r, 180); XCTAssertLessThan(top.b, 90)
         XCTAssertGreaterThan(bottom.b, 180); XCTAssertLessThan(bottom.r, 90)
-        // No HEIC left behind in the import folder.
-        let leftovers = try FileManager.default.contentsOfDirectory(atPath: imported.url.deletingLastPathComponent().path)
-        XCTAssertFalse(leftovers.contains { $0.lowercased().hasSuffix(".heic") })
     }
 
     func testUploadablePhotoIsNeverHEIC() throws {
@@ -224,6 +226,8 @@ final class PhotoModeTests: XCTestCase {
     @MainActor
     func testCaptionsChipOnPhotoShowsPhotoUnsupportedCard() throws {
         let jpg = try XCTUnwrap(writeImage("r.jpg", type: .jpeg, orientation: 1))
+        UserDefaults.standard.set(true, forKey: NativeSettings.cloudProcessingKey)
+        defer { UserDefaults.standard.removeObject(forKey: NativeSettings.cloudProcessingKey) }
         let model = EditorViewModel()
         model.localVideoURL = jpg
         model.state = .ready
@@ -237,9 +241,8 @@ final class PhotoModeTests: XCTestCase {
     func testMalformedArgumentsGoBackToModelAsInvalidArguments() async {
         let model = EditorViewModel()
         model.localVideoURL = Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
-        let json = #"{"id":"c9","name":"trim_video","arguments":"{not json"}"#
-        let call = try? JSONDecoder().decode(ClientToolCall.self, from: Data(json.utf8))
-        let result = await model.executeToolCall(try! XCTUnwrap(call))
+        let call = ClientToolCall(id: "c9", name: "trim_video", arguments: [:], argumentsError: "arguments_not_json")
+        let result = await model.executeToolCall(call)
         XCTAssertFalse(result.ok)
         XCTAssertEqual(result.error, "invalid_arguments")
         XCTAssertFalse(model.messages.contains { $0.failureCard != nil }, "card only at end of turn")
