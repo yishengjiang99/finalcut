@@ -26,7 +26,8 @@ struct EditorView: View {
             if showsImportPanel {
                 ImportPanelView(
                     photosPickerItem: $model.photosPickerItem,
-                    onTrySample: { model.loadSampleClip() }
+                    onTrySample: { model.loadSampleClip() },
+                    importError: model.importError
                 )
                 .frame(maxHeight: 240)
             } else {
@@ -36,11 +37,14 @@ struct EditorView: View {
                     processingMessage: model.processingOverlay.message
                 )
                 .frame(maxHeight: 240)
+                if let importError = model.importError {
+                    ImportErrorBanner(message: importError, photosPickerItem: $model.photosPickerItem)
+                }
             }
 
             Divider().overlay(AppTheme.border)
 
-            ChatView(messages: model.messages)
+            ChatView(messages: model.messages, onRetry: { model.retry($0) })
                 .frame(maxHeight: .infinity)
 
             if model.showSampleChips && model.localVideoURL != nil {
@@ -78,7 +82,7 @@ struct EditorView: View {
             }
         }
         .overlay(alignment: .top) {
-            if model.state == .failed, let err = model.lastError {
+            if model.state == .failed, model.importError == nil, let err = model.lastError {
                 Text(err)
                     .font(.caption)
                     .foregroundStyle(.white)
@@ -104,6 +108,8 @@ struct EditorView: View {
 struct ImportPanelView: View {
     @Binding var photosPickerItem: PhotosPickerItem?
     var onTrySample: () -> Void
+    /// Import-step error (`import.failed.format`), shown with "Choose another".
+    var importError: String? = nil
 
     var body: some View {
         ZStack {
@@ -112,15 +118,22 @@ struct ImportPanelView: View {
                 Image(systemName: "video.badge.plus")
                     .font(.system(size: 36))
                     .foregroundStyle(AppTheme.accent)
-                Text("Import a video to start editing")
+                Text("Import a photo or video to start editing")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppTheme.textPrimary)
+                if let importError {
+                    Text(importError)
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.danger)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("ImportError")
+                }
                 PhotosPicker(
                     selection: $photosPickerItem,
-                    matching: .videos,
+                    matching: EditorViewModel.pickerFilter,
                     photoLibrary: .shared()
                 ) {
-                    Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                    Label(importError == nil ? "Choose from Photos" : UXCopy.chooseAnother, systemImage: "photo.on.rectangle")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.black)
                         .padding(.horizontal, 18)
@@ -139,6 +152,31 @@ struct ImportPanelView: View {
     }
 }
 
+/// Import-step error while a clip is still loaded: copy + "Choose another" (reopens Photos).
+struct ImportErrorBanner: View {
+    var message: String
+    @Binding var photosPickerItem: PhotosPickerItem?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(AppTheme.textPrimary)
+            Spacer(minLength: 8)
+            PhotosPicker(selection: $photosPickerItem, matching: EditorViewModel.pickerFilter, photoLibrary: .shared()) {
+                Text(UXCopy.chooseAnother)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppTheme.accent)
+            }
+            .accessibilityIdentifier("ImportChooseAnother")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(AppTheme.danger.opacity(0.15))
+        .accessibilityIdentifier("ImportError")
+    }
+}
+
 @MainActor
 final class EditorViewModel: ObservableObject {
     @Published var state: EditorState = .empty
@@ -151,6 +189,20 @@ final class EditorViewModel: ObservableObject {
     @Published var activeJobId: String?
     @Published var processingOverlay: ProcessingOverlayKind = .editing
     @Published var captionArtifacts = CaptionArtifacts()
+    /// Import-step error (`import.failed.format`); never an edit card.
+    @Published var importError: String?
+
+    /// Photos and videos (photo mode, NATIVE_EDIT_UX.md §7).
+    nonisolated static var pickerFilter: PHPickerFilter { .any(of: [.images, .videos]) }
+
+    /// The loaded asset is a photo (JPEG/PNG after on-device normalisation).
+    var isPhoto: Bool {
+        localVideoURL.map { MediaMIME.isImage(url: $0) } ?? false
+    }
+
+    /// Per-turn results so failed cards follow the §8 rules.
+    private var turnOutcome = EditTurnOutcome()
+    private var turnPrompt = ""
 
     /// Shared API client from AppModel (jobs for long FFmpeg edits; captions sync).
     var apiClient: APIClient?
@@ -159,8 +211,8 @@ final class EditorViewModel: ObservableObject {
     /// An inference request completed (success or failure) — refresh quota display.
     var onInferenceFinished: (() -> Void)?
 
-    /// Sample chips. Each maps to a correct tool/flow with complete args (see `EditorRoute`).
-    let sampleChips = EditorRoute.sampleChips
+    /// Sample chips (photo-safe set for photos). Each maps to a correct tool with complete args.
+    var sampleChips: [String] { EditorRoute.chips(isPhoto: isPhoto) }
 
     private var processingTask: Task<Void, Never>?
 
@@ -183,14 +235,12 @@ final class EditorViewModel: ObservableObject {
                 let video = try await Task.detached {
                     try ImportedVideo.copy(from: url)
                 }.value
-                finishImport(video, message: "Imported \(url.lastPathComponent)")
+                finishImport(video, message: "Imported \(video.url.lastPathComponent)")
             } catch {
-                state = .failed
-                lastError = error.localizedDescription
+                failImport(isPhoto: MediaMIME.isImage(url: url) || error is PhotoTranscoder.TranscodeError)
             }
-        case .failure(let error):
-            state = .failed
-            lastError = error.localizedDescription
+        case .failure:
+            failImport(isPhoto: false)
         }
     }
 
@@ -200,22 +250,54 @@ final class EditorViewModel: ObservableObject {
         lastError = nil
         // Reset selection so choosing the same video again triggers another import.
         defer { photosPickerItem = nil }
+        let pickedPhoto = item.supportedContentTypes.contains { $0.conforms(to: .image) }
+            && !item.supportedContentTypes.contains { $0.conforms(to: .movie) }
         do {
             guard let video = try await item.loadTransferable(type: ImportedVideo.self) else {
-                throw APIError.message("Couldn't load this video from Photos. Try another video.")
+                throw APIError.message(UXCopy.videoImportFailed)
             }
-            finishImport(video, message: "Imported from Photos")
+            finishImport(video, message: video.isPhoto ? "Imported photo from Photos" : "Imported from Photos")
         } catch {
-            state = .failed
-            lastError = error.localizedDescription
+            failImport(isPhoto: pickedPhoto || error is PhotoTranscoder.TranscodeError)
         }
     }
 
     private func finishImport(_ video: ImportedVideo, message: String) {
         localVideoURL = video.url
         captionArtifacts = CaptionArtifacts()
+        importError = nil
         state = .ready
         messages.append(ChatMessage(role: .system, content: message))
+    }
+
+    /// Import failed: keep the current clip; photos get the import-step copy + "Choose another".
+    private func failImport(isPhoto: Bool) {
+        state = .failed
+        if isPhoto {
+            importError = UXCopy.importFailedFormat
+            lastError = UXCopy.importFailedFormat
+        } else {
+            importError = nil
+            lastError = UXCopy.videoImportFailed
+        }
+    }
+
+    /// Server 415 `unsupported_image_format` (should be unreachable: photos are JPEG/PNG
+    /// before upload). Shown at the import step, not as an edit card.
+    private func showUnsupportedImageFormat() {
+        localVideoURL = nil
+        captionArtifacts = CaptionArtifacts()
+        importError = UXCopy.importFailedFormat
+        lastError = nil
+        state = .empty
+    }
+
+    /// Retry from a generic failed edit card: resend the same prompt.
+    func retry(_ card: EditFailureCard) {
+        guard card.showsRetry, let prompt = card.retryPrompt else { return }
+        guard state != .processing, state != .uploading else { return }
+        composerText = prompt
+        sendMessage()
     }
 
     func loadBundledTestVideo() {
@@ -249,6 +331,7 @@ final class EditorViewModel: ObservableObject {
         }
         localVideoURL = url
         lastError = nil
+        importError = nil
         captionArtifacts = CaptionArtifacts()
         processingOverlay = .editing
         state = .ready
@@ -284,6 +367,13 @@ final class EditorViewModel: ObservableObject {
         lastError = nil
 
         let route = EditorRoute.route(for: text)
+        turnOutcome = EditTurnOutcome()
+        turnPrompt = text
+        if case .captions = route, isPhoto {
+            // Captions/translate/burn-in never apply to photos: no upload, no Retry.
+            messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
+            return
+        }
         switch route {
         case .captions(let intent):
             processingOverlay = Self.overlay(for: intent)
@@ -304,8 +394,8 @@ final class EditorViewModel: ObservableObject {
             case .tool(let name, let arguments):
                 // Chip shortcut: same validation/execution path as a model tool call.
                 let call = ClientToolCall(id: "chip-\(UUID().uuidString.prefix(8))", name: name, arguments: arguments)
-                let result = await executeToolCall(call)
-                finishTurn(ok: result.ok)
+                _ = await executeToolCall(call)
+                finishTurn()
             case .chat(let prompt):
                 await runChatTurn(prompt: prompt)
             }
@@ -536,16 +626,19 @@ final class EditorViewModel: ObservableObject {
     private func finishCaptionFailure(_ error: APIError, fallback: String? = nil) {
         if handlePaywallIfNeeded(error) { return }
         state = .failed
-        lastError = error.errorDescription
         processingOverlay = .editing
         let copy: String
         if case .noSpeechDetected = error {
             copy = error.captionsChatMessage
+        } else if error.serverFailureKind == .photoUnsupported {
+            copy = UXCopy.photoUnsupported
         } else if let fallback {
             copy = fallback
         } else {
             copy = error.captionsChatMessage
         }
+        // Fixed copy only; never the server's or system's error text.
+        lastError = copy
         messages.append(ChatMessage(role: .assistant, content: copy))
         // No fake VTT/SRT chips on failure.
     }
@@ -593,17 +686,21 @@ final class EditorViewModel: ObservableObject {
                 ClientChatRequest(messages: conversation, media: await currentMedia())
             )
             var rounds = 0
-            var anyFailed = false
             while response.status == "tool_calls", !response.toolCalls.isEmpty, rounds < Self.maxClientRounds {
                 rounds += 1
                 var results: [(callId: String, result: ClientToolResult)] = []
                 for call in response.toolCalls {
                     if Task.isCancelled { return }
                     let result = await executeToolCall(call)
-                    if !result.ok { anyFailed = true }
                     results.append((call.id, result))
+                    if importError != nil, localVideoURL == nil { break }
                 }
                 conversation = ClientChat.continuation(previous: conversation, response: response, results: results)
+                if importError != nil, localVideoURL == nil {
+                    // 415: the photo is gone from the editor; stop the loop at the import step.
+                    finishTurn()
+                    return
+                }
                 state = .processing
                 processingOverlay = .editing
                 response = try await client.sendClientChat(
@@ -613,7 +710,7 @@ final class EditorViewModel: ObservableObject {
             if let text = response.finalText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                 messages.append(ChatMessage(role: .assistant, content: text))
             }
-            finishTurn(ok: !anyFailed || localVideoURL != nil)
+            finishTurn()
         } catch is CancellationError {
             // User sent another message or view torn down.
         } catch {
@@ -621,28 +718,42 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    private func finishTurn(ok: Bool) {
+    /// Ends a turn and shows at most one end-of-turn card (generic → Retry; invalid
+    /// arguments only when nothing succeeded). Photo-unsupported cards were already shown.
+    private func finishTurn() {
         processingOverlay = .editing
         activeJobId = nil
-        if state == .processing {
+        if let card = turnOutcome.endOfTurnCard(prompt: turnPrompt) {
+            messages.append(.failure(card))
+        }
+        turnOutcome = EditTurnOutcome()
+        if state == .processing || state == .failed {
             state = localVideoURL == nil ? .empty : .ready
         }
     }
 
+    /// The chat request itself failed. Copy comes from the stable code only.
     private func finishChatFailure(_ error: Error) {
         if handlePaywallIfNeeded(error) { return }
         processingOverlay = .editing
         activeJobId = nil
-        let description = (error as? APIError)?.errorDescription ?? error.localizedDescription
-        if case .clientModeUnavailable = (error as? APIError) {
+        let apiError = error as? APIError
+        if case .clientModeUnavailable = apiError {
             // Keep the clip usable; this is not an edit failure.
             state = localVideoURL == nil ? .empty : .ready
-            messages.append(ChatMessage(role: .assistant, content: description))
+            messages.append(ChatMessage(role: .assistant, content: APIError.clientModeUnavailable.errorDescription ?? UXCopy.generic))
             return
         }
-        state = .failed
-        lastError = description
-        messages.append(ChatMessage(role: .assistant, content: "Couldn't complete that edit — \(description)"))
+        let kind = apiError?.serverFailureKind ?? .generic
+        if kind == .unsupportedImageFormat {
+            showUnsupportedImageFormat()
+            return
+        }
+        state = localVideoURL == nil ? .empty : .ready
+        lastError = nil
+        let card = EditFailureCard(kind: kind, retryPrompt: kind.allowsRetry ? turnPrompt : nil)
+        messages.append(.failure(card))
+        turnOutcome = EditTurnOutcome()
     }
 
     private func prepareAuth(_ client: APIClient) async throws {
@@ -687,23 +798,52 @@ final class EditorViewModel: ObservableObject {
     /// sent to the server — they go back to the model as `ok: false`.
     func executeToolCall(_ call: ClientToolCall) async -> ClientToolResult {
         let tool = ToolCatalog.canonicalName(call.name)
-        if let argumentsError = call.argumentsError {
-            messages.append(ChatMessage(role: .system, content: "Skipped \(tool): \(argumentsError)"))
-            return .failure(argumentsError, on: .device)
+        if call.argumentsError != nil {
+            return record(.failure(ServerErrorCode.invalidArguments, on: .device), kind: .invalidArguments)
         }
         let media = await currentMedia()
-        let plan = ToolCatalog.plan(tool: tool, arguments: call.arguments, mediaDuration: media?.duration)
+        let plan = ToolCatalog.plan(
+            tool: tool,
+            arguments: call.arguments,
+            mediaDuration: media?.duration,
+            isPhoto: isPhoto
+        )
         switch plan {
         case .reject(let error):
-            messages.append(ChatMessage(role: .system, content: "Couldn't run \(tool): \(error)"))
-            return .failure(error, on: .device)
+            // Returned to the model; the user sees a card per the §8 rules, never this text.
+            if error == ServerErrorCode.unsupportedForPhoto {
+                messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
+                return record(.failure(error, on: .device), kind: .photoUnsupported)
+            }
+            return record(.failure(error, on: .device), kind: .invalidArguments)
         case .localQuery(let name):
-            return localQueryResult(name, media: media)
+            return record(localQueryResult(name, media: media), kind: nil)
         case .captions(let language, let translateLanguage, let burnIn):
-            return await runCaptionsTool(language: language, translateLanguage: translateLanguage, burnIn: burnIn)
+            let result = await runCaptionsTool(language: language, translateLanguage: translateLanguage, burnIn: burnIn)
+            // Caption flows post their own fixed-copy chat message on failure.
+            return record(result, kind: nil)
         case .serverJob(let operation, let args):
             return await runServerJob(tool: tool, operation: operation, args: args)
         }
+    }
+
+    @discardableResult
+    private func record(_ result: ClientToolResult, kind: EditFailureKind?) -> ClientToolResult {
+        turnOutcome.record(result, kind: kind)
+        return result
+    }
+
+    /// Applies the §8 UI for a failed server step and returns the model-facing result.
+    private func serverFailure(_ kind: EditFailureKind) -> ClientToolResult {
+        switch kind {
+        case .photoUnsupported:
+            messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
+        case .unsupportedImageFormat:
+            showUnsupportedImageFormat()
+        case .invalidArguments, .generic:
+            break // end-of-turn card
+        }
+        return record(.failure(kind.toolError, on: .server), kind: kind)
     }
 
     private func localQueryResult(_ tool: String, media: ClientMedia?) -> ClientToolResult {
@@ -729,13 +869,13 @@ final class EditorViewModel: ObservableObject {
         processingOverlay = .generatingCaptions
         await runGenerateCaptions(language: language)
         guard captionArtifacts.hasSource else {
-            return .failure(lastError ?? "captions_failed", on: .server)
+            return .failure("captions_failed", on: .server)
         }
         if let translateLanguage {
             state = .processing
             await runTranslateCaptions(targetLanguage: translateLanguage)
             guard captionArtifacts.hasTranslation else {
-                return .failure(lastError ?? "translation_failed", on: .server)
+                return .failure("translation_failed", on: .server)
             }
         }
         if burnIn {
@@ -743,7 +883,7 @@ final class EditorViewModel: ObservableObject {
             let before = localVideoURL
             await runBurnIn()
             if state == .failed || localVideoURL == before {
-                return .failure(lastError ?? "burn_in_failed", on: .server)
+                return .failure("burn_in_failed", on: .server)
             }
         }
         state = .processing
@@ -753,18 +893,28 @@ final class EditorViewModel: ObservableObject {
     /// Runs one operation on the async jobs API, then swaps the preview to the result.
     /// The upload carries the file's real MIME type; the result keeps the server's type.
     private func runServerJob(tool: String, operation: String, args: [String: JSONValue]) async -> ClientToolResult {
-        guard let client = apiClient, let videoURL = localVideoURL else {
-            return .failure("no_media", on: .server)
+        guard let client = apiClient, let mediaURL = localVideoURL else {
+            return record(.failure("no_media", on: .server), kind: .generic)
+        }
+        // Photos upload as JPEG/PNG only — never HEIC (prod FFmpeg has no HEIF decoder).
+        let uploadURL: URL
+        if MediaMIME.isImage(url: mediaURL) {
+            guard let safe = try? PhotoTranscoder.uploadablePhoto(at: mediaURL) else {
+                return serverFailure(.unsupportedImageFormat)
+            }
+            uploadURL = safe
+        } else {
+            uploadURL = mediaURL
         }
         do {
             try await prepareAuth(client)
             state = .processing
             processingOverlay = .editing
-            let (videoData, _) = try readLocalVideoData()
+            let uploadData = try Data(contentsOf: uploadURL)
             let enqueue = try await client.submitProcessVideoJob(
-                videoData: videoData,
-                fileName: videoURL.lastPathComponent,
-                mimeType: MediaMIME.mimeType(for: videoURL),
+                videoData: uploadData,
+                fileName: uploadURL.lastPathComponent,
+                mimeType: MediaMIME.mimeType(for: uploadURL),
                 operation: operation,
                 args: args.mapValues { $0.foundationValue }
             )
@@ -772,9 +922,8 @@ final class EditorViewModel: ObservableObject {
             let final = try await client.pollJob(id: enqueue.jobId)
             activeJobId = nil
             guard final.status == .succeeded else {
-                let error = final.error ?? "Job failed"
-                messages.append(ChatMessage(role: .system, content: "Couldn't apply \(tool): \(error)"))
-                return .failure(error, on: .server)
+                // Failed polls carry the stable `code` (Backend #88); `error` text is ignored.
+                return serverFailure(EditFailureKind.from(code: final.code))
             }
             let download = try await client.downloadJobResultWithContentType(
                 id: enqueue.jobId,
@@ -789,7 +938,7 @@ final class EditorViewModel: ObservableObject {
             try download.data.write(to: out)
             localVideoURL = out
             messages.append(ChatMessage(role: .system, content: "Applied \(tool)"))
-            return .success(on: .server)
+            return record(.success(on: .server), kind: nil)
         } catch is CancellationError {
             activeJobId = nil
             return .failure("cancelled", on: .server)
@@ -799,9 +948,8 @@ final class EditorViewModel: ObservableObject {
                 handlePaywallIfNeeded(apiError)
                 return .failure("paywall", on: .server)
             }
-            let description = (error as? APIError)?.errorDescription ?? error.localizedDescription
-            messages.append(ChatMessage(role: .system, content: "Couldn't apply \(tool): \(description)"))
-            return .failure(description, on: .server)
+            // Sync error bodies (submit 400/415) carry the same stable codes.
+            return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
         }
     }
 

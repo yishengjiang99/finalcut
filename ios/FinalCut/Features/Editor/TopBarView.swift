@@ -22,7 +22,7 @@ struct TopBarView: View {
 
             PhotosPicker(
                 selection: $photosPickerItem,
-                matching: .videos,
+                matching: EditorViewModel.pickerFilter,
                 photoLibrary: .shared()
             ) {
                 Text("Import")
@@ -30,7 +30,7 @@ struct TopBarView: View {
             }
             .disabled(!importEnabled)
             .accessibilityLabel("Import")
-            .accessibilityHint("Choose a video from Photos")
+            .accessibilityHint("Choose a photo or video from Photos")
 
             if exportVisible {
                 Button("Export", action: onExport)
