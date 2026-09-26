@@ -76,6 +76,9 @@ struct EditorView: View {
             model.onInferenceFinished = { [weak appModel] in
                 Task { await appModel?.refreshQuota() }
             }
+            #if DEBUG
+            ScreenshotFixtures.applyIfRequested(to: model)
+            #endif
         }
         .overlay(alignment: .top) {
             if model.state == .failed, let err = model.lastError {

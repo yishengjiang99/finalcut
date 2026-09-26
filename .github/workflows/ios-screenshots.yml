@@ -1,0 +1,173 @@
+# App Store screenshots: runs FinalCutUITests/ScreenshotTests on a 6.9" iPhone (1320x2868)
+# and a 13" iPad (2064x2752), exports the keep-always PNG attachments from the .xcresult,
+# verifies exact pixel sizes, renames them iphone69-NN-<slug>.png / ipad13-NN-<slug>.png
+# (order = docs/asc/LISTING.md) and uploads one artifact.
+name: iOS Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    # Temp branch for the build-11 first pass (workflow_dispatch needs the file on main first).
+    branches: [tmp/asc-screenshots]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-screenshots.yml'
+      - 'scripts/ios/export_screenshots.py'
+
+concurrency:
+  group: ios-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: ScreenshotTests (iPhone 6.9" + iPad 13")
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      DERIVED: ${{ github.workspace }}/DerivedData
+      OUT: ${{ github.workspace }}/screenshots
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          # Xcode 16.x ships iPhone 16 Pro Max + iPad Pro 13-inch (M4) simulators; 26 has 17 Pro Max.
+          for app in /Applications/Xcode_16.4.app /Applications/Xcode_16.3.app /Applications/Xcode_16.2.app /Applications/Xcode_26.0.app /Applications/Xcode_26.app /Applications/Xcode.app; do
+            if [[ -d "$app" ]]; then sudo xcode-select -s "$app"; break; fi
+          done
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Resolve simulators
+        id: sims
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, os, re, subprocess, sys
+
+          def run(*a):
+              return subprocess.check_output(a, text=True)
+
+          data = json.loads(run("xcrun", "simctl", "list", "-j"))
+          runtimes = [r for r in data["runtimes"] if r.get("isAvailable") and r.get("platform", "iOS") == "iOS" and "iOS" in r["name"]]
+          runtimes.sort(key=lambda r: [int(x) for x in re.findall(r"\d+", r["version"])], reverse=True)
+          if not runtimes:
+              sys.exit("no iOS runtime")
+          devices = data["devices"]
+
+          def pick(names, type_ids):
+              # Prefer an existing device on the newest runtime, in preference order.
+              for rt in runtimes:
+                  for name in names:
+                      for d in devices.get(rt["identifier"], []):
+                          if d.get("isAvailable") and d["name"] == name:
+                              return d["udid"], name, rt["name"]
+              # Otherwise create one on the newest runtime that supports the device type.
+              for rt in runtimes:
+                  supported = {t["identifier"] for t in rt.get("supportedDeviceTypes", [])}
+                  for name, tid in zip(names, type_ids):
+                      if not supported or tid in supported:
+                          try:
+                              udid = run("xcrun", "simctl", "create", f"ASC {name}", tid, rt["identifier"]).strip()
+                              return udid, name, rt["name"]
+                          except subprocess.CalledProcessError:
+                              continue
+              sys.exit(f"no simulator for {names}")
+
+          iphone = pick(
+              ["iPhone 16 Pro Max", "iPhone 17 Pro Max"],
+              ["com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max", "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max"],
+          )
+          ipad = pick(
+              ["iPad Pro 13-inch (M4)", "iPad Pro 13-inch (M5)"],
+              ["com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB", "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB"],
+          )
+          print("iPhone:", iphone)
+          print("iPad:", ipad)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"iphone={iphone[0]}\nipad={ipad[0]}\n")
+              f.write(f"iphone_name={iphone[1]} ({iphone[2]})\nipad_name={ipad[1]} ({ipad[2]})\n")
+          PY
+
+      - name: Python tools (Pillow for alpha flattening)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet pillow
+
+      - name: Build for testing
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project FinalCut.xcodeproj \
+            -scheme FinalCutScreenshots \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=${{ steps.sims.outputs.iphone }}" \
+            -destination "platform=iOS Simulator,id=${{ steps.sims.outputs.ipad }}" \
+            -derivedDataPath "$DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing | tail -n 60
+
+      - name: Capture
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          capture() {
+            local udid="$1" prefix="$2" expect="$3"
+            echo "::group::$prefix ($udid)"
+            xcrun simctl boot "$udid" 2>/dev/null || true
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl ui "$udid" appearance dark
+            sleep 5
+            xcrun simctl status_bar "$udid" override \
+              --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
+              --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+            rm -rf "$prefix.xcresult"
+            xcodebuild \
+              -project FinalCut.xcodeproj \
+              -scheme FinalCutScreenshots \
+              -destination "platform=iOS Simulator,id=$udid" \
+              -derivedDataPath "$DERIVED" \
+              -only-testing:FinalCutUITests/ScreenshotTests \
+              -parallel-testing-enabled NO \
+              -resultBundlePath "$prefix.xcresult" \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building
+            "$RUNNER_TEMP/venv/bin/python" ../scripts/ios/export_screenshots.py "$prefix.xcresult" "$OUT" "$prefix" "$expect"
+            xcrun simctl status_bar "$udid" clear || true
+            xcrun simctl shutdown "$udid" || true
+            echo "::endgroup::"
+          }
+          capture "${{ steps.sims.outputs.iphone }}" iphone69 1320x2868
+          capture "${{ steps.sims.outputs.ipad }}" ipad13 2064x2752
+
+      - name: Verify 12 PNGs
+        run: |
+          set -euo pipefail
+          ls -la "$OUT"
+          n=$(ls "$OUT"/*.png | wc -l | tr -d ' ')
+          test "$n" -eq 12 || { echo "::error::expected 12 PNGs, got $n"; exit 1; }
+          for f in "$OUT"/*.png; do sips -g pixelWidth -g pixelHeight -g hasAlpha "$f" | tail -n 3 | tr '\n' ' '; echo " $(basename "$f")"; done
+          {
+            echo "### ASC screenshots (${{ steps.sims.outputs.iphone_name }} / ${{ steps.sims.outputs.ipad_name }})"
+            for f in "$OUT"/*.png; do echo "- $(basename "$f")"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: asc-screenshots-build11-${{ github.sha }}
+          path: screenshots/*.png
+          if-no-files-found: error
+
+      - name: Upload xcresults on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots-xcresult
+          path: ios/*.xcresult
+          if-no-files-found: ignore

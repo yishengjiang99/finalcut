@@ -43,6 +43,11 @@ final class AppModel: ObservableObject {
         didBootstrap = true
 
         #if DEBUG
+        // App Store screenshot fixtures: no network, no quota counter, no paywall.
+        if ScreenshotFixtures.isActive { return }
+        #endif
+
+        #if DEBUG
         // DEBUG / demo: warm the sample token (`sample-access-token` header) in the background.
         let client = apiClient
         Task { _ = try? await client.ensureSampleAccessToken() }
