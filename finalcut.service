@@ -27,6 +27,8 @@ After=network.target
 Type=simple
 User=finalcut
 WorkingDirectory=/home/finalcut/apps/pages/finalcut
+# NODE_ENV comes from here, not from .env (cookies secure flag, trust proxy, log levels).
+# EnvironmentFile= is read by systemd as root, so .env can be mode 600 (owner finalcut).
 Environment=NODE_ENV=production
 EnvironmentFile=/home/finalcut/apps/pages/finalcut/.env
 ExecStart=/usr/bin/node server.js

@@ -47,6 +47,8 @@ Export is the only step with a progress sheet (section 4).
 - **Compare:** press and hold the preview to show the original clip; release to return to the edited version. Label while holding: "Original".
 - **Undo:** the Undo link on the newest card removes that edit. Undo on an older card removes just that edit if the stack allows it; otherwise it removes it and everything after it, and says so ("Also removes 2 later edits").
 
+**Sample chips (video, build 10):** every chip must map to something that runs on the device, either one of the 20 allowlisted tools or on-device captions. Use: "Generate captions", "Red filter", "Speed up 2×", "Add a title", "Fade out audio". Drop "Trim silence" (no native silence detection yet) and "Burn in" unless burn-in is done natively. "Translate to Spanish" can come back once translation runs on the device or sends text only. When the tool list grows, update the chips with it.
+
 ## 4. Export, background, and notification
 
 1. Tap Export, pick a destination in `ExportSheet` (Save to Photos / Share / Save to Files).
@@ -126,6 +128,36 @@ When the imported asset is a photo (`mediaType: "image"`), everything runs on th
 - The Export sheet title is "Save photo". Save to Photos in the original format. There is no render percentage; show a short spinner.
 - If the model calls a video-only tool on a photo (trim, audio, captions, speed), show a failed card that says "That works on videos, not photos." with no Retry. The on-device tool list for photos should make this rare.
 
+## 8a. Grouped look and audio tools (first build with the grouped-tool executor)
+
+The first build with the grouped-tool executor adds grouped tools (`channel_mixer`, `color_adjust`, `apply_filter`, `stylize`, `blur_sharpen`, `lut`, `vignette_grain`, `segment`, `audio_effect`). The catalog and schemas live in `docs/ios/ON_DEVICE_TOOLS.md`. This section covers only how they look and behave for the user.
+
+**Card titles are plain words, never tool or filter names.** The card reads "{Group} · {what changed}". The user should never see `channel_mixer`, `CIPhotoEffectNoir` or a matrix.
+
+| Tool | Card title examples |
+|---|---|
+| `channel_mixer` | Channels · Red removed / Channels · Red and blue swapped / Channels · Green only |
+| `color_adjust` | Color · Warmer / Color · Brighter, more contrast |
+| `adjust_*` (retired names from old chats) | Same "Color · …" titles as `color_adjust` |
+| `apply_filter`, `stylize` | Look · Noir / Look · Comic (use the catalog's display name, not the Core Image name) |
+| `blur_sharpen` | Blur · Soft / Sharpen · Strong |
+| `lut` | Look · {LUT display name} |
+| `vignette_grain` | Vignette · Medium / Grain · Light |
+| `segment` | Background · Blurred / Background · Replaced |
+| `audio_effect` | Audio · Reverb / Audio · Bass boost / Audio · Pitch up |
+
+When one call changes several values, list at most two in the title and put "+{n} more" after them.
+
+**Vague words map to three strengths.** Tool descriptions should tell the model to send a normalized intensity: "a bit" or "slightly" is light (0.25), no qualifier is medium (0.5), and "a lot", "very" or "really" is strong (0.8). Medium must be clearly visible on a phone screen. If the first try looks like nothing happened, the user thinks it failed.
+
+**"More" and "less" update the last card instead of adding one.** If the next prompt adjusts the same tool ("warmer", "less blur", "undo the red thing but keep it cool"), the executor replaces that edit's parameters. The existing card updates in place and briefly shows "Updated". Undo on that card returns to the value before the update, not all the way to the original. Any other tool call adds a new card as usual.
+
+**Slow tools.** `segment` on video and some `apply_filter` distortions can take more than 1.5 seconds to build their first frame. They use the thin bar under the preview from section 2 and never dim it.
+
+**Media mismatch.** `audio_effect` on a photo uses `edit.failed.photoUnsupported`. A filter name that isn't in the catalog returns `unsupported_on_device` and shows the quiet `unavailable` card.
+
+**Sample chips for that build** (all must map to these tools): "Generate captions", "Make it warmer", "Remove red channel", "Blur the background", "Add reverb". Keep the build 10 chips until the grouped-tool executor ships. Builds number automatically, so the switch is tied to that executor, not to a build number. The server turns these tools on from the build FinalCut iOS posts as the first one that runs them.
+
 ## 9. Server error codes (Cloud processing on only)
 
 These apply only when a step actually goes to the server. Map the `code` field to UI and never show the raw `error` text.
@@ -179,6 +211,7 @@ These apply only when a step actually goes to the server. Map the `code` field t
 | `dictation.permissionDenied` | Turn on Microphone and Speech Recognition for FinalCap in Settings. |
 | `paywall.subhead.unlimitedPeriod` | Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return. |
 | `dictation.queued` | Queued |
+| `edit.updated` | Updated |
 | `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. |
 
 ## 11. Out of scope for this slice

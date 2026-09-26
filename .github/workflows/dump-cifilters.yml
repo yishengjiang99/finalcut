@@ -1,0 +1,121 @@
+# Dumps the Core Image filter catalog (every CIFilter + attributes + category membership),
+# AVAudioUnit parameter trees and Vision request revisions from real iOS Simulator runtimes. Source: docs/ios/data/dump_cifilters.swift.
+# Output artifacts are committed as docs/ios/data/*.json and feed docs/ios/ON_DEVICE_TOOLS.md.
+#
+# Manual only (workflow_dispatch). The push trigger is limited to throwaway ci/dump-cifilters*
+# branches so the workflow can be exercised before it exists on main; it never runs on main.
+name: Dump CIFilters (iOS Simulator)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ios17_version:
+        description: 'iOS 17 simulator runtime to download if the image lacks one'
+        default: '17.5'
+        required: false
+  push:
+    branches:
+      - 'ci/dump-cifilters*'
+    paths:
+      - '.github/workflows/dump-cifilters.yml'
+      - 'docs/ios/data/dump_cifilters.swift'
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    name: dump (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # No current GitHub image ships an iOS 17 runtime; macos-15 + Xcode 16.x downloads one.
+          - label: ios17
+            runner: macos-15
+            xcode_glob: 'Xcode_16*'
+            want_major: '17'
+          # Newest iOS 26.x runtime preinstalled on the macos-26 image (default Xcode 26.x).
+          - label: ios26
+            runner: macos-26
+            xcode_glob: 'Xcode_26*'
+            want_major: '26'
+    env:
+      IOS17_VERSION: ${{ github.event.inputs.ios17_version || '17.5' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest matching Xcode
+        run: |
+          set -euo pipefail
+          ls -d /Applications/Xcode*.app || true
+          app=$(ls -d /Applications/${{ matrix.xcode_glob }}.app 2>/dev/null | sort -V | tail -1)
+          if [[ -z "$app" ]]; then app=/Applications/Xcode.app; fi
+          sudo xcode-select -s "$app"
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Ensure iOS ${{ matrix.want_major }} runtime
+        run: |
+          set -euo pipefail
+          have() { xcrun simctl list runtimes -j | python3 -c "import json,sys; rs=[r for r in json.load(sys.stdin)['runtimes'] if r['platform']=='iOS' and r['isAvailable'] and r['version'].split('.')[0]=='${{ matrix.want_major }}']; sys.exit(0 if rs else 1)"; }
+          if have; then echo "runtime present"; exit 0; fi
+          echo "No iOS ${{ matrix.want_major }} runtime; downloading iOS $IOS17_VERSION"
+          sudo xcodebuild -downloadPlatform iOS -buildVersion "$IOS17_VERSION" || true
+          if ! have; then
+            xcodes runtimes install "iOS $IOS17_VERSION" || true
+          fi
+          xcrun simctl list runtimes
+          have
+
+      - name: Create and boot simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess
+          want = "${{ matrix.want_major }}"
+          rts = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "runtimes", "-j"]))["runtimes"]
+          rts = [r for r in rts if r["platform"] == "iOS" and r["isAvailable"] and r["version"].split(".")[0] == want]
+          key = lambda r: [int(x) for x in r["version"].split(".")]
+          rt = sorted(rts, key=key)[-1]
+          phones = [d for d in rt.get("supportedDeviceTypes", []) if d.get("productFamily") == "iPhone"]
+          dt = phones[-1]
+          print("runtime", rt["identifier"], rt["version"], rt.get("buildversion"), "device", dt["name"])
+          udid = subprocess.check_output(["xcrun", "simctl", "create", "cifilter-dump", dt["identifier"], rt["identifier"]], text=True).strip()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"udid={udid}\nversion={rt['version']}\nbuild={rt.get('buildversion','')}\ndevice={dt['name']}\n")
+          PY
+          udid=$(grep '^udid=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Build dumper for the simulator
+        run: |
+          set -euo pipefail
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          arch=$(uname -m)
+          xcrun --sdk iphonesimulator swiftc -O -sdk "$sdk" -target "${arch}-apple-ios17.0-simulator" \
+            docs/ios/data/dump_cifilters.swift -o "$RUNNER_TEMP/dump_cifilters"
+          file "$RUNNER_TEMP/dump_cifilters"
+
+      - name: Dump catalog + platform
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          v="${{ steps.sim.outputs.version }}"
+          udid="${{ steps.sim.outputs.udid }}"
+          xcrun simctl spawn "$udid" "$RUNNER_TEMP/dump_cifilters" catalog "$out/cifilters-ios${v}.json"
+          xcrun simctl spawn "$udid" "$RUNNER_TEMP/dump_cifilters" platform "$out/platform-ios${v}.json"
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['environment']); print(d['categoryCounts'])" "$out/cifilters-ios${v}.json"
+          echo "### iOS $v (${{ steps.sim.outputs.build }}, ${{ steps.sim.outputs.device }}): $(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['filterCount'])" "$out/cifilters-ios${v}.json") filters" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cifilters-${{ matrix.label }}
+          path: ${{ runner.temp }}/out/*.json
+          if-no-files-found: error

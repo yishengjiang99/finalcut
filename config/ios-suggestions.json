@@ -1,0 +1,21 @@
+{
+  "ttl": 3600,
+  "video": [
+    { "id": "v-captions", "label": "Captions", "prompt": "Add captions from what's said in the video.", "icon": "captions.bubble", "tools": ["generate_captions"] },
+    { "id": "v-trim-15", "label": "Trim to 15s", "prompt": "Trim the video to the first 15 seconds.", "icon": "scissors", "tools": ["trim_video"] },
+    { "id": "v-title", "label": "Add a title", "prompt": "Add a title at the top of the video in large white text. Ask me what it should say first.", "icon": "textformat", "tools": ["add_text"] },
+    { "id": "v-vertical", "label": "Make it vertical", "prompt": "Make the video vertical (9:16) for Reels and TikTok.", "icon": "rectangle.portrait", "tools": ["resize_video_preset"] },
+    { "id": "v-slowmo", "label": "Slow motion", "prompt": "Play the video at half speed.", "icon": "tortoise", "tools": ["adjust_speed"] },
+    { "id": "v-speed-2x", "label": "Speed up 2×", "prompt": "Play the video at 2× speed.", "icon": "hare", "tools": ["adjust_speed"] },
+    { "id": "v-warm", "label": "Warmer look", "prompt": "Give the video warmer tones.", "icon": "thermometer.sun", "tools": ["apply_color_filter"] },
+    { "id": "v-mute", "label": "Mute audio", "prompt": "Mute the audio.", "icon": "speaker.slash", "tools": ["adjust_audio_volume"] }
+  ],
+  "photo": [
+    { "id": "p-bw", "label": "Black and white", "prompt": "Make the photo black and white.", "icon": "circle.lefthalf.filled", "tools": ["apply_color_filter"] },
+    { "id": "p-brighten", "label": "Brighten", "prompt": "Make the photo a little brighter.", "icon": "sun.max", "tools": ["adjust_brightness", "color_adjust"] },
+    { "id": "p-vivid", "label": "More vivid", "prompt": "Make the colors a little more vivid.", "icon": "paintpalette", "tools": ["adjust_saturation", "color_adjust"] },
+    { "id": "p-warm", "label": "Warmer look", "prompt": "Give the photo warmer tones.", "icon": "thermometer.sun", "tools": ["apply_color_filter"] },
+    { "id": "p-square", "label": "Square 1:1", "prompt": "Make the photo square (1:1) for Instagram.", "icon": "square", "tools": ["resize_video_preset"] },
+    { "id": "p-text", "label": "Add text", "prompt": "Add text to the photo. Ask me what it should say first.", "icon": "textformat", "tools": ["add_text"] }
+  ]
+}

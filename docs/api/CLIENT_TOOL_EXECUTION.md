@@ -10,9 +10,24 @@ Any other value than `"client"` is rejected with 400.
 ## Auth and quota
 
 Same as normal chat: `Authorization: Bearer <accessToken>`, `sample-access-token`,
-or a session cookie. Every POST (first turn and every tool-result continuation)
-counts as one chat turn against the free daily inference quota (`429
-daily_limit_reached` when exhausted; subscribers are unlimited).
+or a session cookie. The free daily inference quota (`429 daily_limit_reached` when
+exhausted; subscribers are unlimited) is charged **once per edit turn**:
+
+- The first POST of a turn (a new user message) is charged.
+- Every `status: "tool_calls"` response carries a top-level `turnToken` (opaque string).
+  Echo the **latest** one as a top-level `turnToken` in the next continuation POST (see §2).
+  Each round issues a new token; each token works for one continuation. A continuation
+  with a valid token is not charged, and is allowed even if the quota ran out mid-turn
+  (response header `X-Inference-Charged: false`).
+- A missing, reused, expired (30 min) or mismatched token is not an error: the request is
+  charged like a new turn. Clients that don't send it (build 9) are charged per POST.
+- If the phone asks the server to run one of the turn's tool calls (a metered media route
+  such as `/api/jobs/process-video`), send headers `X-Turn-Token: <latest turnToken>` and
+  `X-Tool-Call-Id: <toolCalls[i].id>`. Each tool call id runs free once; anything else is
+  charged per request as before.
+
+With `FREE_EDITS_IOS=unlimited`, iOS clients are never limited, and usage is counted with
+the same per-turn rule. See [`FREE_EDITS_IOS.md`](./FREE_EDITS_IOS.md).
 
 ## Tool schema
 
@@ -44,6 +59,53 @@ properties they don't know. Additions so far:
   `max(0, clip length - duration)`, so it ends at the end of the clip. A negative or
   non-numeric value returns **400** `{ "code": "invalid_arguments" }` from
   `POST /api/process-video` and `POST /api/jobs/process-video`.
+
+## iOS User-Agent and tool allowlist
+
+The server decides which tools the FinalCap iOS app gets. The app sends no capability
+list. It identifies itself with its User-Agent:
+
+```
+User-Agent: FinalCap-iOS/<build>        e.g. FinalCap-iOS/10   (build = CFBundleVersion, integer)
+```
+
+The rule lives in `src/server/iosToolAllowlist.js` (`IOS_TOOL_ALLOWLIST`, `{ toolName: minBuild }` or
+`{ toolName: { minBuild, maxBuild } }`, both inclusive), with UA
+parsing in `src/server/clientInfo.js` (`^FinalCap-iOS/(\d+)`). For a UA starting with
+`FinalCap-iOS`:
+
+- A tool is offered only if it is on the allowlist **and** `minBuild <= build <= maxBuild`, intersected
+  with the tools valid for `media.type`.
+- A missing or unparseable build (`FinalCap-iOS`, `FinalCap-iOS/abc`) or a build older than
+  every entry gets **no** tools. It never falls back to the full list.
+- Device-limited arguments are narrowed in the offered definitions: `convert_video_format.format`
+  ∈ `mp4|mov`, `convert_image_format.format` ∈ `jpg|png`, `adjust_speed.speed` 0.25–4.
+  `generate_captions` has no `translate_language` (no on-device translator), and its
+  description and `position`/`burn_in` text describe on-device speech and burn-in instead of the
+  server/FFmpeg pipeline. `language`, `style`, `position` and `burn_in` are unchanged otherwise.
+
+This applies to `POST /api/chat` in every mode (client mode: the offered `tools`; default
+streaming mode: client-sent `tools` are filtered, and `tools`/`tool_choice` are dropped when none
+remain). It also applies to `GET /api/tools/schema`, which returns the filtered `tools` and `mediaTypes`
+with the same `schemaVersion: "1"` and `Vary: User-Agent`.
+
+Any other UA gets all 46 tools exactly as before. That includes web browsers and iOS build 9 and
+earlier, which send the default `FinalCap/<build> CFNetwork/…` UA and still upload to the server.
+The web request is byte-for-byte unchanged.
+
+Allowlist for build 10 (from `docs/ios/native-tools.md`, "iOS allowlist (build 10)"), all
+`minBuild: 10`: trim_video, adjust_speed, crop_video, rotate_video, flip_video_horizontal,
+flip_video_vertical, resize_video, resize_video_preset, adjust_brightness, adjust_contrast,
+adjust_saturation, adjust_hue, apply_color_filter, add_text, adjust_audio_volume, audio_fade,
+get_video_dimensions, get_supported_formats, convert_video_format, convert_image_format, plus
+**generate_captions** (on-device speech, no translation). That's 21 tools. `translate_captions` and
+`burn_subtitles` are not tools the model sees and are not allowlisted. To ship a tool on device in
+a later build, add `tool_name: <build>` to the allowlist.
+
+Grouped effect tools (`channel_mixer`, `color_adjust`, `apply_filter`, `stylize`, `blur_sharpen`,
+`lut`, `vignette_grain`, `segment`, `audio_effect`) are iOS-only definitions gated on
+`GROUPED_EFFECTS_MIN_BUILD`, which is currently off for every real build. From that build on, the
+four `adjust_*` tools are retired and iOS gets 26 tools. See [`IOS_GROUPED_TOOLS.md`](./IOS_GROUPED_TOOLS.md).
 
 ## 1. First turn
 
@@ -84,7 +146,8 @@ Response:
   ],
   "round": 1,
   "maxRounds": 6,
-  "thumbnailsSentAsImages": false
+  "thumbnailsSentAsImages": false,
+  "turnToken": "v1.eyJ1Ijoi…"
 }
 ```
 
@@ -94,11 +157,13 @@ If the model's arguments are not valid JSON, the call has `"arguments": {}` and
 ## 2. Continue with tool results
 
 Execute each tool call on the device. Then POST `messages` from the previous response
-with one OpenAI-style tool message appended per call:
+with one OpenAI-style tool message appended per call, plus the `turnToken` from that
+response (so the continuation isn't charged as a new turn):
 
 ```json
 {
   "execution": "client",
+  "turnToken": "v1.eyJ1Ijoi…",
   "media": { "type": "image", "width": 4032, "height": 3024 },
   "messages": [
     …previous messages…,
@@ -139,6 +204,24 @@ This is treated as an intentional choice, **not a failure**. In the current user
 - the system context lists the declined tools;
 - the declined tool is removed from the offered tools, and any re-call of it is dropped.
   The model continues with the remaining steps and then gives the final answer.
+
+## Tools the phone can't run (`unsupported_on_device`)
+
+This is a safety net behind the allowlist. If the device gets a call it can't execute, return
+
+```json
+{ "role": "tool", "tool_call_id": "call_1",
+  "content": { "ok": false, "code": "unsupported_on_device", "executedOn": "device" } }
+```
+
+The documented field is **`code`**, matching the server error codes. For tolerance, `error` or
+`reason` with the same value are also accepted (build 10 sends `error`). In the current user turn:
+
+- the tool message is annotated with `unsupportedOnDevice: true` and a note telling the model
+  not to call or retry that tool and to tell the user briefly that the edit isn't available on the phone yet;
+- the system context lists those tools;
+- the tool is removed from the offered tools, and any re-call of it is dropped. If the final
+  reply is empty, `message` is "Sorry, that edit isn't available on the phone yet."
 
 ## Loop cap
 

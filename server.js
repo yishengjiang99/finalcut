@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { initDatabase } from './src/db.js';
-import { PORT, stripe } from './src/server/config.js';
+import { PORT, stripe, nodeEnvWarning } from './src/server/config.js';
 import { setupAuth, authRouter } from './src/server/auth.js';
 import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { captionsRouter } from './src/server/captions.js';
@@ -9,8 +9,12 @@ import { videoRouter } from './src/server/video.js';
 import { chatRouter } from './src/server/chat.js';
 import { jobsRouter } from './src/server/jobs.js';
 import { createHealthRouter } from './src/server/health.js';
+import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 
 const app = express();
+
+const nodeEnvWarningText = nodeEnvWarning();
+if (nodeEnvWarningText) console.warn(nodeEnvWarningText);
 
 // Trust proxy headers (required when behind nginx/reverse proxy)
 // Enable for production or when TRUST_PROXY environment variable is set
@@ -21,6 +25,9 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 // Health check first: no auth, no session, no rate limit, no quota.
 // ffmpeg + commit are probed once here at startup.
 app.use(createHealthRouter());
+
+// iOS suggestion pills: public, pre-login, no session/DB (own rate limiter).
+app.use(iosSuggestionsRouter);
 
 // Initialize database
 try {

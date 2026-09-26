@@ -11,6 +11,24 @@ jobs:
     permissions:
       contents: read
 
+    # Real MariaDB for src/test/quota-enforcement.test.js (quota atomicity with mysql2 defaults).
+    # Throwaway CI-only database and user; not a real credential.
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_RANDOM_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: quota_test
+          MARIADB_USER: quota_test
+          MARIADB_PASSWORD: quota_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -25,3 +43,8 @@ jobs:
 
       - name: Run tests
         run: npm test
+        env:
+          QUOTA_DB_TEST_HOST: 127.0.0.1
+          QUOTA_DB_TEST_USER: quota_test
+          QUOTA_DB_TEST_PASSWORD: quota_test
+          QUOTA_DB_TEST_DATABASE: quota_test

@@ -27,6 +27,7 @@ import {
   IOS_FREE_DAILY_INFERENCE_LIMIT,
 } from './config.js';
 import { getDailyInferenceUsage } from '../db.js';
+import { hasUnlimitedFreeEdits } from './clientInfo.js';
 import { verifyAppleTransaction } from './apple-iap.js';
 import {
   apiLimiter,
@@ -236,6 +237,34 @@ async function dailyQuotaForUser(user) {
   return getDailyInferenceUsage(user.id, IOS_FREE_DAILY_INFERENCE_LIMIT);
 }
 
+/**
+ * Quota fields for GET /api/auth/status (Bearer). With FREE_EDITS_IOS=unlimited for an iOS
+ * client: `unlimited: true`, `dailyLimit`/`dailyRemaining` null (older builds hide the
+ * "N free left" label when dailyRemaining is null), `dailyUsed` still the real count.
+ */
+async function quotaStatusFields(req) {
+  const user = req.user;
+  if (user && !user.has_subscription && hasUnlimitedFreeEdits(req)) {
+    let used = 0;
+    let resetsAt = null;
+    try {
+      const usage = await getDailyInferenceUsage(user.id, IOS_FREE_DAILY_INFERENCE_LIMIT);
+      used = usage.used;
+      resetsAt = usage.resetsAt;
+    } catch (error) {
+      console.error('Daily inference usage read error (unlimited):', error);
+    }
+    return { unlimited: true, dailyLimit: null, dailyUsed: used, dailyRemaining: null, dailyResetsAt: resetsAt };
+  }
+  const dailyQuota = await dailyQuotaForUser(user);
+  return dailyQuota ? {
+    dailyLimit: dailyQuota.limit,
+    dailyUsed: dailyQuota.used,
+    dailyRemaining: dailyQuota.remaining,
+    dailyResetsAt: dailyQuota.resetsAt,
+  } : {};
+}
+
 /** Register an install and mint its opaque Bearer session. The install ID is random and app-scoped, not a hardware identifier. */
 router.post('/api/auth/mobile/device', apiLimiter, async (req, res) => {
   try {
@@ -435,7 +464,7 @@ router.get('/api/auth/status', apiLimiter, async (req, res) => {
         }
         throw error;
       }
-      const dailyQuota = await dailyQuotaForUser(req.user);
+      const quotaFields = await quotaStatusFields(req);
       return res.json({
         authenticated: true,
         authMethod: 'bearer',
@@ -445,12 +474,7 @@ router.get('/api/auth/status', apiLimiter, async (req, res) => {
           name: req.user.name,
           hasSubscription: Boolean(req.user.has_subscription),
         },
-        ...(dailyQuota ? {
-          dailyLimit: dailyQuota.limit,
-          dailyUsed: dailyQuota.used,
-          dailyRemaining: dailyQuota.remaining,
-          dailyResetsAt: dailyQuota.resetsAt,
-        } : {}),
+        ...quotaFields,
       });
     }
 

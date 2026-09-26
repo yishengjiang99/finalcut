@@ -7,7 +7,7 @@
     "dev": "concurrently \"npx vite .\" \"nodemon server.js\"",
     "dev:client": "npx vite .",
     "dev:server": "nodemon server.js",
-    "build": "vite build",
+    "build": "NODE_ENV=production vite build",
     "preview": "vite preview",
     "test": "vitest --run",
     "server": "node server.js",
@@ -49,7 +49,7 @@
     "concurrently": "^9.2.1",
     "jsdom": "^23.0.1",
     "nodemon": "^3.1.10",
-    "vite": "^5.0.8",
-    "vitest": "^1.6.1"
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11"
   }
 }

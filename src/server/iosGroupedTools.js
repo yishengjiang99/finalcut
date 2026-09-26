@@ -1,0 +1,707 @@
+// iOS-only "grouped effect" tools, run by the FinalCap iOS on-device executor.
+//
+// Source: docs/ios/data/proposed-tools-build11.json (FinalCut iOS; also docs/ios/ON_DEVICE_TOOLS.md
+// §8-9). Parameters, enums and ranges are copied from it unchanged (a test keeps them in sync);
+// descriptions add an intensity sentence (and "cartoon" for stylize).
+//
+// These definitions are NOT in src/tools.js: the web tool list and docs/api/tools-schema.v1.json
+// never contain them, and the server has no FFmpeg implementation (cloud runs are rejected with
+// code "not_available_on_server"). They are offered only to FinalCap-iOS builds allowed by
+// GROUPED_EFFECTS_MIN_BUILD in iosToolAllowlist.js.
+
+function deepFreeze(value) {
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) deepFreeze(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** Media types per grouped tool (audio_effect is video-only, like the other audio tools). */
+export const IOS_GROUPED_TOOL_MEDIA_TYPES = deepFreeze({
+  "channel_mixer": [
+    "video",
+    "image"
+  ],
+  "color_adjust": [
+    "video",
+    "image"
+  ],
+  "apply_filter": [
+    "video",
+    "image"
+  ],
+  "stylize": [
+    "video",
+    "image"
+  ],
+  "blur_sharpen": [
+    "video",
+    "image"
+  ],
+  "lut": [
+    "video",
+    "image"
+  ],
+  "vignette_grain": [
+    "video",
+    "image"
+  ],
+  "segment": [
+    "video",
+    "image"
+  ],
+  "audio_effect": [
+    "video"
+  ]
+});
+
+/**
+ * apply_filter `name` → Core Image filter (the allowlisted table in ON_DEVICE_TOOLS.md §9.3).
+ * The enum offers exactly these names; every filter exists in the iOS 17.5 catalog dump.
+ */
+export const APPLY_FILTER_CORE_IMAGE_NAMES = deepFreeze({
+  "twirl": "CITwirlDistortion",
+  "vortex": "CIVortexDistortion",
+  "bulge": "CIBumpDistortion",
+  "bulge_line": "CIBumpDistortionLinear",
+  "pinch": "CIPinchDistortion",
+  "circle_splash": "CICircleSplashDistortion",
+  "hole": "CIHoleDistortion",
+  "light_tunnel": "CILightTunnel",
+  "torus_lens": "CITorusLensDistortion",
+  "glass_lozenge": "CIGlassLozenge",
+  "circular_wrap": "CICircularWrap",
+  "droste": "CIDroste",
+  "kaleidoscope": "CIKaleidoscope",
+  "triangle_kaleidoscope": "CITriangleKaleidoscope",
+  "op_art_tile": "CIOpTile",
+  "mirror_tile_4": "CIFourfoldReflectedTile",
+  "rotated_tile_6": "CISixfoldRotatedTile",
+  "mirror_tile_8": "CIEightfoldReflectedTile",
+  "mirror_tile_12": "CITwelvefoldReflectedTile",
+  "dot_screen": "CIDotScreen",
+  "line_screen": "CILineScreen",
+  "hatched_screen": "CIHatchedScreen",
+  "circular_screen": "CICircularScreen",
+  "cmyk_halftone": "CICMYKHalftone",
+  "monochrome_tint": "CIColorMonochrome",
+  "duotone": "CIFalseColor",
+  "white_point": "CIWhitePointAdjust",
+  "dither": "CIDither",
+  "max_component_gray": "CIMaximumComponent",
+  "min_component_gray": "CIMinimumComponent",
+  "threshold": "CIColorThreshold",
+  "sunbeams": "CISunbeamsGenerator",
+  "lens_flare": "CILenticularHaloGenerator",
+  "star_shine": "CIStarShineGenerator"
+});
+
+/** Tool definitions (same shape as src/tools.js). */
+export const IOS_GROUPED_TOOLS = deepFreeze([
+  {
+    "type": "function",
+    "function": {
+      "name": "channel_mixer",
+      "description": "Change individual RGB colour channels: remove, keep only, swap, invert, or show one channel as gray. Use for requests that name a channel, e.g. 'remove the red channel', 'only keep green', 'swap red and blue', 'invert the blue channel', 'show the red channel in black and white'. Not for tints or looks ('make it red' = apply_color_filter) and not for warmth/saturation (color_adjust). Presets apply fully at the default intensity; use 0.25 for 'partly'. Works on videos and photos. Out-of-range values are clamped. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "remove_red",
+              "remove_green",
+              "remove_blue",
+              "isolate_red",
+              "isolate_green",
+              "isolate_blue",
+              "swap_rb",
+              "swap_rg",
+              "swap_gb",
+              "grayscale_by_red",
+              "grayscale_by_green",
+              "grayscale_by_blue",
+              "invert_red",
+              "invert_green",
+              "invert_blue",
+              "custom"
+            ],
+            "description": "remove_X sets channel X to 0. isolate_X keeps only channel X (the image turns that colour). swap_XY exchanges two channels. grayscale_by_X shows channel X as a gray image. invert_X inverts one channel. custom uses matrix."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it. For this tool 0.5 and above apply the preset fully; 0.25 applies it half-way."
+          },
+          "matrix": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "Only with preset 'custom': 4 rows (R, G, B, A output), each [r, g, b, a, bias]. Coefficients are clamped to -2..2, bias to -1..1.",
+            "items": {
+              "type": "array",
+              "minItems": 5,
+              "maxItems": 5,
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "required": [
+          "preset"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "color_adjust",
+      "description": "Basic colour and light corrections: brighter/darker, contrast, saturation, vibrance, warmer/cooler (white balance), green/magenta tint, shadows, highlights, midtones, hue shift. Use for 'make it warmer', 'a bit brighter', 'more contrast', 'less saturated', 'lift the shadows', 'recover the highlights'. One call can list several changes. For named looks (sepia, black and white, vintage) use apply_color_filter; for film/cinematic looks use lut. Works on videos and photos. Out-of-range values are clamped. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "adjust": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "brighter",
+                "darker",
+                "more_contrast",
+                "less_contrast",
+                "more_saturation",
+                "less_saturation",
+                "more_vibrance",
+                "less_vibrance",
+                "warmer",
+                "cooler",
+                "greener",
+                "more_magenta",
+                "lift_shadows",
+                "deepen_shadows",
+                "recover_highlights",
+                "brighter_midtones",
+                "darker_midtones",
+                "hue_shift"
+              ]
+            },
+            "description": "What to change, in plain words. 'more vivid' = more_vibrance; 'muted' or 'desaturate' = less_saturation; 'white balance too blue' = warmer."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          },
+          "intensity_per_change": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "description": "Optional per-change strength when changes differ, e.g. {\"brighter\": 0.25, \"warmer\": 0.8}. Same scale as intensity."
+          },
+          "values": {
+            "type": "object",
+            "description": "Optional exact values (override intensity). Use only when the user gives numbers.",
+            "properties": {
+              "exposure_ev": {
+                "type": "number",
+                "minimum": -3,
+                "maximum": 3
+              },
+              "brightness": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              },
+              "contrast": {
+                "type": "number",
+                "minimum": 0.25,
+                "maximum": 4,
+                "description": "1 = unchanged"
+              },
+              "saturation": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "1 = unchanged, 0 = gray"
+              },
+              "vibrance": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              },
+              "temperature_shift_k": {
+                "type": "number",
+                "minimum": -4000,
+                "maximum": 4000,
+                "description": "Positive = warmer"
+              },
+              "tint_shift": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 100,
+                "description": "Positive = more magenta, negative = greener"
+              },
+              "hue_degrees": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "gamma": {
+                "type": "number",
+                "minimum": 0.25,
+                "maximum": 4,
+                "description": "1 = unchanged, below 1 brightens midtones"
+              },
+              "shadows": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              },
+              "highlights": {
+                "type": "number",
+                "minimum": 0.3,
+                "maximum": 1,
+                "description": "1 = unchanged, lower recovers highlights"
+              }
+            }
+          }
+        },
+        "required": [
+          "adjust"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "apply_filter",
+      "description": "Special effects that no other tool covers: distortions (twirl, bulge, pinch, vortex, lens), kaleidoscope and mirror tiles, print/halftone screens, one-colour tint with a chosen colour, duotone, two-tone threshold, light overlays (lens flare, sunbeams). Use only when the request names one of these effects. Colour corrections are color_adjust, named colour looks are apply_color_filter, film looks are lut, artistic styles (comic, sketch, pixelate, glow) are stylize, blur/sharpen is blur_sharpen. Works on videos and photos. Out-of-range values are clamped. Some distortions are slow to preview on video. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "twirl",
+              "vortex",
+              "bulge",
+              "bulge_line",
+              "pinch",
+              "circle_splash",
+              "hole",
+              "light_tunnel",
+              "torus_lens",
+              "glass_lozenge",
+              "circular_wrap",
+              "droste",
+              "kaleidoscope",
+              "triangle_kaleidoscope",
+              "op_art_tile",
+              "mirror_tile_4",
+              "rotated_tile_6",
+              "mirror_tile_8",
+              "mirror_tile_12",
+              "dot_screen",
+              "line_screen",
+              "hatched_screen",
+              "circular_screen",
+              "cmyk_halftone",
+              "monochrome_tint",
+              "duotone",
+              "white_point",
+              "dither",
+              "max_component_gray",
+              "min_component_gray",
+              "threshold",
+              "sunbeams",
+              "lens_flare",
+              "star_shine"
+            ],
+            "description": "Effect name. 'bulge' also covers 'fisheye'/'bubble'; 'pinch' is the opposite; 'droste' is an infinite spiral; 'monochrome_tint' tints the whole image one colour (use color)."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          },
+          "center_x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Horizontal centre of the effect as a fraction of the width (0 = left, 1 = right). Default 0.5."
+          },
+          "center_y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Vertical centre as a fraction of the height (0 = top, 1 = bottom). Default 0.5."
+          },
+          "color": {
+            "type": "string",
+            "description": "For monochrome_tint, duotone (dark colour), white_point, lens_flare, sunbeams, star_shine. A colour name (red, orange, yellow, green, cyan, blue, purple, pink, white, black, gray) or #RRGGBB."
+          },
+          "color2": {
+            "type": "string",
+            "description": "Second (light) colour for duotone. A colour name (red, orange, yellow, green, cyan, blue, purple, pink, white, black, gray) or #RRGGBB."
+          },
+          "params": {
+            "type": "object",
+            "description": "Advanced: raw Core Image inputs for this filter (e.g. {\"inputRadius\": 400}). Validated and clamped against the on-device catalog; unknown keys are ignored."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "stylize",
+      "description": "Artistic styles that change the picture's structure, not just its colours: comic book (cartoon), posterize, pixelate, hexagon pixels, crystallize, pointillism (dots), edges, woodcut, pencil sketch, thermal camera, x-ray, glow (dreamy bloom), gloom, colour splash (keep one colour, rest black and white). Use for 'make it look like a comic' or 'cartoon', 'pixelate it', 'make it look like a sketch', 'thermal vision', 'keep only the reds'. For colour tints and named colour looks (sepia, black and white, vintage) use apply_color_filter; for film looks (noir, chrome, fade, instant, cinematic) use lut. Works on videos and photos. Out-of-range values are clamped. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "comic",
+              "posterize",
+              "pixellate",
+              "hex_pixellate",
+              "crystallize",
+              "pointillize",
+              "edges",
+              "woodcut",
+              "sketch",
+              "thermal",
+              "x_ray",
+              "glow",
+              "gloom",
+              "color_splash"
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          },
+          "color": {
+            "type": "string",
+            "description": "Only for color_splash: the colour to keep (default red). A colour name (red, orange, yellow, green, cyan, blue, purple, pink, white, black, gray) or #RRGGBB."
+          }
+        },
+        "required": [
+          "preset"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "blur_sharpen",
+      "description": "Blur, soften, sharpen or denoise the whole frame: gaussian blur, motion blur, zoom blur, lens (bokeh) blur, tilt-shift miniature, sharpen, reduce noise/grain. Use for 'blur it', 'soften a bit', 'make it sharper', 'motion blur', 'miniature effect', 'remove noise'. To blur only the background behind a person use segment. Works on videos and photos. Out-of-range values are clamped. Lens blur and tilt-shift are slow to preview on video. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "blur",
+              "motion_blur",
+              "zoom_blur",
+              "lens_blur",
+              "tilt_shift",
+              "sharpen",
+              "denoise"
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          },
+          "angle_degrees": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "motion_blur direction, 0 = horizontal. Default 0."
+          },
+          "center_x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Horizontal centre of the effect as a fraction of the width (0 = left, 1 = right). Default 0.5."
+          },
+          "center_y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Vertical centre as a fraction of the height (0 = top, 1 = bottom). Default 0.5."
+          },
+          "radius_px": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Exact blur radius in pixels at 1080p (scaled to the frame). Overrides intensity."
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "lut",
+      "description": "Apply a named photo or film look (colour grade): noir, chrome, fade, instant (Polaroid), mono, process (cross-process), tonal, cinematic (teal and orange), warm film, cool film, bleach bypass, golden hour, moody, matte, vivid, pastel. Use for 'make it cinematic', 'film look', 'noir', 'moody', 'golden hour look'. Plain 'black and white', 'grayscale', 'sepia', 'vintage', 'warm' or 'cool' tints are apply_color_filter, not this tool. Works on videos and photos. Out-of-range values are clamped. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "noir",
+              "chrome",
+              "fade",
+              "instant",
+              "mono",
+              "process",
+              "tonal",
+              "cinematic",
+              "warm_film",
+              "cool_film",
+              "bleach_bypass",
+              "golden_hour",
+              "moody",
+              "matte",
+              "vivid",
+              "pastel"
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          }
+        },
+        "required": [
+          "preset"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "vignette_grain",
+      "description": "Darken the corners (vignette) and/or add film grain. Use for 'add a vignette', 'darker edges', 'add grain', 'film grain', 'make it look like film' (both). Works on videos and photos. Out-of-range values are clamped. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "effect": {
+            "type": "string",
+            "enum": [
+              "vignette",
+              "grain",
+              "vignette_and_grain",
+              "light_vignette"
+            ],
+            "description": "light_vignette brightens the corners instead of darkening them."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          },
+          "vignette_amount": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "Exact vignette strength (negative = light). Overrides intensity."
+          },
+          "grain_amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Exact grain strength. Overrides intensity."
+          }
+        },
+        "required": [
+          "effect"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "segment",
+      "description": "Edit the background behind people, or hide faces, using on-device person detection: blur the background (portrait look), replace it with a colour, remove it, make the background black and white while the person stays in colour, darken the background, blur or pixelate faces. Use for 'blur the background', 'remove the background', 'make the background white', 'keep me in colour', 'blur faces'. Works on videos and photos; on video it is slow to preview and background removal becomes a solid colour (videos have no transparency). subject 'any' (pets, objects) is photos only. Out-of-range values are clamped. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "blur_background",
+              "replace_background",
+              "remove_background",
+              "color_pop",
+              "darken_background",
+              "blur_faces",
+              "pixelate_faces"
+            ],
+            "description": "color_pop = person in colour, background black and white."
+          },
+          "subject": {
+            "type": "string",
+            "enum": [
+              "person",
+              "any"
+            ],
+            "default": "person",
+            "description": "any = most prominent subject (pets, objects); photos only."
+          },
+          "background_color": {
+            "type": "string",
+            "description": "For replace_background (default white) and remove_background on video (default black). A colour name (red, orange, yellow, green, cyan, blue, purple, pink, white, black, gray) or #RRGGBB."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "audio_effect",
+      "description": "Audio effects rendered on the device: bass or treble boost/cut, voice boost (clearer speech), remove low rumble, muffle, telephone, reverb, echo, pitch up/down, robot voice, radio voice, distortion, noise gate (silence background hiss between words). Use for 'add reverb', 'more bass', 'make my voice deeper', 'chipmunk voice', 'sound like a phone call', 'remove the hum'. Videos only (not photos). Volume and fades are adjust_audio_volume and audio_fade. Out-of-range values are clamped. Rendering takes a few seconds on long clips. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "effect": {
+            "type": "string",
+            "enum": [
+              "bass_boost",
+              "bass_cut",
+              "treble_boost",
+              "treble_cut",
+              "voice_boost",
+              "remove_rumble",
+              "muffle",
+              "telephone",
+              "reverb",
+              "echo",
+              "pitch_up",
+              "pitch_down",
+              "robot",
+              "radio",
+              "distortion",
+              "noise_gate"
+            ],
+            "description": "'deeper voice' = pitch_down; 'chipmunk' = pitch_up with intensity 0.8; 'hum'/'rumble' = remove_rumble; 'hiss between words' = noise_gate."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Strength from 0 to 1. Use 0.25 for 'a bit' or 'slightly', 0.5 when the user gives no strength (default), 0.8 for 'a lot', 'very' or 'really', 1.0 only for 'maximum'. Explicit values below override it."
+          },
+          "reverb_preset": {
+            "type": "string",
+            "enum": [
+              "small_room",
+              "medium_room",
+              "large_room",
+              "medium_hall",
+              "large_hall",
+              "plate",
+              "medium_chamber",
+              "large_chamber",
+              "cathedral"
+            ],
+            "description": "Room type for reverb. Default medium_hall ('church' = cathedral, 'bathroom' = small_room)."
+          },
+          "pitch_semitones": {
+            "type": "number",
+            "minimum": -24,
+            "maximum": 24,
+            "description": "Exact pitch shift for pitch_up/pitch_down (12 = one octave). Overrides intensity."
+          },
+          "delay_seconds": {
+            "type": "number",
+            "minimum": 0.02,
+            "maximum": 2,
+            "description": "Echo delay. Default 0.35."
+          },
+          "mix_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Exact wet/dry mix for reverb, echo, distortion, robot, radio. Overrides intensity."
+          },
+          "gain_db": {
+            "type": "number",
+            "minimum": -24,
+            "maximum": 24,
+            "description": "Exact EQ gain for bass/treble/voice effects. Overrides intensity."
+          },
+          "frequency_hz": {
+            "type": "number",
+            "minimum": 20,
+            "maximum": 20000,
+            "description": "Exact cutoff/centre frequency for EQ effects."
+          }
+        },
+        "required": [
+          "effect"
+        ]
+      }
+    }
+  }
+]);
+
+/** Sharper apply_color_filter description for builds that also have lut/stylize/color_adjust. */
+export const APPLY_COLOR_FILTER_GROUPED_DESCRIPTION = "Apply a simple colour tint or classic named colour look: red, green, blue, yellow, cyan, magenta tint, sepia, grayscale, black and white (high contrast), invert, warm, cool, vintage. Use for 'apply a red filter', 'make it black and white', 'sepia', 'vintage', 'warm tones'. For film looks (noir, cinematic, fade) use lut; for artistic styles (comic, sketch, pixelate) use stylize; for adjusting warmth or saturation by an amount use color_adjust. Works on videos and photos.";
+
+/** True for a grouped-effect tool name (iOS-only; no server executor). */
+export function isIosGroupedTool(name) {
+  return Object.prototype.hasOwnProperty.call(IOS_GROUPED_TOOL_MEDIA_TYPES, name);
+}

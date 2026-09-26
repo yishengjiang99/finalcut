@@ -210,9 +210,6 @@ XAI_API_TOKEN=your_actual_xai_api_token_here
 # Server Port
 PORT=3001
 
-# Node Environment
-NODE_ENV=production
-
 # Allowed CORS Origins
 ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
@@ -222,6 +219,27 @@ Replace:
 - `yourdomain.com` with your actual domain name
 
 **Important**: Ensure the `.env` file is not tracked by Git (it's already in `.gitignore`)
+
+**`NODE_ENV` and `.env` handling:**
+
+- Don't put `NODE_ENV` in `.env`. Production gets it from `finalcut.service`
+  (`Environment=NODE_ENV=production`), and `npm run build` sets it for Vite. Vite warns when it
+  finds `NODE_ENV` in a `.env` file. Without `NODE_ENV=production`, the server runs with
+  development defaults: a non-secure session cookie, no `trust proxy` (so all clients share
+  nginx's rate-limit IP), and debug ffmpeg logs. The server logs a warning at startup when
+  `NODE_ENV` is unset.
+- How `.env` is read:
+  - systemd reads it as root through `EnvironmentFile=`.
+  - The server's `dotenv` reads it again as `finalcut`. It never overrides values systemd already
+    set, and it silently skips the file if it can't read it.
+  - `vite build` reads `.env` and `.env.production` as the build user, which is root in
+    `scripts/deploy-grepawk.sh`. Only `VITE_*` variables reach the bundle, and the web client
+    reads none. Never add a `VITE_` prefix to a secret.
+  - Nothing reads `.env.production` at runtime, and the repo no longer tracks it. Only
+    `.env.example` (placeholders) is in git. If an old `.env.production` is still on the host,
+    delete it, or at least `chown finalcut:finalcut` and `chmod 600` it.
+- Lock `.env` down with `sudo chown finalcut:finalcut .env && sudo chmod 600 .env`. Deploys
+  exclude `.env*`, so the file keeps this ownership.
 
 #### Build the Frontend
 
