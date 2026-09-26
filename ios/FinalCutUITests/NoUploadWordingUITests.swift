@@ -34,22 +34,27 @@ final class NoUploadWordingUITests: XCTestCase {
 
     /// Swipes the pill's horizontal row (at most 6 times) until the pill's center is on screen.
     /// Uses the frame, not `isHittable`: querying hittability of a fully off-screen element throws.
-    private func scrollIntoView(_ pill: XCUIElement, identifier: String) {
-        // Prefer the pill row by id; otherwise the innermost scroll view that holds the pill.
+    private func scrollIntoView(_ pill: XCUIElement, label: String) {
+        // Prefer the pill row by id; otherwise the innermost scroll view that holds the pill
+        // (the editor container's id can replace inner identifiers).
         let tagged = app.scrollViews["SampleChips"]
-        let holders = app.scrollViews.containing(.button, identifier: identifier)
+        let holders = app.scrollViews.containing(NSPredicate(format: "label == %@", label))
         let row = tagged.exists ? tagged : holders.element(boundBy: max(holders.count - 1, 0))
-        let visible = app.windows.firstMatch.frame.insetBy(dx: 8, dy: 0)
         for _ in 0..<6 {
-            let midX = pill.frame.midX
-            if midX > visible.maxX {
+            if isOnScreen(pill) { return }
+            if pill.frame.midX > app.windows.firstMatch.frame.midX {
                 row.swipeLeft(velocity: .slow)
-            } else if midX < visible.minX {
-                row.swipeRight(velocity: .slow)
             } else {
-                return
+                row.swipeRight(velocity: .slow)
             }
         }
+    }
+
+    private func isOnScreen(_ element: XCUIElement) -> Bool {
+        guard element.exists else { return false }
+        let visible = app.windows.firstMatch.frame.insetBy(dx: 8, dy: 0)
+        let frame = element.frame
+        return !frame.isEmpty && visible.contains(CGPoint(x: frame.midX, y: frame.midY))
     }
 
     func testNoUploadWordingWithCloudProcessingOff() throws {
@@ -66,11 +71,11 @@ final class NoUploadWordingUITests: XCTestCase {
         // Apply an edit (a suggestion pill sends its prompt; the edit runs on device).
         // "Speed up 2×" avoids the Captions pill's speech-permission prompt.
         // The pill row scrolls horizontally, so the pill may start off-screen: scroll it into view.
-        let pillID = "suggestion-v-speed-2x"
-        let pill = app.buttons[pillID]
+        let byID = app.buttons["suggestion-v-speed-2x"]
+        let pill = byID.waitForExistence(timeout: 5) ? byID : app.buttons["Speed up 2×"]
         XCTAssertTrue(pill.waitForExistence(timeout: 10), "Speed up 2× suggestion pill exists")
-        scrollIntoView(pill, identifier: pillID)
-        XCTAssertTrue(pill.isHittable, "Speed up 2× pill scrolled into view")
+        scrollIntoView(pill, label: "Speed up 2×")
+        XCTAssertTrue(isOnScreen(pill), "Speed up 2× pill scrolled into view")
         pill.tap()
         watch("edit", seconds: 6)
 
