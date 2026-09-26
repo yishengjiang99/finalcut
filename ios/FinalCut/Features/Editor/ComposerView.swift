@@ -1,26 +1,25 @@
 import SwiftUI
+import PhotosUI
 
 struct ComposerView: View {
     @Binding var text: String
-    var onImport: () -> Void
-    var onImportFiles: () -> Void
+    @Binding var photosPickerItem: PhotosPickerItem?
     var onSend: () -> Void
     var importEnabled = true
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            Menu {
-                Button("Photo Library", systemImage: "photo.on.rectangle", action: onImport)
-                Button("Choose File", systemImage: "folder", action: onImportFiles)
-            } label: {
+            PhotosPicker(
+                selection: $photosPickerItem,
+                matching: .videos,
+                photoLibrary: .shared()
+            ) {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AppTheme.accent)
-            } primaryAction: {
-                onImport()
             }
             .accessibilityLabel("Import")
-            .accessibilityHint("Opens Photos. Touch and hold for more import options.")
+            .accessibilityHint("Choose a video from Photos")
             .disabled(!importEnabled)
             .opacity(importEnabled ? 1 : 0.35)
 
@@ -52,5 +51,5 @@ struct ComposerView: View {
 }
 
 #Preview {
-    ComposerView(text: .constant(""), onImport: {}, onImportFiles: {}, onSend: {})
+    ComposerView(text: .constant(""), photosPickerItem: .constant(nil), onSend: {})
 }

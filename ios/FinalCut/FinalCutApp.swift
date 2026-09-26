@@ -14,80 +14,83 @@ struct FinalCutApp: App {
     }
 }
 
-/// Shared app navigation + session state.
+/// Shared session state. The app launches straight into the Editor; there is no
+/// Landing / SignIn / Paywall gate. The paywall is a sheet presented from the Editor
+/// (Upgrade button, or when the server reports the free usage limit was hit).
 @MainActor
 final class AppModel: ObservableObject {
-    enum Route: Hashable {
-        case landing
-        case signIn
-        case paywall
-        case editor
+    /// Why the paywall sheet is showing (drives the headline copy).
+    enum PaywallReason: Equatable {
+        case upgradeTapped
+        case usageLimitReached
     }
 
-    // Open directly into the usable editor; the bundled demo video is loaded there.
-    @Published var route: Route = .editor
     @Published var isAuthenticated = false
-    @Published var isSampleMode = false
-    @Published var hasUnlockedEditor = false
-    @Published var isTestVideoMode = false
+    @Published var hasSubscription = false
+    /// Free daily inference quota (from `GET /api/auth/status` for device installs). Nil when unknown/premium.
+    @Published var dailyLimit: Int?
+    @Published var dailyRemaining: Int?
+    @Published var isPaywallPresented = false
+    @Published var paywallReason: PaywallReason = .upgradeTapped
 
     let apiClient = APIClient()
 
     private var didBootstrap = false
 
+    /// Runs silently in the background on launch — never blocks or gates the Editor.
     func bootstrap() async {
         guard !didBootstrap else { return }
         didBootstrap = true
+
+        #if DEBUG
+        // DEBUG / demo: warm the sample token (`sample-access-token` header) in the background.
+        let client = apiClient
+        Task { _ = try? await client.ensureSampleAccessToken() }
+        #endif
+
         do {
-            _ = try await apiClient.ensureDeviceSession()
-            let status = try await apiClient.fetchAuthStatus()
-            isAuthenticated = status.authenticated
-            if status.user?.hasSubscription == true || (status.dailyRemaining ?? 0) > 0 {
-                hasUnlockedEditor = true
-                route = .editor
-            } else if status.authenticated {
-                route = .paywall
-            }
+            try await apiClient.ensureDeviceSession()
         } catch {
-            // Keep the landing/paywall flow usable while offline; inference still requires the server token.
+            // Offline or server unavailable: the Editor stays usable; requests will retry auth.
+            return
+        }
+        await refreshQuota()
+    }
+
+    /// Refreshes subscription + free-quota state from `GET /api/auth/status`.
+    func refreshQuota() async {
+        guard let status = try? await apiClient.fetchAuthStatus() else { return }
+        apply(status)
+    }
+
+    func apply(_ status: AuthStatus) {
+        isAuthenticated = status.authenticated
+        hasSubscription = status.user?.hasSubscription == true
+        if hasSubscription {
+            dailyLimit = nil
+            dailyRemaining = nil
+        } else {
+            dailyLimit = status.dailyLimit
+            dailyRemaining = status.dailyRemaining
         }
     }
 
-    func goToSignIn() {
-        clearTestVideoMode()
-        route = .signIn
+    func presentPaywall(reason: PaywallReason = .upgradeTapped) {
+        paywallReason = reason
+        if reason == .usageLimitReached, !hasSubscription {
+            dailyRemaining = 0
+        }
+        isPaywallPresented = true
     }
 
-    func completeSignIn(sampleMode: Bool = false) {
-        isAuthenticated = !sampleMode
-        isSampleMode = sampleMode
-        apiClient.sampleModeEnabled = sampleMode
-        route = .paywall
-    }
-
-    func unlockEditor() {
-        clearTestVideoMode()
-        hasUnlockedEditor = true
-        route = .editor
-    }
-
-    func skipToEditorForDev() {
-        clearTestVideoMode()
-        hasUnlockedEditor = true
-        route = .editor
-    }
-
-    func tryTestVideoNow() {
-        isSampleMode = true
-        isTestVideoMode = true
-        apiClient.sampleModeEnabled = true
-        hasUnlockedEditor = true
-        route = .editor
-    }
-
-    private func clearTestVideoMode() {
-        isSampleMode = false
-        isTestVideoMode = false
-        apiClient.sampleModeEnabled = false
+    /// Called after StoreKit purchase/restore is verified by the server.
+    func subscriptionActivated(_ status: AuthStatus? = nil) {
+        if let status {
+            apply(status)
+        }
+        hasSubscription = true
+        dailyLimit = nil
+        dailyRemaining = nil
+        isPaywallPresented = false
     }
 }

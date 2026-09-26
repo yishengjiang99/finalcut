@@ -1,8 +1,9 @@
 import SwiftUI
 import PhotosUI
 
-/// Editor — single root (not tabs). Regions top→bottom:
-/// TopBar → Preview → Chat → SampleChips → Composer. ExportSheet as sheet.
+/// Editor — single root and first screen at launch (not tabs). Regions top→bottom:
+/// TopBar → Preview (or Import panel when empty) → Chat → SampleChips → Composer.
+/// ExportSheet and PaywallView are sheets.
 struct EditorView: View {
     @EnvironmentObject private var appModel: AppModel
     @StateObject private var model = EditorViewModel()
@@ -11,26 +12,37 @@ struct EditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             TopBarView(
-                onImport: { model.presentPhotosPicker = true },
-                onImportFiles: { model.presentImporter = true },
+                photosPickerItem: $model.photosPickerItem,
                 onExport: { showExport = true },
+                onUpgrade: { appModel.presentPaywall(reason: .upgradeTapped) },
                 importEnabled: importEnabled,
-                importLabel: appModel.isTestVideoMode ? "Test video" : "Import"
+                exportVisible: model.localVideoURL != nil,
+                exportEnabled: model.state != .processing && model.state != .uploading,
+                showUpgrade: !appModel.hasSubscription,
+                freeRemaining: appModel.dailyRemaining
             )
 
-            PreviewPaneView(
-                state: model.state,
-                videoURL: model.localVideoURL,
-                processingMessage: model.processingOverlay.message
-            )
-            .frame(maxHeight: 240)
+            if showsImportPanel {
+                ImportPanelView(
+                    photosPickerItem: $model.photosPickerItem,
+                    onTrySample: { model.loadSampleClip() }
+                )
+                .frame(maxHeight: 240)
+            } else {
+                PreviewPaneView(
+                    state: model.state,
+                    videoURL: model.localVideoURL,
+                    processingMessage: model.processingOverlay.message
+                )
+                .frame(maxHeight: 240)
+            }
 
             Divider().overlay(AppTheme.border)
 
             ChatView(messages: model.messages)
                 .frame(maxHeight: .infinity)
 
-            if model.showSampleChips {
+            if model.showSampleChips && model.localVideoURL != nil {
                 SampleChipsView(chips: model.sampleChips) { chip in
                     model.applySampleChip(chip)
                 }
@@ -38,8 +50,7 @@ struct EditorView: View {
 
             ComposerView(
                 text: $model.composerText,
-                onImport: { model.presentPhotosPicker = true },
-                onImportFiles: { model.presentImporter = true },
+                photosPickerItem: $model.photosPickerItem,
                 onSend: { model.sendMessage() },
                 importEnabled: importEnabled
             )
@@ -49,39 +60,21 @@ struct EditorView: View {
         .sheet(isPresented: $showExport) {
             ExportSheet(videoURL: model.localVideoURL, state: model.state)
         }
-        .photosPicker(
-            isPresented: $model.presentPhotosPicker,
-            selection: $model.photosPickerItem,
-            matching: .videos
-        )
-        .fileImporter(
-            isPresented: $model.presentImporter,
-            allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
-            allowsMultipleSelection: false
-        ) { result in
-            Task { await model.handleImport(result) }
+        .sheet(isPresented: $appModel.isPaywallPresented) {
+            PaywallView()
+                .environmentObject(appModel)
         }
         .onChange(of: model.photosPickerItem) { _, item in
             Task { await model.loadPhotosPickerItem(item) }
         }
         .onAppear {
             model.apiClient = appModel.apiClient
-            if appModel.isTestVideoMode {
-                model.loadBundledTestVideo()
-            } else {
-                // Every editor session starts with an immediately usable bundled demo.
-                model.loadBundledTestVideo()
+            model.onPaywallRequired = { [weak appModel] in
+                appModel?.presentPaywall(reason: .usageLimitReached)
             }
-        }
-        .onChange(of: appModel.isTestVideoMode) { _, isTestVideoMode in
-            if isTestVideoMode {
-                model.loadBundledTestVideo()
-            } else {
-                model.resetBundledTestVideoIfNeeded()
+            model.onInferenceFinished = { [weak appModel] in
+                Task { await appModel?.refreshQuota() }
             }
-        }
-        .onChange(of: appModel.isSampleMode) { _, _ in
-            model.apiClient = appModel.apiClient
         }
         .overlay(alignment: .top) {
             if model.state == .failed, let err = model.lastError {
@@ -97,7 +90,51 @@ struct EditorView: View {
     }
 
     private var importEnabled: Bool {
-        !appModel.isTestVideoMode && model.state != .uploading && model.state != .processing
+        model.state != .uploading && model.state != .processing
+    }
+
+    /// Launch / empty state shows the import panel in place of the preview.
+    private var showsImportPanel: Bool {
+        model.localVideoURL == nil && (model.state == .empty || model.state == .failed)
+    }
+}
+
+/// Empty-state panel: pick a video from Photos (primary) or try the bundled sample clip.
+struct ImportPanelView: View {
+    @Binding var photosPickerItem: PhotosPickerItem?
+    var onTrySample: () -> Void
+
+    var body: some View {
+        ZStack {
+            AppTheme.surface
+            VStack(spacing: 14) {
+                Image(systemName: "video.badge.plus")
+                    .font(.system(size: 36))
+                    .foregroundStyle(AppTheme.accent)
+                Text("Import a video to start editing")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.textPrimary)
+                PhotosPicker(
+                    selection: $photosPickerItem,
+                    matching: .videos,
+                    photoLibrary: .shared()
+                ) {
+                    Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(AppTheme.accent)
+                        .clipShape(Capsule())
+                }
+                .accessibilityIdentifier("ImportFromPhotos")
+                Button("Try the sample clip", action: onTrySample)
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            .padding(16)
+        }
+        .accessibilityIdentifier("ImportPanel")
     }
 }
 
@@ -107,8 +144,6 @@ final class EditorViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var composerText = ""
     @Published var localVideoURL: URL?
-    @Published var presentImporter = false
-    @Published var presentPhotosPicker = false
     @Published var photosPickerItem: PhotosPickerItem?
     @Published var showSampleChips = true
     @Published var lastError: String?
@@ -118,6 +153,10 @@ final class EditorViewModel: ObservableObject {
 
     /// Shared API client from AppModel (jobs for long FFmpeg edits; captions sync).
     var apiClient: APIClient?
+    /// Server reported the free usage limit (402 `paywall` / 429 `daily_limit_reached`).
+    var onPaywallRequired: (() -> Void)?
+    /// An inference request completed (success or failure) — refresh quota display.
+    var onInferenceFinished: (() -> Void)?
 
     /// Demo chips for the captions three-step flow + other edits.
     let sampleChips = [
@@ -137,6 +176,8 @@ final class EditorViewModel: ObservableObject {
         case otherEdit
     }
 
+    /// Imports a local file URL (copied into app-owned temp storage). The UI imports from
+    /// Photos via `PhotosPicker` → `loadPhotosPickerItem`; this path is kept for tests/local URLs.
     func handleImport(_ result: Result<[URL], Error>) async {
         switch result {
         case .success(let urls):
@@ -203,6 +244,23 @@ final class EditorViewModel: ObservableObject {
         messages.append(ChatMessage(role: .system, content: "Loaded test video"))
     }
 
+    /// User-initiated "Try the sample clip" from the empty-state import panel.
+    func loadSampleClip() {
+        guard state != .processing, state != .uploading else { return }
+        guard let url = bundledTestVideoURL else {
+            state = .failed
+            lastError = "Sample clip unavailable"
+            return
+        }
+        localVideoURL = url
+        lastError = nil
+        captionArtifacts = CaptionArtifacts()
+        processingOverlay = .editing
+        state = .ready
+        showSampleChips = true
+        messages.append(ChatMessage(role: .system, content: "Loaded sample clip"))
+    }
+
     func resetBundledTestVideoIfNeeded() {
         guard shouldResetBundledTestVideo else { return }
         processingTask?.cancel()
@@ -251,6 +309,9 @@ final class EditorViewModel: ObservableObject {
                     )
                 )
                 await runJobsEdit(prompt: text)
+            }
+            if !Task.isCancelled {
+                onInferenceFinished?()
             }
         }
     }
@@ -453,7 +514,27 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    /// Usage limit hit → keep the current clip, present the Paywall sheet (not the failed state).
+    /// Returns true when the error was a paywall signal and has been handled.
+    @discardableResult
+    func handlePaywallIfNeeded(_ error: Error) -> Bool {
+        guard let apiError = error as? APIError, apiError.isPaywall else { return false }
+        processingOverlay = .editing
+        activeJobId = nil
+        lastError = nil
+        state = localVideoURL == nil ? .empty : .ready
+        messages.append(
+            ChatMessage(
+                role: .assistant,
+                content: "You've used today's free edits — upgrade to keep editing."
+            )
+        )
+        onPaywallRequired?()
+        return true
+    }
+
     private func finishCaptionFailure(_ error: APIError, fallback: String? = nil) {
+        if handlePaywallIfNeeded(error) { return }
         state = .failed
         lastError = error.errorDescription
         processingOverlay = .editing
@@ -558,6 +639,7 @@ final class EditorViewModel: ObservableObject {
         } catch is CancellationError {
             // User sent another message or view torn down.
         } catch {
+            if handlePaywallIfNeeded(error) { return }
             state = .failed
             lastError = error.localizedDescription
             messages.append(ChatMessage(role: .system, content: "Job error: \(error.localizedDescription)"))

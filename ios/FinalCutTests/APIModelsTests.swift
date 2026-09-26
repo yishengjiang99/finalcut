@@ -250,35 +250,71 @@ final class APIModelsTests: XCTestCase {
     }
 
     @MainActor
-    func testAppModelModeTransitions() {
+    func testAppModelPaywallPresentationAndQuota() {
         let appModel = AppModel()
+        XCTAssertFalse(appModel.isPaywallPresented)
 
-        appModel.tryTestVideoNow()
-        XCTAssertEqual(appModel.route, .editor)
-        XCTAssertTrue(appModel.hasUnlockedEditor)
-        XCTAssertTrue(appModel.isSampleMode)
-        XCTAssertTrue(appModel.isTestVideoMode)
-        XCTAssertTrue(appModel.apiClient.sampleModeEnabled)
+        appModel.apply(AuthStatus(authenticated: true, user: AuthUser(id: "1", hasSubscription: false), dailyLimit: 3, dailyUsed: 1, dailyRemaining: 2))
+        XCTAssertEqual(appModel.dailyLimit, 3)
+        XCTAssertEqual(appModel.dailyRemaining, 2)
+        XCTAssertFalse(appModel.hasSubscription)
 
-        appModel.goToSignIn()
-        XCTAssertEqual(appModel.route, .signIn)
-        XCTAssertFalse(appModel.isSampleMode)
-        XCTAssertFalse(appModel.isTestVideoMode)
-        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+        appModel.presentPaywall()
+        XCTAssertTrue(appModel.isPaywallPresented)
+        XCTAssertEqual(appModel.paywallReason, .upgradeTapped)
+        XCTAssertEqual(appModel.dailyRemaining, 2)
 
-        appModel.tryTestVideoNow()
-        appModel.unlockEditor()
-        XCTAssertEqual(appModel.route, .editor)
-        XCTAssertFalse(appModel.isSampleMode)
-        XCTAssertFalse(appModel.isTestVideoMode)
-        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+        appModel.isPaywallPresented = false
+        appModel.presentPaywall(reason: .usageLimitReached)
+        XCTAssertTrue(appModel.isPaywallPresented)
+        XCTAssertEqual(appModel.paywallReason, .usageLimitReached)
+        XCTAssertEqual(appModel.dailyRemaining, 0)
 
-        appModel.tryTestVideoNow()
-        appModel.skipToEditorForDev()
-        XCTAssertEqual(appModel.route, .editor)
-        XCTAssertFalse(appModel.isSampleMode)
-        XCTAssertFalse(appModel.isTestVideoMode)
-        XCTAssertFalse(appModel.apiClient.sampleModeEnabled)
+        appModel.subscriptionActivated()
+        XCTAssertFalse(appModel.isPaywallPresented)
+        XCTAssertTrue(appModel.hasSubscription)
+        XCTAssertNil(appModel.dailyRemaining)
+    }
+
+    func testPaywallErrorMapping() {
+        let paywall402 = APIClient.error(forStatus: 402, data: Data(#"{"error":"Upgrade required","code":"paywall"}"#.utf8))
+        XCTAssertEqual(paywall402, .paywallRequired("Upgrade required"))
+        XCTAssertTrue(paywall402.isPaywall)
+
+        XCTAssertTrue(APIClient.error(forStatus: 402, data: Data()).isPaywall)
+        XCTAssertTrue(APIClient.error(forStatus: 429, data: Data(#"{"error":"Daily free inference limit reached","code":"daily_limit_reached","dailyLimit":1}"#.utf8)).isPaywall)
+        XCTAssertTrue(APIClient.error(forStatus: 403, data: Data(#"{"error":"Active subscription required"}"#.utf8)).isPaywall)
+
+        // Plain rate limiting / other errors are not paywall signals.
+        XCTAssertFalse(APIClient.error(forStatus: 429, data: Data("Too many requests".utf8)).isPaywall)
+        XCTAssertFalse(APIClient.error(forStatus: 500, data: Data(#"{"error":"boom"}"#.utf8)).isPaywall)
+        XCTAssertEqual(APIClient.error(forStatus: 401, data: Data()), .httpStatus(401, ""))
+    }
+
+    @MainActor
+    func testEditorPaywallErrorPresentsPaywallInsteadOfFailing() {
+        let model = EditorViewModel()
+        var paywallCount = 0
+        model.onPaywallRequired = { paywallCount += 1 }
+        model.localVideoURL = URL(fileURLWithPath: "/clip.mp4")
+        model.state = .processing
+
+        XCTAssertTrue(model.handlePaywallIfNeeded(APIError.paywallRequired(nil)))
+        XCTAssertEqual(paywallCount, 1)
+        XCTAssertEqual(model.state, .ready)
+        XCTAssertNil(model.lastError)
+
+        XCTAssertFalse(model.handlePaywallIfNeeded(APIError.httpStatus(500, nil)))
+        XCTAssertEqual(paywallCount, 1)
+    }
+
+    @MainActor
+    func testLoadSampleClipFromEmptyState() {
+        let model = EditorViewModel()
+        XCTAssertEqual(model.state, .empty)
+        model.loadSampleClip()
+        XCTAssertEqual(model.state, .ready)
+        XCTAssertEqual(model.localVideoURL?.lastPathComponent, "finalcap-test-video.mp4")
     }
 
     func testAPIErrorCaptionsChatCopy() {

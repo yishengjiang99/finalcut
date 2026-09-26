@@ -237,7 +237,13 @@ final class APIClient {
                 do {
                     let (bytes, response) = try await session.bytes(for: request)
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                        continuation.finish(throwing: APIError.httpStatus(http.statusCode, nil))
+                        // Collect the (small) JSON error body so 402 / quota errors map to `.paywallRequired`.
+                        var errorBody = Data()
+                        for try await byte in bytes {
+                            errorBody.append(byte)
+                            if errorBody.count >= 16_384 { break }
+                        }
+                        continuation.finish(throwing: Self.error(forStatus: http.statusCode, data: errorBody))
                         return
                     }
                     var buffer = ""
@@ -548,10 +554,37 @@ final class APIClient {
     static func throwIfNeeded(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
         guard (200..<300).contains(http.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw APIError.httpStatus(http.statusCode, message)
+            throw error(forStatus: http.statusCode, data: data)
         }
     }
+
+    /// Maps a non-2xx response to a typed error. Usage-limit / paywall responses become
+    /// `.paywallRequired` so the Editor presents the Paywall sheet instead of a generic failure:
+    /// - HTTP 402 (any body; backend contract `{ code: "paywall" }`)
+    /// - any status with JSON `code == "paywall"`
+    /// - HTTP 429 with JSON `code == "daily_limit_reached"` (current `requireInferenceAccess`)
+    /// - HTTP 403 `{ error: "Active subscription required" }`
+    static func error(forStatus statusCode: Int, data: Data) -> APIError {
+        let payload = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))
+        let code = payload?.code?.lowercased()
+        let serverMessage = payload?.error ?? payload?.message
+        if statusCode == 402 || code == "paywall" || code == "daily_limit_reached" {
+            return .paywallRequired(serverMessage)
+        }
+        if statusCode == 403,
+           let serverMessage,
+           serverMessage.localizedCaseInsensitiveContains("subscription required") {
+            return .paywallRequired(serverMessage)
+        }
+        return .httpStatus(statusCode, String(data: data, encoding: .utf8))
+    }
+}
+
+/// Generic JSON error body from the backend (`{ error, code, message, ... }`).
+struct APIErrorPayload: Decodable, Equatable {
+    var error: String?
+    var code: String?
+    var message: String?
 }
 
 enum APIError: Error, LocalizedError, Equatable {
@@ -560,6 +593,8 @@ enum APIError: Error, LocalizedError, Equatable {
     case message(String)
     /// 422 from /api/generate-captions — no speech in clip.
     case noSpeechDetected
+    /// Free usage limit hit (HTTP 402 `code: "paywall"`, or 429 `daily_limit_reached`) — show Paywall.
+    case paywallRequired(String?)
 
     var errorDescription: String? {
         switch self {
@@ -571,7 +606,15 @@ enum APIError: Error, LocalizedError, Equatable {
             return text
         case .noSpeechDetected:
             return "no speech"
+        case .paywallRequired(let message):
+            return message ?? "Free limit reached — upgrade to keep editing"
         }
+    }
+
+    /// True when the server says the free limit is used up (present Paywall, not a failure).
+    var isPaywall: Bool {
+        if case .paywallRequired = self { return true }
+        return false
     }
 
     /// Inline chat copy for caption failures (Design UX).

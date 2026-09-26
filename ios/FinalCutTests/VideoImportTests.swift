@@ -145,8 +145,9 @@ final class VideoImportTests: XCTestCase {
         memset(CVPixelBufferGetBaseAddress(frame), 0, CVPixelBufferGetDataSize(frame))
         CVPixelBufferUnlockBaseAddress(frame, [])
 
-        let deadline = Date().addingTimeInterval(10)
         for index in 0..<20 {
+            // Per-frame deadline: CI simulators can be slow to drain the writer's queue.
+            let deadline = Date().addingTimeInterval(30)
             while !input.isReadyForMoreMediaData, writer.status == .writing, Date() < deadline {
                 try await Task.sleep(for: .milliseconds(10))
             }

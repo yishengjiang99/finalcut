@@ -8,7 +8,7 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if messages.isEmpty {
-                        Text("Describe an edit — results stream from `/api/chat` (server FFmpeg).")
+                        Text("Import a video, then describe an edit — e.g. “Generate captions”.")
                             .font(.footnote)
                             .foregroundStyle(AppTheme.textSecondary)
                             .frame(maxWidth: .infinity)

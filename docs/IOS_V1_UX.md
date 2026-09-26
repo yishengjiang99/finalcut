@@ -36,12 +36,12 @@ Use these identifiers in navigation and file names:
 
 ## Navigation
 
+> **Launch path (Sept 2026):** the app opens directly into `Editor` (empty state = chat + import-from-Photos panel). `Landing` / `SignIn` were removed; `Paywall` is a sheet shown from the top-bar **Upgrade** button or when the server reports the free limit (402 `code: "paywall"` / 429 `daily_limit_reached`). Import uses `PhotosPicker` (videos only), not Files.
+
 ```
-Landing
-  └─ SignIn
-       └─ Paywall (if unsubscribed)
-            └─ Editor
-                 └─ ExportSheet (modal)
+Editor (launch)
+  ├─ Paywall (sheet: Upgrade tap or usage limit)
+  └─ ExportSheet (modal)
 ```
 
 Sample / demo path may enter `Editor` without paywall (match web “Try with Sample Video”).

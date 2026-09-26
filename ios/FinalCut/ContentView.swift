@@ -1,24 +1,11 @@
 import SwiftUI
 
-/// Root navigation: Landing → SignIn → Paywall → Editor.
+/// Root: the Editor (chat + import panel) is the first and only screen.
+/// Paywall is presented as a sheet from the Editor.
 struct ContentView: View {
-    @EnvironmentObject private var appModel: AppModel
-
     var body: some View {
-        Group {
-            switch appModel.route {
-            case .landing:
-                LandingView()
-            case .signIn:
-                SignInView()
-            case .paywall:
-                PaywallView()
-            case .editor:
-                EditorView()
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: appModel.route)
-        .background(AppTheme.background.ignoresSafeArea())
+        EditorView()
+            .background(AppTheme.background.ignoresSafeArea())
     }
 }
 

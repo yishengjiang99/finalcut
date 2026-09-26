@@ -2,24 +2,28 @@ import SwiftUI
 import StoreKit
 
 /// Paywall — StoreKit 2 In-App Purchase stub (NOT Stripe Checkout).
+/// Presented as a sheet from the Editor (Upgrade button, or when the free usage limit is hit).
 struct PaywallView: View {
     @EnvironmentObject private var appModel: AppModel
+    @Environment(\.dismiss) private var dismiss
     @State private var statusMessage: String?
     @State private var isBusy = false
 
     var body: some View {
         VStack(spacing: 24) {
             HStack {
+                Spacer()
                 Button {
-                    appModel.route = .signIn
+                    dismiss()
                 } label: {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
                 }
                 .foregroundStyle(AppTheme.textSecondary)
-                Spacer()
+                .accessibilityLabel("Close")
             }
             .padding(.horizontal)
+            .padding(.top, 12)
 
             Spacer()
 
@@ -27,10 +31,11 @@ struct PaywallView: View {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 44))
                     .foregroundStyle(AppTheme.accent)
-                Text("Unlock FinalCap")
+                Text(headline)
                     .font(.title.bold())
                     .foregroundStyle(AppTheme.textPrimary)
-                Text("StoreKit 2 In-App Purchase stub.\nProduct: \(StoreKitPurchaseStub.monthlyProductID)\nDoes not open Stripe URLs.")
+                    .multilineTextAlignment(.center)
+                Text("Unlimited AI edits, captions and translations.\nMonthly subscription billed through the App Store.")
                     .font(.footnote)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -46,7 +51,7 @@ struct PaywallView: View {
                             ProgressView()
                                 .tint(.white)
                         } else {
-                            Text("Subscribe (StoreKit)")
+                            Text("Subscribe")
                         }
                     }
                     .font(.headline)
@@ -67,8 +72,8 @@ struct PaywallView: View {
                 .buttonStyle(.bordered)
                 .disabled(isBusy)
 
-                Button("Continue without purchase (local demo)") {
-                    appModel.unlockEditor()
+                Button("Not now") {
+                    dismiss()
                 }
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
@@ -92,8 +97,17 @@ struct PaywallView: View {
             // Warm product fetch; empty in simulator without StoreKit config is fine.
             let products = await StoreKitPurchaseStub.loadProducts()
             if products.isEmpty {
-                statusMessage = "No StoreKit products loaded (add a StoreKit Configuration or App Store Connect product)."
+                statusMessage = "Subscriptions aren’t available right now."
             }
+        }
+    }
+
+    private var headline: String {
+        switch appModel.paywallReason {
+        case .usageLimitReached:
+            return "You've used today's free edits"
+        case .upgradeTapped:
+            return "Unlock FinalCap"
         }
     }
 
@@ -104,9 +118,9 @@ struct PaywallView: View {
         switch outcome {
         case .success(let jws):
             do {
-                _ = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
+                let status = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
                 statusMessage = "Purchase verified."
-                appModel.unlockEditor()
+                appModel.subscriptionActivated(status)
             } catch {
                 statusMessage = "Purchase completed, but server verification is pending: \(error.localizedDescription)"
             }
@@ -115,8 +129,7 @@ struct PaywallView: View {
         case .pending:
             statusMessage = "Purchase pending approval."
         case .unavailable:
-            statusMessage = "Product unavailable — continuing local demo."
-            appModel.unlockEditor()
+            statusMessage = "Product unavailable right now — please try again later."
         case .failed(let message):
             statusMessage = "Purchase failed: \(message)"
         }
@@ -130,9 +143,9 @@ struct PaywallView: View {
             return
         }
         do {
-            _ = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
+            let status = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
             statusMessage = "Entitlement restored."
-            appModel.unlockEditor()
+            appModel.subscriptionActivated(status)
         } catch {
             statusMessage = "Entitlement found, but server verification failed: \(error.localizedDescription)"
         }
