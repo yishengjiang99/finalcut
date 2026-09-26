@@ -17,7 +17,8 @@
     "test:playwright:live-captions": "playwright test tests/playwright/live-captions.spec.js",
     "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js",
     "ios": "./scripts/run-ios-device.sh",
-    "ios:simulator": "./scripts/run-ios-simulator.sh"
+    "ios:simulator": "./scripts/run-ios-simulator.sh",
+    "schema:tools": "node scripts/generate-tools-schema.js"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
