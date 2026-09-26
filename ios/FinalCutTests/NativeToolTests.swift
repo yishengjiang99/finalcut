@@ -155,14 +155,16 @@ final class NativeToolTests: XCTestCase {
         let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration).seconds
         XCTAssertEqual(duration, 2, accuracy: 0.15)
-        let track = try await XCTUnwrap(asset.loadTracks(withMediaType: .video).first)
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(videoTracks.first)
         let size = try await track.load(.naturalSize)
         XCTAssertEqual(size, CGSize(width: 1280, height: 720))
         let generator = AVAssetImageGenerator(asset: asset)
         let image = try await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
         let p = pixel(image, 110, 360)
         XCTAssertLessThanOrEqual(max(p.r, p.g, p.b) - min(p.r, p.g, p.b), 16)
-        XCTAssertFalse(try await asset.loadTracks(withMediaType: .audio).isEmpty)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertFalse(audioTracks.isEmpty)
     }
 
     // MARK: - Photo
