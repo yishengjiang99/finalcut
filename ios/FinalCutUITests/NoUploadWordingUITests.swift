@@ -32,14 +32,19 @@ final class NoUploadWordingUITests: XCTestCase {
         } while Date() < end
     }
 
-    /// Pills live in a horizontal row; later ones start off-screen. Swipe the row left
-    /// (at most 5 times) until the pill can be tapped.
-    private func scrollIntoView(_ pill: XCUIElement) {
-        let row = app.scrollViews.containing(NSPredicate(format: "label == %@", pill.label)).firstMatch
-        var swipes = 0
-        while !pill.isHittable && swipes < 5 {
-            (row.exists ? row : pill).swipeLeft(velocity: .slow)
-            swipes += 1
+    /// Swipes the pill's horizontal row (at most 6 times) until the pill is hittable.
+    private func scrollIntoView(_ pill: XCUIElement, identifier: String) {
+        // Prefer the pill row by id; otherwise the innermost scroll view that holds the pill.
+        let tagged = app.scrollViews["SampleChips"]
+        let holders = app.scrollViews.containing(.button, identifier: identifier)
+        let row = tagged.exists ? tagged : holders.element(boundBy: max(holders.count - 1, 0))
+        let screenMidX = app.windows.firstMatch.frame.midX
+        for _ in 0..<6 where !pill.isHittable {
+            if pill.frame.midX > screenMidX {
+                row.swipeLeft(velocity: .slow)
+            } else {
+                row.swipeRight(velocity: .slow)
+            }
         }
     }
 
@@ -56,10 +61,12 @@ final class NoUploadWordingUITests: XCTestCase {
 
         // Apply an edit (a suggestion pill sends its prompt; the edit runs on device).
         // "Speed up 2×" avoids the Captions pill's speech-permission prompt.
-        let pill = app.buttons["Speed up 2×"]
-        XCTAssertTrue(pill.waitForExistence(timeout: 10))
-        scrollIntoView(pill)
-        XCTAssertTrue(pill.isHittable, "Speed up 2× scrolled into view")
+        // The pill row scrolls horizontally, so the pill may start off-screen: scroll it into view.
+        let pillID = "suggestion-v-speed-2x"
+        let pill = app.buttons[pillID]
+        XCTAssertTrue(pill.waitForExistence(timeout: 10), "Speed up 2× suggestion pill exists")
+        scrollIntoView(pill, identifier: pillID)
+        XCTAssertTrue(pill.isHittable, "Speed up 2× pill scrolled into view")
         pill.tap()
         watch("edit", seconds: 6)
 

@@ -31,6 +31,7 @@ struct SampleChipsView: View {
                         )
                     }
                     .accessibilityLabel(pill.label)
+                    .accessibilityIdentifier("suggestion-\(pill.id)")
                 }
             }
             .padding(.horizontal, 16)
