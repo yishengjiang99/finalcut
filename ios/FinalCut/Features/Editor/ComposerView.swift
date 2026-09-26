@@ -40,6 +40,14 @@ struct ComposerView: View {
                         // Tapping the field stops listening; the text stays unsent.
                         if focused, isListening { dictation?.stop() }
                     }
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") { fieldFocused = false }
+                                .accessibilityIdentifier("KeyboardDone")
+                        }
+                    }
+                    .accessibilityIdentifier("ComposerField")
 
                 trailingButton
             }
@@ -73,38 +81,62 @@ struct ComposerView: View {
     private var isListening: Bool { dictation?.isListening == true }
     private var hasText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    private var dictationNote: String? {
-        switch dictation?.status {
+    private var dictationNote: String? { Self.note(for: dictation?.status) }
+
+    /// Note under the composer. Denied/unavailable keep the mic visible and explain why.
+    static func note(for status: DictationController.Status?) -> String? {
+        switch status {
         case .permissionDenied: return UXCopy.dictationPermissionDenied
         case .unavailable: return UXCopy.dictationUnavailable
         default: return nil
         }
     }
 
-    /// Mic and Send share one slot: Send when there's typed text, stop while listening.
+    enum TrailingControl: Equatable {
+        case send
+        case mic
+        case stop
+    }
+
+    /// Mic and Send share one slot (Design #94): the mic shows whenever the field is empty,
+    /// whatever the permission state; Send once there's text; stop while listening.
+    static func trailingControl(text: String, hasDictation: Bool, isListening: Bool) -> TrailingControl {
+        if hasDictation, isListening { return .stop }
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasText || !hasDictation ? .send : .mic
+    }
+
+    private func send() {
+        fieldFocused = false
+        onSend()
+    }
+
     @ViewBuilder
     private var trailingButton: some View {
-        if isListening, let dictation {
-            DictationStopButton { dictation.stop() }
-        } else if hasText || dictation == nil {
-            Button(action: onSend) {
+        switch Self.trailingControl(text: text, hasDictation: dictation != nil, isListening: isListening) {
+        case .stop:
+            DictationStopButton { dictation?.stop() }
+        case .send:
+            Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
                     .foregroundStyle(hasText ? AppTheme.accent : AppTheme.textSecondary)
             }
             .disabled(!hasText)
             .accessibilityLabel("Send")
-        } else if let dictation {
+            .accessibilityIdentifier("ComposerSend")
+        case .mic:
+            let supported = dictation?.isSupported ?? false
             Button {
                 fieldFocused = false
-                dictation.toggle()
+                dictation?.toggle()
             } label: {
                 Image(systemName: "mic.fill")
                     .font(.title3)
-                    .foregroundStyle(dictation.isSupported ? AppTheme.accent : AppTheme.textSecondary)
+                    .foregroundStyle(supported ? AppTheme.accent : AppTheme.textSecondary)
                     .frame(width: 30, height: 30)
             }
-            .opacity(dictation.isSupported ? 1 : 0.45)
+            .opacity(supported ? 1 : 0.45)
             .accessibilityLabel("Dictate")
             .accessibilityIdentifier("DictationMic")
         }

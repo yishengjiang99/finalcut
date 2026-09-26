@@ -77,6 +77,7 @@ struct EditorView: View {
             )
         }
         .background(AppTheme.background.ignoresSafeArea())
+        .background(KeyboardDismissInstaller().frame(width: 0, height: 0))
         .accessibilityIdentifier("Editor")
         .sheet(isPresented: $showExport) {
             ExportSheet(videoURL: model.localVideoURL, state: model.state, stack: model.editStack)

@@ -40,6 +40,17 @@
                ReferencedContainer = "container:FinalCut.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FA62218EFC4D54AD56AF8C92"
+               BuildableName = "FinalCutUITests.xctest"
+               BlueprintName = "FinalCutUITests"
+               ReferencedContainer = "container:FinalCut.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

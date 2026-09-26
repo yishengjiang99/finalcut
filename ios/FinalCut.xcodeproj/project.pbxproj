@@ -61,10 +61,20 @@
 		1AFF213883107B65DCD2E72B /* Captions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF61874E48A7AF7AEB14D5E /* Captions.swift */; };
 		CC08D05CFDF3ACE561E2143F /* OnDeviceCaptioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F5E3892807B2986C6B3BE2F /* OnDeviceCaptioner.swift */; };
 		3AF5E94FF5A7B888CA053E40 /* OnDeviceCaptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43650E5D658EE45A21B0D32 /* OnDeviceCaptionsTests.swift */; };
+		E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D4631ADFACF915E7BC1096B /* KeyboardDismiss.swift */; };
+		FBE881DDA0C9EB05D6BD3BDD /* KeyboardAndMicUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */; };
+		956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		F0583706C16045F3940B2A05 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E983094B601743CCA257AE26 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 222FA0522493476C89FA9258;
+			remoteInfo = FinalCut;
+		};
+		C66C2B3A58E1A4CBCDF982E9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E983094B601743CCA257AE26 /* Project object */;
 			proxyType = 1;
@@ -131,6 +141,10 @@
 		AAF61874E48A7AF7AEB14D5E /* Captions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Captions.swift; sourceTree = "<group>"; };
 		9F5E3892807B2986C6B3BE2F /* OnDeviceCaptioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceCaptioner.swift; sourceTree = "<group>"; };
 		A43650E5D658EE45A21B0D32 /* OnDeviceCaptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceCaptionsTests.swift; sourceTree = "<group>"; };
+		1D4631ADFACF915E7BC1096B /* KeyboardDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismiss.swift; sourceTree = "<group>"; };
+		D3CFEC569C319A8D848DBCCD /* FinalCutUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinalCutUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardAndMicUITests.swift; sourceTree = "<group>"; };
+		E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerMicTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,6 +162,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF12E34417BBC73CD3ADADE0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -156,6 +177,7 @@
 			children = (
 				E6E45CB9C3574FE69401C500 /* FinalCut */,
 				31046C18DC344075B32836E8 /* FinalCutTests */,
+				E0EFEDBB48F445C742FB55FF /* FinalCutUITests */,
 				0A8D1EA26BA74D0CB4B954CC /* Products */,
 			);
 			sourceTree = "<group>";
@@ -165,6 +187,7 @@
 			children = (
 				14F6988B52314F80AA539724 /* FinalCut.app */,
 				CA5CF65882224BB0B955C889 /* FinalCutTests.xctest */,
+				D3CFEC569C319A8D848DBCCD /* FinalCutUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -254,6 +277,7 @@
 		E1D86FFA0C5F47868EBAFE01 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
+				1D4631ADFACF915E7BC1096B /* KeyboardDismiss.swift */,
 				F75730428B69D0391857303A /* DictationController.swift */,
 				5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */,
 				F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */,
@@ -288,6 +312,7 @@
 		31046C18DC344075B32836E8 /* FinalCutTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */,
 				A43650E5D658EE45A21B0D32 /* OnDeviceCaptionsTests.swift */,
 				697C9B433CDD481962E9C53A /* NoUploadAndHeadersTests.swift */,
 				F3F70B4C1048A11E132B7D1E /* NativeToolTests.swift */,
@@ -316,6 +341,14 @@
 				59C829D9D1054B0D87489025 /* finalcap-test-video.mp4 */,
 			);
 			path = SampleMedia;
+			sourceTree = "<group>";
+		};
+		E0EFEDBB48F445C742FB55FF /* FinalCutUITests */ = {
+			isa = PBXGroup;
+			children = (
+				0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */,
+			);
+			path = FinalCutUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -355,6 +388,23 @@
 			productReference = CA5CF65882224BB0B955C889 /* FinalCutTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		FA62218EFC4D54AD56AF8C92 /* FinalCutUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 199B772C970C64CFB52292B4 /* Build configuration list for PBXNativeTarget "FinalCutUITests" */;
+			buildPhases = (
+				02C385D5A662BF0F9B791E2B /* Sources */,
+				FF12E34417BBC73CD3ADADE0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5AC2FB5EF87FC60DA12EFD0D /* PBXTargetDependency */,
+			);
+			name = FinalCutUITests;
+			productName = FinalCutUITests;
+			productReference = D3CFEC569C319A8D848DBCCD /* FinalCutUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -369,6 +419,10 @@
 						CreatedOnToolsVersion = 15.0;
 					};
 					2773D35A624C430C841FE007 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 222FA0522493476C89FA9258;
+					};
+					FA62218EFC4D54AD56AF8C92 = {
 						CreatedOnToolsVersion = 15.0;
 						TestTargetID = 222FA0522493476C89FA9258;
 					};
@@ -389,6 +443,7 @@
 			targets = (
 				222FA0522493476C89FA9258 /* FinalCut */,
 				2773D35A624C430C841FE007 /* FinalCutTests */,
+				FA62218EFC4D54AD56AF8C92 /* FinalCutUITests */,
 			);
 		};
 
@@ -411,6 +466,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */,
 				CC08D05CFDF3ACE561E2143F /* OnDeviceCaptioner.swift in Sources */,
 				1AFF213883107B65DCD2E72B /* Captions.swift in Sources */,
 				BD2093D6FF56B1A36990B792 /* DictationController.swift in Sources */,
@@ -460,6 +516,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */,
 				3AF5E94FF5A7B888CA053E40 /* OnDeviceCaptionsTests.swift in Sources */,
 				F3AEEBB2787D7FACC1822FF8 /* NoUploadAndHeadersTests.swift in Sources */,
 				C3E3CC33FE21D6291D0C91E1 /* NativeToolTests.swift in Sources */,
@@ -473,6 +530,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		02C385D5A662BF0F9B791E2B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FBE881DDA0C9EB05D6BD3BDD /* KeyboardAndMicUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -480,6 +545,11 @@
 			isa = PBXTargetDependency;
 			target = 222FA0522493476C89FA9258 /* FinalCut */;
 			targetProxy = F0583706C16045F3940B2A05 /* PBXContainerItemProxy */;
+		};
+		5AC2FB5EF87FC60DA12EFD0D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 222FA0522493476C89FA9258 /* FinalCut */;
+			targetProxy = C66C2B3A58E1A4CBCDF982E9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -629,6 +699,40 @@
 			};
 			name = Release;
 		};
+		4ED818CCD3594F5937D45250 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10;
+				DEVELOPMENT_TEAM = 83D36RPMUM;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = FinalCut;
+			};
+			name = Debug;
+		};
+		D20C8455F7C3164DFB0641DA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10;
+				DEVELOPMENT_TEAM = 83D36RPMUM;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = FinalCut;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -655,6 +759,15 @@
 			buildConfigurations = (
 				C89A17BCC7564B77ADAFC3F0 /* Debug */,
 				5B301DABDBF34A64BEF4A294 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		199B772C970C64CFB52292B4 /* Build configuration list for PBXNativeTarget "FinalCutUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4ED818CCD3594F5937D45250 /* Debug */,
+				D20C8455F7C3164DFB0641DA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -73,7 +73,11 @@ jobs:
               f.write(f"destination=platform=iOS Simulator,id={udid}\n")
           PY
 
-      - name: Run FinalCutTests
+      - name: Use the software keyboard in the simulator
+        # UI tests check that the on-screen keyboard hides; a connected hardware keyboard hides it anyway.
+        run: defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+
+      - name: Run FinalCutTests + FinalCutUITests
         working-directory: ios
         run: |
           set -euo pipefail
@@ -83,6 +87,7 @@ jobs:
             -scheme FinalCut \
             -destination "${{ steps.sim.outputs.destination }}" \
             -only-testing:FinalCutTests \
+            -only-testing:FinalCutUITests \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             test

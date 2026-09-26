@@ -31,8 +31,9 @@ final class DictationController: ObservableObject {
     private var ticker: Timer?
     private let clock: () -> TimeInterval
 
-    init(clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+    init(clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }, status: Status = .idle) {
         self.clock = clock
+        self.status = status
         recognizer = SFSpeechRecognizer(locale: .current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     }
 
