@@ -5,14 +5,21 @@ struct ExportSheet: View {
     var videoURL: URL?
     var state: EditorState
 
+    @State private var saving = false
+    @State private var saveMessage: String?
+
+    private var isPhoto: Bool {
+        videoURL.map { MediaMIME.isImage(url: $0) } ?? false
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                Image(systemName: "square.and.arrow.up")
+                Image(systemName: isPhoto ? "photo" : "square.and.arrow.up")
                     .font(.system(size: 40))
                     .foregroundStyle(AppTheme.accent)
 
-                Text("Export")
+                Text(isPhoto ? UXCopy.exportPhotoTitle : "Export")
                     .font(.title2.bold())
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -28,12 +35,36 @@ struct ExportSheet: View {
                         .foregroundStyle(AppTheme.textSecondary)
                 }
 
-                Button("Share / Save (stub)") {
-                    dismiss()
+                if isPhoto {
+                    Button {
+                        Task { await savePhoto() }
+                    } label: {
+                        if saving {
+                            // No render percentage for photos: a short spinner (§7).
+                            ProgressView().tint(.black)
+                        } else {
+                            Text(UXCopy.exportPhotoTitle)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.accent)
+                    .disabled(!canExport || saving)
+                    .accessibilityIdentifier("SavePhoto")
+
+                    if let saveMessage {
+                        Text(saveMessage)
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .accessibilityIdentifier("SavePhotoStatus")
+                    }
+                } else {
+                    Button("Share / Save (stub)") {
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.accent)
+                    .disabled(!canExport)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accent)
-                .disabled(videoURL == nil || state == .processing || state == .uploading)
 
                 Spacer()
             }
@@ -45,23 +76,40 @@ struct ExportSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .navigationTitle("ExportSheet")
+            .navigationTitle(isPhoto ? UXCopy.exportPhotoTitle : "ExportSheet")
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
         .accessibilityIdentifier("ExportSheet")
     }
 
+    private var canExport: Bool {
+        videoURL != nil && state != .processing && state != .uploading
+    }
+
+    private func savePhoto() async {
+        guard let videoURL else { return }
+        saving = true
+        saveMessage = nil
+        defer { saving = false }
+        do {
+            try await PhotoLibrarySaver.savePhoto(at: videoURL)
+            saveMessage = UXCopy.savedToPhotos
+        } catch {
+            saveMessage = UXCopy.saveFailed
+        }
+    }
+
     private var statusCopy: String {
         switch state {
         case .empty:
-            return "Import and process a video before exporting."
+            return isPhoto ? "Import a photo before saving." : "Import and process a video before exporting."
         case .uploading:
             return "Still uploading…"
         case .processing:
             return "Server still processing — export when ready."
         case .ready:
-            return "Ready to export the current preview asset."
+            return isPhoto ? "Saves the edited photo to Photos in its original format." : "Ready to export the current preview asset."
         case .failed:
             return "Fix the failed job before exporting."
         }

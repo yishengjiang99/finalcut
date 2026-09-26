@@ -11,7 +11,7 @@ struct ComposerView: View {
         HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(
                 selection: $photosPickerItem,
-                matching: .videos,
+                matching: EditorViewModel.pickerFilter,
                 photoLibrary: .shared()
             ) {
                 Image(systemName: "plus.circle.fill")
@@ -19,7 +19,7 @@ struct ComposerView: View {
                     .foregroundStyle(AppTheme.accent)
             }
             .accessibilityLabel("Import")
-            .accessibilityHint("Choose a video from Photos")
+            .accessibilityHint("Choose a photo or video from Photos")
             .disabled(!importEnabled)
             .opacity(importEnabled ? 1 : 0.35)
 
