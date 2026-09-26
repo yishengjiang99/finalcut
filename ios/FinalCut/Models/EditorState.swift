@@ -1,12 +1,28 @@
 import Foundation
 
 /// Editor lifecycle states (Design).
+/// `importing` = loading from Photos/Files/camera into the app (on device). `uploading` is
+/// only ever used by the opt-in Cloud processing path; with it off nothing is uploaded and the
+/// word never appears.
 enum EditorState: String, Codable, CaseIterable, Equatable {
     case empty
+    case importing
     case uploading
     case ready
     case processing
     case failed
+
+    /// Import, cloud upload or an edit turn is running.
+    var isBusy: Bool { self == .importing || self == .uploading || self == .processing }
+
+    /// Preview/status copy while media moves (nil otherwise).
+    var transferMessage: String? {
+        switch self {
+        case .importing: return UXCopy.importing
+        case .uploading: return UXCopy.cloudUploading
+        default: return nil
+        }
+    }
 }
 
 /// Dimmer copy during `processing` (Design UX — captions three-step flow).
@@ -20,7 +36,7 @@ enum ProcessingOverlayKind: String, Codable, CaseIterable, Equatable {
     var message: String {
         switch self {
         case .editing:
-            return "Editing…"
+            return UXCopy.applyingEdit
         case .generatingCaptions:
             return "Generating captions…"
         case .translating:

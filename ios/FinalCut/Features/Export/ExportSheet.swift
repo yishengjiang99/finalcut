@@ -165,7 +165,7 @@ struct ExportSheet: View {
     }
 
     private var canExport: Bool {
-        (stack != nil || videoURL != nil) && state != .processing && state != .uploading
+        (stack != nil || videoURL != nil) && !state.isBusy
     }
 
     private var statusCopy: String {
@@ -173,8 +173,10 @@ struct ExportSheet: View {
         switch state {
         case .empty:
             return isPhoto ? "Import a photo before saving." : "Import a video before exporting."
+        case .importing:
+            return "Still importing…"
         case .uploading:
-            return "Still uploading…"
+            return UXCopy.cloudUploading
         case .processing:
             return "Finishing your edit — export when it's done."
         case .ready, .failed:

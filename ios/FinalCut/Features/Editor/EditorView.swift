@@ -24,7 +24,7 @@ struct EditorView: View {
                 onUpgrade: { appModel.presentPaywall(reason: .upgradeTapped) },
                 importEnabled: importEnabled,
                 exportVisible: model.localVideoURL != nil,
-                exportEnabled: model.state != .processing && model.state != .uploading,
+                exportEnabled: !model.state.isBusy,
                 showUpgrade: !appModel.hasSubscription,
                 freeRemaining: TopBarView.visibleFreeRemaining(unlimited: appModel.isUnlimited, remaining: appModel.dailyRemaining),
                 onSettings: { showSettings = true },
@@ -129,7 +129,7 @@ struct EditorView: View {
     }
 
     private var importEnabled: Bool {
-        model.state != .uploading && model.state != .processing
+        !model.state.isBusy
     }
 
     /// Launch / empty state shows the import panel in place of the preview.
@@ -285,7 +285,7 @@ final class EditorViewModel: ObservableObject {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            state = .uploading
+            state = .importing
             lastError = nil
             do {
                 let video = try await Task.detached {
@@ -302,7 +302,7 @@ final class EditorViewModel: ObservableObject {
 
     func loadPhotosPickerItem(_ item: PhotosPickerItem?) async {
         guard let item else { return }
-        state = .uploading
+        state = .importing
         lastError = nil
         // Reset selection so choosing the same video again triggers another import.
         defer { photosPickerItem = nil }
@@ -474,7 +474,7 @@ final class EditorViewModel: ObservableObject {
     /// Retry from a generic failed edit card: resend the same prompt.
     func retry(_ card: EditFailureCard) {
         guard card.showsRetry, let prompt = card.retryPrompt else { return }
-        guard state != .processing, state != .uploading else { return }
+        guard !state.isBusy else { return }
         composerText = prompt
         sendMessage()
     }
@@ -502,7 +502,7 @@ final class EditorViewModel: ObservableObject {
 
     /// User-initiated "Try the sample clip" from the empty-state import panel.
     func loadSampleClip() {
-        guard state != .processing, state != .uploading else { return }
+        guard !state.isBusy else { return }
         guard let url = bundledTestVideoURL else {
             state = .failed
             lastError = "Sample clip unavailable"
@@ -540,7 +540,7 @@ final class EditorViewModel: ObservableObject {
     }
 
     /// True while a turn (chat round-trip or edit) is running.
-    var isBusy: Bool { state == .processing || state == .uploading }
+    var isBusy: Bool { state.isBusy }
 
     /// Sends a prompt now, or queues it (FIFO) while an edit is running. Queued prompts
     /// show immediately as a user bubble labelled "Queued" (Design #96).
@@ -1305,7 +1305,8 @@ final class EditorViewModel: ObservableObject {
         }
         do {
             try await prepareAuth(client)
-            state = .processing
+            // Cloud processing is on (this path is unreachable with it off).
+            state = .uploading
             processingOverlay = .editing
             let uploadData = try Data(contentsOf: uploadURL)
             let enqueue = try await client.submitProcessVideoJob(
@@ -1316,6 +1317,7 @@ final class EditorViewModel: ObservableObject {
                 args: args.mapValues { $0.foundationValue }
             )
             activeJobId = enqueue.jobId
+            state = .processing
             let final = try await client.pollJob(id: enqueue.jobId)
             activeJobId = nil
             guard final.status == .succeeded else {

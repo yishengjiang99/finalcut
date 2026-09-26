@@ -193,7 +193,7 @@ final class APIModelsTests: XCTestCase {
 
     func testEditorStateCases() {
         let all = EditorState.allCases.map(\.rawValue)
-        XCTAssertEqual(all, ["empty", "uploading", "ready", "processing", "failed"])
+        XCTAssertEqual(all, ["empty", "importing", "uploading", "ready", "processing", "failed"])
     }
 
     func testCaptionsResponseDecode() throws {

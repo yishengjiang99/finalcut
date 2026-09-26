@@ -18,11 +18,16 @@ enum UXCopy {
     static let cloud = "Cloud"                                                 // edit.cloud
     static let undo = "Undo"                                                   // edit.undo
     static let redo = "Redo"                                                   // edit.redo
+    static let importing = "Importing…"                                       // state.importing
+    static let applyingEdit = "Applying edit…"                                // state.applyingEdit (on-device edit)
+    /// Cloud processing ON only (never shown with it off).
+    static let cloudUploading = "Uploading to cloud…"                  // state.cloudUploading
+    static let exportPreparing = "Exporting…"                                 // export.preparing
     static let editActionName = "Edit"                                         // edit.actionName (Undo Edit / Redo Edit)
     static let cloudSettingTitle = "Cloud processing"                         // cloud.setting.title
-    static let cloudSettingFootnote = "Lets FinalCap upload a clip to our servers for edits your iPhone can't do yet. Off means nothing is ever uploaded." // cloud.setting.footnote
+    static let cloudSettingFootnote = "Lets FinalCap send a clip to our servers for edits your iPhone can't do yet. Off means your photos and videos never leave your iPhone." // cloud.setting.footnote
     static let cloudFlattened = "Earlier edits were baked in by a cloud step." // cloud.flattened
-    static let exportRendering = "Rendering on your iPhone…"                  // export.rendering (+ " {pct}%")
+    static let exportRendering = "Exporting…"                  // export.rendering (+ " {pct}%")
     static let exportRenderedLocal = "Rendered on your iPhone."               // export.rendered.local
     static let exportLeaveHint = "You can leave the app. We'll let you know when it's ready." // export.leaveHint
     static let exportNotifyMe = "Notify me when it's done"                    // export.notifyMe

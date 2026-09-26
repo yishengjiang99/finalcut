@@ -43,13 +43,13 @@ struct PreviewPaneView: View {
                 emptyState
             }
 
-            if showsDimmer || state == .uploading {
+            if showsDimmer || state.transferMessage != nil {
                 Color.black.opacity(0.35)
                 VStack(spacing: 10) {
                     ProgressView()
                         .tint(AppTheme.accent)
                         .scaleEffect(1.2)
-                    Text(processingMessage)
+                    Text(state.transferMessage ?? processingMessage)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(AppTheme.textPrimary)
                         .multilineTextAlignment(.center)
@@ -97,7 +97,7 @@ struct PreviewPaneView: View {
     private var emptyCopy: String {
         switch state {
         case .empty: return "Import a photo or video to preview"
-        case .uploading: return "Uploading…"
+        case .importing, .uploading: return state.transferMessage ?? ""
         case .failed: return "Preview unavailable"
         case .ready, .processing: return "No local URL"
         }
