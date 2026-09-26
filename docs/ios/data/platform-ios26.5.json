@@ -1,0 +1,665 @@
+{
+  "audioUnits" : {
+    "AVAudioUnitDelay" : {
+      "defaults" : {
+        "delayTime" : 1,
+        "feedback" : 50,
+        "lowPassCutoff" : 15000,
+        "wetDryMix" : 50
+      },
+      "parameters" : [
+        {
+          "displayName" : "Dry\/Wet Mix",
+          "identifier" : "0",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 16,
+          "unitName" : "",
+          "value" : 50
+        },
+        {
+          "displayName" : "Delay Time",
+          "identifier" : "1",
+          "max" : 2,
+          "min" : 9.9999997473787516e-05,
+          "unit" : 4,
+          "unitName" : "Secs",
+          "value" : 1
+        },
+        {
+          "displayName" : "Feedback",
+          "identifier" : "2",
+          "max" : 99.900001525878906,
+          "min" : -99.900001525878906,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 50
+        },
+        {
+          "displayName" : "Lowpass Cutoff Frequency",
+          "identifier" : "3",
+          "max" : 22050,
+          "min" : 10,
+          "unit" : 8,
+          "unitName" : "Hz",
+          "value" : 15000
+        }
+      ]
+    },
+    "AVAudioUnitDistortion" : {
+      "parameters" : [
+        {
+          "displayName" : "Delay",
+          "identifier" : "0",
+          "max" : 500,
+          "min" : 0.10000000149011612,
+          "unit" : 24,
+          "unitName" : "msecs",
+          "value" : 4.5999999046325684
+        },
+        {
+          "displayName" : "Decay",
+          "identifier" : "1",
+          "max" : 50,
+          "min" : 0.10000000149011612,
+          "unit" : 7,
+          "unitName" : "",
+          "value" : 9.7299995422363281
+        },
+        {
+          "displayName" : "Delay Mix",
+          "identifier" : "2",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 3.4000000953674316
+        },
+        {
+          "displayName" : "Ring Mod Freq 1",
+          "identifier" : "10",
+          "max" : 8000,
+          "min" : 0.5,
+          "unit" : 8,
+          "unitName" : "Hz",
+          "value" : 44
+        },
+        {
+          "displayName" : "Ring Mod Freq 2",
+          "identifier" : "11",
+          "max" : 8000,
+          "min" : 0.5,
+          "unit" : 8,
+          "unitName" : "Hz",
+          "value" : 1147
+        },
+        {
+          "displayName" : "Ring Mod Balance",
+          "identifier" : "12",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 50
+        },
+        {
+          "displayName" : "Ring Mod Mix",
+          "identifier" : "13",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 0
+        },
+        {
+          "displayName" : "Decimation",
+          "identifier" : "3",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 0.5
+        },
+        {
+          "displayName" : "Rounding",
+          "identifier" : "4",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 65.199996948242188
+        },
+        {
+          "displayName" : "Decimation Mix",
+          "identifier" : "5",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 100
+        },
+        {
+          "displayName" : "Linear Term",
+          "identifier" : "6",
+          "max" : 1,
+          "min" : 0,
+          "unit" : 14,
+          "unitName" : "Gain",
+          "value" : 0
+        },
+        {
+          "displayName" : "Squared Term",
+          "identifier" : "7",
+          "max" : 20,
+          "min" : 0,
+          "unit" : 14,
+          "unitName" : "Gain",
+          "value" : 18.110000610351562
+        },
+        {
+          "displayName" : "Cubic Term",
+          "identifier" : "8",
+          "max" : 20,
+          "min" : 0,
+          "unit" : 14,
+          "unitName" : "Gain",
+          "value" : 0
+        },
+        {
+          "displayName" : "Polynomial Mix",
+          "identifier" : "9",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 100
+        },
+        {
+          "displayName" : "Soft Clip Gain",
+          "identifier" : "14",
+          "max" : 20,
+          "min" : -80,
+          "unit" : 13,
+          "unitName" : "dB",
+          "value" : -0.89999997615814209
+        },
+        {
+          "displayName" : "Wet\/Dry Mix",
+          "identifier" : "15",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 44.599998474121094
+        }
+      ],
+      "preGain" : -0.89999997615814209,
+      "wetDryMix" : 44.599998474121094
+    },
+    "AVAudioUnitEQ(1 band)" : {
+      "bandDefaults" : {
+        "bandwidth" : 0.5,
+        "bypass" : true,
+        "filterType" : 0,
+        "frequency" : 40,
+        "gain" : 0
+      },
+      "globalGain" : 0,
+      "parameters" : [
+        {
+          "displayName" : "Global Gain",
+          "identifier" : "0",
+          "max" : 24,
+          "min" : -96,
+          "unit" : 13,
+          "unitName" : "dB",
+          "value" : 0
+        },
+        {
+          "displayName" : "Bypass",
+          "identifier" : "1000",
+          "max" : 1,
+          "min" : 0,
+          "unit" : 2,
+          "unitName" : "T\/F",
+          "value" : 1
+        },
+        {
+          "displayName" : "Type",
+          "identifier" : "2000",
+          "max" : 10,
+          "min" : 0,
+          "unit" : 1,
+          "unitName" : "",
+          "value" : 0,
+          "valueStrings" : [
+            "Parametric",
+            "Butterworth Low Pass",
+            "Butterworth High Pass",
+            "Resonant Low Pass",
+            "Resonant High Pass",
+            "Band Pass",
+            "Band Stop",
+            "Low Shelf",
+            "High Shelf",
+            "Resonant Low Shelf",
+            "Resonant High Shelf"
+          ]
+        },
+        {
+          "displayName" : "Frequency",
+          "identifier" : "3000",
+          "max" : 21609,
+          "min" : 10,
+          "unit" : 8,
+          "unitName" : "Hz",
+          "value" : 40
+        },
+        {
+          "displayName" : "Gain",
+          "identifier" : "4000",
+          "max" : 24,
+          "min" : -96,
+          "unit" : 13,
+          "unitName" : "dB",
+          "value" : 0
+        },
+        {
+          "displayName" : "Bandwidth",
+          "identifier" : "5000",
+          "max" : 5,
+          "min" : 0.05000000074505806,
+          "unit" : 21,
+          "unitName" : "8ve",
+          "value" : 0.5
+        }
+      ]
+    },
+    "AVAudioUnitReverb" : {
+      "parameters" : [
+        {
+          "displayName" : "Dry\/Wet Mix",
+          "identifier" : "0",
+          "max" : 100,
+          "min" : 0,
+          "unit" : 3,
+          "unitName" : "%",
+          "value" : 0.5
+        },
+        {
+          "displayName" : "Gain",
+          "identifier" : "1",
+          "max" : 20,
+          "min" : -20,
+          "unit" : 13,
+          "unitName" : "dB",
+          "value" : 1
+        },
+        {
+          "displayName" : "Min Delay Time",
+          "identifier" : "2",
+          "max" : 1,
+          "min" : 9.9999997473787516e-05,
+          "unit" : 4,
+          "unitName" : "Secs",
+          "value" : 0.0099999997764825821
+        },
+        {
+          "displayName" : "Max Delay Time",
+          "identifier" : "3",
+          "max" : 1,
+          "min" : 9.9999997473787516e-05,
+          "unit" : 4,
+          "unitName" : "Secs",
+          "value" : 0.070000000298023224
+        },
+        {
+          "displayName" : "Low Freq Decay Time",
+          "identifier" : "4",
+          "max" : 20,
+          "min" : 0.0010000000474974513,
+          "unit" : 4,
+          "unitName" : "Secs",
+          "value" : 2.0999999046325684
+        },
+        {
+          "displayName" : "High Freq Decay Time",
+          "identifier" : "5",
+          "max" : 20,
+          "min" : 0.0010000000474974513,
+          "unit" : 4,
+          "unitName" : "Secs",
+          "value" : 1.1000000238418579
+        },
+        {
+          "displayName" : "Randomize Reflections",
+          "identifier" : "6",
+          "max" : 1000,
+          "min" : 1,
+          "unit" : 0,
+          "unitName" : "",
+          "value" : 1
+        }
+      ],
+      "wetDryMix" : 0.5
+    },
+    "AVAudioUnitTimePitch" : {
+      "defaults" : {
+        "overlap" : 8,
+        "pitch" : 0,
+        "rate" : 1
+      },
+      "parameters" : [
+        {
+          "displayName" : "rate",
+          "identifier" : "0",
+          "max" : 32,
+          "min" : 0.03125,
+          "unit" : 7,
+          "unitName" : "",
+          "value" : 1
+        },
+        {
+          "displayName" : "pitch scale",
+          "identifier" : "1",
+          "max" : 2400,
+          "min" : -2400,
+          "unit" : 9,
+          "unitName" : "Cents",
+          "value" : 0
+        },
+        {
+          "displayName" : "smoothness",
+          "identifier" : "4",
+          "max" : 32,
+          "min" : 3,
+          "unit" : 0,
+          "unitName" : "",
+          "value" : 8
+        },
+        {
+          "displayName" : "spectral coherence",
+          "identifier" : "6",
+          "max" : 1,
+          "min" : 0,
+          "unit" : 2,
+          "unitName" : "T\/F",
+          "value" : 1
+        },
+        {
+          "displayName" : "preserve transients",
+          "identifier" : "7",
+          "max" : 1,
+          "min" : 0,
+          "unit" : 2,
+          "unitName" : "T\/F",
+          "value" : 1
+        }
+      ]
+    },
+    "AVAudioUnitVarispeed" : {
+      "parameters" : [
+        {
+          "displayName" : "playback rate",
+          "identifier" : "0",
+          "max" : 4,
+          "min" : 0.25,
+          "unit" : 7,
+          "unitName" : "",
+          "value" : 1
+        },
+        {
+          "displayName" : "playback pitch",
+          "identifier" : "1",
+          "max" : 2400,
+          "min" : -2400,
+          "unit" : 9,
+          "unitName" : "Cents",
+          "value" : 0
+        }
+      ],
+      "rate" : 1
+    }
+  },
+  "environment" : {
+    "generatedAt" : "2026-09-26T20:45:08Z",
+    "metalDevice" : "Apple iOS simulator GPU",
+    "operatingSystemVersion" : "26.5.0",
+    "operatingSystemVersionString" : "Version 26.5 (Build 23F77)",
+    "simulatorDeviceName" : "cifilter-dump",
+    "simulatorModel" : "iPhone12,1",
+    "simulatorRuntimeBuild" : "23F77",
+    "simulatorRuntimeVersion" : "26.5"
+  },
+  "vision" : {
+    "VNCalculateImageAestheticsScoresRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNClassifyImageRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNDetectAnimalBodyPoseRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectBarcodesRequest" : {
+      "available" : true,
+      "currentRevision" : 4,
+      "supportedRevisions" : [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "VNDetectContoursRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectDocumentSegmentationRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectFaceCaptureQualityRequest" : {
+      "available" : true,
+      "currentRevision" : 3,
+      "supportedRevisions" : [
+        1,
+        2,
+        3
+      ]
+    },
+    "VNDetectFaceLandmarksRequest" : {
+      "available" : true,
+      "currentRevision" : 3,
+      "supportedRevisions" : [
+        1,
+        2,
+        3
+      ]
+    },
+    "VNDetectFaceRectanglesRequest" : {
+      "available" : true,
+      "currentRevision" : 3,
+      "supportedRevisions" : [
+        1,
+        2,
+        3
+      ]
+    },
+    "VNDetectHorizonRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectHumanBodyPose3DRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+
+      ]
+    },
+    "VNDetectHumanBodyPoseRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectHumanHandPoseRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectHumanRectanglesRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNDetectLensSmudgeRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+
+      ]
+    },
+    "VNDetectRectanglesRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNDetectTrajectoriesRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNGenerateAttentionBasedSaliencyImageRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNGenerateForegroundInstanceMaskRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNGenerateImageFeaturePrintRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNGenerateObjectnessBasedSaliencyImageRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNGenerateOpticalFlowRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNGeneratePersonInstanceMaskRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNGeneratePersonSegmentationRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNHomographicImageRegistrationRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNRecognizeAnimalsRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNRecognizeTextRequest" : {
+      "available" : true,
+      "currentRevision" : 3,
+      "supportedRevisions" : [
+        1,
+        2,
+        3
+      ]
+    },
+    "VNTrackObjectRequest" : {
+      "available" : true,
+      "currentRevision" : 2,
+      "supportedRevisions" : [
+        1,
+        2
+      ]
+    },
+    "VNTrackOpticalFlowRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    },
+    "VNTranslationalImageRegistrationRequest" : {
+      "available" : true,
+      "currentRevision" : 1,
+      "supportedRevisions" : [
+        1
+      ]
+    }
+  }
+}
