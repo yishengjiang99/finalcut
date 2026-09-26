@@ -24,12 +24,33 @@ function readPackageVersion() {
   }
 }
 
-export function resolveCommit() {
-  if (process.env.GIT_COMMIT) return String(process.env.GIT_COMMIT).trim().slice(0, 40) || null;
+function gitShortHead(root) {
+  return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+    cwd: root, timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'],
+  }).toString();
+}
+
+/**
+ * Deployed commit, in priority order:
+ *   1. GIT_COMMIT env
+ *   2. REVISION file at the repo root (written by scripts/deploy-grepawk.sh; may end in "-dirty")
+ *   3. `git rev-parse --short HEAD` — only when no REVISION file exists (prod's .git is stale)
+ *   4. null
+ */
+export function resolveCommit({ env = process.env, root = ROOT, readFile = readFileSync, git = gitShortHead } = {}) {
+  if (env.GIT_COMMIT && String(env.GIT_COMMIT).trim()) return String(env.GIT_COMMIT).trim().slice(0, 40);
+  let revision;
   try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
-      cwd: ROOT, timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'],
-    }).toString().trim() || null;
+    revision = readFile(path.join(root, 'REVISION'), 'utf8');
+  } catch (err) {
+    if (err?.code !== 'ENOENT') return null;
+    revision = undefined;
+  }
+  if (revision !== undefined) {
+    return String(revision).split(/\r?\n/)[0].trim().slice(0, 48) || null;
+  }
+  try {
+    return String(git(root)).trim() || null;
   } catch {
     return null;
   }

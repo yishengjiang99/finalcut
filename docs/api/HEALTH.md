@@ -13,7 +13,14 @@ No auth, no session, no rate limit, no quota, `Cache-Control: no-store`.
 }
 ```
 
-- `commit`: `GIT_COMMIT` env, otherwise `git rev-parse --short HEAD` read once at startup, otherwise `null`.
+- `commit`: resolved once at startup, in this order:
+  1. the `GIT_COMMIT` env var;
+  2. the `REVISION` file at the repo root. `scripts/deploy-grepawk.sh` writes it from
+     `git rev-parse --short HEAD` on the checkout being deployed, adding `-dirty` when tracked
+     files differ from HEAD, and rsyncs it to prod. It is gitignored;
+  3. `git rev-parse --short HEAD`, but only when no `REVISION` file exists. The prod folder keeps
+     a stale `.git` because rsync excludes `.git/`, so it must not win over `REVISION`;
+  4. `null`. An empty `REVISION` file also gives `null`.
 - `ffmpeg`: probed once at startup. `heic` is true when a real HEIC sample decodes with
   ffmpeg (`heicVia: "ffmpeg"`) or when `heif-convert` is installed (`heicVia: "heif-convert"`).
 - `db`: `SELECT 1` with a 1s timeout, cached for 5s. Values are `"ok"`, `"error"`, or
