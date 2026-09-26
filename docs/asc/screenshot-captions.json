@@ -1,0 +1,50 @@
+{
+  "about": "Captions for the App Store screenshot overlays. Rendered by scripts/asc/compose_screenshots.py from the raw frames in docs/asc/screenshots-raw/ into docs/asc/screenshots/.",
+  "frames_from_build": 11,
+  "raw_dir": "docs/asc/screenshots-raw",
+  "frames": [
+    {
+      "index": 1,
+      "slug": "chat",
+      "caption": "Edit videos by chatting",
+      "caption_build12": "Your video stays on your iPhone",
+      "raw_iphone": "iphone69-01-editor.png",
+      "raw_ipad": "ipad13-01-editor.png"
+    },
+    {
+      "index": 2,
+      "slug": "ask",
+      "caption": "Just say what you want",
+      "raw_iphone": "iphone69-02-edit-card.png",
+      "raw_ipad": "ipad13-02-edit-card.png"
+    },
+    {
+      "index": 3,
+      "slug": "compare",
+      "caption": "See every change first",
+      "raw_iphone": "iphone69-03-compare.png",
+      "raw_ipad": "ipad13-03-compare.png"
+    },
+    {
+      "index": 4,
+      "slug": "titles",
+      "caption": "Add titles in seconds",
+      "raw_iphone": "iphone69-04-title.png",
+      "raw_ipad": "ipad13-04-title.png"
+    },
+    {
+      "index": 5,
+      "slug": "color",
+      "caption": "Color looks on command",
+      "raw_iphone": "iphone69-05-color-look.png",
+      "raw_ipad": "ipad13-05-color-look.png"
+    },
+    {
+      "index": 6,
+      "slug": "save",
+      "caption": "Save it to Photos",
+      "raw_iphone": "iphone69-06-export.png",
+      "raw_ipad": "ipad13-06-export.png"
+    }
+  ]
+}
