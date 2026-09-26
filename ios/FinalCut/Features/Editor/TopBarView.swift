@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 /// Dark chrome top bar: title (leading) · Undo/Redo · Import (Photos) · Export (when a clip
 /// is loaded) · Upgrade (trailing). One row at 375 pt: the title collapses to its gear and the
@@ -21,6 +22,15 @@ struct TopBarView: View {
     var canRedo = false
     var onUndo: () -> Void = {}
     var onRedo: () -> Void = {}
+
+    /// Import menu: camera only when the device has one (never on the simulator).
+    var cameraAvailable = false
+    var onChooseFile: (URL) -> Void = { _ in }
+    var onCapture: (URL) -> Void = { _ in }
+
+    @State private var showPhotos = false
+    @State private var showFiles = false
+    @State private var showCamera = false
 
     static let spacing: CGFloat = 8
     static let horizontalPadding: CGFloat = 12
@@ -67,11 +77,19 @@ struct TopBarView: View {
                 .layoutPriority(1)
             }
 
-            PhotosPicker(
-                selection: $photosPickerItem,
-                matching: EditorViewModel.pickerFilter,
-                photoLibrary: .shared()
-            ) {
+            Menu {
+                if cameraAvailable {
+                    Button { showCamera = true } label: {
+                        Label(UXCopy.importTakePhotoOrVideo, systemImage: "camera")
+                    }
+                }
+                Button { showPhotos = true } label: {
+                    Label(UXCopy.importChooseFromPhotos, systemImage: "photo.on.rectangle")
+                }
+                Button { showFiles = true } label: {
+                    Label(UXCopy.importChooseFile, systemImage: "folder")
+                }
+            } label: {
                 Text("Import")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -79,7 +97,7 @@ struct TopBarView: View {
             }
             .disabled(!importEnabled)
             .accessibilityLabel("Import")
-            .accessibilityHint("Choose a photo or video from Photos")
+            .accessibilityHint("Take, or choose a photo or video")
 
             if exportVisible {
                 Button(action: onExport) {
@@ -105,6 +123,18 @@ struct TopBarView: View {
         }
         .padding(.horizontal, Self.horizontalPadding)
         .frame(minHeight: Self.rowHeight)
+        .photosPicker(isPresented: $showPhotos, selection: $photosPickerItem,
+                      matching: EditorViewModel.pickerFilter, photoLibrary: .shared())
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.movie, .image]) { result in
+            if case .success(let url) = result { onChooseFile(url) }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { url in
+                showCamera = false
+                if let url { onCapture(url) }
+            }
+            .ignoresSafeArea()
+        }
         .background(AppTheme.surface)
         .overlay(alignment: .bottom) {
             Rectangle().fill(AppTheme.border).frame(height: 1)

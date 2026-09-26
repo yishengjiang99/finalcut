@@ -23,6 +23,9 @@ enum UXCopy {
     /// Cloud processing ON only (never shown with it off).
     static let cloudUploading = "Uploading to cloud…"                  // state.cloudUploading
     static let exportPreparing = "Exporting…"                                 // export.preparing
+    static let importTakePhotoOrVideo = "Take Photo or Video"                 // import.camera
+    static let importChooseFromPhotos = "Choose from Photos"                  // import.photos
+    static let importChooseFile = "Choose File"                               // import.file
     static let editActionName = "Edit"                                         // edit.actionName (Undo Edit / Redo Edit)
     static let cloudSettingTitle = "Cloud processing"                         // cloud.setting.title
     static let cloudSettingFootnote = "Lets FinalCap send a clip to our servers for edits your iPhone can't do yet. Off means your photos and videos never leave your iPhone." // cloud.setting.footnote

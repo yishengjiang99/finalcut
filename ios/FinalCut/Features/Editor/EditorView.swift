@@ -32,7 +32,10 @@ struct EditorView: View {
                 canUndo: model.canUndo,
                 canRedo: model.canRedo,
                 onUndo: { model.performUndo() },
-                onRedo: { model.performRedo() }
+                onRedo: { model.performRedo() },
+                cameraAvailable: UIImagePickerController.isSourceTypeAvailable(.camera),
+                onChooseFile: { url in Task { await model.importFile(url) } },
+                onCapture: { url in Task { await model.handleImport(.success([url])) } }
             )
 
             if showsImportPanel {
@@ -68,8 +71,8 @@ struct EditorView: View {
                 .frame(maxHeight: .infinity)
 
             if model.showSampleChips && model.localVideoURL != nil {
-                SampleChipsView(chips: model.sampleChips) { chip in
-                    model.applySampleChip(chip)
+                SampleChipsView(pills: model.suggestions) { pill in
+                    model.applySuggestion(pill)
                 }
             }
 
@@ -98,6 +101,7 @@ struct EditorView: View {
             Task { await model.loadPhotosPickerItem(item) }
         }
         .onAppear {
+            model.refreshSuggestions()
             model.undoManager = undoManager
             model.apiClient = appModel.apiClient
             model.onPaywallRequired = { [weak appModel] in
@@ -115,6 +119,7 @@ struct EditorView: View {
         }
         .onDisappear { dictation.stop() }
         .onChange(of: undoManager) { _, manager in model.undoManager = manager }
+        .onChange(of: model.isPhoto) { _, _ in model.refreshSuggestions() }
         .overlay(alignment: .top) {
             if model.state == .failed, model.importError == nil, let err = model.lastError {
                 Text(err)
@@ -269,6 +274,38 @@ final class EditorViewModel: ObservableObject {
 
     /// Sample chips (photo-safe set for photos). Each maps to a correct tool with complete args.
     var sampleChips: [String] { EditorRoute.chips(isPhoto: isPhoto) }
+
+    // MARK: Suggestion pills (server-driven, cached, bundled fallback)
+
+    var suggestionService = SuggestionService()
+    @Published private(set) var suggestions: [SuggestionPill] = SuggestionService.bundledVideo
+    private var suggestionsMedia: SuggestionMedia?
+
+    /// On launch and whenever the media type changes: show cache/bundled now, then refresh.
+    func refreshSuggestions() {
+        let media: SuggestionMedia = isPhoto ? .photo : .video
+        guard media != suggestionsMedia else { return }
+        suggestionsMedia = media
+        let service = suggestionService
+        suggestions = service.immediate(for: media)
+        Task { [weak self] in
+            let pills = await service.suggestions(for: media)
+            guard let self, self.suggestionsMedia == media, !pills.isEmpty else { return }
+            self.suggestions = pills
+        }
+    }
+
+    /// A pill sends its full prompt (the label is only what the pill shows).
+    func applySuggestion(_ pill: SuggestionPill) {
+        submitPrompt(pill.prompt)
+    }
+
+    /// Choose File: security-scoped read, copied into the app sandbox by the shared import path.
+    func importFile(_ url: URL) async {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        await handleImport(.success([url]))
+    }
 
     private var processingTask: Task<Void, Never>?
 

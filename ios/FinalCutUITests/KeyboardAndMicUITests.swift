@@ -12,9 +12,9 @@ final class KeyboardAndMicUITests: XCTestCase {
         app.launch()
         let sample = app.buttons["Try the sample clip"]
         if sample.waitForExistence(timeout: 8) { sample.tap() }
-        let loaded = app.buttons["Red filter"].waitForExistence(timeout: 20)
+        let loaded = app.buttons["Export"].waitForExistence(timeout: 20)
         if !loaded { print(app.debugDescription) }
-        XCTAssertTrue(loaded, "sample clip loaded (video chips visible)")
+        XCTAssertTrue(loaded, "sample clip loaded (Export visible)")
     }
 
     /// The composer is the only TextField (the player's timecode can surface as a TextView,
@@ -74,6 +74,22 @@ final class KeyboardAndMicUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Save to Photos"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Save to Files"].exists)
         XCTAssertTrue(app.buttons["Save to Photos"].isEnabled)
+    }
+
+    func testImportMenuOffersPhotosAndFilesButNoCameraOnSimulator() throws {
+        let importButton = app.buttons["Import"].firstMatch
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10))
+        importButton.tap()
+        XCTAssertTrue(app.buttons["Choose from Photos"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Choose File"].exists)
+        XCTAssertFalse(app.buttons["Take Photo or Video"].exists, "no camera on the simulator")
+    }
+
+    func testSuggestionPillsShowForVideo() throws {
+        // Bundled defaults (or the server's set): the row is never empty.
+        let pills = app.scrollViews.buttons
+        XCTAssertTrue(pills.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(pills.count, 0)
     }
 
     func testMicShowsWhenFieldIsEmptyBeforePermissionIsAsked() throws {

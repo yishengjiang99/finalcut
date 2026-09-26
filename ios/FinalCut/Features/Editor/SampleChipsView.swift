@@ -1,27 +1,36 @@
 import SwiftUI
+import UIKit
 
+/// Suggestion pills: shows each pill's label (and SF Symbol when valid); tapping sends its prompt.
 struct SampleChipsView: View {
-    var chips: [String]
-    var onSelect: (String) -> Void
+    var pills: [SuggestionPill]
+    var onSelect: (SuggestionPill) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(chips, id: \.self) { chip in
+                ForEach(pills) { pill in
                     Button {
-                        onSelect(chip)
+                        onSelect(pill)
                     } label: {
-                        Text(chip)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(AppTheme.textPrimary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(AppTheme.surfaceElevated)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule().stroke(AppTheme.border, lineWidth: 1)
-                            )
+                        HStack(spacing: 4) {
+                            if let icon = pill.icon, UIImage(systemName: icon) != nil {
+                                Image(systemName: icon)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(pill.label)
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(AppTheme.surfaceElevated)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(AppTheme.border, lineWidth: 1)
+                        )
                     }
+                    .accessibilityLabel(pill.label)
                 }
             }
             .padding(.horizontal, 16)
@@ -34,5 +43,5 @@ struct SampleChipsView: View {
 }
 
 #Preview {
-    SampleChipsView(chips: ["Trim", "Captions"], onSelect: { _ in })
+    SampleChipsView(pills: SuggestionService.bundledVideo, onSelect: { _ in })
 }

@@ -66,6 +66,10 @@
 		956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */; };
 		B54E2B173160D3E92D4F9C37 /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5E696A011F606B3C761265 /* ExportTests.swift */; };
 		5CCA836F4EF77DE8F68AA45E /* UndoRedoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */; };
+		63140D2471FF1CAB65DAA5AB /* SuggestionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E80F3720919CCA0248B6BE5B /* SuggestionService.swift */; };
+		DCDDFB3797A5B85C02D6B68A /* SuggestionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A4BD9E125BC712EE84A3615 /* SuggestionServiceTests.swift */; };
+		A82630A64F0E068F4A149637 /* CameraPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA7A4FFE6850A2948201185 /* CameraPicker.swift */; };
+		029FF0AD96E5E8AE02A9809F /* NoUploadWordingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -149,6 +153,10 @@
 		E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerMicTests.swift; sourceTree = "<group>"; };
 		9C5E696A011F606B3C761265 /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
 		DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UndoRedoTests.swift; sourceTree = "<group>"; };
+		E80F3720919CCA0248B6BE5B /* SuggestionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionService.swift; sourceTree = "<group>"; };
+		6A4BD9E125BC712EE84A3615 /* SuggestionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionServiceTests.swift; sourceTree = "<group>"; };
+		8BA7A4FFE6850A2948201185 /* CameraPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPicker.swift; sourceTree = "<group>"; };
+		8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoUploadWordingUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -249,6 +257,7 @@
 		DD18F136D60C47D9998EE31B /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				E80F3720919CCA0248B6BE5B /* SuggestionService.swift */,
 				A430886E967E8C735A5982D4 /* ClientChat.swift */,
 				F289A8CF318A0AF8DEF57D06 /* JSONValue.swift */,
 				D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */,
@@ -281,6 +290,7 @@
 		E1D86FFA0C5F47868EBAFE01 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
+				8BA7A4FFE6850A2948201185 /* CameraPicker.swift */,
 				1D4631ADFACF915E7BC1096B /* KeyboardDismiss.swift */,
 				F75730428B69D0391857303A /* DictationController.swift */,
 				5050DD9A54D9BD61E8C7F0D2 /* DictationEndpointer.swift */,
@@ -316,6 +326,7 @@
 		31046C18DC344075B32836E8 /* FinalCutTests */ = {
 			isa = PBXGroup;
 			children = (
+				6A4BD9E125BC712EE84A3615 /* SuggestionServiceTests.swift */,
 				DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */,
 				9C5E696A011F606B3C761265 /* ExportTests.swift */,
 				E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */,
@@ -352,6 +363,7 @@
 		E0EFEDBB48F445C742FB55FF /* FinalCutUITests */ = {
 			isa = PBXGroup;
 			children = (
+				8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */,
 				0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */,
 			);
 			path = FinalCutUITests;
@@ -472,6 +484,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A82630A64F0E068F4A149637 /* CameraPicker.swift in Sources */,
+				63140D2471FF1CAB65DAA5AB /* SuggestionService.swift in Sources */,
 				E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */,
 				CC08D05CFDF3ACE561E2143F /* OnDeviceCaptioner.swift in Sources */,
 				1AFF213883107B65DCD2E72B /* Captions.swift in Sources */,
@@ -522,6 +536,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCDDFB3797A5B85C02D6B68A /* SuggestionServiceTests.swift in Sources */,
 				5CCA836F4EF77DE8F68AA45E /* UndoRedoTests.swift in Sources */,
 				B54E2B173160D3E92D4F9C37 /* ExportTests.swift in Sources */,
 				956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */,
@@ -542,6 +557,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				029FF0AD96E5E8AE02A9809F /* NoUploadWordingUITests.swift in Sources */,
 				FBE881DDA0C9EB05D6BD3BDD /* KeyboardAndMicUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
