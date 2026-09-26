@@ -805,7 +805,7 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    static func mimeType(for url: URL) -> String {
+    nonisolated static func mimeType(for url: URL) -> String {
         MediaMIME.mimeType(for: url)
     }
 
