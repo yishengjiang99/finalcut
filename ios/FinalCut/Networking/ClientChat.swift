@@ -17,6 +17,9 @@ struct ClientChatRequest: Encodable {
     var messages: [JSONValue]
     var media: ClientMedia?
     var thumbnails: [String]?
+    /// Latest `turnToken` from a `tool_calls` response, echoed on the continuation POST
+    /// (docs/api/CLIENT_TOOL_EXECUTION.md). Omitted when nil; never required by the server.
+    var turnToken: String? = nil
 }
 
 struct ClientToolCall: Decodable, Equatable {
@@ -59,9 +62,10 @@ struct ClientChatResponse: Decodable {
     var finalText: String?
     var round: Int?
     var maxRounds: Int?
+    var turnToken: String?
 
     enum CodingKeys: String, CodingKey {
-        case schemaVersion, status, toolCalls, messages, message, content, text, round, maxRounds
+        case schemaVersion, status, toolCalls, messages, message, content, text, round, maxRounds, turnToken
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +76,7 @@ struct ClientChatResponse: Decodable {
         messages = try c.decodeIfPresent([JSONValue].self, forKey: .messages)
         round = try c.decodeIfPresent(Int.self, forKey: .round)
         maxRounds = try c.decodeIfPresent(Int.self, forKey: .maxRounds)
+        turnToken = try? c.decodeIfPresent(String.self, forKey: .turnToken)
         if let text = try? c.decode(String.self, forKey: .message) {
             finalText = text
         } else if let obj = try? c.decode(JSONValue.self, forKey: .message), let text = obj["content"]?.stringValue {

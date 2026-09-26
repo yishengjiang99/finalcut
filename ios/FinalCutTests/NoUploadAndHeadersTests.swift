@@ -96,6 +96,17 @@ final class NoUploadAndHeadersTests: XCTestCase {
         XCTAssertTrue(RecordingURLProtocol.recorded.isEmpty)
     }
 
+    func testTurnTokenIsEchoedOnlyWhenPresent() throws {
+        let response = try JSONDecoder().decode(ClientChatResponse.self, from: Data(
+            #"{"schemaVersion":"1","status":"tool_calls","turnToken":"tt_1","toolCalls":[]}"#.utf8))
+        XCTAssertEqual(response.turnToken, "tt_1")
+        let with = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            ClientChatRequest(messages: [], turnToken: response.turnToken))) as? [String: Any]
+        XCTAssertEqual(with?["turnToken"] as? String, "tt_1")
+        let without = try JSONSerialization.jsonObject(with: JSONEncoder().encode(ClientChatRequest(messages: []))) as? [String: Any]
+        XCTAssertNil(without?["turnToken"])
+    }
+
     func testUnsupportedOnDeviceToolResultShape() {
         let result = ClientToolResult.failure("unsupported_on_device", on: .device)
         XCTAssertEqual(result.content, .object([

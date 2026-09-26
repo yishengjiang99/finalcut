@@ -871,7 +871,12 @@ final class EditorViewModel: ObservableObject {
                 state = .processing
                 processingOverlay = .editing
                 response = try await client.sendClientChat(
-                    ClientChatRequest(messages: conversation, media: await currentMedia(), thumbnails: await currentThumbnails())
+                    ClientChatRequest(
+                        messages: conversation,
+                        media: await currentMedia(),
+                        thumbnails: await currentThumbnails(),
+                        turnToken: response.turnToken
+                    )
                 )
             }
             if let text = response.finalText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
