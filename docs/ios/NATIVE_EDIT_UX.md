@@ -47,6 +47,8 @@ Export is the only step with a progress sheet (section 4).
 - **Compare:** press and hold the preview to show the original clip; release to return to the edited version. Label while holding: "Original".
 - **Undo:** the Undo link on the newest card removes that edit. Undo on an older card removes just that edit if the stack allows it; otherwise it removes it and everything after it, and says so ("Also removes 2 later edits").
 
+**Sample chips (video, build 10):** every chip must map to something that runs on the device, either one of the 20 allowlisted tools or on-device captions. Use: "Generate captions", "Red filter", "Speed up 2×", "Add a title", "Fade out audio". Drop "Trim silence" (no native silence detection yet) and "Burn in" unless burn-in is done natively. "Translate to Spanish" can come back once translation runs on the device or sends text only. When the tool list grows, update the chips with it.
+
 ## 4. Export, background, and notification
 
 1. Tap Export, pick a destination in `ExportSheet` (Save to Photos / Share / Save to Files).
