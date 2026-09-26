@@ -37,6 +37,10 @@ enum UXCopy {
     static let paywallSubheadUnlimited = "Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return." // paywall.subhead.unlimitedPeriod
     static let privacyFirstRun = "Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip." // privacy.firstRun
 
+    static let saveToPhotos = "Save to Photos"                                // export.saveToPhotos
+    static let saveToFiles = "Save to Files"                                  // export.saveToFiles
+    static let savedToFiles = "Saved to Files"                                // export.savedToFiles
+    static let photosPermissionDenied = "Allow FinalCap to add to Photos in Settings." // export.photosDenied
     static let captionsOnDevice = "Captions"                                   // captions.done (+ " · On device")
     static let captionsNoSpeech = "No speech found to caption."               // captions.noSpeech
     static let captionsPermission = "Turn on Speech Recognition for FinalCap in Settings to make captions." // captions.permission

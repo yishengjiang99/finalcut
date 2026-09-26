@@ -3,23 +3,45 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
-/// Runs one export: video = render on device (real %, cancel) then save to Photos;
-/// photo = Core Image render in the original/requested format then save.
-/// Keeps running briefly in the background and posts a local notification when the app
-/// isn't active (only if the user allowed notifications).
+/// One export session. Rendering happens on the iPhone (video: AVAssetExportSession over the
+/// composed edit with real % and Cancel; photo: Core Image in the original/requested format)
+/// and the result is cached so "Save to Photos", "Save to Files" and Share reuse one file.
+/// With no edits the original file is exported as-is. Rendering keeps going briefly in the
+/// background and posts a local notification when the app isn't active (if allowed).
 @MainActor
 final class ExportController: ObservableObject {
     enum Phase: Equatable {
         case idle
         case rendering(Int)
         case saving
-        case done
         case failed(String)
-        case cancelled
+    }
+
+    enum Destination: String, CaseIterable, Identifiable {
+        case photos
+        case files
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .photos: return UXCopy.saveToPhotos
+            case .files: return UXCopy.saveToFiles
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .photos: return "photo.on.rectangle"
+            case .files: return "folder"
+            }
+        }
     }
 
     @Published var phase: Phase = .idle
+    @Published private(set) var renderedURL: URL?
+    @Published var toast: String?
+    @Published var photosPermissionDenied = false
     @Published var showNotifyOffer = false
+    /// Set when the Files picker should open with `renderedURL`.
+    @Published var filesPickerURL: URL?
 
     private let exporter = NativeExporter()
     private var task: Task<Void, Never>?
@@ -37,32 +59,42 @@ final class ExportController: ObservableObject {
         }
     }
 
-    func start(stack: EditStack?, fallbackURL: URL?) {
+    // MARK: - Actions
+
+    func save(to destination: Destination, stack: EditStack?, fallbackURL: URL?) {
         guard !isRunning else { return }
-        let isPhoto = stack?.isPhoto ?? fallbackURL.map { MediaMIME.isImage(url: $0) } ?? false
-        phase = isPhoto ? .saving : .rendering(0)
-        offerNotificationsIfFirstExport(isPhoto: isPhoto)
-        beginBackground()
+        toast = nil
+        photosPermissionDenied = false
+        let isPhoto = Self.isPhoto(stack: stack, fallbackURL: fallbackURL)
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                if isPhoto {
-                    try await self.exportPhoto(stack: stack, fallbackURL: fallbackURL)
-                } else {
-                    try await self.exportVideo(stack: stack, fallbackURL: fallbackURL)
+                let url = try await self.render(stack: stack, fallbackURL: fallbackURL)
+                switch destination {
+                case .photos:
+                    self.phase = .saving
+                    if isPhoto {
+                        try await PhotoLibrarySaver.savePhoto(at: url)
+                    } else {
+                        try await PhotoLibrarySaver.saveVideo(at: url)
+                    }
+                    self.phase = .idle
+                    self.toast = UXCopy.savedToPhotos
+                    self.notifyIfInactive(success: true, isPhoto: isPhoto, savedToPhotos: true)
+                case .files:
+                    self.phase = .idle
+                    self.filesPickerURL = url
                 }
-                self.phase = .done
-                self.notifyIfInactive(success: true, isPhoto: isPhoto)
             } catch NativeExporter.ExportError.cancelled {
-                self.phase = .cancelled
+                self.phase = .idle
             } catch is CancellationError {
-                self.phase = .cancelled
+                self.phase = .idle
             } catch PhotoLibrarySaver.SaveError.notAuthorized {
-                self.phase = .failed(UXCopy.saveFailed)
-                self.notifyIfInactive(success: false, isPhoto: isPhoto)
+                self.phase = .idle
+                self.photosPermissionDenied = true
             } catch {
                 self.phase = .failed(UXCopy.notifFailedTitle)
-                self.notifyIfInactive(success: false, isPhoto: isPhoto)
+                self.notifyIfInactive(success: false, isPhoto: isPhoto, savedToPhotos: false)
             }
             self.endBackground()
         }
@@ -73,39 +105,41 @@ final class ExportController: ObservableObject {
         task?.cancel()
     }
 
-    private func exportVideo(stack: EditStack?, fallbackURL: URL?) async throws {
+    /// Renders once per session (cached). No edits → the original file.
+    func render(stack: EditStack?, fallbackURL: URL?) async throws -> URL {
+        if let renderedURL { return renderedURL }
+        let isPhoto = Self.isPhoto(stack: stack, fallbackURL: fallbackURL)
+        guard let base = stack?.base ?? fallbackURL else { throw NativeExporter.ExportError.failed }
         let url: URL
         if let stack, !stack.entries.isEmpty {
-            let composed = try await NativeComposer.compose(stack)
-            url = try await exporter.export(composed, format: stack.outputFormat) { [weak self] value in
-                guard let self, case .rendering = self.phase else { return }
-                self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
+            beginBackground()
+            offerNotificationsIfFirstExport(isPhoto: isPhoto)
+            if isPhoto {
+                phase = .saving
+                url = try await Task.detached(priority: .userInitiated) { try PhotoRenderer.exportFile(stack) }.value
+            } else {
+                phase = .rendering(0)
+                let composed = try await NativeComposer.compose(stack)
+                url = try await exporter.export(composed, format: stack.outputFormat) { [weak self] value in
+                    guard let self, case .rendering = self.phase else { return }
+                    self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
+                }
             }
-        } else if let base = stack?.base ?? fallbackURL {
-            url = base // No edits: save the clip as-is.
+            try Task.checkCancellation()
         } else {
-            throw NativeExporter.ExportError.failed
+            url = base
         }
-        try Task.checkCancellation()
-        phase = .saving
-        try await PhotoLibrarySaver.saveVideo(at: url)
+        renderedURL = url
+        return url
     }
 
-    private func exportPhoto(stack: EditStack?, fallbackURL: URL?) async throws {
-        let url: URL
-        if let stack, !stack.entries.isEmpty {
-            url = try await Task.detached(priority: .userInitiated) { try PhotoRenderer.exportFile(stack) }.value
-        } else if let base = stack?.base ?? fallbackURL {
-            url = base
-        } else {
-            throw PhotoLibrarySaver.SaveError.failed
-        }
-        try await PhotoLibrarySaver.savePhoto(at: url)
+    static func isPhoto(stack: EditStack?, fallbackURL: URL?) -> Bool {
+        stack?.isPhoto ?? fallbackURL.map { MediaMIME.isImage(url: $0) } ?? false
     }
 
     // MARK: - Notifications (Design §6)
 
-    /// The first export shows "Notify me when it's done" once; permission is only asked on tap.
+    /// The first video export shows "Notify me when it's done" once; permission only on tap.
     private func offerNotificationsIfFirstExport(isPhoto: Bool) {
         guard !isPhoto, !defaults.bool(forKey: NativeSettings.notifyOfferShownKey) else { return }
         defaults.set(true, forKey: NativeSettings.notifyOfferShownKey)
@@ -117,12 +151,12 @@ final class ExportController: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    private func notifyIfInactive(success: Bool, isPhoto: Bool) {
+    private func notifyIfInactive(success: Bool, isPhoto: Bool, savedToPhotos: Bool) {
         guard UIApplication.shared.applicationState != .active else { return }
         let content = UNMutableNotificationContent()
         if success {
             content.title = isPhoto ? UXCopy.notifPhotoTitle : UXCopy.notifVideoTitle
-            content.body = UXCopy.notifVideoBodyPhotos
+            content.body = savedToPhotos ? UXCopy.notifVideoBodyPhotos : UXCopy.notifFailedBody
         } else {
             content.title = UXCopy.notifFailedTitle
             content.body = UXCopy.notifFailedBody

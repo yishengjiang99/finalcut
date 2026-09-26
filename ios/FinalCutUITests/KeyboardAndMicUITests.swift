@@ -43,6 +43,15 @@ final class KeyboardAndMicUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Send"].exists)
     }
 
+    func testExportOffersPhotosAndFiles() throws {
+        let export = app.buttons["Export"]
+        XCTAssertTrue(export.waitForExistence(timeout: 10))
+        export.tap()
+        XCTAssertTrue(app.buttons["Save to Photos"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Save to Files"].exists)
+        XCTAssertTrue(app.buttons["Save to Photos"].isEnabled)
+    }
+
     func testMicShowsWhenFieldIsEmptyBeforePermissionIsAsked() throws {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Dictate"].waitForExistence(timeout: 5), "mic in the trailing slot")
