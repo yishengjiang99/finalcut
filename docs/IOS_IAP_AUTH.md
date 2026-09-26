@@ -11,7 +11,7 @@ iOS does not use the web Google OAuth cookie. Each install creates a random UUID
 
 The inference middleware remains shared: it accepts either a web Passport session, a Google mobile Bearer user, an Apple IAP install Bearer user, or the existing debug sample token. The client never gets to set `has_subscription` directly.
 
-Unsubscribed iOS installs receive `IOS_FREE_DAILY_INFERENCE_LIMIT` inference-starting requests per UTC day (default: 3). The server returns `dailyLimit`, `dailyUsed`, and `dailyRemaining` from `/api/auth/status`; premium users bypass this quota. Job polling and result downloads do not consume quota.
+Unsubscribed iOS installs receive `IOS_FREE_DAILY_INFERENCE_LIMIT` inference-starting requests per UTC day (default: 3). The server returns `dailyLimit`, `dailyUsed`, and `dailyRemaining` from `/api/auth/status`; premium users bypass this quota. Job polling and result downloads do not consume quota. Set `FREE_EDITS_IOS=unlimited` to turn the limit off for iOS clients (see [`docs/api/FREE_EDITS_IOS.md`](api/FREE_EDITS_IOS.md)).
 
 ## Server configuration
 

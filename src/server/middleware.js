@@ -7,7 +7,8 @@ import {
   APP_BASE_URL,
   IOS_FREE_DAILY_INFERENCE_LIMIT,
 } from './config.js';
-import { findUserByApiToken, consumeDailyInference } from '../db.js';
+import { findUserByApiToken, consumeDailyInference, recordDailyInference } from '../db.js';
+import { hasUnlimitedFreeEdits } from './clientInfo.js';
 import { isAcceptedUpload } from './mediaType.js';
 
 export const sampleAccessTokens = new Map();
@@ -137,9 +138,27 @@ export function requireActiveSubscription(req, res, next) {
   next();
 }
 
+/**
+ * FREE_EDITS_IOS=unlimited + iOS client (see clientInfo.js): never block. Usage is still
+ * counted (uncapped) for users with an id so the numbers exist when the limit returns.
+ */
+async function allowUnlimitedIosInference(req, res, next) {
+  res.set('X-Inference-Unlimited', 'true');
+  if (req.user?.id) {
+    try {
+      const { used } = await recordDailyInference(req.user.id);
+      res.set('X-Inference-Daily-Used', String(used));
+    } catch (error) {
+      console.error('Daily inference usage record error (unlimited, not blocking):', error);
+    }
+  }
+  return next();
+}
+
 /** Premium users bypass the quota; anonymous iOS installs consume one daily inference. */
 export async function requireInferenceAccess(req, res, next) {
   if (isValidSampleModeRequest(req) || req.user?.has_subscription) return next();
+  if (hasUnlimitedFreeEdits(req)) return allowUnlimitedIosInference(req, res, next);
   if (!req.user?.device_install_id) {
     return res.status(403).json({ error: 'Active subscription required' });
   }

@@ -14,6 +14,7 @@ import {
   CLIENT_EXECUTION_INSTRUCTIONS,
   ClientRequestError,
   MAX_TOOL_ROUNDS,
+  countOkToolResultsInTurn,
   countToolRounds,
   mediaContextText,
   modelSupportsVision,
@@ -23,6 +24,7 @@ import {
   toClientToolCalls,
   validateMedia,
 } from './clientExecution.js';
+import { isIosClient } from './clientInfo.js';
 
 const router = express.Router();
 
@@ -359,7 +361,17 @@ async function handleClientExecution(req, res, userId) {
     userId,
     interactionType: 'ai2human',
     content: rawText,
-    metadata: { model, streamed: false, execution: 'client' },
+    // Usage numbers for on-device edits: a completed edit turn is a final answer after
+    // at least one tool result with ok:true (each request is also counted by the quota).
+    metadata: {
+      model,
+      streamed: false,
+      execution: 'client',
+      toolRounds: rounds,
+      okToolResults: countOkToolResultsInTurn(conversation),
+      editTurnCompleted: countOkToolResultsInTurn(conversation) > 0,
+      iosClient: isIosClient(req),
+    },
   });
   if (userId) {
     const lesson = extractLesson(rawText);

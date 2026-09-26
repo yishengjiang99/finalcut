@@ -284,6 +284,26 @@ export async function consumeDailyInference(userId, dailyLimit) {
   return { ...usage, allowed: result.affectedRows > 0 };
 }
 
+/**
+ * Count one inference without enforcing a limit (used when the free limit is off, e.g.
+ * FREE_EDITS_IOS=unlimited), so usage numbers keep accumulating in daily_inference_usage.
+ * Returns the day's count.
+ */
+export async function recordDailyInference(userId) {
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO daily_inference_usage (user_id, usage_date, inference_count)
+     VALUES (?, UTC_DATE(), 1)
+     ON DUPLICATE KEY UPDATE inference_count = inference_count + 1`,
+    [userId]
+  );
+  const [rows] = await pool.query(
+    'SELECT inference_count AS used FROM daily_inference_usage WHERE user_id = ? AND usage_date = UTC_DATE()',
+    [userId]
+  );
+  return { used: Number(rows[0]?.used || 0) };
+}
+
 export async function updateUserSubscription(email, hasSubscription, subscriptionId = null) {
   const pool = getPool();
   await pool.query(
@@ -448,6 +468,7 @@ export default {
   updateUserAppleSubscription,
   getDailyInferenceUsage,
   consumeDailyInference,
+  recordDailyInference,
   createApiToken,
   findUserByApiToken,
   revokeApiToken,

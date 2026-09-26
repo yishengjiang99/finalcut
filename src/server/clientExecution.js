@@ -254,6 +254,12 @@ export function countToolRounds(messages) {
     .filter(m => m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length).length;
 }
 
+/** Tool results with `ok: true` in the current user turn (edits the device applied). */
+export function countOkToolResultsInTurn(messages) {
+  return currentTurn(messages)
+    .filter(m => m.role === 'tool' && parseToolResult(m.content)?.ok === true).length;
+}
+
 /** Tool names the user skipped in the current turn (from `skipped_by_user` results). */
 export function skippedToolsInTurn(messages) {
   const turn = currentTurn(messages);

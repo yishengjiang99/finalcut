@@ -13,6 +13,8 @@ Same as normal chat: `Authorization: Bearer <accessToken>`, `sample-access-token
 or a session cookie. Every POST (first turn and every tool-result continuation)
 counts as one chat turn against the free daily inference quota (`429
 daily_limit_reached` when exhausted; subscribers are unlimited).
+With `FREE_EDITS_IOS=unlimited`, iOS clients are never limited but each request is still
+counted. See [`FREE_EDITS_IOS.md`](./FREE_EDITS_IOS.md).
 
 ## Tool schema
 
