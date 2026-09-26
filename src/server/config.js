@@ -7,6 +7,17 @@ dotenv.config();
 export const PORT = process.env.PORT || 3001;
 export const TMP_DIR = process.env.FINALCUT_TMP_DIR || os.tmpdir();
 export const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+/**
+ * Startup warning when NODE_ENV is missing outside tests. In production it must come from the
+ * systemd unit (Environment=NODE_ENV=production): without it the session cookie is not `secure`
+ * and `trust proxy` is off, so behind nginx every client shares one rate-limit IP.
+ */
+export function nodeEnvWarning(env = process.env) {
+  if (env.NODE_ENV || env.VITEST === 'true') return null;
+  return 'WARNING: NODE_ENV is not set; running with development defaults (non-secure session cookie, ' +
+    'no trust proxy). In production set Environment=NODE_ENV=production in finalcut.service.';
+}
 export const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;

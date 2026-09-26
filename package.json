@@ -7,7 +7,7 @@
     "dev": "concurrently \"npx vite .\" \"nodemon server.js\"",
     "dev:client": "npx vite .",
     "dev:server": "nodemon server.js",
-    "build": "vite build",
+    "build": "NODE_ENV=production vite build",
     "preview": "vite preview",
     "test": "vitest --run",
     "server": "node server.js",

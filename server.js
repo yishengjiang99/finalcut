@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { initDatabase } from './src/db.js';
-import { PORT, stripe } from './src/server/config.js';
+import { PORT, stripe, nodeEnvWarning } from './src/server/config.js';
 import { setupAuth, authRouter } from './src/server/auth.js';
 import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { captionsRouter } from './src/server/captions.js';
@@ -12,6 +12,9 @@ import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 
 const app = express();
+
+const nodeEnvWarningText = nodeEnvWarning();
+if (nodeEnvWarningText) console.warn(nodeEnvWarningText);
 
 // Trust proxy headers (required when behind nginx/reverse proxy)
 // Enable for production or when TRUST_PROXY environment variable is set
