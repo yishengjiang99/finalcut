@@ -14,6 +14,7 @@ import { getMimeTypeToFormat, getExtFromMimeType, parseAudioInput } from './util
 import { detectMediaType, MEDIA_TYPE_IMAGE } from './mediaType.js';
 import {
   OpValidationError,
+  unsupportedForPhotoError,
   applyTrim,
   assertOperationSupported,
   buildVisualFilter,
@@ -246,14 +247,14 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       filename: req.file.originalname,
     });
     if (multipartMedia.mediaType === MEDIA_TYPE_IMAGE) {
-      return res.status(400).json({ error: `Operation "${operation}" is not supported for photos` });
+      return res.status(400).json(unsupportedForPhotoError(operation, `Operation "${operation}" is not supported for photos`).toJSON());
     }
 
     let parsedArgs;
     try {
       parsedArgs = typeof args === 'string' ? JSON.parse(args) : (args || {});
     } catch {
-      return res.status(400).json({ error: 'Invalid args JSON' });
+      return res.status(400).json({ error: 'Invalid args JSON', code: 'invalid_arguments' });
     }
 
     if (operation === 'burn_subtitles') {
@@ -462,7 +463,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
   try {
     parsedArgs = argsStr ? JSON.parse(argsStr) : {};
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON' });
+    return res.status(400).json({ error: 'Invalid x-args header: must be valid JSON', code: 'invalid_arguments' });
   }
 
   const conversionOps = ['convert_video_format', 'convert_audio_format', 'extract_audio'];
@@ -563,7 +564,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       return res.send(outputBuffer);
     } catch (error) {
       if (error instanceof OpValidationError) {
-        return res.status(error.statusCode).json({ error: error.message });
+        return res.status(error.statusCode).json(error.toJSON());
       }
       console.error('Error processing photo:', error);
       return res.status(500).json({ error: error.message || 'Failed to process photo' });
@@ -613,7 +614,9 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
         command = applyTrim(command, parsedArgs);
       } catch (error) {
         fs.unlink(tmpStreamInputPath).catch(() => {});
-        return res.status(error.statusCode || 400).json({ error: error.message });
+        return res.status(error.statusCode || 400).json(
+          error instanceof OpValidationError ? error.toJSON() : { error: error.message, code: 'invalid_arguments' }
+        );
       }
       break;
 
@@ -624,7 +627,9 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
         command = command.videoFilters(buildVisualFilter(operation, parsedArgs, 'video')).audioCodec('copy');
       } catch (error) {
         fs.unlink(tmpStreamInputPath).catch(() => {});
-        return res.status(error.statusCode || 400).json({ error: error.message });
+        return res.status(error.statusCode || 400).json(
+          error instanceof OpValidationError ? error.toJSON() : { error: error.message, code: 'invalid_arguments' }
+        );
       }
       break;
 
@@ -933,7 +938,7 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
     for (const file of req.files) {
       const media = await detectMediaType({ buffer: file.buffer, mimetype: file.mimetype, filename: file.originalname });
       if (media.mediaType === MEDIA_TYPE_IMAGE) {
-        return res.status(400).json({ error: 'Video transitions are not supported for photos' });
+        return res.status(400).json(unsupportedForPhotoError('add_video_transition', 'Video transitions are not supported for photos').toJSON());
       }
     }
 

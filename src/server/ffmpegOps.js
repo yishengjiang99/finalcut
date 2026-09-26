@@ -13,12 +13,40 @@ const VIDEO_CONTENT_TYPES = {
   avi: 'video/x-msvideo', mkv: 'video/x-matroska', flv: 'video/x-flv', ogv: 'video/ogg',
 };
 
+/** Stable machine-readable error codes for clients (iOS matches on these, not on text). */
+export const ERROR_CODES = {
+  UNSUPPORTED_FOR_PHOTO: 'unsupported_for_photo',
+  INVALID_ARGUMENTS: 'invalid_arguments',
+  UNSUPPORTED_IMAGE_FORMAT: 'unsupported_image_format',
+};
+
 export class OpValidationError extends Error {
-  constructor(message, statusCode = 400) {
+  /**
+   * @param {string} message human-readable message (kept for backwards compatibility)
+   * @param {number} statusCode HTTP status (default 400)
+   * @param {{ code?: string, details?: object }} [opts] machine-readable code + extra JSON fields
+   */
+  constructor(message, statusCode = 400, { code = ERROR_CODES.INVALID_ARGUMENTS, details = {} } = {}) {
     super(message);
     this.name = 'OpValidationError';
     this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
   }
+
+  /** JSON body for HTTP responses: { error, code, ...details }. */
+  toJSON() {
+    return { error: this.message, code: this.code, ...this.details };
+  }
+}
+
+/** Error thrown when an operation cannot run on a photo. */
+export function unsupportedForPhotoError(operation, message) {
+  return new OpValidationError(
+    message || `Operation "${operation}" is not supported for photos. Supported photo operations: ${PHOTO_SUPPORTED_OPS.join(', ')}`,
+    400,
+    { code: ERROR_CODES.UNSUPPORTED_FOR_PHOTO, details: { operation, mediaType: 'image' } }
+  );
 }
 
 // ─── Time parsing / trim (guards against `-ss undefined`) ────────────────────
@@ -243,9 +271,7 @@ export const PHOTO_OUTPUT_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
 export function assertOperationSupported(operation, mediaType) {
   if (mediaType !== MEDIA_TYPE_IMAGE) return;
   if (!PHOTO_SUPPORTED_OPS.includes(operation)) {
-    throw new OpValidationError(
-      `Operation "${operation}" is not supported for photos. Supported photo operations: ${PHOTO_SUPPORTED_OPS.join(', ')}`
-    );
+    throw unsupportedForPhotoError(operation);
   }
 }
 
@@ -343,7 +369,8 @@ export async function prepareImageInput(inputPath, imageFormat, { probe = probeF
   }
   throw new OpValidationError(
     'HEIC photos are not supported by this server (FFmpeg lacks HEIF decoding and heif-convert is not installed). Please upload a JPEG or PNG.',
-    415
+    415,
+    { code: ERROR_CODES.UNSUPPORTED_IMAGE_FORMAT, details: { mediaType: 'image', format: 'heic' } }
   );
 }
 

@@ -28,8 +28,8 @@ carry `contentType` (`image/jpeg`, `image/png`, `image/webp`, or the video/audio
 and `resultUrl`. `GET /api/jobs/:id/result` serves that Content-Type plus
 `X-Media-Type` and an inline filename with the right extension.
 
-Unsupported photo operations and invalid args are rejected up front with
-`400 { "error": "Operation \"trim_video\" is not supported for photos. …" }`.
+Unsupported photo operations and invalid args are rejected up front with a 400
+(see [Error codes](#error-codes)).
 
 ### Sync — `POST /api/process-video`
 
@@ -68,3 +68,51 @@ If neither works the job returns `415` with a message asking for JPEG/PNG.
 `trim_video` now parses `start`/`end` (seconds or `HH:MM:SS`), skips `-ss` when
 `start` is missing, and returns 400 for missing/invalid/reversed times instead of
 running `ffmpeg -ss undefined`.
+
+## Error codes
+
+Every error body keeps the human-readable `error` string and adds a stable,
+machine-readable `code`. Clients should match on `code`, not on the text.
+
+### `unsupported_for_photo` (400)
+
+Returned by `POST /api/jobs/process-video` and sync `POST /api/process-video` (raw
+body and multipart) when the operation can't run on a photo. The same shape comes
+back from `/api/transition-videos` (`operation: "add_video_transition"`) and the
+caption endpoints (`operation: "generate_captions"`).
+
+```json
+{
+  "error": "Operation \"trim_video\" is not supported for photos. Supported photo operations: resize_video, crop_video, …",
+  "code": "unsupported_for_photo",
+  "operation": "trim_video",
+  "mediaType": "image"
+}
+```
+
+### `invalid_arguments` (400)
+
+Bad or missing op arguments (e.g. trim times, out-of-range numbers, unknown color
+filter, bad `format`), malformed `args` / `x-args` JSON, and unknown operations.
+
+```json
+{ "error": "trim_video requires a start and/or end time (seconds or HH:MM:SS)", "code": "invalid_arguments" }
+```
+
+### `unsupported_image_format` (415)
+
+The HEIC could not be decoded (no FFmpeg HEIF support and no `heif-convert`). For
+sync requests this is the HTTP response. For async jobs, decoding happens while the
+job runs, so the job ends `failed` and the poll JSON carries the code:
+
+```json
+{ "error": "HEIC photos are not supported by this server (…). Please upload a JPEG or PNG.", "code": "unsupported_image_format", "mediaType": "image", "format": "heic" }
+```
+
+```json
+{ "jobId": "…", "status": "failed", "error": "HEIC photos are not supported by this server (…)", "code": "unsupported_image_format", "mediaType": "image", "operation": "adjust_hue", … }
+```
+
+Other errors (401/403/429 auth and quota, 413 upload size, 500 ffmpeg failures)
+keep their existing shapes.
+
