@@ -8,6 +8,21 @@ import {
 } from './middleware.js';
 import { enqueueChatInteraction, saveLesson } from '../db.js';
 import { PHOTO_SUPPORTED_OPS, PHOTO_OUTPUT_FORMATS, COLOR_FILTER_PRESETS } from './ffmpegOps.js';
+import { buildToolsSchema, toolsForMediaType } from './toolsSchema.js';
+import {
+  CLIENT_SCHEMA_VERSION,
+  CLIENT_EXECUTION_INSTRUCTIONS,
+  ClientRequestError,
+  MAX_TOOL_ROUNDS,
+  countToolRounds,
+  mediaContextText,
+  modelSupportsVision,
+  normalizeClientMessages,
+  parseThumbnails,
+  skippedToolsInTurn,
+  toClientToolCalls,
+  validateMedia,
+} from './clientExecution.js';
 
 const router = express.Router();
 
@@ -189,6 +204,176 @@ function enqueueChatError({ userId, message, source, requestMessageCount, metada
   });
 }
 
+// ─── Client-execution mode (tools run on the device) ─────────────────────────
+
+/** Strip the "Answer:" heading and hidden "Lesson:" section from a final reply. */
+export function cleanFinalText(text) {
+  const filter = createStreamFilter();
+  const head = applyStreamFilter(filter, String(text || ''));
+  return (head + flushStreamFilter(filter)).trim();
+}
+
+/** Model for client-execution turns (defaults to the same model as the streaming chat). */
+export function getClientExecutionModel() {
+  return process.env.XAI_CLIENT_MODEL || 'grok-3';
+}
+
+/**
+ * POST /api/chat with `execution: "client"`.
+ * One model call per request: returns either tool calls for the device to run or the final answer.
+ * Never runs ffmpeg or touches uploaded media.
+ */
+async function handleClientExecution(req, res, userId) {
+  let media;
+  let thumbnails;
+  let conversation;
+  try {
+    media = validateMedia(req.body.media);
+    thumbnails = parseThumbnails(req.body.thumbnails);
+    conversation = normalizeClientMessages(req.body.messages);
+  } catch (error) {
+    if (error instanceof ClientRequestError) {
+      return res.status(error.status).json({ error: error.message, schemaVersion: CLIENT_SCHEMA_VERSION });
+    }
+    throw error;
+  }
+
+  const latestUserText = getLatestUserMessageText(conversation);
+  enqueueChatInteraction({
+    userId,
+    interactionType: 'human2ai',
+    content: latestUserText,
+    metadata: {
+      authMethod: req.authMethod || (req.headers['sample-access-token'] ? 'sample' : null),
+      messageCount: conversation.length,
+      execution: 'client',
+      mediaType: media?.type ?? null,
+    },
+  });
+
+  const model = getClientExecutionModel();
+  const thumbnailsAsImages = thumbnails.length > 0 && modelSupportsVision(model);
+  const rounds = countToolRounds(conversation);
+  const skippedTools = skippedToolsInTurn(conversation);
+  const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
+
+  const offeredTools = toolsForMediaType(media?.type).filter(t => !skippedTools.includes(t.function.name));
+  const contextLines = [
+    CLIENT_EXECUTION_INSTRUCTIONS,
+    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
+  ];
+  if (skippedTools.length) {
+    contextLines.push(`The user declined these steps this turn (not failures): ${skippedTools.join(', ')}. Do not call them again in this turn.`);
+  }
+  if (roundCapReached) {
+    contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
+  }
+  const baseSystem = buildSystemMessage();
+  const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
+
+  const modelMessages = [systemMessage];
+  if (thumbnailsAsImages) {
+    modelMessages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Thumbnail frame(s) of the current media, for visual context only:' },
+        ...thumbnails.map(t => ({ type: 'image_url', image_url: { url: t.dataUrl, detail: 'low' } })),
+      ],
+    });
+  }
+  modelMessages.push(...conversation);
+
+  const requestBody = {
+    model,
+    messages: modelMessages,
+    stream: false,
+  };
+  if (offeredTools.length && !roundCapReached) {
+    requestBody.tools = offeredTools;
+    requestBody.tool_choice = 'auto';
+  }
+
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${XAI_API_TOKEN}`
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    let errorBody = {};
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = { message: response.statusText };
+    }
+    const message = errorBody.error?.message || errorBody.message || response.statusText || 'xAI API request failed';
+    enqueueChatError({
+      userId,
+      message,
+      source: 'xai_api',
+      requestMessageCount: conversation.length,
+      metadata: { status: response.status, statusText: response.statusText, execution: 'client' },
+    });
+    return res.status(response.status).json({ error: message, schemaVersion: CLIENT_SCHEMA_VERSION });
+  }
+
+  const data = await response.json();
+  const choice = data?.choices?.[0]?.message || {};
+  const allowedNames = new Set(offeredTools.map(t => t.function.name));
+  const modelToolCalls = (Array.isArray(choice.tool_calls) ? choice.tool_calls : [])
+    .filter(call => !roundCapReached && allowedNames.has(call?.function?.name));
+
+  if (modelToolCalls.length) {
+    const assistantMessage = {
+      role: 'assistant',
+      content: typeof choice.content === 'string' ? choice.content : null,
+      tool_calls: modelToolCalls.map(call => ({
+        id: call.id,
+        type: 'function',
+        function: {
+          name: call.function.name,
+          arguments: typeof call.function.arguments === 'string'
+            ? call.function.arguments
+            : JSON.stringify(call.function.arguments ?? {}),
+        },
+      })),
+    };
+    return res.json({
+      schemaVersion: CLIENT_SCHEMA_VERSION,
+      status: 'tool_calls',
+      toolCalls: toClientToolCalls(assistantMessage.tool_calls),
+      messages: [...conversation, assistantMessage],
+      round: rounds + 1,
+      maxRounds: MAX_TOOL_ROUNDS,
+      thumbnailsSentAsImages: thumbnailsAsImages,
+    });
+  }
+
+  const rawText = typeof choice.content === 'string' ? choice.content : '';
+  const message = cleanFinalText(rawText)
+    || (skippedTools.length ? 'Okay — I skipped the steps you declined.' : 'Done.');
+  enqueueChatInteraction({
+    userId,
+    interactionType: 'ai2human',
+    content: rawText,
+    metadata: { model, streamed: false, execution: 'client' },
+  });
+  if (userId) {
+    const lesson = extractLesson(rawText);
+    if (lesson) await saveLesson(userId, lesson);
+  }
+  return res.json({
+    schemaVersion: CLIENT_SCHEMA_VERSION,
+    status: 'final',
+    message,
+    messages: [...conversation, { role: 'assistant', content: message }],
+    thumbnailsSentAsImages: thumbnailsAsImages,
+  });
+}
+
 // ─── Route ───────────────────────────────────────────────────────────────────
 
 // Proxy endpoint for xAI API with streaming support
@@ -198,6 +383,13 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     // Basic request validation
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({ error: 'Invalid request body' });
+    }
+
+    if (req.body.execution !== undefined) {
+      if (req.body.execution !== 'client') {
+        return res.status(400).json({ error: 'execution must be "client" (omit it for the default streaming mode)' });
+      }
+      return await handleClientExecution(req, res, userId);
     }
 
     if (!req.body.messages || !Array.isArray(req.body.messages)) {
@@ -400,6 +592,12 @@ router.post('/api/chat-error', apiLimiter, requireAuthenticatedUser, requireActi
   });
 
   res.status(202).json({ ok: true });
+});
+
+// Versioned tool-schema contract for native clients (static; no quota).
+router.get('/api/tools/schema', apiLimiter, (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json(buildToolsSchema());
 });
 
 // Supported formats introspection endpoint
