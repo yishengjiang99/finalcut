@@ -18,6 +18,7 @@ import {
   secondsToTimestamp,
   buildSrtAndVtt,
 } from './utils.js';
+import { sniffMediaFormat } from './mediaType.js';
 import {
   normalizeLanguageCode,
   mergeTranslatedSrt,
@@ -272,6 +273,10 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
     if (!inputBuffer.length) {
       return res.status(400).json({ error: 'No video data received' });
     }
+    const sniffedFormat = sniffMediaFormat(inputBuffer);
+    if ((sniffedFormat && sniffedFormat !== 'video') || fileContentType.startsWith('image/')) {
+      return res.status(400).json({ error: 'Captions are not supported for photos' });
+    }
 
     const ext = getExtFromMimeType(fileContentType);
     const tmpInputPath = track(path.join(TMP_DIR, `input-${randomUUID()}.${ext}`));
@@ -354,6 +359,10 @@ router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthe
 
     if (!inputBuffer.length) {
       return res.status(400).json({ error: 'No video/audio data received' });
+    }
+    const sniffedFormat = sniffMediaFormat(inputBuffer);
+    if ((sniffedFormat && sniffedFormat !== 'video') || fileContentType.startsWith('image/')) {
+      return res.status(400).json({ error: 'Captions are not supported for photos' });
     }
 
     const ext = getExtFromMimeType(fileContentType);

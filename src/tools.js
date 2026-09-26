@@ -3,7 +3,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'resize_video',
-      description: 'Resize the video to the specified width and height while maintaining aspect ratio if needed. This filter scales the video dimensions.',
+      description: 'Resize the video or photo to the specified width and height. This filter scales the frame dimensions. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -18,7 +18,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'crop_video',
-      description: 'Crop a region of the video starting from the specified top-left corner with given width and height. Useful for removing borders or focusing on a part of the frame.',
+      description: 'Crop a region of the video or photo starting from the specified top-left corner with given width and height. Useful for removing borders or focusing on a part of the frame. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -35,7 +35,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'rotate_video',
-      description: 'Rotate the video by the specified angle in degrees. Common for correcting orientation, e.g., 90 for clockwise, -90 for counter-clockwise.',
+      description: 'Rotate the video or photo by the specified angle in degrees. Common for correcting orientation, e.g., 90 for clockwise, -90 for counter-clockwise. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -49,7 +49,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'flip_video_horizontal',
-      description: 'Flip the video horizontally (mirror effect). This creates a mirror image of the video along the vertical axis.',
+      description: 'Flip the video or photo horizontally (mirror effect) along the vertical axis. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {},
@@ -61,7 +61,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'add_text',
-      description: 'Overlay text on the video at a specified position with customizable size and color. Note: This assumes a default font is available in FFmpeg.',
+      description: 'Overlay text on the video or photo at a specified position with customizable size and color. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -79,7 +79,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'trim_video',
-      description: 'Trim the video to keep only the portion between the start and end times. Times can be in seconds or HH:MM:SS format.',
+      description: 'Trim the video to keep only the portion between the start and end times. Times can be in seconds or HH:MM:SS format. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -94,7 +94,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'adjust_speed',
-      description: 'Change the playback speed of the video and audio. A factor >1 speeds up, <1 slows down.',
+      description: 'Change the playback speed of the video and audio. A factor >1 speeds up, <1 slows down. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -108,7 +108,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'add_audio_track',
-      description: 'Add or replace the audio track in a video with a new audio file. This can be used to add background music, voiceovers, or replace the existing audio entirely.',
+      description: 'Add or replace the audio track in a video with a new audio file. This can be used to add background music, voiceovers, or replace the existing audio entirely. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -730,7 +730,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'resize_video_preset',
-      description: 'Resize video to a preset aspect ratio optimized for specific social media platforms and use cases. The video will be scaled to fit the preset dimensions while maintaining aspect ratio, with padding added if needed.',
+      description: 'Resize video or photo to a preset aspect ratio optimized for specific social media platforms and use cases. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -748,7 +748,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'adjust_brightness',
-      description: 'Adjust the brightness level of the video. Can be used to make the video lighter or darker.',
+      description: 'Adjust the brightness level of the video or photo. Can be used to make it lighter or darker. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -765,7 +765,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'adjust_hue',
-      description: 'Rotate the hue (color) of the video. Shifts all colors by the specified angle on the color wheel.',
+      description: 'Rotate the hue (color) of the video or photo. Shifts all colors by the specified angle on the color wheel. Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -782,7 +782,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'adjust_saturation',
-      description: 'Adjust the color saturation (intensity) of the video. Can make colors more vivid or more muted.',
+      description: 'Adjust the color saturation (intensity) of the video or photo. Can make colors more vivid or more muted (0 = grayscale). Works on photos (jpg/png/webp/heic) as well as videos.',
       parameters: {
         type: 'object',
         properties: {
@@ -811,7 +811,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'convert_video_format',
-      description: 'Convert video from one format to another. Supports common formats like mp4, webm, mov, avi, mkv, flv, etc.',
+      description: 'Convert video from one format to another. Supports common formats like mp4, webm, mov, avi, mkv, flv, etc. For photos use convert_image_format instead.',
       parameters: {
         type: 'object',
         properties: {
@@ -857,7 +857,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'extract_audio',
-      description: 'Extract audio track from a video file and save it as an audio file. Useful for getting just the audio from a video.',
+      description: 'Extract audio track from a video file and save it as an audio file. Useful for getting just the audio from a video. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -893,7 +893,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'generate_captions',
-      description: 'Generate subtitles from the video audio via speech-to-text (OpenAI transcription on the server). Optionally translate dialogue with Grok to another language. Use ISO language codes when possible (en, es, fr, de, ja, zh) — full names like "Spanish" are also accepted. Creates SRT/VTT. When burn_in is true (default), burns captions into the video (dual-track if translating: translated on top, original on bottom). When burn_in is false, returns soft subtitle tracks only. Use for accessibility, social, or international content.',
+      description: 'Generate subtitles from the video audio via speech-to-text (OpenAI transcription on the server). Optionally translate dialogue with Grok to another language. Use ISO language codes when possible (en, es, fr, de, ja, zh) — full names like "Spanish" are also accepted. Creates SRT/VTT. When burn_in is true (default), burns captions into the video (dual-track if translating: translated on top, original on bottom). When burn_in is false, returns soft subtitle tracks only. Use for accessibility, social, or international content. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -932,7 +932,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'add_video_transition',
-      description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos.',
+      description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -950,7 +950,77 @@ export const tools = [
         required: ['transition']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'apply_color_filter',
+      description: 'Apply a color filter / tint / look to the photo or video, e.g. "apply a red filter", "make it black and white", "sepia", "vintage", "warm tones". Works on photos (jpg/png/webp/heic) as well as videos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filter: {
+            type: 'string',
+            description: 'Color filter preset.',
+            enum: ['red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'sepia', 'grayscale', 'black_and_white', 'invert', 'warm', 'cool', 'vintage']
+          },
+          intensity: {
+            type: 'number',
+            description: 'Filter strength from 0.0 (no effect) to 1.0 (full effect). Default 1.0. Ignored for invert and vintage.',
+            default: 1
+          }
+        },
+        required: ['filter']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'adjust_contrast',
+      description: 'Adjust the contrast of the photo or video. Works on photos (jpg/png/webp/heic) as well as videos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contrast: {
+            type: 'number',
+            description: 'Contrast multiplier. Range: 0 to 3. 1 = no change, >1 more contrast, <1 less contrast.'
+          }
+        },
+        required: ['contrast']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'flip_video_vertical',
+      description: 'Flip the photo or video vertically (upside-down mirror along the horizontal axis). Works on photos as well as videos.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'convert_image_format',
+      description: 'Convert a photo to another image format (jpg, png, webp). Photos only — use convert_video_format for videos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          format: {
+            type: 'string',
+            description: 'Target image format.',
+            enum: ['jpg', 'png', 'webp']
+          }
+        },
+        required: ['format']
+      }
+    }
   }
 ];
 
-export const systemPrompt = 'You are a helpful video and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video or audio. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video.';
+export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic) only use frame edits: apply_color_filter, adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation, crop_video, resize_video, rotate_video, flip_video_horizontal, flip_video_vertical, add_text, convert_image_format — never trim, speed, audio, captions, or transitions on a photo. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video.';

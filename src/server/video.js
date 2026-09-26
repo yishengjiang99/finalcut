@@ -11,6 +11,14 @@ import {
   upload,
 } from './middleware.js';
 import { getMimeTypeToFormat, getExtFromMimeType, parseAudioInput } from './utils.js';
+import { detectMediaType, MEDIA_TYPE_IMAGE } from './mediaType.js';
+import {
+  OpValidationError,
+  applyTrim,
+  assertOperationSupported,
+  buildVisualFilter,
+  processImageToFile,
+} from './ffmpegOps.js';
 
 // Helper function to check if a video has audio stream
 export async function checkHasAudioStream(inputPath) {
@@ -231,6 +239,14 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
     if (!operation) return res.status(400).json({ error: 'No operation specified' });
     if (operation !== 'add_audio_track' && operation !== 'burn_subtitles') {
       return res.status(400).json({ error: 'Use streaming request (video body + x-operation header) for this operation' });
+    }
+    const multipartMedia = await detectMediaType({
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      filename: req.file.originalname,
+    });
+    if (multipartMedia.mediaType === MEDIA_TYPE_IMAGE) {
+      return res.status(400).json({ error: `Operation "${operation}" is not supported for photos` });
     }
 
     let parsedArgs;
@@ -501,6 +517,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
   // Read request body to a temporary file first. Many container formats (especially MP4)
   // are not reliably seekable from stdin, which can yield truncated/invalid output blobs.
   let tmpStreamInputPath = null;
+  let streamedInputBuffer = null;
   try {
     const chunks = [];
     for await (const chunk of req) { chunks.push(chunk); }
@@ -508,11 +525,52 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
     if (!inputBuffer.length) {
       return res.status(400).json({ error: 'No video data received' });
     }
+    streamedInputBuffer = inputBuffer.subarray(0, 64);
     tmpStreamInputPath = path.join(TMP_DIR, `input-${randomUUID()}.${getExtFromMimeType(fileContentType)}`);
     await fs.writeFile(tmpStreamInputPath, inputBuffer);
   } catch (error) {
     console.error('Error buffering streamed input:', error);
     return res.status(500).json({ error: 'Failed to read uploaded video stream' });
+  }
+
+  // Photos (jpg/png/webp/heic): single-frame pipeline, never -ss/-t, image Content-Type.
+  let detectedMedia;
+  try {
+    detectedMedia = await detectMediaType({
+      buffer: streamedInputBuffer,
+      mimetype: fileContentType,
+      filename: req.headers['x-filename'],
+      inputPath: tmpStreamInputPath,
+    });
+  } catch {
+    detectedMedia = { mediaType: 'video', imageFormat: null };
+  }
+  if (detectedMedia.mediaType === MEDIA_TYPE_IMAGE) {
+    const imageOutputPath = path.join(TMP_DIR, `photo-${randomUUID()}.out`);
+    try {
+      assertOperationSupported(operation, MEDIA_TYPE_IMAGE);
+      const result = await processImageToFile({
+        inputPath: tmpStreamInputPath,
+        imageFormat: detectedMedia.imageFormat,
+        operation,
+        args: parsedArgs,
+        outputPath: imageOutputPath,
+      });
+      const outputBuffer = await fs.readFile(imageOutputPath);
+      res.set('Content-Type', result.contentType);
+      res.set('X-Media-Type', 'image');
+      res.set('Content-Length', String(outputBuffer.length));
+      return res.send(outputBuffer);
+    } catch (error) {
+      if (error instanceof OpValidationError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      console.error('Error processing photo:', error);
+      return res.status(500).json({ error: error.message || 'Failed to process photo' });
+    } finally {
+      fs.unlink(tmpStreamInputPath).catch(() => {});
+      fs.unlink(imageOutputPath).catch(() => {});
+    }
   }
 
   // Build ffmpeg command from a seekable temp file, while still streaming output to the client.
@@ -550,7 +608,24 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
     }
 
     case 'trim_video':
-      command = command.setStartTime(parsedArgs.start).setDuration(parsedArgs.end - parsedArgs.start).outputOptions('-c copy');
+      // Only emit -ss/-t for present, validated times (never `-ss undefined`).
+      try {
+        command = applyTrim(command, parsedArgs);
+      } catch (error) {
+        fs.unlink(tmpStreamInputPath).catch(() => {});
+        return res.status(error.statusCode || 400).json({ error: error.message });
+      }
+      break;
+
+    case 'apply_color_filter':
+    case 'adjust_contrast':
+    case 'flip_video_vertical':
+      try {
+        command = command.videoFilters(buildVisualFilter(operation, parsedArgs, 'video')).audioCodec('copy');
+      } catch (error) {
+        fs.unlink(tmpStreamInputPath).catch(() => {});
+        return res.status(error.statusCode || 400).json({ error: error.message });
+      }
       break;
 
     case 'speed_video': {
@@ -807,7 +882,10 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
 
     case 'fade_transition': {
       const fadeDuration = parsedArgs.duration || 1;
-      command = command.videoFilters(`fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${parsedArgs.totalDuration - fadeDuration}:d=${fadeDuration}`).audioCodec('copy');
+      const totalDuration = Number(parsedArgs.totalDuration);
+      command = (!Number.isFinite(totalDuration) || totalDuration <= fadeDuration)
+        ? command.videoFilters(`fade=t=in:st=0:d=${fadeDuration}`).audioCodec('copy')
+        : command.videoFilters(`fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${totalDuration - fadeDuration}:d=${fadeDuration}`).audioCodec('copy');
       break;
     }
 
@@ -850,6 +928,13 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
 
     if (!transition) {
       return res.status(400).json({ error: 'No transition type specified' });
+    }
+
+    for (const file of req.files) {
+      const media = await detectMediaType({ buffer: file.buffer, mimetype: file.mimetype, filename: file.originalname });
+      if (media.mediaType === MEDIA_TYPE_IMAGE) {
+        return res.status(400).json({ error: 'Video transitions are not supported for photos' });
+      }
     }
 
     // Parse duration if it's a string

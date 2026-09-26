@@ -3,7 +3,7 @@ import { tools } from './tools.js';
 import { toolFunctions } from './toolFunctions.js';
 
 export function assertToolCallApplied(result, functionName) {
-  if (typeof result !== 'string' || /^Failed\b/i.test(result.trim())) {
+  if (typeof result !== 'string' || !result.trim() || /^Failed\b/i.test(result.trim())) {
     throw new Error(`Tool call "${functionName}" was not applied: ${result || 'no result returned'}`);
   }
   return result;
