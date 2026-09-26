@@ -32,18 +32,22 @@ final class NoUploadWordingUITests: XCTestCase {
         } while Date() < end
     }
 
-    /// Swipes the pill's horizontal row (at most 6 times) until the pill is hittable.
+    /// Swipes the pill's horizontal row (at most 6 times) until the pill's center is on screen.
+    /// Uses the frame, not `isHittable`: querying hittability of a fully off-screen element throws.
     private func scrollIntoView(_ pill: XCUIElement, identifier: String) {
         // Prefer the pill row by id; otherwise the innermost scroll view that holds the pill.
         let tagged = app.scrollViews["SampleChips"]
         let holders = app.scrollViews.containing(.button, identifier: identifier)
         let row = tagged.exists ? tagged : holders.element(boundBy: max(holders.count - 1, 0))
-        let screenMidX = app.windows.firstMatch.frame.midX
-        for _ in 0..<6 where !pill.isHittable {
-            if pill.frame.midX > screenMidX {
+        let visible = app.windows.firstMatch.frame.insetBy(dx: 8, dy: 0)
+        for _ in 0..<6 {
+            let midX = pill.frame.midX
+            if midX > visible.maxX {
                 row.swipeLeft(velocity: .slow)
-            } else {
+            } else if midX < visible.minX {
                 row.swipeRight(velocity: .slow)
+            } else {
+                return
             }
         }
     }
