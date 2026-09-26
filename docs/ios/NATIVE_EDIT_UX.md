@@ -27,7 +27,7 @@ Each tool call from the model becomes an **edit card** in the chat, attached und
 
 Several tool calls in one turn render as a stack of cards in call order. The assistant's final text arrives after the cards settle.
 
-Because the app sends the server its list of on-device tools, `unavailable` should be rare. Design it quiet, not alarming.
+Because the server leaves tools iOS can't run out of the model's tool list (based on the `FinalCap-iOS/<build>` User-Agent), `unavailable` should be rare. Design it quiet, not alarming.
 
 ## 2. Progress
 
@@ -92,6 +92,21 @@ The top bar is a **single row, about 44 pt tall**, with everything vertically ce
 - If it's still too narrow after that (large Dynamic Type), the "FinalCap" title truncates before Import or Export.
 - Verify at 375 pt wide (iPhone SE) and at Dynamic Type sizes up to XL.
 
+## 7a. Dictation (mic button in the composer)
+
+Speech is recognized on the device only. Audio is never uploaded.
+
+- **Placement:** a mic icon inside the prompt field, trailing edge. When the field has typed text, the mic is replaced by the Send button; clearing the text brings the mic back.
+- **First tap:** request microphone and speech recognition permission (system prompts). If either is denied, show a one-line inline note under the field: "Turn on Microphone and Speech Recognition for FinalCap in Settings." with a Settings link.
+- **Listening:** the mic becomes a red stop button with a soft pulsing ring, the placeholder reads "Listening…", and partial text appears live in the field. A light haptic plays when listening starts and stops. If the keyboard is up, dismiss it.
+- **Finishing:** about 1 second of silence ends the utterance and sends the text as a normal prompt. Tapping stop also finalizes and sends. If nothing was recognized, go back to idle and send nothing.
+- **Editing before send:** if the user taps into the field while listening, stop listening and keep the text in the field unsent so they can fix it.
+- **Unavailable:** if the device or language can't do on-device recognition, show the mic dimmed; tapping it shows "Dictation isn't available on this device." There is no server fallback.
+
+Info.plist copy:
+- `NSMicrophoneUsageDescription`: "FinalCap uses the microphone so you can speak your edit requests."
+- `NSSpeechRecognitionUsageDescription`: "FinalCap turns your speech into text on your iPhone. Your voice isn't uploaded."
+
 ## 8. Photo mode
 
 When the imported asset is a photo (`mediaType: "image"`), everything runs on the device through Core Image. Nothing uploads.
@@ -150,6 +165,9 @@ These apply only when a step actually goes to the server. Map the `code` field t
 | `header.freeLeft.long` | {n} free left |
 | `header.freeLeft.short` | {n} left |
 | `header.upgrade` | Upgrade |
+| `dictation.listening` | Listening… |
+| `dictation.unavailable` | Dictation isn't available on this device. |
+| `dictation.permissionDenied` | Turn on Microphone and Speech Recognition for FinalCap in Settings. |
 | `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. |
 
 ## 11. Out of scope for this slice
