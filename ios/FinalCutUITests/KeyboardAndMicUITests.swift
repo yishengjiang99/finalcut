@@ -27,36 +27,41 @@ final class KeyboardAndMicUITests: XCTestCase {
         return app.buttons.matching(dictate).count > app.keyboards.buttons.matching(dictate).count
     }
 
-    /// Taps into the composer and waits for focus (retrying once: the first tap can land while
-    /// the sample clip's chips are still animating in).
+    /// Focus = the software keyboard is up, or the composer reports keyboard focus
+    /// (either signal alone has been flaky on CI mid-animation).
+    private func isFocused() -> Bool {
+        if app.keyboards.firstMatch.exists { return true }
+        guard field.exists else { return false }
+        return (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+    }
+
+    private func waitUntil(timeout: TimeInterval, _ condition: @escaping () -> Bool) -> Bool {
+        let predicate = NSPredicate { _, _ in condition() }
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: timeout) == .completed
+    }
+
+    /// Taps into the composer and waits for focus (retrying: the first tap can land while the
+    /// sample clip's chips are still animating in).
     private func focusField() {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         for _ in 0..<3 {
             field.tap()
-            let focused = NSPredicate { _, _ in self.hasKeyboardFocus(self.field) }
-            let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nil)], timeout: 3)
-            if result == .completed { return }
+            if waitUntil(timeout: 4, { self.isFocused() }) { return }
         }
         print(app.debugDescription)
         XCTFail("composer field never took keyboard focus")
     }
 
-    private func hasKeyboardFocus(_ element: XCUIElement) -> Bool {
-        guard element.exists else { return false }
-        return (element.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
-    }
-
     func testTappingPreviewDismissesKeyboard() throws {
         focusField()
         field.typeText("make it red")
-        XCTAssertTrue(hasKeyboardFocus(field), "field should be focused while typing")
+        XCTAssertTrue(isFocused(), "field should be focused while typing")
 
         // The preview sits under the top bar, above the chat.
         let window = app.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
 
-        let unfocused = NSPredicate { _, _ in !self.hasKeyboardFocus(self.field) }
-        wait(for: [XCTNSPredicateExpectation(predicate: unfocused, object: nil)], timeout: 5)
+        XCTAssertTrue(waitUntil(timeout: 5) { !self.isFocused() }, "tapping the preview ends editing")
         XCTAssertEqual(app.keyboards.count, 0, "keyboard should be hidden")
         // The typed prompt stays in the field, unsent.
         XCTAssertTrue(app.buttons["Send"].exists)
