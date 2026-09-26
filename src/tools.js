@@ -164,6 +164,11 @@ export const tools = [
             type: 'number',
             description: 'Duration of the fade effect in seconds.',
             default: 3
+          },
+          start: {
+            type: 'number',
+            description: 'Optional. Time in seconds from the beginning of the clip at which the fade begins; the fade runs from start to start + duration. Fade in: silent before start, rising to full volume by start + duration. Fade out: full volume until start, silent from start + duration on. If omitted, a fade in starts at 0 and a fade out starts at (clip length - duration, not below 0), so it ends at the end of the clip.',
+            minimum: 0
           }
         },
         required: ['type', 'duration']

@@ -397,6 +397,67 @@ export async function processImageToFile({ inputPath, imageFormat, operation, ar
   }
 }
 
+// ─── audio_fade (start / duration / type) ────────────────────────────────────
+
+/** True when audio_fade needs the clip length to place the fade (fade-out without `start`). */
+export function audioFadeNeedsDuration(parsedArgs = {}) {
+  return parsedArgs.type !== 'in' && (parsedArgs.start === undefined || parsedArgs.start === null);
+}
+
+/**
+ * Validate audio_fade args. `duration` is required and > 0 seconds; `start` is optional and,
+ * when present, a non-negative number of seconds. Throws OpValidationError (invalid_arguments).
+ * Returns the numeric values ({ start: number|null, duration: number }).
+ */
+export function validateAudioFadeArgs(parsedArgs = {}) {
+  const toNumber = (v) => (typeof v === 'string' && v.trim() !== '' ? Number(v) : v);
+  const duration = toNumber(parsedArgs.duration);
+  if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) {
+    throw new OpValidationError('audio_fade duration must be a positive number of seconds');
+  }
+  let start = null;
+  if (parsedArgs.start !== undefined && parsedArgs.start !== null) {
+    start = toNumber(parsedArgs.start);
+    if (typeof start !== 'number' || !Number.isFinite(start) || start < 0) {
+      throw new OpValidationError('audio_fade start must be a non-negative number of seconds');
+    }
+  }
+  return { start, duration };
+}
+
+/**
+ * Build the afade filter. `start` (seconds from the beginning of the clip) is where the fade
+ * begins. When omitted: fade-in starts at 0; fade-out starts at clipDuration - duration
+ * (clamped to 0) so it ends at the end of the clip. Any type other than "in" is a fade-out.
+ */
+export function buildAudioFadeFilter(parsedArgs = {}, { mediaDuration } = {}) {
+  const { start, duration } = validateAudioFadeArgs(parsedArgs);
+  const fadeType = parsedArgs.type === 'in' ? 'in' : 'out';
+  let st = start;
+  if (st === null) {
+    if (fadeType === 'in') {
+      st = 0;
+    } else if (Number.isFinite(mediaDuration) && mediaDuration > 0) {
+      st = Math.max(0, Math.round((mediaDuration - duration) * 1000) / 1000);
+    } else {
+      throw new OpValidationError('audio_fade start is required for a fade-out when the clip duration cannot be determined');
+    }
+  }
+  return `afade=t=${fadeType}:st=${st}:d=${duration}`;
+}
+
+/** Clip duration in seconds from ffprobe (format duration, else longest stream), or null. */
+export async function probeMediaDuration(inputPath, { probe = probeFile } = {}) {
+  const metadata = await probe(inputPath);
+  if (!metadata) return null;
+  const candidates = [metadata.format?.duration, ...(metadata.streams || []).map(st => st.duration)]
+    .map(Number)
+    .filter(n => Number.isFinite(n) && n > 0);
+  if (!candidates.length) return null;
+  const formatDuration = Number(metadata.format?.duration);
+  return Number.isFinite(formatDuration) && formatDuration > 0 ? formatDuration : Math.max(...candidates);
+}
+
 /**
  * Validate video op args up front (so bad input is a 400, not an ffmpeg crash).
  */
@@ -407,6 +468,9 @@ export function validateVideoOperation(operation, args = {}) {
   }
   if (['apply_color_filter', 'adjust_contrast', 'flip_video_vertical'].includes(operation)) {
     buildVisualFilter(operation, parsedArgs, MEDIA_TYPE_VIDEO);
+  }
+  if (operation === 'audio_fade') {
+    validateAudioFadeArgs(parsedArgs);
   }
 }
 
@@ -433,7 +497,7 @@ export function resolveOutputMeta(operation, parsedArgs = {}) {
  * Apply a process-video operation onto a fluent-ffmpeg command.
  * Throws OpValidationError for unknown/invalid ops.
  */
-export function applyOperation(command, operation, parsedArgs = {}) {
+export function applyOperation(command, operation, parsedArgs = {}, { mediaDuration } = {}) {
   switch (operation) {
     case 'resize_video':
       return command.videoFilters(`scale=${parsedArgs.width}:${parsedArgs.height}`).audioCodec('copy');
@@ -479,12 +543,8 @@ export function applyOperation(command, operation, parsedArgs = {}) {
     }
     case 'adjust_volume':
       return command.audioFilters(`volume=${parsedArgs.volume}`).videoCodec('copy');
-    case 'audio_fade': {
-      const fadeFilter = parsedArgs.type === 'in'
-        ? `afade=t=in:st=${parsedArgs.start}:d=${parsedArgs.duration}`
-        : `afade=t=out:st=${parsedArgs.start}:d=${parsedArgs.duration}`;
-      return command.audioFilters(fadeFilter).videoCodec('copy');
-    }
+    case 'audio_fade':
+      return command.audioFilters(buildAudioFadeFilter(parsedArgs, { mediaDuration })).videoCodec('copy');
     case 'highpass_filter':
       return command.audioFilters(`highpass=f=${parsedArgs.frequency}`).videoCodec('copy');
     case 'lowpass_filter':
@@ -675,15 +735,19 @@ export function applyOperation(command, operation, parsedArgs = {}) {
 /**
  * Run a process-video operation to an output file (for async jobs).
  */
-export function processVideoToFile({ inputPath, inputMime, operation, args, outputPath }) {
+export async function processVideoToFile({ inputPath, inputMime, operation, args, outputPath }) {
   const parsedArgs = args && typeof args === 'object' ? args : {};
   const { outputExt, contentType } = resolveOutputMeta(operation, parsedArgs);
   const inputFormat = getMimeTypeToFormat(inputMime || 'video/mp4');
+  // A fade-out without `start` is placed so it ends at the end of the clip.
+  const mediaDuration = operation === 'audio_fade' && audioFadeNeedsDuration(parsedArgs)
+    ? await probeMediaDuration(inputPath)
+    : undefined;
 
   return new Promise((resolve, reject) => {
     let command = ffmpeg(inputPath).inputFormat(inputFormat);
     try {
-      command = applyOperation(command, operation, parsedArgs);
+      command = applyOperation(command, operation, parsedArgs, { mediaDuration });
     } catch (err) {
       reject(err);
       return;

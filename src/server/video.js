@@ -19,6 +19,9 @@ import {
   assertOperationSupported,
   buildVisualFilter,
   processImageToFile,
+  audioFadeNeedsDuration,
+  buildAudioFadeFilter,
+  probeMediaDuration,
 } from './ffmpegOps.js';
 
 // Helper function to check if a video has audio stream
@@ -659,13 +662,20 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       command = command.audioFilters(`volume=${parsedArgs.volume}`).videoCodec('copy');
       break;
 
-    case 'audio_fade': {
-      const fadeFilter = parsedArgs.type === 'in'
-        ? `afade=t=in:st=${parsedArgs.start}:d=${parsedArgs.duration}`
-        : `afade=t=out:st=${parsedArgs.start}:d=${parsedArgs.duration}`;
-      command = command.audioFilters(fadeFilter).videoCodec('copy');
+    case 'audio_fade':
+      // `start` is optional: fade-in defaults to 0, fade-out to (clip length - duration).
+      try {
+        const mediaDuration = audioFadeNeedsDuration(parsedArgs)
+          ? await probeMediaDuration(tmpStreamInputPath)
+          : undefined;
+        command = command.audioFilters(buildAudioFadeFilter(parsedArgs, { mediaDuration })).videoCodec('copy');
+      } catch (error) {
+        fs.unlink(tmpStreamInputPath).catch(() => {});
+        return res.status(error.statusCode || 400).json(
+          error instanceof OpValidationError ? error.toJSON() : { error: error.message, code: 'invalid_arguments' }
+        );
+      }
       break;
-    }
 
     case 'highpass_filter':
       command = command.audioFilters(`highpass=f=${parsedArgs.frequency}`).videoCodec('copy');

@@ -500,6 +500,30 @@ describe('toolFunctions', () => {
       );
       expect(result).toBe('Audio fade out applied successfully.');
     });
+
+    it('should reject a negative or non-numeric start', async () => {
+      for (const start of [-1, 'soon']) {
+        const result = await toolFunctions.audio_fade(
+          { type: 'in', duration: 2, start },
+          mockVideoFileData,
+          mockSetVideoFileData,
+          mockAddMessage
+        );
+        expect(result).toContain('Start must be a non-negative number of seconds');
+      }
+    });
+
+    it('should pass an explicit start through to the server', async () => {
+      const result = await toolFunctions.audio_fade(
+        { type: 'out', duration: 2, start: 5 },
+        mockVideoFileData,
+        mockSetVideoFileData,
+        mockAddMessage
+      );
+      expect(result).toBe('Audio fade out applied successfully.');
+      const call = global.fetch.mock.calls.at(-1);
+      expect(JSON.parse(call[1].headers['x-args'])).toEqual({ type: 'out', duration: 2, start: 5 });
+    });
   });
 
   describe('audio_highpass', () => {
