@@ -275,7 +275,7 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
     }
     const sniffedFormat = sniffMediaFormat(inputBuffer);
     if ((sniffedFormat && sniffedFormat !== 'video') || fileContentType.startsWith('image/')) {
-      return res.status(400).json({ error: 'Captions are not supported for photos' });
+      return res.status(400).json({ error: 'Captions are not supported for photos', code: 'unsupported_for_photo', operation: 'generate_captions', mediaType: 'image' });
     }
 
     const ext = getExtFromMimeType(fileContentType);
@@ -362,7 +362,7 @@ router.post('/api/generate-captions-diarized', videoProcessLimiter, requireAuthe
     }
     const sniffedFormat = sniffMediaFormat(inputBuffer);
     if ((sniffedFormat && sniffedFormat !== 'video') || fileContentType.startsWith('image/')) {
-      return res.status(400).json({ error: 'Captions are not supported for photos' });
+      return res.status(400).json({ error: 'Captions are not supported for photos', code: 'unsupported_for_photo', operation: 'generate_captions', mediaType: 'image' });
     }
 
     const ext = getExtFromMimeType(fileContentType);

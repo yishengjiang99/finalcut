@@ -37,6 +37,8 @@ export function publicJob(job, baseUrl) {
     status: job.status,
     progress: job.progress,
     error: job.error || undefined,
+    // Machine-readable failure code (e.g. "unsupported_image_format" for undecodable HEIC).
+    code: job.errorCode || undefined,
     operation: job.operation,
     // "image" for photos, "video" otherwise — lets clients pick an image vs player view.
     mediaType: job.mediaType || MEDIA_TYPE_VIDEO,
@@ -85,6 +87,7 @@ async function runProcessVideoJob(job) {
     console.error(`Job ${job.id} failed:`, err);
     job.status = 'failed';
     job.error = err.message || 'Processing failed';
+    if (err instanceof OpValidationError) job.errorCode = err.code;
     job.updatedAt = new Date().toISOString();
   } finally {
     if (job.inputPath) {
@@ -144,7 +147,7 @@ router.post(
         try {
           args = typeof req.body.args === 'string' ? JSON.parse(req.body.args) : req.body.args;
         } catch {
-          return res.status(400).json({ error: 'args must be valid JSON' });
+          return res.status(400).json({ error: 'args must be valid JSON', code: 'invalid_arguments' });
         }
       }
 
@@ -206,7 +209,7 @@ router.post(
     } catch (error) {
       if (inputPath) fs.unlink(inputPath).catch(() => {});
       if (error instanceof OpValidationError) {
-        return res.status(error.statusCode).json({ error: error.message });
+        return res.status(error.statusCode).json(error.toJSON());
       }
       console.error('Error enqueueing process-video job:', error);
       return res.status(500).json({ error: 'Failed to enqueue job' });

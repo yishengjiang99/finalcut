@@ -178,6 +178,7 @@ describe('photo ffmpeg command', () => {
       expect(err).toBeInstanceOf(OpValidationError);
       expect(err.statusCode).toBe(400);
       expect(err.message).toContain('not supported for photos');
+      expect(err.toJSON()).toEqual({ error: err.message, code: 'unsupported_for_photo', operation: op, mediaType: 'image' });
     }
     for (const op of PHOTO_SUPPORTED_OPS) {
       expect(() => assertOperationSupported(op, 'image')).not.toThrow();
@@ -188,7 +189,7 @@ describe('photo ffmpeg command', () => {
   it('HEIC falls back to heif-convert, then a clear 415 when nothing can decode it', async () => {
     const noProbe = async () => null;
     await expect(prepareImageInput('/tmp/x.heic', 'heic', { probe: noProbe, convert: async () => false }))
-      .rejects.toMatchObject({ statusCode: 415, message: expect.stringContaining('HEIC') });
+      .rejects.toMatchObject({ statusCode: 415, code: 'unsupported_image_format', message: expect.stringContaining('HEIC') });
     const converted = await prepareImageInput('/tmp/x.heic', 'heic', { probe: noProbe, convert: async () => true });
     expect(converted).toMatchObject({ imageFormat: 'jpeg', path: '/tmp/x.heic.heic-converted.jpg' });
     const direct = await prepareImageInput('/tmp/x.heic', 'heic', {
@@ -222,6 +223,12 @@ describe('video -ss guard', () => {
     expect(cmd2.calls).toContainEqual(['t', 3]);
   });
 
+  it('invalid trim args carry code invalid_arguments', () => {
+    let err;
+    try { applyOperation(recorder(), 'trim_video', { start: 'abc', end: 3 }); } catch (e) { err = e; }
+    expect(err.toJSON()).toEqual({ error: err.message, code: 'invalid_arguments' });
+  });
+
   it('trim_video with no args is a 400, not `-ss undefined`', () => {
     expect(() => applyOperation(recorder(), 'trim_video', {})).toThrow(OpValidationError);
     expect(() => applyOperation(recorder(), 'trim_video', { start: 5, end: 2 })).toThrow(/greater than start/);
@@ -247,6 +254,12 @@ describe('jobs mediaType contract', () => {
       resultUrl: 'https://grepawk.com/api/jobs/abc/result',
     });
     expect(publicJob({ id: 'v', status: 'queued', progress: 0 }, 'x').mediaType).toBe('video');
+    expect(JSON.parse(JSON.stringify(publicJob({ id: 'v', status: 'queued', progress: 0 }, 'x')))).not.toHaveProperty('code');
+    const failed = publicJob({
+      id: 'h', status: 'failed', progress: 0, mediaType: 'image', operation: 'adjust_hue',
+      error: 'HEIC photos are not supported…', errorCode: 'unsupported_image_format',
+    }, 'x');
+    expect(failed).toMatchObject({ status: 'failed', code: 'unsupported_image_format', mediaType: 'image' });
   });
 
   it('classifyAndValidateUpload rejects trim on a photo and accepts a color filter', async () => {
@@ -289,7 +302,13 @@ describe('HTTP routes (photo)', () => {
       body: jobForm(JPG, 'IMG_0001.jpg', 'video/mp4', 'trim_video'),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain('not supported for photos');
+    const body = await res.json();
+    expect(body).toEqual({
+      error: expect.stringContaining('Operation "trim_video" is not supported for photos'),
+      code: 'unsupported_for_photo',
+      operation: 'trim_video',
+      mediaType: 'image',
+    });
   });
 
   it('POST /api/jobs/process-video returns 400 (not an ffmpeg crash) for video trim without times', async () => {
@@ -299,7 +318,10 @@ describe('HTTP routes (photo)', () => {
       body: jobForm(MP4, 'clip.mp4', 'video/mp4', 'trim_video'),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/start and\/or end/);
+    expect(await res.json()).toEqual({
+      error: 'trim_video requires a start and/or end time (seconds or HH:MM:SS)',
+      code: 'invalid_arguments',
+    });
   });
 
   it.skipIf(!hasFfmpeg)('photo job succeeds with mediaType image and image/jpeg result', async () => {
@@ -357,7 +379,12 @@ describe('HTTP routes (photo)', () => {
       body: readFileSync(JPG),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain('not supported for photos');
+    expect(await res.json()).toEqual({
+      error: expect.stringContaining('Operation "adjust_volume" is not supported for photos'),
+      code: 'unsupported_for_photo',
+      operation: 'adjust_volume',
+      mediaType: 'image',
+    });
   });
 
   it.skipIf(!hasFfmpeg)('sync video path still returns video/mp4 for a video edit', async () => {
@@ -388,7 +415,39 @@ describe('HTTP routes (photo)', () => {
       body: readFileSync(MP4),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/start and\/or end/);
+    expect(await res.json()).toEqual({
+      error: 'trim_video requires a start and/or end time (seconds or HH:MM:SS)',
+      code: 'invalid_arguments',
+    });
+  });
+
+  it('sync multipart burn_subtitles on a photo returns unsupported_for_photo', async () => {
+    const form = new FormData();
+    form.append('operation', 'burn_subtitles');
+    form.append('args', JSON.stringify({ srtContent: '1\n00:00:00,000 --> 00:00:01,000\nhi' }));
+    form.append('video', new Blob([readFileSync(JPG)], { type: 'image/jpeg' }), 'photo.jpg');
+    const res = await fetch(`${base}/api/process-video`, {
+      method: 'POST', headers: { 'sample-access-token': token }, body: form,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: 'Operation "burn_subtitles" is not supported for photos',
+      code: 'unsupported_for_photo',
+      operation: 'burn_subtitles',
+      mediaType: 'image',
+    });
+  });
+
+  it('bad args JSON on jobs submit is invalid_arguments', async () => {
+    const form = new FormData();
+    form.append('operation', 'adjust_hue');
+    form.append('args', '{not json');
+    form.append('video', new Blob([readFileSync(JPG)], { type: 'image/jpeg' }), 'a.jpg');
+    const res = await fetch(`${base}/api/jobs/process-video`, {
+      method: 'POST', headers: { 'sample-access-token': token }, body: form,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'args must be valid JSON', code: 'invalid_arguments' });
   });
 });
 
