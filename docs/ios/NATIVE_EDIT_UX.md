@@ -102,6 +102,10 @@ The model receives clip metadata and up to 4 still frames, never the video. Say 
 | `preview.original` | Original |
 | `edit.failed.photoUnsupported` | That works on videos, not photos. |
 | `export.photo.title` | Save photo |
+| `edit.failed.invalidArgs` | Couldn't apply that edit. Try saying it another way. |
+| `edit.failed.generic` | Something went wrong with that edit. |
+| `import.failed.format` | Couldn't open this photo. Try a different one. |
+| `import.chooseAnother` | Choose another |
 | `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends a few still frames to the AI so it understands your clip. |
 
 ## 7. Photo mode (added after #82)
@@ -114,7 +118,20 @@ When the imported asset is a photo (`mediaType: "image"`):
 - The Export sheet title is "Save photo". Save to Photos in the original format (JPEG or PNG per `contentType`). There is no render percentage; show a short spinner.
 - If a tool that doesn't apply to photos comes back as a 400 (trim, audio, captions, speed), show a failed edit card with the copy `edit.failed.photoUnsupported`: "That works on videos, not photos." Never show the raw server error.
 
-## 8. Out of scope for this slice
+## 8. Server error codes (from #88)
+
+Map the server's `code` field to UI. Never parse or show the raw `error` text.
+
+| `code` | HTTP | Where it shows | Copy key | UI |
+|---|---|---|---|---|
+| `unsupported_for_photo` | 400 | Edit card | `edit.failed.photoUnsupported` | Failed card, no Retry |
+| `invalid_arguments` | 400 | Edit card | `edit.failed.invalidArgs` | Failed card. In client mode, also return the error to the model as the tool result so it can correct the call; show the card only if the model gives up |
+| `unsupported_image_format` | 415 | Import step, not an edit card | `import.failed.format` | Inline error under the import area with "Choose another" |
+| anything else / no code | 4xx/5xx | Edit card | `edit.failed.generic` | Failed card with Retry |
+
+The 415 should be unreachable from iOS, because HEIC photos are converted to JPEG on the device before any upload. Keep the copy as a safety net.
+
+## 9. Out of scope for this slice
 
 Multi-track timeline, keyframe UI, per-edit parameter sliders (the chat is still the way to adjust; "make it less bright" produces a new edit or replaces the last one of the same type).
 
