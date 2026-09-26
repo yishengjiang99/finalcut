@@ -49,14 +49,15 @@ enum ScreenshotFixtures {
 
     static var isActive: Bool { requested != nil }
 
-    /// `-ScreenshotPreview still`: show a PNG of the clip's first frame (photo preview path)
-    /// instead of the AVKit player.
+    /// The preview shows a PNG of the rendered clip's first frame (the photo preview path) by
+    /// default: with the iOS 26 SDK the embedded AVKit player hides the status bar, and a still
+    /// is deterministic. `-ScreenshotPreview video` keeps the real AVKit player instead.
     static var previewAsStill: Bool {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-ScreenshotPreview"), i + 1 < args.count {
-            return args[i + 1] == "still"
+            return args[i + 1] != "video"
         }
-        return false
+        return true
     }
 
     private static var didApply = false

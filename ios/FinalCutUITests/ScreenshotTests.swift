@@ -20,12 +20,6 @@ final class ScreenshotTests: XCTestCase {
         app?.terminate()
     }
 
-    /// Diagnostic (not an ASC frame): editor with a still-image preview instead of the AVKit player.
-    func test00ProbeStill() throws {
-        try launch(state: "editor", readyText: "Loaded sample clip", extraArguments: ["-ScreenshotPreview", "still"])
-        capture("00-probe-still")
-    }
-
     func test01Editor() throws {
         try launch(state: "editor", readyText: "Loaded sample clip")
         capture("01-editor")

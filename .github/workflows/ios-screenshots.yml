@@ -134,6 +134,17 @@ jobs:
             echo "::group::$prefix ($udid)"
             xcrun simctl boot "$udid" 2>/dev/null || true
             xcrun simctl bootstatus "$udid" -b
+            if [[ "$prefix" == ipad* ]]; then
+              # iPadOS 26 defaults to Windowed Apps, which draws a resize grabber in the corner.
+              # Switch to Full Screen Apps (all three keys, then reboot, as the Settings toggle does).
+              for key in SBChamoisWindowingEnabled SBMedusaMultitaskingEnabled SBFlexibleWindowingPreviouslyEnabledAutomaticStageCreation; do
+                xcrun simctl spawn "$udid" defaults write com.apple.springboard "$key" -bool false || true
+              done
+              xcrun simctl shutdown "$udid"
+              xcrun simctl boot "$udid"
+              xcrun simctl bootstatus "$udid" -b
+              echo "SBChamoisWindowingEnabled=$(xcrun simctl spawn "$udid" defaults read com.apple.springboard SBChamoisWindowingEnabled 2>/dev/null || echo unset)"
+            fi
             xcrun simctl ui "$udid" appearance dark
             sleep 5
             sb_args=(--dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100)
