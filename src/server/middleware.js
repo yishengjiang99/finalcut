@@ -8,6 +8,7 @@ import {
   IOS_FREE_DAILY_INFERENCE_LIMIT,
 } from './config.js';
 import { findUserByApiToken, consumeDailyInference } from '../db.js';
+import { isAcceptedUpload } from './mediaType.js';
 
 export const sampleAccessTokens = new Map();
 
@@ -170,9 +171,45 @@ export function getBaseUrlFromRequest(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
-// Configure multer for file uploads (store in memory)
+// Configure multer for file uploads (store in memory).
+// Accepts videos, audio and photos (jpg/png/webp/heic/…). Photos (typically 1–15MB)
+// fit well within the 100MB default, which matches nginx client_max_body_size 100M.
+// Override with UPLOAD_MAX_BYTES (raise nginx too if you go higher).
+const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+export const UPLOAD_MAX_BYTES = (() => {
+  const n = Number(process.env.UPLOAD_MAX_BYTES);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_UPLOAD_MAX_BYTES;
+})();
+
+export function mediaFileFilter(req, file, cb) {
+  if (isAcceptedUpload({ mimetype: file.mimetype, filename: file.originalname })) {
+    return cb(null, true);
+  }
+  const err = new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname);
+  err.message = `Unsupported file type "${file.mimetype}". Upload a video, audio file, or photo (jpg, png, webp, heic).`;
+  err.statusCode = 415;
+  return cb(err);
+}
+
 const storage = multer.memoryStorage();
 export const upload = multer({
   storage: storage,
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+  limits: { fileSize: UPLOAD_MAX_BYTES },
+  fileFilter: mediaFileFilter,
 });
+
+/**
+ * upload.single() wrapper that turns multer errors into JSON responses
+ * (413 for size limit, 415 for unsupported type, 400 otherwise).
+ */
+export function uploadSingle(fieldName) {
+  const handler = upload.single(fieldName);
+  return (req, res, next) => {
+    handler(req, res, (err) => {
+      if (!err) return next();
+      const status = err.statusCode
+        || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 400);
+      return res.status(status).json({ error: err.message || 'Upload failed' });
+    });
+  };
+}

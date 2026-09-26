@@ -1,5 +1,8 @@
 import ffmpeg from 'fluent-ffmpeg';
+import { execFile } from 'child_process';
+import { promises as fs } from 'fs';
 import { getMimeTypeToFormat } from './utils.js';
+import { IMAGE_FORMATS, MEDIA_TYPE_IMAGE, MEDIA_TYPE_VIDEO } from './mediaType.js';
 
 const AUDIO_CONTENT_TYPES = {
   mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
@@ -15,6 +18,368 @@ export class OpValidationError extends Error {
     super(message);
     this.name = 'OpValidationError';
     this.statusCode = statusCode;
+  }
+}
+
+// ─── Time parsing / trim (guards against `-ss undefined`) ────────────────────
+
+/**
+ * Parse a time value (seconds number, numeric string, or [[HH:]MM:]SS[.ms]) to seconds.
+ * Returns null when the value is absent (undefined/null/empty string).
+ * Throws OpValidationError for anything that is present but not a valid non-negative time.
+ */
+export function parseTimeToSeconds(value, field = 'time') {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new OpValidationError(`${field} must be a non-negative number of seconds`);
+    }
+    return value;
+  }
+  if (typeof value !== 'string') {
+    throw new OpValidationError(`${field} must be seconds or HH:MM:SS`);
+  }
+  const str = value.trim();
+  if (!str || str === 'undefined' || str === 'null') return null;
+  if (/^\d+(\.\d+)?$/.test(str)) return Number(str);
+  const m = /^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/.exec(str);
+  if (!m) throw new OpValidationError(`${field} must be seconds or HH:MM:SS (got "${str}")`);
+  const [, h = '0', mm, ss] = m;
+  return Number(h) * 3600 + Number(mm) * 60 + Number(ss);
+}
+
+/**
+ * Apply trim_video safely: `-ss` is only emitted when a start time is present,
+ * `-t` only when an end time is present, and both are validated numbers.
+ */
+export function applyTrim(command, parsedArgs = {}) {
+  const start = parseTimeToSeconds(parsedArgs.start, 'start');
+  const end = parseTimeToSeconds(parsedArgs.end, 'end');
+  if (start === null && end === null) {
+    throw new OpValidationError('trim_video requires a start and/or end time (seconds or HH:MM:SS)');
+  }
+  if (start !== null && end !== null && end <= start) {
+    throw new OpValidationError('trim_video end must be greater than start');
+  }
+  let next = command;
+  if (start !== null) next = next.setStartTime(start);
+  if (end !== null) next = next.setDuration(end - (start ?? 0));
+  return next.outputOptions('-c copy');
+}
+
+// ─── Visual filters shared by photos and videos ──────────────────────────────
+
+export const COLOR_FILTER_PRESETS = [
+  'red', 'green', 'blue', 'yellow', 'cyan', 'magenta',
+  'sepia', 'grayscale', 'black_and_white', 'invert', 'warm', 'cool', 'vintage',
+];
+
+const IDENTITY_MATRIX = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+const SEPIA_MATRIX = [0.393, 0.769, 0.189, 0.349, 0.686, 0.168, 0.272, 0.534, 0.131];
+const GRAY_MATRIX = [0.299, 0.587, 0.114, 0.299, 0.587, 0.114, 0.299, 0.587, 0.114];
+
+function tintMatrix(keep) {
+  // keep: [r, g, b] booleans — channels not kept are attenuated.
+  return [keep[0] ? 1 : 0.4, 0, 0, 0, keep[1] ? 1 : 0.4, 0, 0, 0, keep[2] ? 1 : 0.4];
+}
+
+const COLOR_MATRICES = {
+  red: tintMatrix([true, false, false]),
+  green: tintMatrix([false, true, false]),
+  blue: tintMatrix([false, false, true]),
+  yellow: tintMatrix([true, true, false]),
+  cyan: tintMatrix([false, true, true]),
+  magenta: tintMatrix([true, false, true]),
+  sepia: SEPIA_MATRIX,
+  grayscale: GRAY_MATRIX,
+  black_and_white: GRAY_MATRIX,
+};
+
+function round4(n) {
+  return Math.round(n * 10000) / 10000;
+}
+
+function requireFiniteNumber(value, field, { min = -Infinity, max = Infinity } = {}) {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    throw new OpValidationError(`${field} must be a number`);
+  }
+  if (n < min || n > max) {
+    throw new OpValidationError(`${field} must be between ${min} and ${max}`);
+  }
+  return n;
+}
+
+/** Build the ffmpeg filter for apply_color_filter (red/sepia/grayscale/…). */
+export function buildColorFilter(parsedArgs = {}) {
+  const raw = String(parsedArgs.filter ?? parsedArgs.color ?? parsedArgs.preset ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const preset = raw === 'gray' || raw === 'greyscale' || raw === 'monochrome' ? 'grayscale'
+    : raw === 'b&w' || raw === 'bw' ? 'black_and_white'
+      : raw === 'negative' ? 'invert'
+        : raw;
+  if (!COLOR_FILTER_PRESETS.includes(preset)) {
+    throw new OpValidationError(`filter must be one of: ${COLOR_FILTER_PRESETS.join(', ')}`);
+  }
+  const intensity = parsedArgs.intensity === undefined || parsedArgs.intensity === null
+    ? 1
+    : requireFiniteNumber(parsedArgs.intensity, 'intensity', { min: 0, max: 1 });
+
+  if (preset === 'invert') return 'negate';
+  if (preset === 'vintage') return 'curves=preset=vintage';
+  if (preset === 'warm' || preset === 'cool') {
+    const sign = preset === 'warm' ? 1 : -1;
+    const s = round4(0.3 * intensity * sign);
+    const m = round4(0.15 * intensity * sign);
+    return `colorbalance=rs=${s}:bs=${-s}:rm=${m}:bm=${-m}`;
+  }
+  const target = COLOR_MATRICES[preset];
+  const mixed = target.map((v, i) => round4(IDENTITY_MATRIX[i] * (1 - intensity) + v * intensity));
+  const names = ['rr', 'rg', 'rb', 'gr', 'gg', 'gb', 'br', 'bg', 'bb'];
+  return `colorchannelmixer=${names.map((n, i) => `${n}=${mixed[i]}`).join(':')}`;
+}
+
+// Two-level escaping for drawtext text (no surrounding quotes):
+// 1) option-value level: \ ' :   2) filtergraph level: \ ' [ ] , ;
+// Combined with expansion=none so "%" is literal.
+export function escapeDrawtext(text) {
+  const optionLevel = String(text).replace(/\r/g, '').replace(/[\\':]/g, '\\$&');
+  return optionLevel.replace(/[\\'[\],;]/g, '\\$&');
+}
+
+function safeColor(value, fallback = 'white') {
+  if (value === undefined || value === null || value === '') return fallback;
+  const color = String(value).trim();
+  if (!/^[#A-Za-z0-9@.]{1,32}$/.test(color)) {
+    throw new OpValidationError('color must be a color name or hex value (e.g. white, #ff0000)');
+  }
+  return color;
+}
+
+function optionalInt(value, field, fallback, opts) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return Math.round(requireFiniteNumber(value, field, opts));
+}
+
+/**
+ * Build a validated ffmpeg video-filter string for a visual (frame-only) operation.
+ * Used for photos (all photo ops) and for new video ops (color filter, contrast, vflip).
+ */
+export function buildVisualFilter(operation, parsedArgs = {}, mediaType = MEDIA_TYPE_IMAGE) {
+  switch (operation) {
+    case 'resize_video': {
+      const width = Math.round(requireFiniteNumber(parsedArgs.width, 'width', { min: -2, max: 16384 }));
+      const height = Math.round(requireFiniteNumber(parsedArgs.height, 'height', { min: -2, max: 16384 }));
+      if (width === 0 || height === 0 || (width < 0 && height < 0)) {
+        throw new OpValidationError('width and height must be positive (one of them may be -1 to keep aspect ratio)');
+      }
+      return `scale=${width}:${height}`;
+    }
+    case 'crop_video': {
+      const width = Math.round(requireFiniteNumber(parsedArgs.width, 'width', { min: 1, max: 16384 }));
+      const height = Math.round(requireFiniteNumber(parsedArgs.height, 'height', { min: 1, max: 16384 }));
+      const x = optionalInt(parsedArgs.x, 'x', 0, { min: 0, max: 16384 });
+      const y = optionalInt(parsedArgs.y, 'y', 0, { min: 0, max: 16384 });
+      return `crop=${width}:${height}:${x}:${y}`;
+    }
+    case 'rotate_video': {
+      const angle = requireFiniteNumber(parsedArgs.angle, 'angle', { min: -3600, max: 3600 });
+      const normalized = ((angle % 360) + 360) % 360;
+      if (mediaType === MEDIA_TYPE_IMAGE) {
+        // Lossless-looking quarter turns for photos (canvas swaps width/height).
+        if (normalized === 0) return 'null';
+        if (normalized === 90) return 'transpose=clock';
+        if (normalized === 180) return 'hflip,vflip';
+        if (normalized === 270) return 'transpose=cclock';
+        const rad = `${round4(angle)}*PI/180`;
+        return `rotate=${rad}:ow=rotw(${rad}):oh=roth(${rad}):c=black`;
+      }
+      return `rotate=${angle}*PI/180`;
+    }
+    case 'flip_video_horizontal':
+      return 'hflip';
+    case 'flip_video_vertical':
+      return 'vflip';
+    case 'add_text': {
+      if (typeof parsedArgs.text !== 'string' || !parsedArgs.text.trim()) {
+        throw new OpValidationError('text is required for add_text');
+      }
+      const x = optionalInt(parsedArgs.x, 'x', 10, { min: 0, max: 16384 });
+      const y = optionalInt(parsedArgs.y, 'y', 10, { min: 0, max: 16384 });
+      const fontsize = optionalInt(parsedArgs.fontsize, 'fontsize', 24, { min: 1, max: 1000 });
+      const color = safeColor(parsedArgs.color, 'white');
+      return `drawtext=expansion=none:text=${escapeDrawtext(parsedArgs.text)}:x=${x}:y=${y}:fontsize=${fontsize}:fontcolor=${color}`;
+    }
+    case 'adjust_brightness':
+      return `eq=brightness=${requireFiniteNumber(parsedArgs.brightness, 'brightness', { min: -1, max: 1 })}`;
+    case 'adjust_contrast':
+      return `eq=contrast=${requireFiniteNumber(parsedArgs.contrast, 'contrast', { min: 0, max: 3 })}`;
+    case 'adjust_hue':
+      return `hue=h=${requireFiniteNumber(parsedArgs.degrees, 'degrees', { min: -360, max: 360 })}`;
+    case 'adjust_saturation':
+      return `eq=saturation=${requireFiniteNumber(parsedArgs.saturation, 'saturation', { min: 0, max: 3 })}`;
+    case 'apply_color_filter':
+      return buildColorFilter(parsedArgs);
+    case 'convert_image_format':
+      return 'null';
+    default:
+      throw new OpValidationError(`Unknown operation: ${operation}`);
+  }
+}
+
+// ─── Photo pipeline ──────────────────────────────────────────────────────────
+
+/** Operations that work on a single still frame. */
+export const PHOTO_SUPPORTED_OPS = [
+  'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical',
+  'add_text', 'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation',
+  'apply_color_filter', 'convert_image_format',
+];
+
+export const PHOTO_OUTPUT_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
+
+/**
+ * Throw a 400 OpValidationError when an operation cannot run on the given media type.
+ */
+export function assertOperationSupported(operation, mediaType) {
+  if (mediaType !== MEDIA_TYPE_IMAGE) return;
+  if (!PHOTO_SUPPORTED_OPS.includes(operation)) {
+    throw new OpValidationError(
+      `Operation "${operation}" is not supported for photos. Supported photo operations: ${PHOTO_SUPPORTED_OPS.join(', ')}`
+    );
+  }
+}
+
+const IMAGE_INPUT_DEMUXERS = {
+  jpeg: 'jpeg_pipe', png: 'png_pipe', webp: 'webp_pipe', bmp: 'bmp_pipe', tiff: 'tiff_pipe', gif: 'gif',
+};
+
+/**
+ * Resolve output extension, Content-Type and encoder options for a photo result.
+ * Same format as the input for jpg/png/webp; HEIC → JPEG; gif/bmp/tiff → PNG.
+ */
+export function resolveImageOutputMeta(imageFormat, operation, parsedArgs = {}, { canEncodeWebp = true } = {}) {
+  let target = imageFormat;
+  if (operation === 'convert_image_format') {
+    const requested = String(parsedArgs.format || '').toLowerCase();
+    if (!PHOTO_OUTPUT_FORMATS.includes(requested)) {
+      throw new OpValidationError(`format must be one of: ${PHOTO_OUTPUT_FORMATS.join(', ')}`);
+    }
+    target = requested === 'jpg' ? 'jpeg' : requested;
+  }
+  if (target === 'webp' && !canEncodeWebp) target = 'png';
+  if (!['jpeg', 'png', 'webp'].includes(target)) {
+    target = imageFormat === 'heic' ? 'jpeg' : 'png';
+  }
+  const { ext, contentType } = IMAGE_FORMATS[target];
+  const codecOptions = {
+    jpeg: ['-c:v mjpeg', '-q:v 2'],
+    png: ['-c:v png'],
+    webp: ['-c:v libwebp', '-quality 90'],
+  }[target];
+  return { imageFormat: target, outputExt: ext, contentType, codecOptions, mediaType: MEDIA_TYPE_IMAGE };
+}
+
+/**
+ * Build (but do not run) the fluent-ffmpeg command for a photo edit.
+ * Never adds -ss/-t; always -frames:v 1 and a single-image muxer.
+ */
+export function buildImageCommand({ inputPath, outputPath, imageFormat, operation, args, canEncodeWebp = true }) {
+  const parsedArgs = args && typeof args === 'object' ? args : {};
+  assertOperationSupported(operation, MEDIA_TYPE_IMAGE);
+  const filter = buildVisualFilter(operation, parsedArgs, MEDIA_TYPE_IMAGE);
+  const meta = resolveImageOutputMeta(imageFormat, operation, parsedArgs, { canEncodeWebp });
+
+  let command = ffmpeg(inputPath);
+  const demuxer = IMAGE_INPUT_DEMUXERS[imageFormat];
+  if (demuxer) command = command.inputFormat(demuxer);
+  if (filter && filter !== 'null') command = command.videoFilters(filter);
+  command = command
+    .outputOptions(['-map 0:v:0', '-frames:v 1', '-update 1', ...meta.codecOptions])
+    .noAudio()
+    .toFormat('image2')
+    .output(outputPath);
+  return { command, meta };
+}
+
+let webpEncoderPromise = null;
+function canEncodeWebp() {
+  if (!webpEncoderPromise) {
+    webpEncoderPromise = new Promise((resolve) => {
+      ffmpeg.getAvailableEncoders((err, encoders) => resolve(!err && Boolean(encoders?.libwebp)));
+    });
+  }
+  return webpEncoderPromise;
+}
+
+function probeFile(inputPath) {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(inputPath, (err, metadata) => resolve(err ? null : metadata));
+  });
+}
+
+function heifConvert(inputPath, outputPath) {
+  return new Promise((resolve) => {
+    execFile('heif-convert', ['-q', '92', inputPath, outputPath], { timeout: 60_000 }, (err) => resolve(!err));
+  });
+}
+
+/**
+ * Make sure ffmpeg can decode the photo. For HEIC this relies on FFmpeg's HEIF
+ * demuxer (FFmpeg ≥ 7.0; iPhone tile-grid HEICs need ≥ 7.1). If ffmpeg cannot
+ * read it we fall back to libheif's `heif-convert` CLI (if installed) and
+ * transcode to JPEG; otherwise a clear 415 error is thrown.
+ * @returns {Promise<{ path: string, imageFormat: string, cleanup: string|null }>}
+ */
+export async function prepareImageInput(inputPath, imageFormat, { probe = probeFile, convert = heifConvert } = {}) {
+  if (imageFormat !== 'heic') return { path: inputPath, imageFormat, cleanup: null };
+  const metadata = await probe(inputPath);
+  const stream = metadata?.streams?.find(s => s.codec_type === 'video');
+  if (stream && Number(stream.width) > 0 && Number(stream.height) > 0) {
+    return { path: inputPath, imageFormat: 'heic', cleanup: null };
+  }
+  const jpegPath = `${inputPath}.heic-converted.jpg`;
+  if (await convert(inputPath, jpegPath)) {
+    return { path: jpegPath, imageFormat: 'jpeg', cleanup: jpegPath };
+  }
+  throw new OpValidationError(
+    'HEIC photos are not supported by this server (FFmpeg lacks HEIF decoding and heif-convert is not installed). Please upload a JPEG or PNG.',
+    415
+  );
+}
+
+/**
+ * Run a photo edit to an output file. Returns output metadata including mediaType "image".
+ */
+export async function processImageToFile({ inputPath, imageFormat, operation, args, outputPath }) {
+  const prepared = await prepareImageInput(inputPath, imageFormat);
+  try {
+    const { command, meta } = buildImageCommand({
+      inputPath: prepared.path,
+      outputPath,
+      imageFormat: prepared.imageFormat,
+      operation,
+      args,
+      canEncodeWebp: await canEncodeWebp(),
+    });
+    await new Promise((resolve, reject) => {
+      command.on('error', (err) => reject(err)).on('end', resolve).run();
+    });
+    return { outputExt: meta.outputExt, contentType: meta.contentType, mediaType: MEDIA_TYPE_IMAGE };
+  } finally {
+    if (prepared.cleanup) fs.unlink(prepared.cleanup).catch(() => {});
+  }
+}
+
+/**
+ * Validate video op args up front (so bad input is a 400, not an ffmpeg crash).
+ */
+export function validateVideoOperation(operation, args = {}) {
+  const parsedArgs = args && typeof args === 'object' ? args : {};
+  if (operation === 'trim_video') {
+    applyTrim({ setStartTime() { return this; }, setDuration() { return this; }, outputOptions() { return this; } }, parsedArgs);
+  }
+  if (['apply_color_filter', 'adjust_contrast', 'flip_video_vertical'].includes(operation)) {
+    buildVisualFilter(operation, parsedArgs, MEDIA_TYPE_VIDEO);
   }
 }
 
@@ -64,7 +429,7 @@ export function applyOperation(command, operation, parsedArgs = {}) {
       ).audioCodec('copy');
     }
     case 'trim_video':
-      return command.setStartTime(parsedArgs.start).setDuration(parsedArgs.end - parsedArgs.start).outputOptions('-c copy');
+      return applyTrim(command, parsedArgs);
     case 'speed_video': {
       let audioFilter = '';
       const speed = parsedArgs.speed;
@@ -255,8 +620,19 @@ export function applyOperation(command, operation, parsedArgs = {}) {
     }
     case 'fade_transition': {
       const fadeDuration = parsedArgs.duration || 1;
-      return command.videoFilters(`fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${parsedArgs.totalDuration - fadeDuration}:d=${fadeDuration}`).audioCodec('copy');
+      const totalDuration = Number(parsedArgs.totalDuration);
+      if (!Number.isFinite(totalDuration) || totalDuration <= fadeDuration) {
+        // Without a known clip length only a fade-in can be placed safely.
+        return command.videoFilters(`fade=t=in:st=0:d=${fadeDuration}`).audioCodec('copy');
+      }
+      return command.videoFilters(`fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${totalDuration - fadeDuration}:d=${fadeDuration}`).audioCodec('copy');
     }
+    case 'apply_color_filter':
+    case 'adjust_contrast':
+    case 'flip_video_vertical':
+      return command.videoFilters(buildVisualFilter(operation, parsedArgs, MEDIA_TYPE_VIDEO)).audioCodec('copy');
+    case 'convert_image_format':
+      throw new OpValidationError('convert_image_format only applies to photos — use convert_video_format for videos');
     case 'crossfade_transition':
       throw new OpValidationError('crossfade_transition requires special multi-video handling — use /api/transition-videos');
     case 'get_video_info':
@@ -290,7 +666,17 @@ export function processVideoToFile({ inputPath, inputMime, operation, args, outp
       .output(outputPath)
       .toFormat(outputExt)
       .on('error', (err) => reject(err))
-      .on('end', () => resolve({ outputExt, contentType }))
+      .on('end', () => resolve({ outputExt, contentType, mediaType: MEDIA_TYPE_VIDEO }))
       .run();
   });
+}
+
+/**
+ * Dispatch to the photo or video pipeline.
+ */
+export function processMediaToFile({ mediaType, imageFormat, ...rest }) {
+  if (mediaType === MEDIA_TYPE_IMAGE) {
+    return processImageToFile({ ...rest, imageFormat });
+  }
+  return processVideoToFile(rest);
 }

@@ -109,7 +109,27 @@ async function processVideoOnServer(operation, args, videoFileData) {
     throw new Error(errorData.error || 'Server processing failed');
   }
 
+  lastResultContentType = response.headers?.get?.('content-type') || null;
   return collectStreamChunks(response.body.getReader());
+}
+
+// Content-Type of the most recent /api/process-video result (image/* for photos).
+let lastResultContentType = null;
+
+// Shared runner for frame-only edits that work on both videos and photos.
+async function runVisualEdit(operation, args, videoFileData, setVideoFileData, addMessage, label) {
+  try {
+    const data = await processVideoOnServer(operation, args || {}, videoFileData);
+    setVideoFileData(data);
+    const resultType = (lastResultContentType || 'video/mp4').split(';')[0].trim();
+    const isPhoto = resultType.startsWith('image/');
+    const url = URL.createObjectURL(new Blob([data], { type: resultType }));
+    addMessage({ text: `Processed ${isPhoto ? 'photo' : 'video'} (${label}):`, videoUrl: url, mimeType: resultType });
+    return `${label.charAt(0).toUpperCase()}${label.slice(1)} applied successfully.`;
+  } catch (error) {
+    addMessage({ text: `Error applying ${label}: ` + error.message });
+    return `Failed to apply ${label}: ` + error.message;
+  }
 }
 
 export const toolFunctions = {
@@ -869,6 +889,23 @@ export const toolFunctions = {
     }
   },
   
+  apply_color_filter: async (args, videoFileData, setVideoFileData, addMessage) => {
+    if (!args || !args.filter) {
+      addMessage({ text: 'Error applying color filter: filter is required' });
+      return 'Failed to apply color filter: filter is required';
+    }
+    return runVisualEdit('apply_color_filter', args, videoFileData, setVideoFileData, addMessage, `${args.filter} color filter`);
+  },
+
+  adjust_contrast: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('adjust_contrast', args, videoFileData, setVideoFileData, addMessage, 'contrast adjustment'),
+
+  flip_video_vertical: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('flip_video_vertical', args, videoFileData, setVideoFileData, addMessage, 'vertical flip'),
+
+  convert_image_format: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('convert_image_format', args, videoFileData, setVideoFileData, addMessage, `conversion to ${args?.format || 'image'}`),
+
   // Aliases for backward compatibility with tests
   adjust_audio_volume: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.adjust_volume(args, videoFileData, setVideoFileData, addMessage),

@@ -7,6 +7,7 @@ import {
   requireInferenceAccess,
 } from './middleware.js';
 import { enqueueChatInteraction, saveLesson } from '../db.js';
+import { PHOTO_SUPPORTED_OPS, PHOTO_OUTPUT_FORMATS, COLOR_FILTER_PRESETS } from './ffmpegOps.js';
 
 const router = express.Router();
 
@@ -126,7 +127,13 @@ export function flushStreamFilter(filter) {
 // ─── System prompt builder ───────────────────────────────────────────────────
 
 export function buildSystemMessage() {
+  const photoGuidance =
+    'The current media may be a video OR a photo (jpg, png, webp, heic). For a photo, only call frame edits (' +
+    PHOTO_SUPPORTED_OPS.join(', ') +
+    '); color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
+    'Never call trim, speed, audio, caption, or transition tools on a photo — explain they only apply to videos.\n\n';
   const outputContract =
+    photoGuidance +
     'When a request requires multiple edits, emit one tool call for each edit in the order they should be applied. The tool calls will be executed sequentially on the current media.\n\n' +
     'Always end your FINAL response (after any tool use is complete) with exactly this format:\n' +
     '- Answer:\n' +
@@ -408,6 +415,12 @@ router.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, requi
     },
     extract: {
       formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a']
+    },
+    image: {
+      inputFormats: ['jpg', 'png', 'webp', 'heic', 'gif', 'bmp', 'tiff'],
+      outputFormats: PHOTO_OUTPUT_FORMATS,
+      operations: PHOTO_SUPPORTED_OPS,
+      colorFilters: COLOR_FILTER_PRESETS,
     }
   });
 });
