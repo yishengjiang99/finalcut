@@ -63,6 +63,32 @@ need ≥ 7.1). If FFmpeg can't read the file, the server tries libheif's
 `heif-convert` CLI (`apt install libheif-examples`) and converts to JPEG first.
 If neither works the job returns `415` with a message asking for JPEG/PNG.
 
+### Production (FFmpeg 4.4.2, Ubuntu 22.04, no libheif)
+
+FFmpeg 4.4 has no HEIF demuxer, so **HEIC uploads currently return 415
+`unsupported_image_format` in prod**. To enable HEIC without upgrading FFmpeg, run
+`sudo apt install libheif-examples` (it provides `heif-convert`, which the server
+finds automatically), or upgrade to FFmpeg ≥ 7.1. `GET /api/health` shows the
+current state in `ffmpeg.heic` / `ffmpeg.heicVia`.
+
+## FFmpeg 4.4 compatibility
+
+Checked against a 4.4 static build (johnvansickle `4.4-static`, via the
+`ffmpeg-static` b4.4 release) with ffprobe 4.0.2:
+
+- Filters used: `colorchannelmixer` (rr..bb), `colorbalance` (rs/bs/rm/bm),
+  `eq` (brightness/contrast/saturation), `hue=h`, `curves=preset=vintage`, `negate`,
+  `transpose=clock|cclock`, `hflip`, `vflip`, `rotate` (ow/oh `rotw`/`roth`, `c=`),
+  `scale`, `crop`, `drawtext` (`expansion=none`, `fontcolor`). All exist in 4.4.
+  `colortemperature` also exists in 4.4 but is not used.
+- Output options: `-map 0:v:0 -frames:v 1 -update 1 -f image2` plus `-c:v mjpeg -q:v 2`,
+  `-c:v png`, or `-c:v libwebp -quality 90`. All are accepted by 4.4 and write a
+  single image file.
+- Input demuxers: `jpeg_pipe`, `png_pipe`, `webp_pipe`, `bmp_pipe`, `tiff_pipe`, `gif`.
+- Result: every photo op × color preset × jpg/png/webp input (87 combinations)
+  produced a valid image on 4.4 and on 7.1. The full `npm test` suite passes with
+  4.4 first on `PATH`. HEIC gives the expected 415 on 4.4.
+
 ## Video safety fix
 
 `trim_video` now parses `start`/`end` (seconds or `HH:MM:SS`), skips `-ss` when

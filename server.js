@@ -8,6 +8,7 @@ import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
 import { chatRouter } from './src/server/chat.js';
 import { jobsRouter } from './src/server/jobs.js';
+import { createHealthRouter } from './src/server/health.js';
 
 const app = express();
 
@@ -16,6 +17,10 @@ const app = express();
 if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
   app.set('trust proxy', 1);
 }
+
+// Health check first: no auth, no session, no rate limit, no quota.
+// ffmpeg + commit are probed once here at startup.
+app.use(createHealthRouter());
 
 // Initialize database
 try {
