@@ -135,6 +135,7 @@
 				FDF99BBA1B92461D91BDB465 /* FinalCutApp.swift */,
 				B364855EAC084A2C921B51CA /* ContentView.swift */,
 				20C48E7C3E9344C696A60148 /* Models */,
+				4E1A7C0E5B2D4F6A8C9D0E1F /* NativeEditing */,
 				DD18F136D60C47D9998EE31B /* Networking */,
 				11F090BD1B5F430B8644C27C /* Features */,
 				6571C841211B426E9DD9A1C4 /* Theme */,
@@ -143,6 +144,13 @@
 				01F8F90184F0448FAD35E158 /* Assets.xcassets */,
 			);
 			path = FinalCut;
+			sourceTree = "<group>";
+		};
+		4E1A7C0E5B2D4F6A8C9D0E1F /* NativeEditing */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = NativeEditing;
 			sourceTree = "<group>";
 		};
 		20C48E7C3E9344C696A60148 /* Models */ = {
