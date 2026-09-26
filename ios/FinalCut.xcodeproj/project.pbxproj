@@ -38,6 +38,10 @@
 		B42389843D64748BA79F2A3C /* ToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9722BFEDE8268FC1384863A0 /* ToolCatalog.swift */; };
 		1C91E72D0BE8A8E76AD6FFD8 /* EditRoutingAndMediaTypeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68C3D23240D4E22F930DAA98 /* EditRoutingAndMediaTypeTests.swift */; };
 		C20B004DB7D14DD01FB6F475 /* TopBarLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F556E1C2A830B96A1C5F84 /* TopBarLayoutTests.swift */; };
+		A21C3037F66A0718DA76217E /* EditErrorUX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ABE293A9D0687724353316E /* EditErrorUX.swift */; };
+		28C2D5C76EEF55CA22506028 /* PhotoTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2D87EEC6697B55F5CCC8A1 /* PhotoTranscoder.swift */; };
+		EAF7481D7F6387F416A288A6 /* PhotoLibrarySaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0046DC48A773DF8F5824962 /* PhotoLibrarySaver.swift */; };
+		28542D32807FA0E724E71D63 /* PhotoModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,6 +89,10 @@
 		9722BFEDE8268FC1384863A0 /* ToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCatalog.swift; sourceTree = "<group>"; };
 		68C3D23240D4E22F930DAA98 /* EditRoutingAndMediaTypeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditRoutingAndMediaTypeTests.swift; sourceTree = "<group>"; };
 		D8F556E1C2A830B96A1C5F84 /* TopBarLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopBarLayoutTests.swift; sourceTree = "<group>"; };
+		1ABE293A9D0687724353316E /* EditErrorUX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditErrorUX.swift; sourceTree = "<group>"; };
+		DF2D87EEC6697B55F5CCC8A1 /* PhotoTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTranscoder.swift; sourceTree = "<group>"; };
+		A0046DC48A773DF8F5824962 /* PhotoLibrarySaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibrarySaver.swift; sourceTree = "<group>"; };
+		30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoModeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +150,8 @@
 		20C48E7C3E9344C696A60148 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				DF2D87EEC6697B55F5CCC8A1 /* PhotoTranscoder.swift */,
+				1ABE293A9D0687724353316E /* EditErrorUX.swift */,
 				9722BFEDE8268FC1384863A0 /* ToolCatalog.swift */,
 				617E9A5E82952DBB9B6A0061 /* MediaMIME.swift */,
 				E8402916397845F3B4C09078 /* EditorState.swift */,
@@ -201,6 +211,7 @@
 		0DC3C8A5EDC24D8FAE8CC12B /* Export */ = {
 			isa = PBXGroup;
 			children = (
+				A0046DC48A773DF8F5824962 /* PhotoLibrarySaver.swift */,
 				2A775571821445ABA7BF61C5 /* ExportSheet.swift */,
 			);
 			path = Export;
@@ -218,6 +229,7 @@
 			isa = PBXGroup;
 			children = (
 				D8F556E1C2A830B96A1C5F84 /* TopBarLayoutTests.swift */,
+				30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */,
 				68C3D23240D4E22F930DAA98 /* EditRoutingAndMediaTypeTests.swift */,
 				428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */,
 				F0583706C16045F3940B2A04 /* VideoImportTests.swift */,
@@ -334,6 +346,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EAF7481D7F6387F416A288A6 /* PhotoLibrarySaver.swift in Sources */,
+				28C2D5C76EEF55CA22506028 /* PhotoTranscoder.swift in Sources */,
+				A21C3037F66A0718DA76217E /* EditErrorUX.swift in Sources */,
 				B42389843D64748BA79F2A3C /* ToolCatalog.swift in Sources */,
 				15AC9EC9A6D6A05184D299B0 /* MediaMIME.swift in Sources */,
 				08B2347A4DD41246349469D9 /* ClientChat.swift in Sources */,
@@ -367,6 +382,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C20B004DB7D14DD01FB6F475 /* TopBarLayoutTests.swift in Sources */,
+				28542D32807FA0E724E71D63 /* PhotoModeTests.swift in Sources */,
 				1C91E72D0BE8A8E76AD6FFD8 /* EditRoutingAndMediaTypeTests.swift in Sources */,
 				876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */,
 				F0583706C16045F3940B2A03 /* VideoImportTests.swift in Sources */,
@@ -435,8 +451,8 @@
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save exported videos to your library.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import videos to edit in FinalCut.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save your edited photos and videos to your library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import photos and videos to edit in FinalCap.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -469,8 +485,8 @@
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save exported videos to your library.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import videos to edit in FinalCut.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save your edited photos and videos to your library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Import photos and videos to edit in FinalCap.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
