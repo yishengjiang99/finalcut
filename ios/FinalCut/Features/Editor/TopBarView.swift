@@ -13,12 +13,17 @@ struct TopBarView: View {
     /// Remaining free requests today (shown subtly next to Upgrade when known).
     var freeRemaining: Int?
 
+    /// Single ~44 pt row; the Upgrade capsule never wraps, the free-count label gives way first.
+    static let rowHeight: CGFloat = 44
+
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Text("FinalCap")
                 .font(.headline)
                 .foregroundStyle(AppTheme.textPrimary)
-            Spacer()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 4)
 
             PhotosPicker(
                 selection: $photosPickerItem,
@@ -27,46 +32,87 @@ struct TopBarView: View {
             ) {
                 Text("Import")
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .disabled(!importEnabled)
             .accessibilityLabel("Import")
             .accessibilityHint("Choose a video from Photos")
 
             if exportVisible {
-                Button("Export", action: onExport)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .disabled(!exportEnabled)
+                Button(action: onExport) {
+                    Text("Export")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .foregroundStyle(AppTheme.accent)
+                .disabled(!exportEnabled)
             }
 
             if showUpgrade {
-                HStack(spacing: 6) {
-                    if let freeRemaining {
-                        Text("\(max(freeRemaining, 0)) free left")
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .accessibilityLabel("\(max(freeRemaining, 0)) free edits left today")
-                    }
-                    Button(action: onUpgrade) {
-                        Label("Upgrade", systemImage: "crown.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(AppTheme.accent)
-                            .clipShape(Capsule())
-                    }
-                    .accessibilityIdentifier("Upgrade")
+                if let freeRemaining {
+                    FreeRemainingLabel(count: max(freeRemaining, 0))
+                        .layoutPriority(-1)
                 }
+                UpgradeCapsuleButton(action: onUpgrade)
+                    .layoutPriority(1)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .frame(minHeight: Self.rowHeight)
         .background(AppTheme.surface)
         .overlay(alignment: .bottom) {
             Rectangle().fill(AppTheme.border).frame(height: 1)
         }
+        // Keep the chrome one row: Dynamic Type is honoured up to .xLarge here.
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .accessibilityIdentifier("TopBar")
+    }
+}
+
+/// Compact crown + "Upgrade" capsule (never wraps).
+struct UpgradeCapsuleButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "crown.fill")
+                Text("Upgrade")
+            }
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .foregroundStyle(.black)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(AppTheme.accent)
+            .clipShape(Capsule())
+        }
+        .accessibilityIdentifier("Upgrade")
+    }
+}
+
+/// "N free left", shrinking first and falling back to "N left" when space is tight.
+struct FreeRemainingLabel: View {
+    var count: Int
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            label("\(count) free left")
+            label("\(count) left")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(count) free edits left today")
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(AppTheme.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
     }
 }
 
