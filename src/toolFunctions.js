@@ -287,6 +287,10 @@ export const toolFunctions = {
       if (args.duration === null || args.duration === undefined || args.duration <= 0) {
         throw new Error('Duration must be a positive number');
       }
+      if (args.start !== null && args.start !== undefined
+        && (typeof args.start !== 'number' || !Number.isFinite(args.start) || args.start < 0)) {
+        throw new Error('Start must be a non-negative number of seconds');
+      }
 
       const data = await processVideoOnServer('audio_fade', args, videoFileData);
       setVideoFileData(data); // Update video data for subsequent edits

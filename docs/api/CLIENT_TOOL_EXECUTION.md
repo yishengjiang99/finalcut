@@ -34,6 +34,17 @@ change is breaking and run `npm run schema:tools`.
 `arguments` in tool calls have exactly the shape of these function parameters (the
 same objects the web `toolFunctions.js` receive).
 
+Additive, optional parameters are added within schemaVersion `"1"`; clients must ignore
+properties they don't know. Additions so far:
+
+- `audio_fade.start` (number of seconds, `minimum: 0`, optional): where the fade begins,
+  measured from the start of the clip. The fade runs from `start` to `start + duration`. For a
+  fade-in the audio is silent before `start`; for a fade-out it is silent after
+  `start + duration`. If omitted, a fade-in starts at `0` and a fade-out starts at
+  `max(0, clip length - duration)`, so it ends at the end of the clip. A negative or
+  non-numeric value returns **400** `{ "code": "invalid_arguments" }` from
+  `POST /api/process-video` and `POST /api/jobs/process-video`.
+
 ## 1. First turn
 
 ```http
