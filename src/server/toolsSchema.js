@@ -2,6 +2,7 @@
 // Bump TOOLS_SCHEMA_VERSION and regenerate docs/api/tools-schema.v<N>.json
 // (`npm run schema:tools`) whenever src/tools.js changes in a way clients must know about.
 import { tools } from '../tools.js';
+import { filterToolsForUserAgent } from './iosToolAllowlist.js';
 
 export const TOOLS_SCHEMA_VERSION = '1';
 
@@ -32,14 +33,19 @@ export function mediaTypesForTool(name) {
   return ['video'];
 }
 
-export function buildToolsSchema() {
+/**
+ * The versioned tool schema. With a FinalCap-iOS `userAgent`, `tools` and `mediaTypes`
+ * contain only that build's allowlisted tools; otherwise (and with no argument) all tools.
+ */
+export function buildToolsSchema({ userAgent } = {}) {
+  const offered = filterToolsForUserAgent(tools, userAgent);
   const mediaTypes = {};
-  for (const tool of tools) {
+  for (const tool of offered) {
     mediaTypes[tool.function.name] = mediaTypesForTool(tool.function.name);
   }
   return {
     schemaVersion: TOOLS_SCHEMA_VERSION,
-    tools,
+    tools: offered,
     mediaTypes,
   };
 }

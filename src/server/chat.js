@@ -22,9 +22,11 @@ import {
   parseThumbnails,
   skippedToolsInTurn,
   toClientToolCalls,
+  unsupportedToolsInTurn,
   validateMedia,
 } from './clientExecution.js';
-import { isIosClient } from './clientInfo.js';
+import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
+import { filterToolsForUserAgent } from './iosToolAllowlist.js';
 
 const router = express.Router();
 
@@ -206,6 +208,29 @@ function enqueueChatError({ userId, message, source, requestMessageCount, metada
   });
 }
 
+// ─── FinalCap-iOS tool allowlist (streaming mode) ────────────────────────────
+
+/**
+ * For a FinalCap-iOS User-Agent, keep only allowlisted client-sent `tools` (dropping `tools`
+ * and `tool_choice` when none remain, or when tool_choice names a removed tool).
+ * Any other UA gets the body back untouched (same object), so the web request is unchanged.
+ */
+export function restrictStreamingBodyForIos(body, userAgent) {
+  if (!parseFinalCapIosUserAgent(userAgent).isFinalCapIos) return body;
+  if (!('tools' in body) && !('tool_choice' in body)) return body;
+  const next = { ...body };
+  const tools = filterToolsForUserAgent(Array.isArray(body.tools) ? body.tools : [], userAgent);
+  if (tools.length) {
+    next.tools = tools;
+    const forced = body.tool_choice?.function?.name;
+    if (forced && !tools.some(t => t.function.name === forced)) delete next.tool_choice;
+  } else {
+    delete next.tools;
+    delete next.tool_choice;
+  }
+  return next;
+}
+
 // ─── Client-execution mode (tools run on the device) ─────────────────────────
 
 /** Strip the "Answer:" heading and hidden "Lesson:" section from a final reply. */
@@ -257,15 +282,21 @@ async function handleClientExecution(req, res, userId) {
   const thumbnailsAsImages = thumbnails.length > 0 && modelSupportsVision(model);
   const rounds = countToolRounds(conversation);
   const skippedTools = skippedToolsInTurn(conversation);
+  const unsupportedTools = unsupportedToolsInTurn(conversation);
   const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
 
-  const offeredTools = toolsForMediaType(media?.type).filter(t => !skippedTools.includes(t.function.name));
+  // FinalCap-iOS UA → only allowlisted on-device tools; any other UA → unchanged.
+  const offeredTools = filterToolsForUserAgent(toolsForMediaType(media?.type), req.get('user-agent'))
+    .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
   const contextLines = [
     CLIENT_EXECUTION_INSTRUCTIONS,
     mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
   ];
   if (skippedTools.length) {
     contextLines.push(`The user declined these steps this turn (not failures): ${skippedTools.join(', ')}. Do not call them again in this turn.`);
+  }
+  if (unsupportedTools.length) {
+    contextLines.push(`These edits are not available on the phone yet: ${unsupportedTools.join(', ')}. Do not call them again in this turn; briefly tell the user they are not available on the phone yet.`);
   }
   if (roundCapReached) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
@@ -356,7 +387,9 @@ async function handleClientExecution(req, res, userId) {
 
   const rawText = typeof choice.content === 'string' ? choice.content : '';
   const message = cleanFinalText(rawText)
-    || (skippedTools.length ? 'Okay — I skipped the steps you declined.' : 'Done.');
+    || (unsupportedTools.length
+      ? 'Sorry, that edit isn\'t available on the phone yet.'
+      : (skippedTools.length ? 'Okay — I skipped the steps you declined.' : 'Done.'));
   enqueueChatInteraction({
     userId,
     interactionType: 'ai2human',
@@ -430,12 +463,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
-      body: JSON.stringify({
+      body: JSON.stringify(restrictStreamingBodyForIos({
         ...req.body,
         messages: [systemMessage, ...req.body.messages],
         model: 'grok-3', // Specify the new model here
         stream: true // Enable streaming
-      })
+      }, req.get('user-agent')))
     });
 
     if (!response.ok) {
@@ -607,9 +640,11 @@ router.post('/api/chat-error', apiLimiter, requireAuthenticatedUser, requireActi
 });
 
 // Versioned tool-schema contract for native clients (static; no quota).
+// FinalCap-iOS UAs get only their allowlisted tools (same schemaVersion); others get all.
 router.get('/api/tools/schema', apiLimiter, (req, res) => {
   res.set('Cache-Control', 'public, max-age=300');
-  res.json(buildToolsSchema());
+  res.set('Vary', 'User-Agent');
+  res.json(buildToolsSchema({ userAgent: req.get('user-agent') }));
 });
 
 // Supported formats introspection endpoint

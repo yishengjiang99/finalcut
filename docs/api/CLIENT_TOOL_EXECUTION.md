@@ -47,6 +47,42 @@ properties they don't know. Additions so far:
   non-numeric value returns **400** `{ "code": "invalid_arguments" }` from
   `POST /api/process-video` and `POST /api/jobs/process-video`.
 
+## iOS User-Agent and tool allowlist
+
+The server decides which tools the FinalCap iOS app gets. The app sends no capability
+list. It identifies itself with its User-Agent:
+
+```
+User-Agent: FinalCap-iOS/<build>        e.g. FinalCap-iOS/10   (build = CFBundleVersion, integer)
+```
+
+The rule lives in `src/server/iosToolAllowlist.js` (`IOS_TOOL_ALLOWLIST`, `{ toolName: minBuild }`), with UA
+parsing in `src/server/clientInfo.js` (`^FinalCap-iOS/(\d+)`). For a UA starting with
+`FinalCap-iOS`:
+
+- A tool is offered only if it is on the allowlist **and** `build >= minBuild`, intersected
+  with the tools valid for `media.type`.
+- A missing or unparseable build (`FinalCap-iOS`, `FinalCap-iOS/abc`) or a build older than
+  every entry gets **no** tools. It never falls back to the full list.
+- Device-limited arguments are narrowed in the offered definitions: `convert_video_format.format`
+  ∈ `mp4|mov`, `convert_image_format.format` ∈ `jpg|png`, `adjust_speed.speed` 0.25–4.
+
+This applies to `POST /api/chat` in every mode (client mode: the offered `tools`; default
+streaming mode: client-sent `tools` are filtered, and `tools`/`tool_choice` are dropped when none
+remain). It also applies to `GET /api/tools/schema`, which returns the filtered `tools` and `mediaTypes`
+with the same `schemaVersion: "1"` and `Vary: User-Agent`.
+
+Any other UA gets all 46 tools exactly as before. That includes web browsers and iOS build 9 and
+earlier, which send the default `FinalCap/<build> CFNetwork/…` UA and still upload to the server.
+The web request is byte-for-byte unchanged.
+
+Allowlist for build 10 (from `docs/ios/native-tools.md`, "iOS allowlist (build 10)"), all
+`minBuild: 10`: trim_video, adjust_speed, crop_video, rotate_video, flip_video_horizontal,
+flip_video_vertical, resize_video, resize_video_preset, adjust_brightness, adjust_contrast,
+adjust_saturation, adjust_hue, apply_color_filter, add_text, adjust_audio_volume, audio_fade,
+get_video_dimensions, get_supported_formats, convert_video_format, convert_image_format. To ship a
+tool on device in a later build, add `tool_name: <build>` to the allowlist.
+
 ## 1. First turn
 
 ```http
@@ -141,6 +177,24 @@ This is treated as an intentional choice, **not a failure**. In the current user
 - the system context lists the declined tools;
 - the declined tool is removed from the offered tools, and any re-call of it is dropped.
   The model continues with the remaining steps and then gives the final answer.
+
+## Tools the phone can't run (`unsupported_on_device`)
+
+This is a safety net behind the allowlist. If the device gets a call it can't execute, return
+
+```json
+{ "role": "tool", "tool_call_id": "call_1",
+  "content": { "ok": false, "code": "unsupported_on_device", "executedOn": "device" } }
+```
+
+The documented field is **`code`**, matching the server error codes. For tolerance, `error` or
+`reason` with the same value are also accepted (build 10 sends `error`). In the current user turn:
+
+- the tool message is annotated with `unsupportedOnDevice: true` and a note telling the model
+  not to call or retry that tool and to tell the user briefly that the edit isn't available on the phone yet;
+- the system context lists those tools;
+- the tool is removed from the offered tools, and any re-call of it is dropped. If the final
+  reply is empty, `message` is "Sorry, that edit isn't available on the phone yet."
 
 ## Loop cap
 

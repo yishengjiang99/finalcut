@@ -13,6 +13,8 @@ export const MAX_THUMBNAIL_BYTES = 300 * 1024;
 export const MAX_TOOL_ROUNDS = 6;
 /** Tool-result error code meaning the user declined the step on device (not a failure). */
 export const SKIPPED_BY_USER = 'skipped_by_user';
+/** Tool-result code meaning the device cannot run this tool (safety net for the UA allowlist). */
+export const UNSUPPORTED_ON_DEVICE = 'unsupported_on_device';
 
 export class ClientRequestError extends Error {
   constructor(message, status = 400) {
@@ -136,6 +138,8 @@ export const CLIENT_EXECUTION_INSTRUCTIONS =
   'If ok is false, explain the error or try an alternative; do not repeat the same failing call. ' +
   'error "skipped_by_user" means the user deliberately declined that step: it is not a failure, ' +
   'do not call that tool again in this turn, and continue to the final answer. ' +
+  'code "unsupported_on_device" means the phone cannot run that edit yet: do not call that tool again ' +
+  'in this turn, and briefly tell the user that edit is not available on the phone yet. ' +
   'Use output metadata (duration, width, height) from earlier results when planning later edits.';
 
 function contentToString(content) {
@@ -226,19 +230,40 @@ export function isSkippedByUser(result) {
 }
 
 /**
- * Rewrite a `skipped_by_user` tool result so the model reads it as an intentional
- * user decision (not a failure) and does not retry the same tool this turn.
+ * `{ ok:false, code:"unsupported_on_device" }`. `code` is the documented field (like the
+ * server error codes); `reason` and `error` are accepted for tolerance.
+ */
+export function isUnsupportedOnDevice(result) {
+  return Boolean(result) && result.ok === false
+    && [result.code, result.reason, result.error].includes(UNSUPPORTED_ON_DEVICE);
+}
+
+/**
+ * Rewrite a `skipped_by_user` / `unsupported_on_device` tool result so the model reads it
+ * correctly (a user decision / a device limitation, not a failure) and does not retry the
+ * same tool this turn. Other results pass through unchanged.
  */
 export function annotateToolResult(content, toolName) {
   const result = parseToolResult(content);
-  if (!isSkippedByUser(result)) return content;
   const name = toolName || 'this tool';
-  return JSON.stringify({
-    ...result,
-    skipped: true,
-    note: `The user intentionally skipped this step (${name}). This is NOT a failure — do not apologize or retry. ` +
-      `Do not call ${name} again in this turn; continue with any remaining steps and then give the final answer.`,
-  });
+  if (isSkippedByUser(result)) {
+    return JSON.stringify({
+      ...result,
+      skipped: true,
+      note: `The user intentionally skipped this step (${name}). This is NOT a failure — do not apologize or retry. ` +
+        `Do not call ${name} again in this turn; continue with any remaining steps and then give the final answer.`,
+    });
+  }
+  if (isUnsupportedOnDevice(result)) {
+    return JSON.stringify({
+      ...result,
+      unsupportedOnDevice: true,
+      note: `This edit (${name}) is not available on the phone yet, so nothing was changed. Do not call ${name} ` +
+        'again in this turn and do not retry it with other arguments. Briefly tell the user this edit is not ' +
+        'available on the phone yet, continue with any remaining steps, and then give the final answer.',
+    });
+  }
+  return content;
 }
 
 /** Messages after the most recent user message (the current turn's tool loop). */
@@ -260,17 +285,26 @@ export function countOkToolResultsInTurn(messages) {
     .filter(m => m.role === 'tool' && parseToolResult(m.content)?.ok === true).length;
 }
 
-/** Tool names the user skipped in the current turn (from `skipped_by_user` results). */
-export function skippedToolsInTurn(messages) {
+function toolsInTurnMatching(messages, predicate) {
   const turn = currentTurn(messages);
-  const skipped = new Set();
+  const names = new Set();
   for (const m of turn) {
     if (m.role !== 'tool') continue;
-    if (!isSkippedByUser(parseToolResult(m.content))) continue;
+    if (!predicate(parseToolResult(m.content))) continue;
     const name = toolNameForCall(messages, m.tool_call_id);
-    if (name) skipped.add(name);
+    if (name) names.add(name);
   }
-  return [...skipped];
+  return [...names];
+}
+
+/** Tool names the user skipped in the current turn (from `skipped_by_user` results). */
+export function skippedToolsInTurn(messages) {
+  return toolsInTurnMatching(messages, isSkippedByUser);
+}
+
+/** Tool names the device reported as `unsupported_on_device` in the current turn. */
+export function unsupportedToolsInTurn(messages) {
+  return toolsInTurnMatching(messages, isUnsupportedOnDevice);
 }
 
 /** Map model tool_calls to the client contract `{ id, name, arguments }` (arguments parsed). */
