@@ -623,6 +623,10 @@ struct APIErrorPayload: Decodable, Equatable {
     var error: String?
     var code: String?
     var message: String?
+    /// Backend #88 extras (`unsupported_for_photo` / `unsupported_image_format`).
+    var operation: String?
+    var mediaType: String?
+    var format: String?
 }
 
 enum APIError: Error, LocalizedError, Equatable {
@@ -638,19 +642,40 @@ enum APIError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .httpStatus(let code, let body):
-            return "HTTP \(code)" + (body.map { ": \($0)" } ?? "")
+        case .httpStatus:
+            // Never surface the raw server body/`error` text (NATIVE_EDIT_UX.md §8).
+            return serverFailureKind.copy
         case .decoding:
-            return "Failed to decode response"
+            return UXCopy.generic
         case .message(let text):
             return text
         case .noSpeechDetected:
             return "no speech"
-        case .paywallRequired(let message):
-            return message ?? "Free limit reached — upgrade to keep editing"
+        case .paywallRequired:
+            return "Free limit reached — upgrade to keep editing"
         case .clientModeUnavailable:
             return "The editing assistant is updating. Try again in a few minutes."
         }
+    }
+
+    /// Stable `code` from a non-2xx JSON body (Backend #88), lowercased. Nil when absent.
+    var serverCode: String? {
+        guard case .httpStatus(_, let body) = self, let body, let data = body.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(APIErrorPayload.self, from: data) else { return nil }
+        return payload.code?.lowercased()
+    }
+
+    /// HTTP status for `.httpStatus`, nil otherwise.
+    var httpStatusCode: Int? {
+        if case .httpStatus(let status, _) = self { return status }
+        return nil
+    }
+
+    /// UI treatment for this error, chosen from the stable code only.
+    var serverFailureKind: EditFailureKind {
+        if let serverCode { return EditFailureKind.from(code: serverCode) }
+        if httpStatusCode == 415 { return .unsupportedImageFormat }
+        return .generic
     }
 
     /// True when the server says the free limit is used up (present Paywall, not a failure).

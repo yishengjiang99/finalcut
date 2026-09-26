@@ -92,6 +92,14 @@ enum ToolCatalog {
     /// Tools the jobs API cannot run for iOS yet (secondary inputs / multi-clip).
     static let unavailableOnIOS: Set<String> = ["add_audio_track", "add_video_transition"]
 
+    /// Server operations that accept photos (docs/PHOTO_SUPPORT.md). Everything else on a
+    /// photo is answered locally with `unsupported_for_photo` without uploading.
+    static let photoSupportedOperations: Set<String> = [
+        "resize_video", "crop_video", "rotate_video", "flip_video_horizontal", "flip_video_vertical",
+        "add_text", "adjust_brightness", "adjust_contrast", "adjust_hue", "adjust_saturation",
+        "apply_color_filter", "convert_image_format",
+    ]
+
     static func canonicalName(_ name: String) -> String {
         aliases[name] ?? name
     }
@@ -126,7 +134,25 @@ enum ToolCatalog {
 
     /// Decide how to execute a model tool call. `mediaDuration` (seconds) lets us fill
     /// `audio_fade.start`, which the server reads but the schema doesn't expose.
-    static func plan(tool rawName: String, arguments: [String: JSONValue], mediaDuration: Double? = nil) -> Plan {
+    static func plan(
+        tool rawName: String,
+        arguments: [String: JSONValue],
+        mediaDuration: Double? = nil,
+        isPhoto: Bool = false
+    ) -> Plan {
+        let plan = basePlan(tool: rawName, arguments: arguments, mediaDuration: mediaDuration)
+        guard isPhoto else { return plan }
+        switch plan {
+        case .serverJob(let operation, _) where !photoSupportedOperations.contains(operation):
+            return .reject(error: ServerErrorCode.unsupportedForPhoto)
+        case .captions:
+            return .reject(error: ServerErrorCode.unsupportedForPhoto)
+        default:
+            return plan
+        }
+    }
+
+    private static func basePlan(tool rawName: String, arguments: [String: JSONValue], mediaDuration: Double?) -> Plan {
         let tool = canonicalName(rawName)
         guard requiredArgs[tool] != nil else { return .reject(error: "unknown_tool") }
         let missing = missingRequiredArgs(tool: tool, arguments: arguments)
@@ -183,9 +209,26 @@ enum EditorRoute: Equatable {
         "Trim silence",
     ]
 
+    /// Photo-safe chips (NATIVE_EDIT_UX.md §7).
+    static let photoChips = [
+        "Make it warm",
+        "Black and white",
+        "More contrast",
+    ]
+
+    static func chips(isPhoto: Bool) -> [String] {
+        isPhoto ? photoChips : sampleChips
+    }
+
     static func route(for text: String) -> EditorRoute {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         switch trimmed.lowercased() {
+        case "make it warm":
+            return .tool(name: "apply_color_filter", arguments: ["filter": .string("warm")])
+        case "black and white":
+            return .tool(name: "apply_color_filter", arguments: ["filter": .string("grayscale")])
+        case "more contrast":
+            return .tool(name: "adjust_contrast", arguments: ["contrast": .number(1.3)])
         case "generate captions":
             return .captions(.generate)
         case "translate to spanish":

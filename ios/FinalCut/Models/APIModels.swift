@@ -70,6 +70,8 @@ struct JobPollResponse: Codable, Equatable {
     var contentType: String?
     /// "image" for photos, "video" otherwise (Backend #82).
     var mediaType: String?
+    /// Stable error code on `failed` jobs (Backend #88), e.g. `unsupported_image_format`.
+    var code: String?
     var operation: String?
     var createdAt: String?
     var updatedAt: String?

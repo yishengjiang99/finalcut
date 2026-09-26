@@ -2,13 +2,15 @@ import SwiftUI
 
 struct ChatView: View {
     var messages: [ChatMessage]
+    /// Retry for generic failed edit cards (resends the card's prompt).
+    var onRetry: ((EditFailureCard) -> Void)? = nil
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if messages.isEmpty {
-                        Text("Import a video, then describe an edit — e.g. “Generate captions”.")
+                        Text("Import a photo or video, then describe an edit — e.g. “Generate captions”.")
                             .font(.footnote)
                             .foregroundStyle(AppTheme.textSecondary)
                             .frame(maxWidth: .infinity)
@@ -38,12 +40,16 @@ struct ChatView: View {
         HStack {
             if message.role == .user { Spacer(minLength: 40) }
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
+                if let card = message.failureCard {
+                    failureCardView(card)
+                } else {
                 Text(message.content)
                     .font(.body)
                     .foregroundStyle(AppTheme.textPrimary)
                     .padding(12)
                     .background(bubbleColor(for: message.role))
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                }
 
                 if !message.downloadChips.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -89,6 +95,33 @@ struct ChatView: View {
             }
             if message.role != .user { Spacer(minLength: 40) }
         }
+    }
+
+    /// Failed edit card: fixed copy only, Retry only for generic failures.
+    private func failureCardView(_ card: EditFailureCard) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(AppTheme.danger)
+                Text(card.copy)
+                    .font(.body)
+                    .foregroundStyle(AppTheme.textPrimary)
+            }
+            if card.showsRetry, let onRetry {
+                Button(UXCopy.retry) { onRetry(card) }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .accessibilityIdentifier("EditFailureRetry")
+            }
+        }
+        .padding(12)
+        .background(AppTheme.surfaceElevated)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                .stroke(AppTheme.danger.opacity(0.6), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+        .accessibilityIdentifier("EditFailureCard")
     }
 
     private func bubbleColor(for role: ChatMessage.Role) -> Color {
