@@ -252,8 +252,7 @@ export async function updateUserAppleSubscription(userId, hasSubscription, subsc
   );
 }
 
-export async function getDailyInferenceUsage(userId, dailyLimit) {
-  const pool = getPool();
+export async function getDailyInferenceUsage(userId, dailyLimit, { pool = getPool() } = {}) {
   const [rows] = await pool.query(
     `SELECT inference_count AS used,
        DATE_ADD(UTC_DATE(), INTERVAL 1 DAY) AS resets_at
@@ -270,18 +269,46 @@ export async function getDailyInferenceUsage(userId, dailyLimit) {
   };
 }
 
-export async function consumeDailyInference(userId, dailyLimit) {
-  const pool = getPool();
-  if (dailyLimit <= 0) return { ...(await getDailyInferenceUsage(userId, dailyLimit)), allowed: false };
+/**
+ * Atomically take one inference from today's (UTC) free quota. Returns usage + `allowed`.
+ *
+ * 1. `INSERT IGNORE` creates today's row at 0 (no-op when it exists).
+ * 2. `UPDATE … SET inference_count = inference_count + 1 WHERE … AND inference_count < limit`.
+ *    The row lock serializes concurrent requests and the WHERE re-checks the count, so at most
+ *    `limit` calls succeed per day. `allowed` is `affectedRows === 1` on that UPDATE: because the
+ *    limit is in the WHERE clause, matched rows == changed rows, so this holds with or without
+ *    CLIENT_FOUND_ROWS (mysql2 enables it by default).
+ *
+ * The previous single upsert (`ON DUPLICATE KEY UPDATE inference_count = IF(…)`) reported
+ * affectedRows = 1 for an unchanged row under FOUND_ROWS, so the limit was never enforced.
+ * If the UPDATE matches nothing because UTC midnight passed between the two statements,
+ * it retries once on the new day's row.
+ */
+export async function consumeDailyInference(userId, dailyLimit, { pool = getPool() } = {}) {
+  if (dailyLimit <= 0) return { ...(await getDailyInferenceUsage(userId, dailyLimit, { pool })), allowed: false };
 
-  const [result] = await pool.query(
-    `INSERT INTO daily_inference_usage (user_id, usage_date, inference_count)
-     VALUES (?, UTC_DATE(), 1)
-     ON DUPLICATE KEY UPDATE inference_count = IF(inference_count < ?, inference_count + 1, inference_count)`,
-    [userId, dailyLimit]
-  );
-  const usage = await getDailyInferenceUsage(userId, dailyLimit);
-  return { ...usage, allowed: result.affectedRows > 0 };
+  let allowed = false;
+  for (let attempt = 0; attempt < 2 && !allowed; attempt += 1) {
+    await pool.query(
+      `INSERT IGNORE INTO daily_inference_usage (user_id, usage_date, inference_count)
+       VALUES (?, UTC_DATE(), 0)`,
+      [userId]
+    );
+    const [result] = await pool.query(
+      `UPDATE daily_inference_usage
+       SET inference_count = inference_count + 1
+       WHERE user_id = ? AND usage_date = UTC_DATE() AND inference_count < ?`,
+      [userId, dailyLimit]
+    );
+    allowed = result.affectedRows === 1;
+    if (!allowed) {
+      // At the limit (normal denial) unless today's row is missing (midnight rollover): retry once.
+      const usage = await getDailyInferenceUsage(userId, dailyLimit, { pool });
+      if (usage.used >= dailyLimit) return { ...usage, allowed: false };
+    }
+  }
+  const usage = await getDailyInferenceUsage(userId, dailyLimit, { pool });
+  return { ...usage, allowed };
 }
 
 /**
@@ -289,8 +316,7 @@ export async function consumeDailyInference(userId, dailyLimit) {
  * FREE_EDITS_IOS=unlimited), so usage numbers keep accumulating in daily_inference_usage.
  * Returns the day's count.
  */
-export async function recordDailyInference(userId) {
-  const pool = getPool();
+export async function recordDailyInference(userId, { pool = getPool() } = {}) {
   await pool.query(
     `INSERT INTO daily_inference_usage (user_id, usage_date, inference_count)
      VALUES (?, UTC_DATE(), 1)
