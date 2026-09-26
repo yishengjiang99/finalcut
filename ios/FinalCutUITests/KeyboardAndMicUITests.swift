@@ -17,9 +17,11 @@ final class KeyboardAndMicUITests: XCTestCase {
         XCTAssertTrue(loaded, "sample clip loaded (video chips visible)")
     }
 
+    /// The composer, by its placeholder (the player's timecode can also surface as a TextView).
     private var field: XCUIElement {
-        let textView = app.textViews.firstMatch
-        return textView.exists ? textView : app.textFields.firstMatch
+        let composer = NSPredicate(format: "placeholderValue == %@", "Describe an edit…")
+        let textField = app.textFields.matching(composer).firstMatch
+        return textField.exists ? textField : app.textViews.matching(composer).firstMatch
     }
 
     /// Taps into the composer and waits for focus (retrying once: the first tap can land while
