@@ -66,6 +66,9 @@ parsing in `src/server/clientInfo.js` (`^FinalCap-iOS/(\d+)`). For a UA starting
   every entry gets **no** tools. It never falls back to the full list.
 - Device-limited arguments are narrowed in the offered definitions: `convert_video_format.format`
   ∈ `mp4|mov`, `convert_image_format.format` ∈ `jpg|png`, `adjust_speed.speed` 0.25–4.
+  `generate_captions` has no `translate_language` (no on-device translator), and its
+  description and `position`/`burn_in` text describe on-device speech and burn-in instead of the
+  server/FFmpeg pipeline. `language`, `style`, `position` and `burn_in` are unchanged otherwise.
 
 This applies to `POST /api/chat` in every mode (client mode: the offered `tools`; default
 streaming mode: client-sent `tools` are filtered, and `tools`/`tool_choice` are dropped when none
@@ -80,8 +83,10 @@ Allowlist for build 10 (from `docs/ios/native-tools.md`, "iOS allowlist (build 1
 `minBuild: 10`: trim_video, adjust_speed, crop_video, rotate_video, flip_video_horizontal,
 flip_video_vertical, resize_video, resize_video_preset, adjust_brightness, adjust_contrast,
 adjust_saturation, adjust_hue, apply_color_filter, add_text, adjust_audio_volume, audio_fade,
-get_video_dimensions, get_supported_formats, convert_video_format, convert_image_format. To ship a
-tool on device in a later build, add `tool_name: <build>` to the allowlist.
+get_video_dimensions, get_supported_formats, convert_video_format, convert_image_format, plus
+**generate_captions** (on-device speech, no translation). That's 21 tools. `translate_captions` and
+`burn_subtitles` are not tools the model sees and are not allowlisted. To ship a tool on device in
+a later build, add `tool_name: <build>` to the allowlist.
 
 ## 1. First turn
 

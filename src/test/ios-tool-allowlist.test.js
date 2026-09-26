@@ -165,13 +165,15 @@ describe('allowlist thresholds', () => {
     expect(tools).toHaveLength(46);
   });
 
-  it('seed: exactly the "iOS allowlist (build 10)" block in docs/ios/native-tools.md, at minBuild 10', () => {
+  it('seed: the "iOS allowlist (build 10)" block in docs/ios/native-tools.md + generate_captions, at minBuild 10', () => {
     const doc = readFileSync(path.join(here, '..', '..', 'docs', 'ios', 'native-tools.md'), 'utf8');
     const section = doc.slice(doc.indexOf('## iOS allowlist (build 10)'));
     const block = section.slice(section.indexOf('```') + 3, section.indexOf('```', section.indexOf('```') + 3));
     const documented = block.split('\n').map(l => l.trim()).filter(Boolean);
     expect(documented).toHaveLength(20);
-    expect([...allowlisted].sort()).toEqual([...documented].sort());
+    expect([...allowlisted].sort()).toEqual([...documented, 'generate_captions'].sort());
+    expect(allowlisted).toHaveLength(21);
+    for (const serverOnly of ['translate_captions', 'burn_subtitles']) expect(allowlisted).not.toContain(serverOnly);
     for (const name of allowlisted) {
       expect(names(tools)).toContain(name);
       expect(IOS_TOOL_ALLOWLIST[name]).toBe(10);
@@ -189,6 +191,15 @@ describe('allowlist thresholds', () => {
     expect(shared.convert_video_format.format.enum).toEqual(['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv']);
     expect(shared.convert_image_format.format.enum).toEqual(['jpg', 'png', 'webp']);
     expect(shared.adjust_speed.speed.minimum).toBeUndefined();
+    // generate_captions: translation removed, server/FFmpeg wording replaced; web copy intact.
+    const iosCaptions = filtered.find(t => t.function.name === 'generate_captions').function;
+    expect(Object.keys(iosCaptions.parameters.properties)).toEqual(['language', 'style', 'position', 'burn_in']);
+    expect(iosCaptions.parameters.required).toEqual([]);
+    expect(JSON.stringify(iosCaptions)).not.toMatch(/translat(e|ion)_language|OpenAI|Grok|FFmpeg|server/);
+    expect(iosCaptions.description).toMatch(/on-device speech recognition/);
+    const web = tools.find(t => t.function.name === 'generate_captions').function;
+    expect(Object.keys(web.parameters.properties)).toEqual(['language', 'translate_language', 'style', 'position', 'burn_in']);
+    expect(web.description).toMatch(/OpenAI transcription on the server/);
     // Tools without overrides are passed through as-is.
     expect(filtered.find(t => t.function.name === 'trim_video')).toBe(tools.find(t => t.function.name === 'trim_video'));
   });
@@ -206,7 +217,7 @@ describe('POST /api/chat execution:"client" with a FinalCap-iOS UA', () => {
     expect(offered).toContain('trim_video');
     expect(offered).toContain('audio_fade');
     expect(offered).toContain('convert_video_format');
-    expect(offered).not.toContain('generate_captions');
+    expect(offered).toContain('generate_captions');
     expect(offered).not.toContain('audio_highpass');
     expect(offered).not.toContain('convert_image_format'); // photo-only
   });
@@ -234,11 +245,11 @@ describe('POST /api/chat execution:"client" with a FinalCap-iOS UA', () => {
 
   it('drops a model call to a non-allowlisted tool', async () => {
     xaiResponder = () => jsonResponse(completion({
-      content: 'Answer:\nCaptions are not available here.',
-      tool_calls: [{ id: 'c1', type: 'function', function: { name: 'generate_captions', arguments: '{}' } }],
+      content: 'Answer:\nChorus is not available here.',
+      tool_calls: [{ id: 'c1', type: 'function', function: { name: 'audio_chorus', arguments: '{}' } }],
     }));
-    const res = await chatAs(ios(10), { execution: 'client', media: { type: 'video' }, messages: [{ role: 'user', content: 'caption it' }] });
-    expect(await res.json()).toMatchObject({ status: 'final', message: 'Captions are not available here.' });
+    const res = await chatAs(ios(10), { execution: 'client', media: { type: 'video' }, messages: [{ role: 'user', content: 'add chorus' }] });
+    expect(await res.json()).toMatchObject({ status: 'final', message: 'Chorus is not available here.' });
   });
 
   it('web and old-iOS UAs still get every media-valid tool', async () => {
@@ -302,7 +313,7 @@ describe('POST /api/chat streaming mode with a FinalCap-iOS UA', () => {
 describe('GET /api/tools/schema by User-Agent', () => {
   const getSchema = (ua) => realFetch(`${base}/api/tools/schema`, { headers: ua ? { 'User-Agent': ua } : {} });
 
-  it('FinalCap-iOS/10 → the 20 allowlisted tools, schemaVersion "1", Vary: User-Agent', async () => {
+  it('FinalCap-iOS/10 → the 21 allowlisted tools, schemaVersion "1", Vary: User-Agent', async () => {
     const res = await getSchema(ios(10));
     expect(res.headers.get('vary')).toMatch(/User-Agent/i);
     const body = await res.json();
