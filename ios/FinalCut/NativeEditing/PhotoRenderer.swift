@@ -75,7 +75,7 @@ enum PhotoRenderer {
     /// Writes the export to a temp file with the right extension.
     static func exportFile(_ stack: EditStack) throws -> URL {
         let (data, type) = try exportData(stack)
-        let name = stack.base.deletingPathExtension().lastPathComponent + "-edited." + (type.preferredFilenameExtension ?? "jpg")
+        let name = stack.base.deletingPathExtension().lastPathComponent + "-edited." + (type == .jpeg ? "jpg" : type.preferredFilenameExtension ?? "jpg")
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         let out = url.appendingPathComponent(name)
