@@ -65,6 +65,7 @@
 		FBE881DDA0C9EB05D6BD3BDD /* KeyboardAndMicUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */; };
 		956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */; };
 		B54E2B173160D3E92D4F9C37 /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5E696A011F606B3C761265 /* ExportTests.swift */; };
+		5CCA836F4EF77DE8F68AA45E /* UndoRedoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -147,6 +148,7 @@
 		0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardAndMicUITests.swift; sourceTree = "<group>"; };
 		E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerMicTests.swift; sourceTree = "<group>"; };
 		9C5E696A011F606B3C761265 /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
+		DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UndoRedoTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -314,6 +316,7 @@
 		31046C18DC344075B32836E8 /* FinalCutTests */ = {
 			isa = PBXGroup;
 			children = (
+				DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */,
 				9C5E696A011F606B3C761265 /* ExportTests.swift */,
 				E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */,
 				A43650E5D658EE45A21B0D32 /* OnDeviceCaptionsTests.swift */,
@@ -519,6 +522,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5CCA836F4EF77DE8F68AA45E /* UndoRedoTests.swift in Sources */,
 				B54E2B173160D3E92D4F9C37 /* ExportTests.swift in Sources */,
 				956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */,
 				3AF5E94FF5A7B888CA053E40 /* OnDeviceCaptionsTests.swift in Sources */,

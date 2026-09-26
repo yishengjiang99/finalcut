@@ -13,6 +13,8 @@ struct EditorView: View {
     @StateObject private var dictation = DictationController()
     /// Observed so chips and routing refresh when Settings → Cloud processing changes.
     @AppStorage(NativeSettings.cloudProcessingKey) private var cloudProcessing = false
+    /// The window's undo manager: shake to undo / redo drives the edit stack.
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +27,12 @@ struct EditorView: View {
                 exportEnabled: model.state != .processing && model.state != .uploading,
                 showUpgrade: !appModel.hasSubscription,
                 freeRemaining: TopBarView.visibleFreeRemaining(unlimited: appModel.isUnlimited, remaining: appModel.dailyRemaining),
-                onSettings: { showSettings = true }
+                onSettings: { showSettings = true },
+                editControlsVisible: model.localVideoURL != nil,
+                canUndo: model.canUndo,
+                canRedo: model.canRedo,
+                onUndo: { model.performUndo() },
+                onRedo: { model.performRedo() }
             )
 
             if showsImportPanel {
@@ -42,9 +49,7 @@ struct EditorView: View {
                     processingMessage: model.processingOverlay.message,
                     playerItem: model.previewItem,
                     photo: model.previewPhoto,
-                    showsDimmer: model.isCloudStepRunning,
-                    canUndo: model.editStack?.canUndo == true && !model.isBusy,
-                    onUndo: { model.undoLastEdit() }
+                    showsDimmer: model.isCloudStepRunning
                 )
                 .frame(maxHeight: 240)
                 if let importError = model.importError {
@@ -93,6 +98,7 @@ struct EditorView: View {
             Task { await model.loadPhotosPickerItem(item) }
         }
         .onAppear {
+            model.undoManager = undoManager
             model.apiClient = appModel.apiClient
             model.onPaywallRequired = { [weak appModel] in
                 appModel?.presentPaywall(reason: .usageLimitReached)
@@ -108,6 +114,7 @@ struct EditorView: View {
             }
         }
         .onDisappear { dictation.stop() }
+        .onChange(of: undoManager) { _, manager in model.undoManager = manager }
         .overlay(alignment: .top) {
             if model.state == .failed, model.importError == nil, let err = model.lastError {
                 Text(err)
@@ -325,6 +332,7 @@ final class EditorViewModel: ObservableObject {
     /// Resets the edit stack to a new base and shows it.
     func startEditing(_ url: URL) {
         editStack = nil
+        undoManager?.removeAllActions(withTarget: self)
         composedVideo = nil
         previewItem = nil
         previewPhoto = nil
@@ -385,12 +393,60 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Undo / Redo
+
+    /// The window's undo manager (shake to undo). Set by the view; each step registers its
+    /// inverse, and the edit stack stays the source of truth.
+    weak var undoManager: UndoManager?
+
+    /// A new edit on the stack: shows it, clears Redo (in `push`) and registers shake-to-undo.
+    func commitEdit(_ stack: EditStack) {
+        editStack = stack
+        registerUndo(redo: false)
+    }
+
     /// Undo the last edit (Design §3). Never touches the base file.
-    func undoLastEdit() {
+    func undoLastEdit(registering: Bool = true) {
         guard var stack = editStack, stack.undo() else { return }
+        apply(stack)
+        if registering { registerUndo(redo: true) }
+    }
+
+    /// Re-apply the last undone edit.
+    func redoLastEdit(registering: Bool = true) {
+        guard var stack = editStack, stack.redo() else { return }
+        apply(stack)
+        if registering { registerUndo(redo: false) }
+    }
+
+    /// Top-bar buttons go through the undo manager when it has the step, so its stack
+    /// (shake to undo) stays in sync with ours; otherwise they act on the edit stack directly.
+    func performUndo() {
+        if let manager = undoManager, manager.canUndo { manager.undo() } else { undoLastEdit(registering: false) }
+    }
+
+    func performRedo() {
+        if let manager = undoManager, manager.canRedo { manager.redo() } else { redoLastEdit(registering: false) }
+    }
+
+    var canUndo: Bool { editStack?.canUndo == true && !isBusy }
+    var canRedo: Bool { editStack?.canRedo == true && !isBusy }
+
+    private func apply(_ stack: EditStack) {
         editStack = stack
         localVideoURL = stack.base
         Task { await refreshPreview() }
+    }
+
+    /// Registers the inverse step: after an edit/redo that's Undo, after an undo it's Redo.
+    private func registerUndo(redo: Bool) {
+        guard let manager = undoManager else { return }
+        manager.registerUndo(withTarget: self) { target in
+            MainActor.assumeIsolated {
+                if redo { target.redoLastEdit() } else { target.undoLastEdit() }
+            }
+        }
+        manager.setActionName(UXCopy.editActionName)
     }
 
     /// Import failed: keep the current clip; photos get the import-step copy + "Choose another".
@@ -1001,7 +1057,7 @@ final class EditorViewModel: ObservableObject {
             return await runOnDeviceCaptions(call: call, stack: stack, language: language, burnIn: burnIn)
         case .success(.apply(let op)):
             stack.push(EditEntry(tool: tool, op: op, toolCallId: call.id))
-            editStack = stack
+            commitEdit(stack)
             await refreshPreview()
             messages.append(ChatMessage(role: .system, content: "\(Self.label(for: tool)) · \(UXCopy.onDevice)"))
             let canvas = stack.canvas
@@ -1086,7 +1142,7 @@ final class EditorViewModel: ObservableObject {
         captionArtifacts = CaptionArtifacts(srt: srt, vtt: vtt, language: transcript.language)
         if burnIn, var current = editStack {
             current.push(EditEntry(tool: "generate_captions", op: .captions(cues), toolCallId: call.id))
-            editStack = current
+            commitEdit(current)
             await refreshPreview()
         }
         messages.append(ChatMessage(
@@ -1312,8 +1368,11 @@ final class EditorViewModel: ObservableObject {
         if var stack = editStack, let canvas {
             if stack.entries.isEmpty == false || stack.base != url {
                 stack.rebase(onto: url, canvas: canvas)
+                editStack = stack
+                registerUndo(redo: false)
+            } else {
+                editStack = stack
             }
-            editStack = stack
             localVideoURL = url
             await refreshPreview()
         } else {

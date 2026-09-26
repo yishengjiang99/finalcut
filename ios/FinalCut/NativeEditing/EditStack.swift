@@ -25,6 +25,27 @@ struct EditStack: Equatable, Sendable {
     var entries: [EditEntry] = []
     /// Pre-cloud states (cloud steps flatten the stack into a new base).
     var history: [HistoryState] = []
+    /// States undone since the last new edit, most recent last (Redo pops from here).
+    private(set) var redoStates: [Snapshot] = []
+
+    /// Everything Undo/Redo swaps (the redo list itself excluded).
+    struct Snapshot: Equatable, Sendable {
+        var base: URL
+        var baseCanvas: NativeCanvas
+        var entries: [EditEntry]
+        var history: [HistoryState]
+    }
+
+    private var snapshot: Snapshot {
+        Snapshot(base: base, baseCanvas: baseCanvas, entries: entries, history: history)
+    }
+
+    private mutating func restore(_ state: Snapshot) {
+        base = state.base
+        baseCanvas = state.baseCanvas
+        entries = state.entries
+        history = state.history
+    }
 
     struct HistoryState: Equatable, Sendable {
         var base: URL
@@ -48,24 +69,36 @@ struct EditStack: Equatable, Sendable {
         return nil
     }
 
+    /// A new edit. Clears Redo.
     mutating func push(_ entry: EditEntry) {
         entries.append(entry)
+        redoStates.removeAll()
     }
 
     /// Removes the last edit (or restores the pre-cloud state when the stack is empty).
+    /// The undone state can be brought back with `redo()` until the next new edit.
     @discardableResult
     mutating func undo() -> Bool {
+        let current = snapshot
         if !entries.isEmpty {
             entries.removeLast()
-            return true
-        }
-        if let previous = history.popLast() {
+        } else if let previous = history.popLast() {
             base = previous.base
             baseCanvas = previous.baseCanvas
             entries = previous.entries
-            return true
+        } else {
+            return false
         }
-        return false
+        redoStates.append(current)
+        return true
+    }
+
+    /// Re-applies the most recently undone step.
+    @discardableResult
+    mutating func redo() -> Bool {
+        guard let next = redoStates.popLast() else { return false }
+        restore(next)
+        return true
     }
 
     /// A cloud step's result becomes the new base; the old state stays in history for undo.
@@ -74,9 +107,11 @@ struct EditStack: Equatable, Sendable {
         base = url
         baseCanvas = canvas
         entries = []
+        redoStates.removeAll()
     }
 
     var canUndo: Bool { !entries.isEmpty || !history.isEmpty }
+    var canRedo: Bool { !redoStates.isEmpty }
 
     /// Burned-in captions on the final timeline: the latest captions entry, remapped through
     /// any trims/speed changes made after it.

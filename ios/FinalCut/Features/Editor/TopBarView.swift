@@ -1,7 +1,9 @@
 import SwiftUI
 import PhotosUI
 
-/// Dark chrome top bar: title (leading) · Import (Photos) · Export (when a clip is ready) · Upgrade (trailing).
+/// Dark chrome top bar: title (leading) · Undo/Redo · Import (Photos) · Export (when a clip
+/// is loaded) · Upgrade (trailing). One row at 375 pt: the title collapses to its gear and the
+/// free counter disappears before anything wraps; the Upgrade capsule never wraps.
 struct TopBarView: View {
     @Binding var photosPickerItem: PhotosPickerItem?
     var onExport: () -> Void
@@ -13,6 +15,15 @@ struct TopBarView: View {
     /// Remaining free requests today (shown subtly next to Upgrade when known).
     var freeRemaining: Int?
     var onSettings: () -> Void = {}
+    /// Undo/Redo show once media is loaded; each is disabled when there's nothing to undo/redo.
+    var editControlsVisible = false
+    var canUndo = false
+    var canRedo = false
+    var onUndo: () -> Void = {}
+    var onRedo: () -> Void = {}
+
+    static let spacing: CGFloat = 8
+    static let horizontalPadding: CGFloat = 12
 
     /// The free counter shows only with a real remaining count and no unlimited period.
     static func visibleFreeRemaining(unlimited: Bool, remaining: Int?) -> Int? {
@@ -23,22 +34,38 @@ struct TopBarView: View {
     static let rowHeight: CGFloat = 44
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Title doubles as the Settings entry; it truncates before Import/Export (Design §7).
+        HStack(spacing: Self.spacing) {
+            // Title doubles as the Settings entry; when space is tight only the gear shows (Design §7).
             Button(action: onSettings) {
-                HStack(spacing: 4) {
-                    Text("FinalCap")
-                        .font(.headline)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        Text("FinalCap")
+                            .font(.headline)
+                            .lineLimit(1)
+                            .fixedSize()
+                        Image(systemName: "gearshape")
+                            .font(.caption)
+                    }
                     Image(systemName: "gearshape")
-                        .font(.caption)
+                        .font(.body)
                 }
                 .foregroundStyle(AppTheme.textPrimary)
             }
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("Settings")
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
+
+            if editControlsVisible {
+                HStack(spacing: 0) {
+                    UndoRedoButton(systemImage: "arrow.uturn.backward", label: UXCopy.undo,
+                                   enabled: canUndo, action: onUndo)
+                        .accessibilityIdentifier("Undo")
+                    UndoRedoButton(systemImage: "arrow.uturn.forward", label: UXCopy.redo,
+                                   enabled: canRedo, action: onRedo)
+                        .accessibilityIdentifier("Redo")
+                }
+                .layoutPriority(1)
+            }
 
             PhotosPicker(
                 selection: $photosPickerItem,
@@ -66,15 +93,17 @@ struct TopBarView: View {
             }
 
             if showUpgrade {
-                if let freeRemaining {
-                    FreeRemainingLabel(count: max(freeRemaining, 0))
-                        .layoutPriority(-1)
+                HStack(spacing: 4) {
+                    if let freeRemaining {
+                        FreeRemainingLabel(count: max(freeRemaining, 0))
+                            .layoutPriority(-1)
+                    }
+                    UpgradeCapsuleButton(action: onUpgrade)
+                        .layoutPriority(1)
                 }
-                UpgradeCapsuleButton(action: onUpgrade)
-                    .layoutPriority(1)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Self.horizontalPadding)
         .frame(minHeight: Self.rowHeight)
         .background(AppTheme.surface)
         .overlay(alignment: .bottom) {
@@ -83,6 +112,26 @@ struct TopBarView: View {
         // Keep the chrome one row: Dynamic Type is honoured up to .xLarge here.
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .accessibilityIdentifier("TopBar")
+    }
+}
+
+/// Icon-only Undo / Redo with a VoiceOver label; dimmed when disabled.
+struct UndoRedoButton: View {
+    var systemImage: String
+    var label: String
+    var enabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 28, height: 34)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(enabled ? AppTheme.textPrimary : AppTheme.textSecondary.opacity(0.5))
+        .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 }
 
@@ -100,7 +149,7 @@ struct UpgradeCapsuleButton: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(.black)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .frame(height: 34)
             .background(AppTheme.accent)
             .clipShape(Capsule())
@@ -117,6 +166,8 @@ struct FreeRemainingLabel: View {
         ViewThatFits(in: .horizontal) {
             label("\(count) free left")
             label("\(count) left")
+            // Nothing when even that doesn't fit: Undo/Redo, Import, Export and Upgrade win.
+            Color.clear.frame(width: 0, height: 0)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(count) free edits left today")
@@ -137,6 +188,8 @@ struct FreeRemainingLabel: View {
         onExport: {},
         onUpgrade: {},
         exportVisible: true,
-        freeRemaining: 3
+        freeRemaining: 3,
+        editControlsVisible: true,
+        canUndo: true
     )
 }

@@ -17,6 +17,8 @@ enum UXCopy {
     static let onDevice = "On device"                                          // edit.onDevice
     static let cloud = "Cloud"                                                 // edit.cloud
     static let undo = "Undo"                                                   // edit.undo
+    static let redo = "Redo"                                                   // edit.redo
+    static let editActionName = "Edit"                                         // edit.actionName (Undo Edit / Redo Edit)
     static let cloudSettingTitle = "Cloud processing"                         // cloud.setting.title
     static let cloudSettingFootnote = "Lets FinalCap upload a clip to our servers for edits your iPhone can't do yet. Off means nothing is ever uploaded." // cloud.setting.footnote
     static let cloudFlattened = "Earlier edits were baked in by a cloud step." // cloud.flattened
