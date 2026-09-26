@@ -133,3 +133,37 @@ Per [`CLIENT_TOOL_EXECUTION.md`](../api/CLIENT_TOOL_EXECUTION.md):
 ## 6. Privacy
 
 Media stays on the device. The model gets metadata and up to 4 thumbnails per chat turn. Full media is uploaded only when the user has turned on **Allow cloud processing** and a step needs it. See `docs/asc/PRIVACY_NUTRITION.md` and `public/legal/privacy.html`.
+
+## iOS allowlist (build 10)
+
+Requests from the app send `User-Agent: FinalCap-iOS/<CFBundleVersion>` (build 10 → `FinalCap-iOS/10`). For that build and later, the server should expose **only** these 20 tools to the model. Anything else still gets `{ ok: false, error: "unsupported_on_device", executedOn: "device" }` from the app as a safety net.
+
+```
+trim_video
+adjust_speed
+crop_video
+rotate_video
+flip_video_horizontal
+flip_video_vertical
+resize_video
+resize_video_preset
+adjust_brightness
+adjust_contrast
+adjust_saturation
+adjust_hue
+apply_color_filter
+add_text
+adjust_audio_volume
+audio_fade
+get_video_dimensions
+get_supported_formats
+convert_video_format
+convert_image_format
+```
+
+Argument restrictions on device (other values return `invalid_arguments`, so ideally narrow the enums in the filtered schema too):
+
+- `convert_video_format.format`: `mp4`, `mov` only.
+- `convert_image_format.format`: `jpg`, `png` only.
+- `adjust_speed.speed`: 0.25–4.
+- Photos: only the frame tools (`crop_video`, `rotate_video`, `flip_video_*`, `resize_video`, `resize_video_preset`, `adjust_*` colour tools, `apply_color_filter`, `add_text`, `convert_image_format`, `get_video_dimensions`, `get_supported_formats`). Timeline/audio tools return `unsupported_for_photo`.
