@@ -32,6 +32,17 @@ final class NoUploadWordingUITests: XCTestCase {
         } while Date() < end
     }
 
+    /// Pills live in a horizontal row; later ones start off-screen. Swipe the row left
+    /// (at most 5 times) until the pill can be tapped.
+    private func scrollIntoView(_ pill: XCUIElement) {
+        let row = app.scrollViews.containing(NSPredicate(format: "label == %@", pill.label)).firstMatch
+        var swipes = 0
+        while !pill.isHittable && swipes < 5 {
+            (row.exists ? row : pill).swipeLeft(velocity: .slow)
+            swipes += 1
+        }
+    }
+
     func testNoUploadWordingWithCloudProcessingOff() throws {
         assertNoUpload("launch")
 
@@ -46,7 +57,10 @@ final class NoUploadWordingUITests: XCTestCase {
         // Apply an edit (a suggestion pill sends its prompt; the edit runs on device).
         // "Speed up 2×" avoids the Captions pill's speech-permission prompt.
         let pill = app.buttons["Speed up 2×"]
-        if pill.waitForExistence(timeout: 5) { pill.tap() }
+        XCTAssertTrue(pill.waitForExistence(timeout: 10))
+        scrollIntoView(pill)
+        XCTAssertTrue(pill.isHittable, "Speed up 2× scrolled into view")
+        pill.tap()
         watch("edit", seconds: 6)
 
         // Start an export once the editor is idle.
