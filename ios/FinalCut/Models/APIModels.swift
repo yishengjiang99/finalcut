@@ -68,6 +68,8 @@ struct JobPollResponse: Codable, Equatable {
     var error: String?
     var resultUrl: String?
     var contentType: String?
+    /// "image" for photos, "video" otherwise (Backend #82).
+    var mediaType: String?
     var operation: String?
     var createdAt: String?
     var updatedAt: String?

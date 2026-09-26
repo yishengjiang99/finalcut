@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import AVFoundation
 
 /// Editor — single root and first screen at launch (not tabs). Regions top→bottom:
 /// TopBar → Preview (or Import panel when empty) → Chat → SampleChips → Composer.
@@ -158,14 +159,8 @@ final class EditorViewModel: ObservableObject {
     /// An inference request completed (success or failure) — refresh quota display.
     var onInferenceFinished: (() -> Void)?
 
-    /// Demo chips for the captions three-step flow + other edits.
-    let sampleChips = [
-        "Generate captions",
-        "Translate to Spanish",
-        "Burn in",
-        "Trim silence",
-        "Vertical crop",
-    ]
+    /// Sample chips. Each maps to a correct tool/flow with complete args (see `EditorRoute`).
+    let sampleChips = EditorRoute.sampleChips
 
     private var processingTask: Task<Void, Never>?
 
@@ -288,27 +283,31 @@ final class EditorViewModel: ObservableObject {
         composerText = ""
         lastError = nil
 
-        let intent = Self.detectCaptionIntent(text)
-        processingOverlay = Self.overlay(for: intent)
+        let route = EditorRoute.route(for: text)
+        switch route {
+        case .captions(let intent):
+            processingOverlay = Self.overlay(for: intent)
+        case .tool, .chat:
+            processingOverlay = .editing
+        }
         state = .processing
 
         processingTask?.cancel()
         processingTask = Task {
-            switch intent {
-            case .generate:
+            switch route {
+            case .captions(.generate):
                 await runGenerateCaptions()
-            case .translate(let language):
+            case .captions(.translate(let language)):
                 await runTranslateCaptions(targetLanguage: language)
-            case .burnIn:
+            case .captions(.burnIn), .captions(.otherEdit):
                 await runBurnIn()
-            case .otherEdit:
-                messages.append(
-                    ChatMessage(
-                        role: .assistant,
-                        content: "Got it — running “\(text)” via async jobs API (poll-only; no on-device FFmpeg)."
-                    )
-                )
-                await runJobsEdit(prompt: text)
+            case .tool(let name, let arguments):
+                // Chip shortcut: same validation/execution path as a model tool call.
+                let call = ClientToolCall(id: "chip-\(UUID().uuidString.prefix(8))", name: name, arguments: arguments)
+                let result = await executeToolCall(call)
+                finishTurn(ok: result.ok)
+            case .chat(let prompt):
+                await runChatTurn(prompt: prompt)
             }
             if !Task.isCancelled {
                 onInferenceFinished?()
@@ -377,14 +376,15 @@ final class EditorViewModel: ObservableObject {
         return (data, videoURL)
     }
 
-    private func runGenerateCaptions() async {
+    private func runGenerateCaptions(language: String = "auto") async {
         do {
             let client = try await ensureClientAndToken()
             let (videoData, videoURL) = try readLocalVideoData()
             processingOverlay = .generatingCaptions
             let result = try await client.generateCaptions(
                 videoData: videoData,
-                mimeType: Self.mimeType(for: videoURL)
+                mimeType: Self.mimeType(for: videoURL),
+                language: language
             )
             captionArtifacts.srt = result.srt
             captionArtifacts.vtt = result.vtt
@@ -573,118 +573,240 @@ final class EditorViewModel: ObservableObject {
         return chips
     }
 
-    // MARK: - Other long FFmpeg edits → async jobs poll
+    // MARK: - Free-text edits → server chat tool calls (execution: "client")
 
-    /// Prefer POST /api/jobs/process-video + poll GET /api/jobs/:id (not for burn/add_audio).
-    func runJobsEdit(prompt: String) async {
-        if let client = apiClient, let videoURL = localVideoURL {
-            await runRealJobsEdit(client: client, videoURL: videoURL, prompt: prompt)
-        } else {
-            await simulateJobsLifecycle()
+    /// Hard local stop in addition to the server's `maxRounds` cap (6).
+    static let maxClientRounds = 8
+
+    /// Sends free text to `/api/chat` in client-execution mode. The model picks the tools
+    /// and args; each tool call runs here (server jobs API for now) and its result is posted
+    /// back until `status: "final"`. There is no local keyword fallback.
+    func runChatTurn(prompt: String) async {
+        guard let client = apiClient else {
+            finishChatFailure(APIError.message("API client unavailable"))
+            return
         }
-    }
-
-    private func applyJobStatus(_ status: JobStatus, error: String? = nil) {
-        state = status.editorState
-        if status == .failed {
-            lastError = error ?? "Job failed"
-        }
-    }
-
-    private func runRealJobsEdit(client: APIClient, videoURL: URL, prompt: String) async {
         do {
-            if client.sampleModeEnabled {
-                _ = try await client.ensureSampleAccessToken()
-            }
-            let accessed = videoURL.startAccessingSecurityScopedResource()
-            defer { if accessed { videoURL.stopAccessingSecurityScopedResource() } }
-            let videoData = try Data(contentsOf: videoURL)
-            let operation = Self.mapPromptToOperation(prompt)
-            processingOverlay = .editing
-            let enqueue = try await client.submitProcessVideoJob(
-                videoData: videoData,
-                fileName: videoURL.lastPathComponent,
-                mimeType: Self.mimeType(for: videoURL),
-                operation: operation,
-                args: [:]
+            try await prepareAuth(client)
+            var conversation: [JSONValue] = [ClientChat.userMessage(prompt)]
+            var response = try await client.sendClientChat(
+                ClientChatRequest(messages: conversation, media: await currentMedia())
             )
-            activeJobId = enqueue.jobId
-            applyJobStatus(enqueue.status)
-
-            let final = try await client.pollJob(id: enqueue.jobId) { [weak self] poll in
-                Task { @MainActor in
-                    self?.applyJobStatus(poll.status, error: poll.error)
+            var rounds = 0
+            var anyFailed = false
+            while response.status == "tool_calls", !response.toolCalls.isEmpty, rounds < Self.maxClientRounds {
+                rounds += 1
+                var results: [(callId: String, result: ClientToolResult)] = []
+                for call in response.toolCalls {
+                    if Task.isCancelled { return }
+                    let result = await executeToolCall(call)
+                    if !result.ok { anyFailed = true }
+                    results.append((call.id, result))
                 }
-            }
-            applyJobStatus(final.status, error: final.error)
-
-            if final.status == .succeeded {
-                if let resultData = try? await client.downloadJobResult(
-                    id: enqueue.jobId,
-                    resultUrl: final.resultUrl
-                ) {
-                    let out = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("\(enqueue.jobId).mp4")
-                    try? resultData.write(to: out)
-                    localVideoURL = out
-                }
-                messages.append(
-                    ChatMessage(
-                        role: .system,
-                        content: "Job \(enqueue.jobId) succeeded"
-                            + (final.resultUrl.map { " — \($0)" } ?? "")
-                    )
+                conversation = ClientChat.continuation(previous: conversation, response: response, results: results)
+                state = .processing
+                processingOverlay = .editing
+                response = try await client.sendClientChat(
+                    ClientChatRequest(messages: conversation, media: await currentMedia())
                 )
             }
+            if let text = response.finalText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+                messages.append(ChatMessage(role: .assistant, content: text))
+            }
+            finishTurn(ok: !anyFailed || localVideoURL != nil)
         } catch is CancellationError {
             // User sent another message or view torn down.
         } catch {
-            if handlePaywallIfNeeded(error) { return }
-            state = .failed
-            lastError = error.localizedDescription
-            messages.append(ChatMessage(role: .system, content: "Job error: \(error.localizedDescription)"))
+            finishChatFailure(error)
         }
     }
 
-    /// Local demo when no video/client: walk queued → running → succeeded while staying processing until terminal.
-    private func simulateJobsLifecycle() async {
-        let fakeId = UUID().uuidString
-        activeJobId = fakeId
-        let steps: [JobStatus] = [.queued, .running, .succeeded]
-        for status in steps {
-            if Task.isCancelled { return }
-            applyJobStatus(status)
-            if !status.isTerminal {
-                try? await Task.sleep(nanoseconds: 400_000_000)
-            }
+    private func finishTurn(ok: Bool) {
+        processingOverlay = .editing
+        activeJobId = nil
+        if state == .processing {
+            state = localVideoURL == nil ? .empty : .ready
         }
-        if localVideoURL == nil {
-            state = .empty
+    }
+
+    private func finishChatFailure(_ error: Error) {
+        if handlePaywallIfNeeded(error) { return }
+        processingOverlay = .editing
+        activeJobId = nil
+        let description = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        if case .clientModeUnavailable = (error as? APIError) {
+            // Keep the clip usable; this is not an edit failure.
+            state = localVideoURL == nil ? .empty : .ready
+            messages.append(ChatMessage(role: .assistant, content: description))
+            return
         }
-        messages.append(
-            ChatMessage(
-                role: .system,
-                content: "Demo job \(fakeId.prefix(8)) finished (import a video to hit the real jobs API)."
-            )
+        state = .failed
+        lastError = description
+        messages.append(ChatMessage(role: .assistant, content: "Couldn't complete that edit — \(description)"))
+    }
+
+    private func prepareAuth(_ client: APIClient) async throws {
+        if client.sampleModeEnabled {
+            _ = try await client.ensureSampleAccessToken()
+        } else {
+            try? await client.ensureDeviceSession()
+        }
+    }
+
+    /// Metadata for the model (`media` in the client-mode request). Never uploads the clip.
+    func currentMedia() async -> ClientMedia? {
+        guard let url = localVideoURL else { return nil }
+        if MediaMIME.isImage(url: url) {
+            return ClientMedia(type: "image")
+        }
+        let asset = AVURLAsset(url: url)
+        let duration = (try? await asset.load(.duration)).map { CMTimeGetSeconds($0) }
+        var width: Int?
+        var height: Int?
+        var fps: Double?
+        if let track = try? await asset.loadTracks(withMediaType: .video).first,
+           let loaded = try? await track.load(.naturalSize, .preferredTransform, .nominalFrameRate) {
+            let (size, transform, rate) = loaded
+            let oriented = size.applying(transform)
+            width = Int(abs(oriented.width).rounded())
+            height = Int(abs(oriented.height).rounded())
+            fps = rate > 0 ? Double(rate) : nil
+        }
+        let hasAudio = ((try? await asset.loadTracks(withMediaType: .audio)) ?? []).isEmpty == false
+        return ClientMedia(
+            type: "video",
+            duration: duration.flatMap { $0.isFinite ? $0 : nil },
+            width: width,
+            height: height,
+            fps: fps,
+            hasAudio: hasAudio
         )
     }
 
-    /// Lightweight prompt → server operation mapping for non-caption edits.
-    /// Never maps to burn_subtitles / add_audio_track (those are sync process-video only).
-    static func mapPromptToOperation(_ prompt: String) -> String {
-        let lower = prompt.lowercased()
-        if lower.contains("silence") { return "audio_silence_remove" }
-        if lower.contains("trim") { return "trim_video" }
-        if lower.contains("vertical") || lower.contains("crop") { return "crop_video" }
-        return "trim_video"
+    /// Executes one tool call (from the model or a chip). Missing required args are never
+    /// sent to the server — they go back to the model as `ok: false`.
+    func executeToolCall(_ call: ClientToolCall) async -> ClientToolResult {
+        let tool = ToolCatalog.canonicalName(call.name)
+        if let argumentsError = call.argumentsError {
+            messages.append(ChatMessage(role: .system, content: "Skipped \(tool): \(argumentsError)"))
+            return .failure(argumentsError, on: .device)
+        }
+        let media = await currentMedia()
+        let plan = ToolCatalog.plan(tool: tool, arguments: call.arguments, mediaDuration: media?.duration)
+        switch plan {
+        case .reject(let error):
+            messages.append(ChatMessage(role: .system, content: "Couldn't run \(tool): \(error)"))
+            return .failure(error, on: .device)
+        case .localQuery(let name):
+            return localQueryResult(name, media: media)
+        case .captions(let language, let translateLanguage, let burnIn):
+            return await runCaptionsTool(language: language, translateLanguage: translateLanguage, burnIn: burnIn)
+        case .serverJob(let operation, let args):
+            return await runServerJob(tool: tool, operation: operation, args: args)
+        }
+    }
+
+    private func localQueryResult(_ tool: String, media: ClientMedia?) -> ClientToolResult {
+        switch tool {
+        case "get_video_dimensions":
+            guard let media else { return .failure("no_media", on: .device) }
+            var output: [String: JSONValue] = ["type": .string(media.type)]
+            if let w = media.width { output["width"] = .number(Double(w)) }
+            if let h = media.height { output["height"] = .number(Double(h)) }
+            if let d = media.duration { output["duration"] = .number(d) }
+            if let f = media.fps { output["fps"] = .number(f) }
+            if let a = media.hasAudio { output["hasAudio"] = .bool(a) }
+            return .success(on: .device, output: output)
+        default:
+            return .success(on: .device, output: [
+                "video": .array(["mp4", "mov"].map { .string($0) }),
+                "audio": .array(["m4a"].map { .string($0) }),
+            ])
+        }
+    }
+
+    private func runCaptionsTool(language: String, translateLanguage: String?, burnIn: Bool) async -> ClientToolResult {
+        processingOverlay = .generatingCaptions
+        await runGenerateCaptions(language: language)
+        guard captionArtifacts.hasSource else {
+            return .failure(lastError ?? "captions_failed", on: .server)
+        }
+        if let translateLanguage {
+            state = .processing
+            await runTranslateCaptions(targetLanguage: translateLanguage)
+            guard captionArtifacts.hasTranslation else {
+                return .failure(lastError ?? "translation_failed", on: .server)
+            }
+        }
+        if burnIn {
+            state = .processing
+            let before = localVideoURL
+            await runBurnIn()
+            if state == .failed || localVideoURL == before {
+                return .failure(lastError ?? "burn_in_failed", on: .server)
+            }
+        }
+        state = .processing
+        return .success(on: .server)
+    }
+
+    /// Runs one operation on the async jobs API, then swaps the preview to the result.
+    /// The upload carries the file's real MIME type; the result keeps the server's type.
+    private func runServerJob(tool: String, operation: String, args: [String: JSONValue]) async -> ClientToolResult {
+        guard let client = apiClient, let videoURL = localVideoURL else {
+            return .failure("no_media", on: .server)
+        }
+        do {
+            try await prepareAuth(client)
+            state = .processing
+            processingOverlay = .editing
+            let (videoData, _) = try readLocalVideoData()
+            let enqueue = try await client.submitProcessVideoJob(
+                videoData: videoData,
+                fileName: videoURL.lastPathComponent,
+                mimeType: MediaMIME.mimeType(for: videoURL),
+                operation: operation,
+                args: args.mapValues { $0.foundationValue }
+            )
+            activeJobId = enqueue.jobId
+            let final = try await client.pollJob(id: enqueue.jobId)
+            activeJobId = nil
+            guard final.status == .succeeded else {
+                let error = final.error ?? "Job failed"
+                messages.append(ChatMessage(role: .system, content: "Couldn't apply \(tool): \(error)"))
+                return .failure(error, on: .server)
+            }
+            let download = try await client.downloadJobResultWithContentType(
+                id: enqueue.jobId,
+                resultUrl: final.resultUrl
+            )
+            let ext = MediaMIME.fileExtension(
+                forContentType: final.contentType ?? download.contentType,
+                mediaType: final.mediaType
+            )
+            let out = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(enqueue.jobId).\(ext)")
+            try download.data.write(to: out)
+            localVideoURL = out
+            messages.append(ChatMessage(role: .system, content: "Applied \(tool)"))
+            return .success(on: .server)
+        } catch is CancellationError {
+            activeJobId = nil
+            return .failure("cancelled", on: .server)
+        } catch {
+            activeJobId = nil
+            if let apiError = error as? APIError, apiError.isPaywall {
+                handlePaywallIfNeeded(apiError)
+                return .failure("paywall", on: .server)
+            }
+            let description = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            messages.append(ChatMessage(role: .system, content: "Couldn't apply \(tool): \(description)"))
+            return .failure(description, on: .server)
+        }
     }
 
     static func mimeType(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "mov": return "video/quicktime"
-        case "m4v": return "video/x-m4v"
-        default: return "video/mp4"
-        }
+        MediaMIME.mimeType(for: url)
     }
 
     private var bundledTestVideoURL: URL? {

@@ -273,6 +273,29 @@ final class APIClient {
     }
 
 
+    // MARK: - Chat (client tool execution — docs/api/CLIENT_TOOL_EXECUTION.md)
+
+    /// POST /api/chat with `execution: "client"` → JSON `{ status, toolCalls, messages, message? }`.
+    /// Throws `.clientModeUnavailable` when the server answers with the legacy SSE stream
+    /// (older deploy that ignores `execution`) or a non-JSON body.
+    func sendClientChat(_ body: ClientChatRequest) async throws -> ClientChatResponse {
+        let data = try encoder.encode(body)
+        var request = makeRequest(url: chatURL, method: "POST", auth: .bearerPreferred, body: data)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (responseData, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: responseData)
+        if let http = response as? HTTPURLResponse,
+           let type = http.value(forHTTPHeaderField: "Content-Type")?.lowercased(),
+           type.contains("text/event-stream") {
+            throw APIError.clientModeUnavailable
+        }
+        do {
+            return try decoder.decode(ClientChatResponse.self, from: responseData)
+        } catch {
+            throw APIError.clientModeUnavailable
+        }
+    }
+
     // MARK: - Async jobs (prefer over sync process-video on iOS)
 
     /// Multipart enqueue: POST /api/jobs/process-video → 202 { jobId, status, pollUrl? }
@@ -382,6 +405,21 @@ final class APIClient {
         let (data, response) = try await session.data(for: request)
         try Self.throwIfNeeded(response: response, data: data)
         return data
+    }
+
+    /// Download job result bytes plus the response `Content-Type` (used to pick the file extension).
+    func downloadJobResultWithContentType(id: String, resultUrl: String? = nil) async throws -> (data: Data, contentType: String?) {
+        let url: URL
+        if let resultUrl, let absolute = URL(string: resultUrl), absolute.scheme != nil {
+            url = absolute
+        } else {
+            url = jobResultURL(id: id)
+        }
+        let request = makeRequest(url: url, method: "GET", auth: .bearerPreferred)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+        return (data, contentType)
     }
 
     // MARK: - Video / captions
@@ -595,6 +633,8 @@ enum APIError: Error, LocalizedError, Equatable {
     case noSpeechDetected
     /// Free usage limit hit (HTTP 402 `code: "paywall"`, or 429 `daily_limit_reached`) — show Paywall.
     case paywallRequired(String?)
+    /// `/api/chat` did not answer in `execution: "client"` mode (older server deploy).
+    case clientModeUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -608,6 +648,8 @@ enum APIError: Error, LocalizedError, Equatable {
             return "no speech"
         case .paywallRequired(let message):
             return message ?? "Free limit reached — upgrade to keep editing"
+        case .clientModeUnavailable:
+            return "The editing assistant is updating. Try again in a few minutes."
         }
     }
 

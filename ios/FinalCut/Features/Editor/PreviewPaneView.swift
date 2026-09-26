@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import UIKit
 
 /// Preview uses AVKit/AVFoundation only (VideoPlayer + scrub when URL present).
 struct PreviewPaneView: View {
@@ -13,7 +14,17 @@ struct PreviewPaneView: View {
     var body: some View {
         ZStack {
             AppTheme.surface
-            if videoURL != nil {
+            if let videoURL, MediaMIME.isImage(url: videoURL) {
+                // Photo results (Backend #82 returns image/jpeg or image/png): no player.
+                if let image = UIImage(contentsOfFile: videoURL.path) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .accessibilityIdentifier("PhotoPreview")
+                } else {
+                    emptyState
+                }
+            } else if videoURL != nil {
                 VideoPlayer(player: player)
             } else {
                 emptyState
@@ -71,6 +82,11 @@ struct PreviewPaneView: View {
     }
 
     private func attachPlayer(url: URL?) {
+        if let url, MediaMIME.isImage(url: url) {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            return
+        }
         let currentURL = (player.currentItem?.asset as? AVURLAsset)?.url
         guard currentURL != url else { return }
         player.pause()
