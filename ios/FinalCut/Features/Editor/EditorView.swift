@@ -252,6 +252,8 @@ final class EditorViewModel: ObservableObject {
 
     /// Shared API client from AppModel (jobs for long FFmpeg edits; captions sync).
     var apiClient: APIClient?
+    /// On-device speech-to-text for `generate_captions` (swapped in tests).
+    var captioner: CaptionTranscribing = OnDeviceCaptioner()
     /// Server reported the free usage limit (402 `paywall` / 429 `daily_limit_reached`).
     var onPaywallRequired: (() -> Void)?
     /// An inference request completed (success or failure) — refresh quota display.
@@ -989,6 +991,8 @@ final class EditorViewModel: ObservableObject {
         switch NativeToolParser.plan(tool: tool, arguments: call.arguments, canvas: stack.canvas) {
         case .success(.query(let name)):
             return record(localQueryResult(name, media: await currentMedia()), kind: nil)
+        case .success(.captions(let language, let burnIn)):
+            return await runOnDeviceCaptions(call: call, stack: stack, language: language, burnIn: burnIn)
         case .success(.apply(let op)):
             stack.push(EditEntry(tool: tool, op: op, toolCallId: call.id))
             editStack = stack
@@ -1038,6 +1042,59 @@ final class EditorViewModel: ObservableObject {
         case .serverJob(let operation, let args):
             return await runServerJob(tool: tool, operation: operation, args: args)
         }
+    }
+
+    /// `generate_captions` on the device: transcribe the edited clip's audio, offer SRT/VTT,
+    /// and (by default) burn the captions into preview and export as an undoable edit.
+    private func runOnDeviceCaptions(call: ClientToolCall, stack: EditStack, language: String?, burnIn: Bool) async -> ClientToolResult {
+        processingOverlay = .generatingCaptions
+        defer { processingOverlay = .editing }
+        let composed: ComposedVideo
+        if let current = composedVideo, editStack == stack {
+            composed = current
+        } else {
+            guard let fresh = try? await NativeComposer.compose(stack) else {
+                return record(.failure("captions_failed", on: .device), kind: .generic)
+            }
+            composed = fresh
+        }
+        let transcript: CaptionTranscript
+        do {
+            transcript = try await captioner.transcribe(composed, language: language)
+        } catch OnDeviceCaptioner.Failure.notAuthorized {
+            messages.append(ChatMessage(role: .system, content: UXCopy.captionsPermission))
+            return record(.failure("speech_permission_denied", on: .device), kind: nil)
+        } catch OnDeviceCaptioner.Failure.unavailable {
+            messages.append(.failure(EditFailureCard(kind: .unavailable)))
+            return record(.failure("unsupported_on_device", on: .device), kind: .unavailable)
+        } catch {
+            return record(.failure("captions_failed", on: .device), kind: .generic)
+        }
+        let cues = CaptionFormatter.cues(from: transcript.words)
+        guard !cues.isEmpty else {
+            messages.append(ChatMessage(role: .system, content: UXCopy.captionsNoSpeech))
+            return record(.failure("no_speech", on: .device), kind: nil)
+        }
+        let srt = CaptionFormatter.srt(cues)
+        let vtt = CaptionFormatter.vtt(cues)
+        captionArtifacts = CaptionArtifacts(srt: srt, vtt: vtt, language: transcript.language)
+        if burnIn, var current = editStack {
+            current.push(EditEntry(tool: "generate_captions", op: .captions(cues), toolCallId: call.id))
+            editStack = current
+            await refreshPreview()
+        }
+        messages.append(ChatMessage(
+            role: .system,
+            content: "\(UXCopy.captionsOnDevice) · \(UXCopy.onDevice)",
+            downloadChips: Self.sourceChips(srt: srt, vtt: vtt)
+        ))
+        let text = cues.map(\.text).joined(separator: " ")
+        return record(.success(on: .device, output: [
+            "cues": .number(Double(cues.count)),
+            "language": .string(transcript.language),
+            "burnedIn": .bool(burnIn),
+            "text": .string(String(text.prefix(600))),
+        ]), kind: nil)
     }
 
     @discardableResult

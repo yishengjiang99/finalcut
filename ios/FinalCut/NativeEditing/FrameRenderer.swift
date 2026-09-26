@@ -11,8 +11,11 @@ struct FrameRenderer: @unchecked Sendable {
     let sourceSize: CGSize
     /// Pre-rendered text overlays keyed by op index (Core Text, rendered once per edit).
     private let textImages: [Int: CIImage]
+    /// Burned-in captions (final timeline) and their pre-rendered lines.
+    let captions: [CaptionCue]
+    private let captionImages: [Int: CIImage]
 
-    init(ops: [NativeOp], sourceSize: CGSize) {
+    init(ops: [NativeOp], sourceSize: CGSize, captions: [CaptionCue] = []) {
         let frameOps = ops.filter(\.isFrame)
         self.ops = frameOps
         self.sourceSize = sourceSize
@@ -24,6 +27,14 @@ struct FrameRenderer: @unchecked Sendable {
             }
         }
         textImages = texts
+        self.captions = captions
+        var size = sourceSize
+        for op in frameOps { size = Self.size(after: op, from: size) }
+        var lines: [Int: CIImage] = [:]
+        for (index, cue) in captions.enumerated() {
+            if let image = Self.renderCaption(cue.text, canvas: size) { lines[index] = image }
+        }
+        captionImages = lines
     }
 
     /// Canvas size after all frame ops (even-rounded for H.264).
@@ -64,6 +75,47 @@ struct FrameRenderer: @unchecked Sendable {
         }
         let black = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: size))
         return image.composited(over: black)
+    }
+
+    /// The chain plus the caption active at `time` (seconds on the final timeline).
+    func apply(to input: CIImage, time: Double) -> CIImage {
+        let image = apply(to: input)
+        guard let index = CaptionFormatter.cue(at: time, in: captions), let line = captionImages[index] else { return image }
+        let size = image.extent.size
+        let x = (size.width - line.extent.width) / 2
+        let y = size.height * 0.06
+        return line.transformed(by: CGAffineTransform(translationX: x, y: y)).composited(over: image)
+    }
+
+    /// White caption text on a translucent black box, sized to the output canvas.
+    static func renderCaption(_ string: String, canvas: CGSize) -> CIImage? {
+        let short = min(canvas.width, canvas.height)
+        let fontSize = max(14, (short / 18).rounded())
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let attributed = NSAttributedString(string: string, attributes: [
+            .font: UIFont.systemFont(ofSize: fontSize, weight: .semibold),
+            .foregroundColor: UIColor.white,
+            .paragraphStyle: paragraph,
+        ])
+        let maxWidth = canvas.width * 0.9
+        let padding = (fontSize * 0.4).rounded()
+        let bounds = attributed.boundingRect(with: CGSize(width: maxWidth - padding * 2, height: canvas.height),
+                                             options: [.usesLineFragmentOrigin], context: nil)
+        let textSize = CGSize(width: ceil(bounds.width), height: ceil(bounds.height))
+        guard textSize.width > 0, textSize.height > 0 else { return nil }
+        let size = CGSize(width: textSize.width + padding * 2, height: textSize.height + padding)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let rendered = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            UIColor.black.withAlphaComponent(0.6).setFill()
+            UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: padding / 2).fill()
+            attributed.draw(with: CGRect(x: padding, y: padding / 2, width: textSize.width, height: textSize.height),
+                            options: [.usesLineFragmentOrigin], context: nil)
+        }
+        guard let cg = rendered.cgImage else { return nil }
+        return CIImage(cgImage: cg)
     }
 
     private static func apply(_ op: NativeOp, to image: CIImage, size: CGSize, text: CIImage?) -> CIImage {

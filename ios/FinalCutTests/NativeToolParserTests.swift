@@ -20,7 +20,10 @@ final class NativeToolParserTests: XCTestCase {
     }
 
     func testAllowlistIsTheBuild10Twenty() {
-        XCTAssertEqual(NativeToolParser.supportedTools.count, 20)
+        XCTAssertEqual(NativeToolParser.supportedTools.count, 21)
+        XCTAssertTrue(NativeToolParser.isSupported("generate_captions"))
+        XCTAssertFalse(NativeToolParser.isSupported("translate_captions"))
+        XCTAssertFalse(NativeToolParser.isSupported("burn_subtitles"))
         XCTAssertTrue(NativeToolParser.isSupported("apply_color_filter"))
         XCTAssertFalse(NativeToolParser.isSupported("audio_chorus"))
     }
@@ -79,6 +82,17 @@ final class NativeToolParserTests: XCTestCase {
         XCTAssertEqual(plan("convert_image_format", ["format": .string("webp")], photo), .failure(.unsupportedOnDevice))
         XCTAssertEqual(op("adjust_brightness", ["brightness": .number(0.2)], photo), .colorControls(brightness: 0.2, contrast: 1, saturation: 1))
         XCTAssertEqual(plan("get_video_dimensions", [:]), .success(.query("get_video_dimensions")))
+    }
+
+    func testGenerateCaptionsPlans() {
+        XCTAssertEqual(plan("generate_captions", [:]), .success(.captions(language: nil, burnIn: true)))
+        XCTAssertEqual(plan("generate_captions", ["language": .string("es"), "burn_in": .bool(false)]),
+                       .success(.captions(language: "es", burnIn: false)))
+        XCTAssertEqual(plan("generate_captions", ["language": .string("auto")]), .success(.captions(language: nil, burnIn: true)))
+        var silent = video
+        silent.hasAudio = false
+        XCTAssertTrue(isInvalid(plan("generate_captions", [:], silent)))
+        XCTAssertEqual(plan("generate_captions", [:], photo), .failure(.unsupportedForPhoto))
     }
 
     func testCanvasTracksEdits() {

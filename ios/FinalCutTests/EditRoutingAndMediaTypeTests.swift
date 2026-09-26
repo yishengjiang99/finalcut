@@ -23,7 +23,7 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
         )
         // Gap tools never get a chip shortcut: free text goes to the model.
         XCTAssertEqual(EditorRoute.route(for: "Trim silence"), .chat("Trim silence"))
-        XCTAssertEqual(EditorRoute.route(for: "Generate captions"), .captions(.generate))
+        XCTAssertEqual(EditorRoute.route(for: "Generate captions"), .chat("Generate captions"))
         XCTAssertEqual(EditorRoute.route(for: "Translate to Spanish"), .captions(.translate(language: "Spanish")))
         XCTAssertEqual(EditorRoute.route(for: "Burn in"), .captions(.burnIn))
     }
@@ -50,8 +50,13 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
                 guard case .success(.apply) = NativeToolParser.plan(tool: name, arguments: arguments, canvas: canvas) else {
                     return XCTFail("\(chip) → \(name) doesn't plan natively")
                 }
-            case .captions(.generate):
+            case .chat(let prompt) where prompt == "Generate captions":
+                // The model calls generate_captions, which must run on the device.
                 XCTAssertTrue(EditorRoute.onDeviceCaptionsAvailable, "\(chip) needs on-device captions")
+                XCTAssertTrue(NativeToolParser.isSupported("generate_captions"))
+                guard case .success(.captions) = NativeToolParser.plan(tool: "generate_captions", arguments: [:], canvas: canvas) else {
+                    return XCTFail("generate_captions must plan on the device")
+                }
             default:
                 XCTFail("\(chip) must map to a native tool or on-device captions")
             }

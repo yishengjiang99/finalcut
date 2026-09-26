@@ -107,7 +107,7 @@ enum NativeComposer {
         // Frame ops: one Core Image chain per frame.
         let orientedRect = CGRect(origin: .zero, size: naturalSize).applying(transform)
         let orientedSize = CGSize(width: abs(orientedRect.width), height: abs(orientedRect.height))
-        let renderer = FrameRenderer(ops: stack.ops, sourceSize: orientedSize)
+        let renderer = FrameRenderer(ops: stack.ops, sourceSize: orientedSize, captions: stack.captionCues)
         let renderSize = FrameRenderer.evenSize(renderer.outputSize)
         let videoComposition = try await AVMutableVideoComposition.videoComposition(with: composition) { request in
             var image = request.sourceImage
@@ -117,7 +117,7 @@ enum NativeComposer {
                abs(naturalSize.width - orientedSize.width) > 1 {
                 image = image.transformed(by: transform)
             }
-            request.finish(with: renderer.apply(to: image), context: nil)
+            request.finish(with: renderer.apply(to: image, time: CMTimeGetSeconds(request.compositionTime)), context: nil)
         }
         videoComposition.renderSize = renderSize
         let rate = fps > 0 ? fps : 30

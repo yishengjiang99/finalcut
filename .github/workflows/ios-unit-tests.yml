@@ -99,3 +99,40 @@ jobs:
           name: ios-test-results
           path: ios/TestResults.xcresult
           if-no-files-found: ignore
+
+  build-xcode26:
+    # TestFlight archives with Xcode 26 (iOS 26 SDK: SpeechAnalyzer paths compile only there).
+    name: Release build (Xcode 26)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        id: xcode
+        run: |
+          set -euo pipefail
+          for app in /Applications/Xcode_26.0.app /Applications/Xcode_26.app /Applications/Xcode-26.app; do
+            if [[ -d "$app" ]]; then
+              sudo xcode-select -s "$app"
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              xcodebuild -version
+              exit 0
+            fi
+          done
+          echo "::notice::Xcode 26 not installed on this runner; skipping."
+          echo "found=false" >> "$GITHUB_OUTPUT"
+
+      - name: Build (Release, generic iOS, unsigned)
+        if: steps.xcode.outputs.found == 'true'
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project FinalCut.xcodeproj \
+            -scheme FinalCut \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

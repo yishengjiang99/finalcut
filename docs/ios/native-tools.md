@@ -85,7 +85,7 @@
 
 | Tool | Args | Native implementation | Status | Build |
 |---|---|---|---|---|
-| `generate_captions` | `language`=auto, `translate_language`, `style`, `position`, `burn_in`=true | On-device speech (SpeechTranscriber iOS 26+, SFSpeechRecognizer on-device iOS 17–25) → SRT/VTT; burn-in via CI text per cue. `translate_language` has no on-device translator in the edit path → `unsupported_on_device` for that part | Partial | next |
+| `generate_captions` | `language`=auto, `translate_language`, `style`, `position`, `burn_in`=true | On-device speech (SpeechTranscriber iOS 26+, SFSpeechRecognizer on-device iOS 17–25) → SRT/VTT; burn-in via CI text per cue. `translate_language` has no on-device translator in the edit path: source-language captions only (the result's `text` lets the model say so) | Partial | 10 |
 | `convert_video_format` | `format*` mp4, webm, mov, avi, mkv, flv, ogv | mp4/mov = export container setting; others have no AVFoundation writer | Partial | 10 (mp4/mov) |
 | `extract_audio` | `format` mp3, wav, aac, ogg, flac, m4a | m4a (`AVAssetExportPresetAppleM4A`), wav (`AVAssetWriter` LPCM); others not writable | Partial | next |
 | `convert_audio_format` | `format*` mp3, wav, aac, ogg, flac, m4a, wma | Same as `extract_audio` | Partial | next |
@@ -96,7 +96,7 @@
 - **Native (33):** trim_video, adjust_speed, crop_video, rotate_video, flip_video_horizontal, flip_video_vertical, resize_video, resize_video_preset, adjust_brightness, adjust_contrast, adjust_saturation, adjust_hue, apply_color_filter, add_text, get_video_dimensions, get_supported_formats, adjust_audio_volume, audio_fade, audio_delay, audio_highpass, audio_lowpass, adjust_bass, adjust_treble, audio_equalizer, audio_pan, audio_echo, audio_tremolo, audio_reverse, normalize_audio, audio_compressor, audio_limiter, audio_gate, audio_silence_remove.
 - **Partial (6):** add_video_transition (single-clip fade), generate_captions (no on-device translation), convert_video_format (mp4/mov), extract_audio (m4a/wav), convert_audio_format (m4a/wav), convert_image_format (jpg/png).
 - **GAP (7):** audio_chorus, audio_flanger, audio_phaser, audio_vibrato, audio_stereo_widen, audio_dynamic_normalize, add_audio_track.
-- **Build 10 scope:** the 18 tools marked "10" plus mp4/mov and jpg/png formats, photo mode, and the no-upload default. Everything marked "next" returns `unsupported_on_device` in build 10.
+- **Build 10 scope:** the 19 tools marked "10" (including on-device `generate_captions`) plus mp4/mov and jpg/png formats, photo mode, and the no-upload default. Everything marked "next" returns `unsupported_on_device` in build 10.
 
 Legacy aliases (`adjust_volume`, `highpass_filter`, `lowpass_filter`, `echo_effect`, `bass_adjustment`, `treble_adjustment`, `equalizer`, `delay_audio`, `speed_video`, `get_video_info`) resolve to the canonical tool before dispatch.
 
@@ -136,7 +136,7 @@ Media stays on the device. The model gets metadata and up to 4 thumbnails per ch
 
 ## iOS allowlist (build 10)
 
-Requests from the app send `User-Agent: FinalCap-iOS/<CFBundleVersion>` (build 10 → `FinalCap-iOS/10`). For that build and later, the server should expose **only** these 20 tools to the model. Anything else still gets `{ ok: false, error: "unsupported_on_device", executedOn: "device" }` from the app as a safety net.
+Requests from the app send `User-Agent: FinalCap-iOS/<CFBundleVersion>` (build 10 → `FinalCap-iOS/10`). For that build and later, the server should expose **only** these 21 tools to the model. Anything else still gets `{ ok: false, error: "unsupported_on_device", code: "unsupported_on_device", executedOn: "device" }` from the app as a safety net. `translate_captions` and `burn_subtitles` are **not** on the list.
 
 ```
 trim_video
@@ -159,11 +159,13 @@ get_video_dimensions
 get_supported_formats
 convert_video_format
 convert_image_format
+generate_captions
 ```
 
 Argument restrictions on device (other values return `invalid_arguments`, so ideally narrow the enums in the filtered schema too):
 
-- `convert_video_format.format`: `mp4`, `mov` only.
-- `convert_image_format.format`: `jpg`, `png` only.
+- `convert_video_format.format`: `mp4`, `mov` only (other formats → `unsupported_on_device`).
+- `convert_image_format.format`: `jpg`, `png` only (other formats → `unsupported_on_device`).
+- `generate_captions`: runs on the device (SpeechAnalyzer on iOS 26+, on-device SFSpeechRecognizer on iOS 17–25; audio never uploaded). `language` optional (default: device language), `burn_in` default true (captions overlay preview and export; undoable), `translate_language` ignored. Returns `{cues, language, burnedIn, text}` and SRT/VTT download chips. No speech → `no_speech`; recognizer unavailable → `unsupported_on_device`. The "Generate captions" chip sends a chat prompt, so the model calls this tool.
 - `adjust_speed.speed`: 0.25–4.
 - Photos: only the frame tools (`crop_video`, `rotate_video`, `flip_video_*`, `resize_video`, `resize_video_preset`, `adjust_*` colour tools, `apply_color_filter`, `add_text`, `convert_image_format`, `get_video_dimensions`, `get_supported_formats`). Timeline/audio tools return `unsupported_for_photo`.

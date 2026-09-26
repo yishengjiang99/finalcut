@@ -24,6 +24,9 @@ enum NativeOp: Equatable, Sendable {
     case fade(isIn: Bool, duration: Double, start: Double?)
     // Output settings (applied on export)
     case outputFormat(String)
+    /// Burned-in captions (on-device `generate_captions`), timed on the timeline at the
+    /// moment they were made; later trims/speed changes remap them (`EditStack.captionCues`).
+    case captions([CaptionCue])
 
     var isTimeline: Bool {
         switch self { case .trim, .speed: return true; default: return false }
@@ -144,6 +147,8 @@ enum NativePlan: Equatable {
     case apply(NativeOp)
     /// Answer without changing the stack.
     case query(String)
+    /// On-device captions: transcribe the edited clip's audio (async, not a plain op).
+    case captions(language: String?, burnIn: Bool)
 }
 
 /// Maps schema tool calls (docs/api/tools-schema.v1.json) onto `NativeOp`s, validating
@@ -155,7 +160,7 @@ enum NativeToolParser {
         "flip_video_vertical", "resize_video", "resize_video_preset", "adjust_brightness",
         "adjust_contrast", "adjust_saturation", "adjust_hue", "apply_color_filter", "add_text",
         "adjust_audio_volume", "audio_fade", "get_video_dimensions", "get_supported_formats",
-        "convert_video_format", "convert_image_format",
+        "convert_video_format", "convert_image_format", "generate_captions",
     ]
 
     static let photoTools: Set<String> = [
@@ -201,6 +206,13 @@ enum NativeToolParser {
         switch tool {
         case "get_video_dimensions", "get_supported_formats":
             return .success(.query(tool))
+
+        case "generate_captions":
+            guard canvas.hasAudio else { return bad("no audio track") }
+            let language = a["language"]?.stringValue?.trimmingCharacters(in: .whitespaces)
+            let burnIn = a["burn_in"]?.boolValue ?? (a["burn_in"]?.stringValue).map { $0.lowercased() != "false" } ?? true
+            return .success(.captions(language: (language?.isEmpty ?? true) || language?.lowercased() == "auto" ? nil : language,
+                                      burnIn: burnIn))
 
         case "trim_video":
             guard let start = parseTime(a["start"]), let end = parseTime(a["end"]) else { return bad("start/end") }

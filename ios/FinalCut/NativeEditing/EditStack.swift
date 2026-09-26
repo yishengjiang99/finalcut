@@ -77,4 +77,19 @@ struct EditStack: Equatable, Sendable {
     }
 
     var canUndo: Bool { !entries.isEmpty || !history.isEmpty }
+
+    /// Burned-in captions on the final timeline: the latest captions entry, remapped through
+    /// any trims/speed changes made after it.
+    var captionCues: [CaptionCue] {
+        guard let index = entries.lastIndex(where: { if case .captions = $0.op { return true }; return false }),
+              case .captions(var cues) = entries[index].op else { return [] }
+        for entry in entries[(index + 1)...] {
+            switch entry.op {
+            case .trim(let start, let end): cues = CaptionFormatter.trimmed(cues, start: start, end: end)
+            case .speed(let factor): cues = CaptionFormatter.sped(cues, factor: factor)
+            default: break
+            }
+        }
+        return cues
+    }
 }

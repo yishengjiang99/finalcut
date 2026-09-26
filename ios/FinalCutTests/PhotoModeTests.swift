@@ -224,16 +224,13 @@ final class PhotoModeTests: XCTestCase {
     }
 
     @MainActor
-    func testCaptionsChipOnPhotoShowsPhotoUnsupportedCard() throws {
+    func testCaptionsOnPhotoShowsPhotoUnsupportedCard() async throws {
         let jpg = try XCTUnwrap(writeImage("r.jpg", type: .jpeg, orientation: 1))
-        UserDefaults.standard.set(true, forKey: NativeSettings.cloudProcessingKey)
-        defer { UserDefaults.standard.removeObject(forKey: NativeSettings.cloudProcessingKey) }
         let model = EditorViewModel()
         model.localVideoURL = jpg
         model.state = .ready
-        model.composerText = "Generate captions"
-        model.sendMessage()
-        XCTAssertEqual(model.state, .ready)
+        let result = await model.executeToolCall(ClientToolCall(id: "c1", name: "generate_captions", arguments: [:]))
+        XCTAssertEqual(result.error, "unsupported_for_photo")
         XCTAssertEqual(model.messages.last?.failureCard?.kind, .photoUnsupported)
     }
 

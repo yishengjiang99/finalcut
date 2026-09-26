@@ -193,7 +193,9 @@ enum ToolCatalog {
     }
 }
 
-/// Where a composer message goes. Only exact sample-chip taps take a local shortcut;
+/// Where a composer message goes. Only exact sample-chip taps take a local shortcut
+/// ("Generate captions" is a chat prompt: the model calls `generate_captions`, which runs on
+/// the device, exactly as if the user typed or said it);
 /// all other free text is sent to the server chat so the model picks the tool and args.
 enum EditorRoute: Equatable {
     case captions(EditorViewModel.CaptionIntent)
@@ -209,9 +211,9 @@ enum EditorRoute: Equatable {
         "Fade out audio",
     ]
 
-    /// On-device captions (Speech framework) haven't shipped yet; until they do the
-    /// "Generate captions" chip is hidden rather than routed to the server.
-    static let onDeviceCaptionsAvailable = false
+    /// On-device `generate_captions` (SpeechAnalyzer / SFSpeechRecognizer) ships in build 10.
+    /// If it's ever pulled, set this false: the chip hides instead of routing to the server.
+    static let onDeviceCaptionsAvailable = true
 
     /// Video chips shown in this build.
     static var sampleChips: [String] {
@@ -247,8 +249,6 @@ enum EditorRoute: Equatable {
             ])
         case "fade out audio", "fade out":
             return .tool(name: "audio_fade", arguments: ["type": .string("out"), "duration": .number(1)])
-        case "generate captions":
-            return .captions(.generate)
         case "translate to spanish":
             return .captions(.translate(language: "Spanish"))
         case "burn in":
