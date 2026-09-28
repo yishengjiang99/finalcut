@@ -1,35 +1,32 @@
 # TODO — FinalCap
-_Last updated: 2026-09-26 PT by Chief of Staff_
+_Last updated: 2026-09-28 9:21 AM PT by Chief of Staff_
+
+On-device iOS work from `feat/ios-native-build10` is on `main` (tip `659303a`). Branch tip `dd71d71` is one UI-test commit ahead. TestFlight build 12 uploaded from `d907c14` (workflow overrides `CURRENT_PROJECT_VERSION` to the run number; repo file still says 10).
 
 ## Now (in progress)
-Build 10 work is on branch `feat/ios-native-build10` (`fd53fd4`), not on main yet.
-- [ ] NativeToolExecutor on-device editing (AVMutableComposition, Core Image, CoreAnimation text, AVAudioMix); no uploads by default, cloud opt-in and off; photos edited on-device; unsupported tools → `unsupported_on_device` — iOS — `02c592e`, `f80c843` (wip)
-- [ ] Background export (BGContinuedProcessingTask iOS 26+, beginBackgroundTask iOS 17–25) + local "Your video is ready" notification — iOS — `6500aa9` (wip)
-- [ ] Mic dictation: addsPunctuation; auto-send 0.4s after punctuation / 1.0s silence / isFinal; keep listening; queue while processing — iOS — Design #94, #96
-- [ ] On-device captions via `generate_captions` (SpeechAnalyzer iOS 26+, SFSpeechRecognizer older) — iOS — `c60585c` (wip)
-- [ ] UA `FinalCap-iOS/<build>`, build number 10 — iOS — `aa49f1c`
-- [ ] Hide free counter when server says unlimited — iOS — Design #95, `f80c843`
-- [ ] Sample chips mapped to on-device tools — iOS — Design `0aa0a12`, `57e359a`
-- [ ] Send `turnToken` on continuations (docs/api/CLIENT_TOOL_EXECUTION.md) — iOS — `fd53fd4` (wip)
-- [ ] iOS Unit Tests green on the branch — iOS — runs 36267759062, 36267972112 failed; 36268126308 running
+- [ ] TestFlight build 12 (on-device edits, no "Upload" wording, Import menu, server-driven pills): install + dogfood — User + iOS — run 36279221297
+- [ ] Land the one open UI-test fix from `feat/ios-native-build10` (`dd71d71`: no-Upload pill find by id/label + on-screen-by-frame) onto `main` — iOS
+- [ ] Privacy update for client mode (`docs/asc/PRIVACY_NUTRITION.md`, `public/legal/privacy.html`): review draft before any App Store submit — Chief of Staff
+- [ ] Keep `translate_captions` and `burn_subtitles` off the iOS allowlist — Backend
+- [ ] Grouped effect tools (build-gated; `GROUPED_EFFECTS_MIN_BUILD` still placeholder) — Backend + iOS — `c166321`
 
 ## Next
-- [ ] Privacy update for client mode (docs/asc/PRIVACY_NUTRITION.md, public/legal/privacy.html): draft is on the branch (`57e359a`); must be reviewed before any App Store submit — Chief of Staff
-- [ ] Merge build 10 to main and cut TestFlight build 10 — iOS
-- [ ] Keep `translate_captions` and `burn_subtitles` off the iOS allowlist — Backend
+- [ ] ASC listing upload from composed screenshots (`docs/asc/screenshots/`, captions in `docs/asc/screenshot-captions.json`) — Design + Chief of Staff — `43a6c3b`
+- [ ] Cut next TestFlight once privacy + listing are ready — iOS
+- [ ] ImgBot PR #84 (image optimize, open) — triage or ignore — Chief of Staff
 
 ## Blocked / waiting on user
-- [ ] TestFlight testing of build 10 once it's ready — User
+- [ ] TestFlight testing of build 12 — User
+- [ ] Decision on App Store submit timing for FinalCap 1.0 — User
 
 ## Done (recent)
-- [x] Client-mode chat charged once per edit turn via signed `turnToken`; prod grepawk.com deployed 1:07 PM PT, /api/health 200, commit `f3483e4` — `f3483e4` — 2026-09-26
-- [x] Daily limit enforced atomically (INSERT IGNORE + conditional UPDATE) — `dee7838` — 2026-09-26
-- [x] `generate_captions` allowlisted for build 10+, iOS copy without translation (21 tools at build 10) — `2bdd104` — 2026-09-26
-- [x] Server tool allowlist by UA: `FinalCap-iOS/10` gets 20 (21 after `2bdd104`); a FinalCap-iOS UA with build <10 or no build gets 0; every other UA gets all 46 (web, and build 9, which sends the default `FinalCap/<build> CFNetwork` UA) — `54b4e43` — 2026-09-26
-- [x] `FREE_EDITS_IOS=unlimited` turns off the iOS free limit (still counted) — `4b9fb62` — 2026-09-26
-- [x] One-row ~44pt top bar, Upgrade capsule never wraps, layout tests at 375pt (on main, ships in build 10) — `0f89013` — 2026-09-26
-- [x] `audio_fade` optional `start` defaulted and validated (fixes web audio_fade) — #92 `5922c44` — 2026-09-26
-- [x] Health reports deployed commit from REVISION file — #91 `7cfc2a9` — 2026-09-26
-- [x] `GET /api/health` + photo pipeline verified on FFmpeg 4.4 — #89 `2461df0` — 2026-09-26
-- [x] Machine-readable error codes for photo rejections — #88 `771b91b` — 2026-09-26
-- [x] TestFlight build 9: crash fixes (free text → server tool calls, real MIME types) — `8684c47`, `98444d5` — 2026-09-26
+- [x] Music Reader privacy/support/terms pages under `public/music-reader/` (served with FinalCap host) — `659303a` — 2026-09-27
+- [x] TestFlight build 12 uploaded (on-device path; skipped waiting on flaky Speed-up UI test) — run 36279221297 from `d907c14` — 2026-09-26
+- [x] ASC caption compositor + framed iphone69/ipad13 screenshots (build 11 frames) — `43a6c3b` — 2026-09-26
+- [x] Import menu (camera/Photos/Files) + server-driven suggestion pills (`GET /api/ios/suggestions`) + no-Upload copy — `7faf594`, `3186953`, `d7dbbe3` — 2026-09-26
+- [x] iOS Unit Tests green on `main` at `d907c14` — run 36279719348 — 2026-09-26
+- [x] Stop tracking `.env.production`; vite/vitest audit clear; NODE_ENV set in build script — `8eedc81`, `df767ae`, `d15ed94` — 2026-09-26
+- [x] Client-mode chat charged once per edit turn via signed `turnToken`; prod grepawk.com — `f3483e4` — 2026-09-26
+- [x] Daily limit enforced atomically — `dee7838` — 2026-09-26
+- [x] `generate_captions` allowlisted for build 10+ (21 tools) — `2bdd104` — 2026-09-26
+- [x] Server tool allowlist by UA (`FinalCap-iOS/<build>`) — `54b4e43` — 2026-09-26
