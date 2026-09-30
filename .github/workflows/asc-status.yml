@@ -34,6 +34,27 @@ jobs:
           app = apps["data"][0]
           app_id = app["id"]
           print("APP", app_id, app["attributes"].get("name"), app["attributes"].get("bundleId"))
+          print("contentRights:", app["attributes"].get("contentRightsDeclaration"))
+          import urllib.error
+          def trypath(path):
+            try:
+              return api(path)
+            except Exception as e:
+              return {"_error": str(e)[:200]}
+          sched = trypath(f"/v1/apps/{app_id}/appPriceSchedule")
+          sd = sched.get("data")
+          print("priceSchedule:", "present" if sd else ("MISSING " + json.dumps(sched)[:200]))
+          if sd:
+            print("  schedAttrs:", json.dumps(sd.get("attributes")))
+            for inc in (sched.get("included") or []):
+              print("  included:", inc.get("type"), inc.get("id"), json.dumps(inc.get("attributes")))
+          v2 = trypath(f"/v2/apps/{app_id}/appPrices?limit=50")
+          if v2.get("data") is not None:
+            print("v2 appPrices count:", len(v2["data"]))
+            for p in v2["data"]:
+              print("  V2PRICE", p["id"], json.dumps(p.get("attributes")))
+          else:
+            print("v2 appPrices:", json.dumps(v2)[:200])
           vers = api(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=10")
           for v in vers.get("data", []):
             a = v["attributes"]
