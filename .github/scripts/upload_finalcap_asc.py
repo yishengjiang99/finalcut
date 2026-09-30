@@ -103,6 +103,44 @@ def main():
     app_id = app["id"]
     print("APP", app_id, app["attributes"].get("bundleId"), app["attributes"].get("name"))
 
+    # Content rights: no third-party content in this app (user-confirmed)
+    if app["attributes"].get("contentRightsDeclaration") != "DOES_NOT_USE_THIRD_PARTY_CONTENT":
+        api("PATCH", f"/v1/apps/{app_id}", {"data": {"type": "apps", "id": app_id, "attributes": {
+            "contentRightsDeclaration": "DOES_NOT_USE_THIRD_PARTY_CONTENT"}}})
+        print("contentRightsDeclaration set: DOES_NOT_USE_THIRD_PARTY_CONTENT")
+    else:
+        print("contentRightsDeclaration already set")
+
+    # Pricing: free app -> price schedule on the $0.00 price point (base USA, auto-equalized)
+    st, sched = api("GET", f"/v1/apps/{app_id}/appPriceSchedule", ok404=True)
+    if sched.get("data"):
+        print("price schedule already set")
+    else:
+        st, pps = api("GET", f"/v1/apps/{app_id}/appPricePoints?filter[territory]=USA&limit=200")
+        free_pp = None
+        for pp in pps.get("data", []):
+            try:
+                if float(pp["attributes"].get("customerPrice") or "x") == 0:
+                    free_pp = pp
+                    break
+            except (ValueError, TypeError):
+                continue
+        if free_pp is None:
+            print("WARNING: no $0.00 price point found; set Pricing and Availability in App Store Connect")
+        else:
+            tmp = "p0"
+            api("POST", "/v1/appPriceSchedules", {
+                "data": {"type": "appPriceSchedules",
+                         "relationships": {
+                             "app": {"data": {"type": "apps", "id": app_id}},
+                             "baseTerritory": {"data": {"type": "territories", "id": "USA"}},
+                             "manualPrices": {"data": [{"type": "appPrices", "id": tmp}]}}},
+                "included": [{"type": "appPrices", "id": tmp,
+                              "attributes": {"startDate": None},
+                              "relationships": {"appPricePoint": {"data": {"type": "appPricePoints",
+                                                                        "id": free_pp["id"]}}}}]})
+            print("price schedule set: free", free_pp["id"])
+
     st, vers = api("GET", f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")
     version = None
     for v in vers.get("data", []):
