@@ -48,6 +48,13 @@ jobs:
             print("  schedAttrs:", json.dumps(sd.get("attributes")))
             for inc in (sched.get("included") or []):
               print("  included:", inc.get("type"), inc.get("id"), json.dumps(inc.get("attributes")))
+            sched_id = sd.get("id")
+            prices = trypath(f"/v1/appPriceSchedules/{sched_id}/appPrices?limit=100")
+            print("  schedPrices:", json.dumps(prices.get("data"))[:1500] if prices.get("data") is not None else json.dumps(prices)[:200])
+            if prices.get("data"):
+              for p in prices["data"]:
+                pp = trypath(f"/v1/appPrices/{p['id']}/appPricePoint")
+                print("    PRICE", p["id"], json.dumps(p.get("attributes")), "point:", json.dumps((pp.get("data") or {}).get("attributes")))
           v2 = trypath(f"/v2/apps/{app_id}/appPrices?limit=50")
           if v2.get("data") is not None:
             print("v2 appPrices count:", len(v2["data"]))
