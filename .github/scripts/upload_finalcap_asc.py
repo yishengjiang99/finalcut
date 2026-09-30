@@ -140,7 +140,7 @@ def main():
                 continue
         if free_pp is None:
             raise SystemExit("no $0.00 price point found; set Pricing and Availability in App Store Connect")
-        tmp = "p0"
+        tmp = "${p0}"
         api("POST", "/v1/appPriceSchedules", {
             "data": {"type": "appPriceSchedules",
                      "relationships": {
