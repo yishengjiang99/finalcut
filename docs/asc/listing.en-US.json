@@ -1,9 +1,9 @@
 {
   "name": "FinalCap - AI Video Editor",
-  "subtitle": "Edit videos just by chatting",
-  "keywords": "captions,subtitles,trim,cut,crop,clip,text,title,filter,color,speed,slow motion,reels,vlog,maker",
-  "promotionalText": "Describe the edit you want and FinalCap makes it. Trim, add titles, change the speed, apply color looks and generate captions, then save the clip to Photos.",
-  "description": "FinalCap lets you edit a video by describing what you want. Type \"cut the first three seconds\", \"add a title that says Day One\" or \"make it warmer\", and FinalCap makes the edit and shows it in the preview.\n\nEDIT BY CHATTING\n• Trim, crop, rotate and flip\n• Add text titles\n• Speed clips up or slow them down\n• Apply color looks, or adjust brightness, contrast and saturation\n• Fade the audio in or out, or change the volume\n• Generate captions from speech\n\nPREVIEW, THEN SAVE\n• Import a clip from Photos\n• Check each change in the preview before you save\n• Save the finished video to Photos or share it\n\nChat requests are handled by FinalCap's AI service. See the privacy policy for details.",
+  "subtitle": "Chat: Trim Titles Captions",
+  "keywords": "subtitles,cut,crop,clip,filter,color,speed,slowmo,reels,vlog,export,looks,montage,share,audio,fade",
+  "promotionalText": "Your clip, edited in a sentence. Type the trim, title or color look \u2014 FinalCap makes it and shows the preview. Then save it to Photos.",
+  "description": "Edit a clip by saying what you want. Type \"cut the first three seconds\", \"add a title that says Day One\" or \"make it warmer\" \u2014 FinalCap makes the edit and shows it in the preview.\n\nCHAT THE EDIT\n\u2022 Trim, crop, rotate and flip\n\u2022 Add text titles\n\u2022 Speed clips up or slow them down\n\u2022 Apply color looks, or adjust brightness, contrast and saturation\n\u2022 Fade the audio in or out, or change the volume\n\u2022 Generate captions from speech\n\nON YOUR IPHONE\n\u2022 Edits run on your iPhone, so there's no upload and no waiting\n\u2022 Undo any step, or compare with the original\n\u2022 Dictate your request instead of typing\n\u2022 Edit photos too\n\u2022 Exports keep going in the background\n\nPREVIEW, THEN SAVE\n\u2022 Import a clip from Photos, or try the bundled sample\n\u2022 Check each change in the preview before you save\n\u2022 Save the finished video to Photos or share it\n\nYour video stays on your iPhone. Only your chat messages go to FinalCap's AI service. See the privacy policy for details.",
   "supportUrl": "https://grepawk.com/legal/support.html",
   "marketingUrl": "https://grepawk.com",
   "privacyPolicyUrl": "https://grepawk.com/legal/privacy.html"
