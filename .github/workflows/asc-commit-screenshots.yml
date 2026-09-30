@@ -1,0 +1,35 @@
+name: ASC commit screenshots
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  commit-shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate BBB store screenshots
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow
+          test -f public/BigBuckBunny.mp4
+          python3 docs/asc/screenshots/en-US/make_store_screenshots.py
+          ls -la docs/asc/screenshots/en-US/*.png
+      - name: Commit PNGs
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/asc/screenshots/en-US/*.png
+          if git diff --cached --quiet; then
+            echo 'no screenshot changes'
+            exit 0
+          fi
+          git commit -m "asc: commit FinalCap BBB store screenshots (iphone-69 / ipad-13)"
+          git push origin HEAD
