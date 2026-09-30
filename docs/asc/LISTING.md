@@ -1,45 +1,53 @@
-# FinalCap App Store listing (en-US)
+# App Store listing — FinalCap - AI Video Editor (en-US)
 
-**Source of truth for upload:** `docs/asc/listing.en-US.json`. The upload script `.github/scripts/upload_finalcap_asc.py` reads that file, so edit the JSON and this doc together.
-**Upload:** run the "ASC FinalCap upload listing" workflow. By default it uploads text only. Set `screenshots: true` to also replace the screenshots from `docs/asc/screenshots/`. The workflow never submits for review.
-**App Name:** `FinalCap - AI Video Editor` · **Apple ID:** `6815060815` · **Bundle ID:** `com.ragnus.w2` · **SKU:** `finalcap-ai`
-**Primary category:** Photo & Video
+Source of truth for the ASC listing. `scripts/asc/upload_finalcut_listing.py` reads the
+fastlane-layout files under `docs/asc/metadata/` and pushes them to App Store Connect
+(bundle `com.ragnus.w2`, Apple ID `6815060815`). Limits are Apple's. Never use the word
+"Grok" or "Final Cut" anywhere in the upload-ready listing.
 
-## Rules
+The fenced Subtitle / Promotional text / Keywords / Description blocks are the **upload-ready**
+copy and must equal `metadata/en-US/*.txt` (fastlane deliver layout).
+Check: `python3 docs/asc/check_copy.py`.
 
-- Claim only features in a shipped TestFlight build. Right now that's build 11 (current `main`), where edits run on grepawk.com.
-- Lines marked **pending build 12** go live only once the native build is on TestFlight. Then swap them in and re-run the upload.
-- Say "your video stays on your iPhone" (true from build 12). Never say "private", "offline" or "nothing leaves your phone". Chat messages and short edit results go through grepawk.com to the AI model.
-- No competitor or platform brand names, no "Grok", no "Final Cut", no Apple product names in the name, subtitle or keywords.
-- Don't claim translate or burn-in captions. Build 12's on-device captions don't do either.
-- Don't repeat words from the name or subtitle in keywords. Apple already indexes them.
+Status: listing v2 (name confirmed, subtitle names the concrete edits people search,
+description rewritten benefit-led, keywords rebuilt without name/subtitle repeats or
+spaces, screenshots regenerated with large hero text over the Big Buck Bunny sample).
+Upload + verify with the manual workflow `ASC FinalCap upload listing`. Submitting for
+review is a separate manual step (`ASC submit App Store`).
 
-## Name (26/30)
-
-`FinalCap - AI Video Editor`
-
-## Subtitle (28/30)
-
-`Edit videos just by chatting`
-
-## Keywords (96/100)
-
-`captions,subtitles,trim,cut,crop,clip,text,title,filter,color,speed,slow motion,reels,vlog,maker`
-
-## Promotional text (156/170, editable without a new submission)
-
-Live now:
-> Describe the edit you want and FinalCap makes it. Trim, add titles, change the speed, apply color looks and generate captions, then save the clip to Photos.
-
-**Pending build 12** (153/170):
-> Your video stays on your iPhone. Describe the edit you want and see it right away: trims, titles, color looks, captions and more. Then save it to Photos.
-
-## Description (live now)
-
+## Name (30)
 ```
-FinalCap lets you edit a video by describing what you want. Type "cut the first three seconds", "add a title that says Day One" or "make it warmer", and FinalCap makes the edit and shows it in the preview.
+FinalCap - AI Video Editor
+```
 
-EDIT BY CHATTING
+Keep. 26/30, already live on the App Store record.
+
+## Subtitle (30)
+```
+Chat: Trim Titles Captions
+```
+
+26/30. Names the concrete edits people search for (trim, titles, captions) plus the chat
+verb. "AI" / "video" / "editor" already live in the name.
+
+## Promotional text (170)
+```
+Your clip, edited in a sentence. Type the trim, title or color look — FinalCap makes it and shows the preview. Then save it to Photos.
+```
+
+## Keywords (100, comma-separated, no spaces after commas)
+```
+subtitles,cut,crop,clip,filter,color,speed,slowmo,reels,vlog,export,looks,montage,share,audio,fade
+```
+
+Rebuilt so no keyword repeats a word already in the name or subtitle. Single tokens only
+(Apple splits on spaces).
+
+## Description (4000)
+```
+Edit a clip by saying what you want. Type "cut the first three seconds", "add a title that says Day One" or "make it warmer" — FinalCap makes the edit and shows it in the preview.
+
+CHAT THE EDIT
 • Trim, crop, rotate and flip
 • Add text titles
 • Speed clips up or slow them down
@@ -47,81 +55,56 @@ EDIT BY CHATTING
 • Fade the audio in or out, or change the volume
 • Generate captions from speech
 
+ON YOUR IPHONE
+• Edits run on your iPhone, so there's no upload and no waiting
+• Undo any step, or compare with the original
+• Dictate your request instead of typing
+• Edit photos too
+• Exports keep going in the background
+
 PREVIEW, THEN SAVE
-• Import a clip from Photos
+• Import a clip from Photos, or try the bundled sample
 • Check each change in the preview before you save
 • Save the finished video to Photos or share it
 
-Chat requests are handled by FinalCap's AI service. See the privacy policy for details.
+Your video stays on your iPhone. Only your chat messages go to FinalCap's AI service. See the privacy policy for details.
 ```
 
-### Pending build 12 changes to the description
-
-- Replace the first paragraph with:
-  > FinalCap lets you edit a video by describing what you want, and your video stays on your iPhone. Type "cut the first three seconds", "add a title that says Day One" or "make it warmer", and the edit shows up in the preview right away.
-- Add a section after EDIT BY CHATTING:
-  ```
-  ON YOUR IPHONE
-  • Edits run on your iPhone, so there's no upload and no waiting
-  • Undo any step, or compare with the original
-  • Dictate your request instead of typing
-  • Edit photos too
-  • Exports keep going in the background, and you get a notification when your video is ready
-  ```
-- Replace the last line with:
-  > Your video stays on your iPhone. Only your chat messages go to FinalCap's AI service. See the privacy policy for details.
-
-**Pending the effects build** (the first build with the grouped effects executor): add "Remove or swap color channels, blur the background, and add audio effects like reverb and EQ" to EDIT BY CHATTING.
-
-## Subscription
-
-Not mentioned in the description for now. Edits are free on iOS while `FREE_EDITS_IOS=unlimited` is set, and the StoreKit product isn't set up in App Store Connect yet. Add a SUBSCRIPTION section once the product exists.
-
 ## What's New
+Apple does not allow editing What's New on the first version (1.0). Leave empty on upload.
 
-Apple doesn't allow editing it on the first version. For a later version, use: "Edit videos by chatting, with trims, titles, color looks, speed and captions."
+## Support URL
+```
+https://grepawk.com/legal/support.html
+```
+
+## Marketing URL
+```
+https://grepawk.com
+```
+
+## Privacy Policy URL
+```
+https://grepawk.com/legal/privacy.html
+```
+
+## Copyright
+```
+2026 Yisheng Jiang
+```
+
+## Categories
+- Primary: `PHOTO_AND_VIDEO`
+- Secondary: `PRODUCTIVITY`
 
 ## Screenshots
+Brand style: amber `#E0A812` on dark `#111111`, large ExtraBold hero text at the top of
+every frame, hero value first. Generated by
+`docs/asc/screenshots/en-US/make_store_screenshots.py` from the bundled sample
+`public/BigBuckBunny.mp4`. Order: 01 Chat the edit, 02 Trim in one line, 03 Titles on the
+clip, 04 Captions from speech, 05 Color looks.
 
-Final captures come from build 12. Frames are 6.9" iPhone (1320×2868, files `iphone69-NN-*.png`) and 13" iPad (2064×2752, files `ipad13-NN-*.png`) in `docs/asc/screenshots/`. Each frame has one short caption above the device capture.
-
-| # | App state | Caption |
+| ASC display type | Size | Files |
 |---|---|---|
-| 1 | Editor with the sample clip and a prompt being typed | Edit videos by chatting |
-| 2 | Chat with an applied edit card | Just say what you want |
-| 3 | Compare, split between original and edited | See every change first |
-| 4 | Title text on the preview | Add titles in seconds |
-| 5 | Color look applied | Color looks on command |
-| 6 | Export sheet | Save it to Photos |
-
-**Pending build 12:** frame 1's caption becomes "Your video stays on your iPhone".
-
-## URLs
-
-| Field | URL |
-|---|---|
-| Privacy policy | `https://grepawk.com/legal/privacy.html` |
-| Support | `https://grepawk.com/legal/support.html` |
-| Marketing | `https://grepawk.com` |
-
-## Localization
-
-English (U.S.) only for 1.0.
-
-## Screenshots: framed PNGs
-
-The files in `docs/asc/screenshots/` are generated. Don't edit them by hand.
-
-- **Raw frames** go in `docs/asc/screenshots-raw/`, straight from the iOS Screenshots workflow artifact (`iphone69-NN-*.png` at 1320×2868, `ipad13-NN-*.png` at 2064×2752). The uploader only reads the top level of `docs/asc/screenshots/`, so it never sees these.
-- **Captions** and the raw frame for each slot are in `docs/asc/screenshot-captions.json`. Frame 1's pending build 12 caption is stored there as `caption_build12`.
-- **Regenerate** from the repo root (`pip install pillow` once):
-
-  ```
-  python3 scripts/asc/compose_screenshots.py
-  ```
-
-  Add `--build12` to use `caption_build12` for frame 1. The script writes `iphone69-NN-<slug>.png` and `ipad13-NN-<slug>.png`, checks that every file is the exact size, RGB and has no alpha, and removes stale frames. The font is Inter Bold (`scripts/asc/fonts/`, SIL OFL).
-- **Build 12 swap:** replace the files in `docs/asc/screenshots-raw/` with the build 12 captures (same names), rerun with `--build12`, and commit.
-- **Upload:** run the "ASC FinalCap upload listing" workflow with `screenshots: true`. That replaces every screenshot in both sets.
-
-Current frames come from build 11 (iOS Screenshots run 36274857531).
+| `APP_IPHONE_67` (6.9" iPhone) | 1320 × 2868 | `screenshots/en-US/iphone-69-0{1,2,3,4,5}-*.png` |
+| `APP_IPAD_PRO_3GEN_129` (13" iPad) | 2064 × 2752 | `screenshots/en-US/ipad-13-0{1,2,3,4,5}-*.png` |
