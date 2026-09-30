@@ -14,7 +14,7 @@ import jwt
 
 APPLE_ID = os.environ.get("APP_APPLE_ID", "6815060815").strip()
 BUNDLE_HINT = "com.ragnus.w2"
-SHOT_DIR = Path(os.environ.get("SHOT_DIR", "docs/asc/screenshots"))
+SHOT_DIR = Path(os.environ.get("SHOT_DIR", "docs/asc/screenshots/en-US"))
 
 LISTING_JSON = Path(os.environ.get("LISTING_JSON", "docs/asc/listing.en-US.json"))
 UPLOAD_SCREENSHOTS = os.environ.get("UPLOAD_SCREENSHOTS", "false").strip().lower() == "true"
@@ -87,7 +87,6 @@ def put_bytes(url: str, method: str, headers: dict, chunk: bytes):
 
 
 def main():
-    # Find app
     st, apps = api("GET", f"/v1/apps?filter[id]={APPLE_ID}&limit=5")
     app = apps.get("data", [None])[0]
     if not app:
@@ -102,115 +101,40 @@ def main():
     app_id = app["id"]
     print("APP", app_id, app["attributes"].get("bundleId"), app["attributes"].get("name"))
 
-    # Version 1.0 iOS
     st, vers = api("GET", f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")
     version = None
     for v in vers.get("data", []):
-        print(
-            "VERSION",
-            v["id"],
-            v["attributes"].get("versionString"),
-            v["attributes"].get("appStoreState"),
-        )
+        print("VERSION", v["id"], v["attributes"].get("versionString"), v["attributes"].get("appStoreState"))
         if v["attributes"].get("versionString") == "1.0":
             version = v
     if version is None:
-        st, created = api(
-            "POST",
-            "/v1/appStoreVersions",
-            {
-                "data": {
-                    "type": "appStoreVersions",
-                    "attributes": {"platform": "IOS", "versionString": "1.0"},
-                    "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
-                }
-            },
-        )
+        st, created = api("POST", "/v1/appStoreVersions", {"data": {"type": "appStoreVersions", "attributes": {"platform": "IOS", "versionString": "1.0"}, "relationships": {"app": {"data": {"type": "apps", "id": app_id}}}}})
         version = created["data"]
         print("created version", version["id"])
     version_id = version["id"]
 
-    # en-US localization
     st, locs = api("GET", f"/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations")
     loc = next((L for L in locs.get("data", []) if L["attributes"].get("locale") == "en-US"), None)
     if loc is None:
-        st, created = api(
-            "POST",
-            "/v1/appStoreVersionLocalizations",
-            {
-                "data": {
-                    "type": "appStoreVersionLocalizations",
-                    "attributes": {"locale": "en-US"},
-                    "relationships": {
-                        "appStoreVersion": {"data": {"type": "appStoreVersions", "id": version_id}}
-                    },
-                }
-            },
-        )
+        st, created = api("POST", "/v1/appStoreVersionLocalizations", {"data": {"type": "appStoreVersionLocalizations", "attributes": {"locale": "en-US"}, "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": version_id}}}}})
         loc = created["data"]
     loc_id = loc["id"]
-    api(
-        "PATCH",
-        f"/v1/appStoreVersionLocalizations/{loc_id}",
-        {
-            "data": {
-                "type": "appStoreVersionLocalizations",
-                "id": loc_id,
-                "attributes": {
-                    "description": DESCRIPTION,
-                    "keywords": KEYWORDS,
-                    "marketingUrl": MARKETING_URL,
-                    "promotionalText": PROMO,
-                    "supportUrl": SUPPORT_URL,
-                    # whatsNew is not editable on the first App Store version
-                },
-            }
-        },
-    )
+    api("PATCH", f"/v1/appStoreVersionLocalizations/{loc_id}", {"data": {"type": "appStoreVersionLocalizations", "id": loc_id, "attributes": {"description": DESCRIPTION, "keywords": KEYWORDS, "marketingUrl": MARKETING_URL, "promotionalText": PROMO, "supportUrl": SUPPORT_URL}}})
     print("localization patched", loc_id)
 
-    # App name / subtitle
     st, infos = api("GET", f"/v1/apps/{app_id}/appInfos")
     if infos.get("data"):
         info_id = infos["data"][0]["id"]
         st, info_locs = api("GET", f"/v1/appInfos/{info_id}/appInfoLocalizations")
-        info_loc = next(
-            (L for L in info_locs.get("data", []) if L["attributes"].get("locale") == "en-US"),
-            None,
-        )
-        attrs = {
-            "name": NAME,
-            "subtitle": SUBTITLE,
-            "privacyPolicyUrl": PRIVACY_URL,
-        }
+        info_loc = next((L for L in info_locs.get("data", []) if L["attributes"].get("locale") == "en-US"), None)
+        attrs = {"name": NAME, "subtitle": SUBTITLE, "privacyPolicyUrl": PRIVACY_URL}
         if info_loc is None:
-            api(
-                "POST",
-                "/v1/appInfoLocalizations",
-                {
-                    "data": {
-                        "type": "appInfoLocalizations",
-                        "attributes": {"locale": "en-US", **attrs},
-                        "relationships": {"appInfo": {"data": {"type": "appInfos", "id": info_id}}},
-                    }
-                },
-            )
+            api("POST", "/v1/appInfoLocalizations", {"data": {"type": "appInfoLocalizations", "attributes": {"locale": "en-US", **attrs}, "relationships": {"appInfo": {"data": {"type": "appInfos", "id": info_id}}}}})
             print("created appInfoLocalization")
         else:
-            api(
-                "PATCH",
-                f"/v1/appInfoLocalizations/{info_loc['id']}",
-                {
-                    "data": {
-                        "type": "appInfoLocalizations",
-                        "id": info_loc["id"],
-                        "attributes": attrs,
-                    }
-                },
-            )
+            api("PATCH", f"/v1/appInfoLocalizations/{info_loc['id']}", {"data": {"type": "appInfoLocalizations", "id": info_loc["id"], "attributes": attrs}})
             print("patched appInfoLocalization", info_loc["id"])
 
-    # Screenshot sets (only when asked, so a text-only run never wipes existing shots)
     if not UPLOAD_SCREENSHOTS:
         print("SUCCESS FinalCap ASC listing text uploaded (screenshots skipped)")
         return
@@ -218,10 +142,8 @@ def main():
         raise SystemExit(f"Missing screenshot dir {SHOT_DIR.resolve()}")
 
     mapping = {
-        # 6.9" iPhone (1320x2868) uses the APP_IPHONE_67 display type.
-        "APP_IPHONE_67": sorted(SHOT_DIR.glob("iphone69-*.png")),
-        # 13" iPad (2064x2752) uses the APP_IPAD_PRO_3GEN_129 display type.
-        "APP_IPAD_PRO_3GEN_129": sorted(SHOT_DIR.glob("ipad13-*.png")),
+        "APP_IPHONE_67": sorted(SHOT_DIR.glob("iphone-69-*.png")),
+        "APP_IPAD_PRO_3GEN_129": sorted(SHOT_DIR.glob("ipad-13-*.png")),
     }
     st, sets = api("GET", f"/v1/appStoreVersionLocalizations/{loc_id}/appScreenshotSets")
     by_type = {s["attributes"]["screenshotDisplayType"]: s for s in sets.get("data", [])}
@@ -232,21 +154,7 @@ def main():
             continue
         sset = by_type.get(dtype)
         if sset is None:
-            st, created = api(
-                "POST",
-                "/v1/appScreenshotSets",
-                {
-                    "data": {
-                        "type": "appScreenshotSets",
-                        "attributes": {"screenshotDisplayType": dtype},
-                        "relationships": {
-                            "appStoreVersionLocalization": {
-                                "data": {"type": "appStoreVersionLocalizations", "id": loc_id}
-                            }
-                        },
-                    }
-                },
-            )
+            st, created = api("POST", "/v1/appScreenshotSets", {"data": {"type": "appScreenshotSets", "attributes": {"screenshotDisplayType": dtype}, "relationships": {"appStoreVersionLocalization": {"data": {"type": "appStoreVersionLocalizations", "id": loc_id}}}}})
             sset = created["data"]
             print("created set", dtype, sset["id"])
         else:
@@ -258,21 +166,7 @@ def main():
 
         for path in files:
             raw = path.read_bytes()
-            st, reserved = api(
-                "POST",
-                "/v1/appScreenshots",
-                {
-                    "data": {
-                        "type": "appScreenshots",
-                        "attributes": {"fileName": path.name, "fileSize": len(raw)},
-                        "relationships": {
-                            "appScreenshotSet": {
-                                "data": {"type": "appScreenshotSets", "id": sset["id"]}
-                            }
-                        },
-                    }
-                },
-            )
+            st, reserved = api("POST", "/v1/appScreenshots", {"data": {"type": "appScreenshots", "attributes": {"fileName": path.name, "fileSize": len(raw)}, "relationships": {"appScreenshotSet": {"data": {"type": "appScreenshotSets", "id": sset["id"]}}}}})
             shot = reserved["data"]
             shot_id = shot["id"]
             for op in shot["attributes"].get("uploadOperations") or []:
@@ -280,20 +174,7 @@ def main():
                 offset = int(op.get("offset", 0))
                 length = int(op.get("length", len(raw)))
                 put_bytes(op["url"], op["method"], headers, raw[offset : offset + length])
-            st, committed = api(
-                "PATCH",
-                f"/v1/appScreenshots/{shot_id}",
-                {
-                    "data": {
-                        "type": "appScreenshots",
-                        "id": shot_id,
-                        "attributes": {
-                            "uploaded": True,
-                            "sourceFileChecksum": hashlib.md5(raw).hexdigest(),
-                        },
-                    }
-                },
-            )
+            st, committed = api("PATCH", f"/v1/appScreenshots/{shot_id}", {"data": {"type": "appScreenshots", "id": shot_id, "attributes": {"uploaded": True, "sourceFileChecksum": hashlib.md5(raw).hexdigest()}}})
             state = committed["data"]["attributes"].get("assetDeliveryState")
             print("shot", path.name, shot_id, state)
 
