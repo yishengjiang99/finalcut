@@ -113,13 +113,15 @@ def main():
 
     # Pricing: free app -> ensure the schedule has a current $0.00 manual price
     # (a bare schedule shell can exist with no prices, which Apple rejects)
-    st, sched = api("GET", f"/v1/apps/{app_id}/appPriceSchedule?include=manualPrices.appPricePoint", ok404=True)
+    st, sched = api("GET", f"/v1/apps/{app_id}/appPriceSchedule?include=manualPrices", ok404=True)
     has_free = False
     if sched.get("data"):
         for inc in (sched.get("included") or []):
-            if inc.get("type") == "appPricePoints":
+            if inc.get("type") == "appPrices":
+                st2, full = api("GET", f"/v1/appPrices/{inc['id']}?include=appPricePoint")
+                pt = next((i for i in (full.get("included") or []) if i.get("type") == "appPricePoints"), {})
                 try:
-                    if float(inc["attributes"].get("customerPrice") or "x") == 0:
+                    if float((pt.get("attributes") or {}).get("customerPrice") or "x") == 0:
                         has_free = True
                         break
                 except (ValueError, TypeError):
