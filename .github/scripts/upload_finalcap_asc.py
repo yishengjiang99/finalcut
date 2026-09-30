@@ -148,6 +148,13 @@ def main():
     st, sets = api("GET", f"/v1/appStoreVersionLocalizations/{loc_id}/appScreenshotSets")
     by_type = {s["attributes"]["screenshotDisplayType"]: s for s in sets.get("data", [])}
 
+    for dtype, sset in by_type.items():
+        if dtype not in mapping:  # obsolete display size (e.g. APP_IPHONE_65): remove the whole set
+            st, old = api("GET", f"/v1/appScreenshotSets/{sset['id']}/appScreenshots")
+            n = len(old.get("data", []))
+            api("DELETE", f"/v1/appScreenshotSets/{sset['id']}")
+            print(f"deleted obsolete set {dtype} ({n} screenshots)")
+
     for dtype, files in mapping.items():
         if not files:
             print("skip empty", dtype)
