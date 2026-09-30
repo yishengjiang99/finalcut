@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       screenshots:
-        description: "Also replace screenshots from docs/asc/screenshots (text-only when false)"
+        description: "Generate BBB shots and replace ASC screenshots (text-only when false)"
         type: boolean
         default: true
 
@@ -16,6 +16,17 @@ jobs:
       - name: Checkout finalcut
         uses: actions/checkout@v4
 
+      - name: Generate BBB store screenshots
+        if: ${{ inputs.screenshots }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow
+          test -f public/BigBuckBunny.mp4
+          python3 docs/asc/screenshots/en-US/make_store_screenshots.py
+          ls -1 docs/asc/screenshots/en-US/iphone-69-*.png docs/asc/screenshots/en-US/ipad-13-*.png
+
       - name: Upload listing (and optionally screenshots) to ASC
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -23,7 +34,7 @@ jobs:
           APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           APP_APPLE_ID: "6815060815"
           LISTING_JSON: docs/asc/listing.en-US.json
-          SHOT_DIR: docs/asc/screenshots
+          SHOT_DIR: docs/asc/screenshots/en-US
           UPLOAD_SCREENSHOTS: ${{ inputs.screenshots }}
           BUILD_NUMBER: "12"
         run: |
