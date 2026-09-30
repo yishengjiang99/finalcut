@@ -57,7 +57,7 @@ def token() -> str:
 TOK = None
 
 
-def api(method: str, path: str, body=None):
+def api(method: str, path: str, body=None, ok404: bool = False):
     global TOK
     if TOK is None:
         TOK = token()
@@ -76,6 +76,8 @@ def api(method: str, path: str, body=None):
             raw = r.read().decode() or "{}"
             return r.status, json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
+        if ok404 and e.code == 404:
+            return e.code, {}
         err = e.read().decode()
         raise SystemExit(f"{method} {path} -> {e.code}: {err[:3000]}")
 
@@ -134,6 +136,29 @@ def main():
         else:
             api("PATCH", f"/v1/appInfoLocalizations/{info_loc['id']}", {"data": {"type": "appInfoLocalizations", "id": info_loc["id"], "attributes": attrs}})
             print("patched appInfoLocalization", info_loc["id"])
+
+        # Age rating: fill every still-unset field -> NONE / false (4+). Apple blocks
+        # review submission while any required attribute is missing.
+        st, ard = api("GET", f"/v1/appInfos/{info_id}/ageRatingDeclaration", ok404=True)
+        if ard.get("data"):
+            ard_id = ard["data"]["id"]
+            a = ard["data"]["attributes"]
+            string_fields = ["alcoholTobaccoOrDrugUseOrReferences", "contests", "gamblingSimulated", "gunsOrOtherWeapons",
+                             "horrorOrFearThemes", "matureOrSuggestiveThemes", "medicalOrTreatmentInformation",
+                             "profanityOrCrudeHumor", "sexualContentGraphicAndNudity", "sexualContentOrNudity",
+                             "violenceCartoonOrFantasy", "violenceRealistic", "violenceRealisticProlongedGraphicOrSadistic"]
+            bool_fields = ["advertising", "gambling", "healthOrWellnessTopics", "lootBox", "messagingAndChat",
+                           "parentalControls", "ageAssurance", "socialMedia", "unrestrictedWebAccess", "userGeneratedContent"]
+            todo = {k: "NONE" for k in string_fields if a.get(k) is None}
+            todo.update({k: False for k in bool_fields if a.get(k) is None})
+            if todo:
+                api("PATCH", f"/v1/ageRatingDeclarations/{ard_id}",
+                    {"data": {"type": "ageRatingDeclarations", "id": ard_id, "attributes": todo}})
+                print("ageRating set:", sorted(todo))
+            else:
+                print("ageRating: all fields already set")
+        else:
+            print("WARNING: no ageRatingDeclaration on appInfo")
 
     if not UPLOAD_SCREENSHOTS:
         print("SUCCESS FinalCap ASC listing text uploaded (screenshots skipped)")
