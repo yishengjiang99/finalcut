@@ -47,6 +47,18 @@ jobs:
               print("ATTACHED_BUILD", b["id"], "cfBundleVersion=", ba.get("version"), "processing=", ba.get("processingState"), "uploaded=", ba.get("uploadedDate"))
             else:
               print("ATTACHED_BUILD none")
+          if vers.get("data"):
+              vid0 = vers["data"][0]["id"]
+              vstr = vers["data"][0]["attributes"].get("versionString")
+              sets = api(f"/v1/appStoreVersions/{vid0}/appScreenshotSets?limit=20")
+              for st in sets.get("data", []):
+                  sa = st["attributes"]
+                  shots = api(f"/v1/appScreenshotSets/{st['id']}/appScreenshots?limit=30")
+                  dims = []
+                  for sh in shots.get("data", []):
+                      ia = (sh.get("attributes") or {}).get("imageAsset") or {}
+                      dims.append(f"{ia.get('width')}x{ia.get('height')}")
+                  print("SHOTSET", vstr, sa.get("screenshotDisplayType"), len(shots.get("data", [])), "shots:", ",".join(dims))
           subs = api(f"/v1/apps/{app_id}/reviewSubmissions?filter[platform]=IOS&limit=15")
           for s in subs.get("data", []):
             a = s["attributes"]

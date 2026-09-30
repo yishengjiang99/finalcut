@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       screenshots:
-        description: "Generate BBB shots and replace ASC screenshots (text-only when false)"
+        description: "Upload the committed store screenshots (text-only when false)"
         type: boolean
         default: true
 
@@ -16,16 +16,25 @@ jobs:
       - name: Checkout finalcut
         uses: actions/checkout@v4
 
-      - name: Generate BBB store screenshots
+      - name: Verify store screenshots
         if: ${{ inputs.screenshots }}
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
           pip install -q pillow
-          test -f public/BigBuckBunny.mp4
-          python3 docs/asc/screenshots/en-US/make_store_screenshots.py
-          ls -1 docs/asc/screenshots/en-US/iphone-69-*.png docs/asc/screenshots/en-US/ipad-13-*.png
+          python3 docs/asc/check_copy.py
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          d = Path('docs/asc/screenshots/en-US')
+          want = {'iphone-69': (1320, 2868), 'ipad-13': (2064, 2752)}
+          for prefix, size in want.items():
+              files = sorted(d.glob(f'{prefix}-*.png'))
+              assert len(files) == 6, f'{prefix}: found {len(files)} pngs, want 6'
+              for f in files:
+                  im = Image.open(f)
+                  assert im.size == size and im.mode == 'RGB', f'{f.name}: {im.size} {im.mode}'
+                  print('OK', f.name, im.size)
+          PY
 
       - name: Upload listing (and optionally screenshots) to ASC
         env:

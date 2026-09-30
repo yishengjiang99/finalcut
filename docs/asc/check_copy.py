@@ -77,12 +77,12 @@ def main() -> int:
     print("\nscreenshot hero text (<= 5 words per line)")
     sys.path.insert(0, str(HERE / "screenshots" / "en-US"))
     from make_store_screenshots import SHOTS
-    for name, hero, _sub in SHOTS:
+    for slug, hero, _sub, _user, _assistant in SHOTS:
         for line in hero.split("\n"):
             n = len(line.split())
             if n > 5:
-                errors.append(f"hero line {line!r} ({name}): {n} words")
-            print(f"  {n} words  {name}: {line}")
+                errors.append(f"hero line {line!r} ({slug}): {n} words")
+            print(f"  {n} words  {slug}: {line}")
 
     print()
     for e in errors:

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """FinalCap App Store screenshots from public/BigBuckBunny.mp4.
 
-Writes docs/asc/screenshots/en-US/iphone-69-01-chat-the-edit.png
-and ipad-13-05-color-on-command.png — same title style as photo-recipes.
+Writes docs/asc/screenshots/en-US/iphone-69-*.png (1320x2868) and
+ipad-13-*.png (2064x2752) — same title style as photo-recipes.
+
+The PNGs are COMMITTED to the repo; the upload workflow verifies them
+(check_copy.py + dimensions) and uploads the committed files. Re-run this
+script manually only when the shot design changes, then commit the results.
 """
 from __future__ import annotations
 import subprocess, tempfile
