@@ -6,7 +6,7 @@ on:
       screenshots:
         description: "Also replace screenshots from docs/asc/screenshots (text-only when false)"
         type: boolean
-        default: false
+        default: true
 
 jobs:
   upload:
@@ -25,9 +25,52 @@ jobs:
           LISTING_JSON: docs/asc/listing.en-US.json
           SHOT_DIR: docs/asc/screenshots
           UPLOAD_SCREENSHOTS: ${{ inputs.screenshots }}
+          BUILD_NUMBER: "12"
         run: |
           set -euo pipefail
           pip install -q PyJWT cryptography
           test -f "$LISTING_JSON"
           if [ "$UPLOAD_SCREENSHOTS" = "true" ]; then test -d "$SHOT_DIR"; fi
           python3 .github/scripts/upload_finalcap_asc.py
+
+      - name: Set copyright, category, review contact
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography requests
+          python3 - <<'PY'
+          import os, time, jwt, requests
+          KEY=os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          ISS=os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          P8=os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n','\n').strip()
+          now=int(time.time())
+          tok=jwt.encode({'iss':ISS,'iat':now,'exp':now+1100,'aud':'appstoreconnect-v1'},P8,algorithm='ES256',headers={'kid':KEY})
+          H={'Authorization':'Bearer '+tok,'Content-Type':'application/json'}
+          B='https://api.appstoreconnect.apple.com'
+          def api(m,p,body=None):
+            r=requests.request(m,B+p,json=body,headers=H,timeout=90)
+            if r.status_code>=300 and r.status_code not in (404,):
+              raise SystemExit(f'{m} {p} -> {r.status_code} {r.text[:1500]}')
+            return r.json() if r.text else {}
+          app=api('GET','/v1/apps?filter[bundleId]=com.ragnus.w2')['data'][0]
+          aid=app['id']
+          ver=api('GET',f'/v1/apps/{aid}/appStoreVersions?filter[platform]=IOS&filter[versionString]=1.0')['data'][0]
+          vid=ver['id']
+          api('PATCH',f'/v1/appStoreVersions/{vid}',{'data':{'type':'appStoreVersions','id':vid,'attributes':{'copyright':'2026 Yisheng Jiang'}}})
+          print('copyright set')
+          infos=api('GET',f'/v1/apps/{aid}/appInfos')['data']
+          info=next((i for i in infos if (i['attributes'].get('state') or i['attributes'].get('appStoreState')) not in ('READY_FOR_DISTRIBUTION','READY_FOR_SALE')), infos[0])
+          api('PATCH',f'/v1/appInfos/{info["id"]}',{'data':{'type':'appInfos','id':info['id'],'relationships':{'primaryCategory':{'data':{'type':'appCategories','id':'PHOTO_AND_VIDEO'}},'secondaryCategory':{'data':{'type':'appCategories','id':'PRODUCTIVITY'}}}}})
+          print('categories set')
+          rattrs={'contactFirstName':'Yisheng','contactLastName':'Jiang','contactPhone':'+1 669 251 7789','contactEmail':'yisheng.jiang@gmail.com','demoAccountRequired':False}
+          rd=api('GET',f'/v1/appStoreVersions/{vid}/appStoreReviewDetail')
+          if rd.get('data'):
+            api('PATCH',f'/v1/appStoreReviewDetails/{rd["data"]["id"]}',{'data':{'type':'appStoreReviewDetails','id':rd['data']['id'],'attributes':rattrs}})
+          else:
+            api('POST','/v1/appStoreReviewDetails',{'data':{'type':'appStoreReviewDetails','attributes':rattrs,'relationships':{'appStoreVersion':{'data':{'type':'appStoreVersions','id':vid}}}}})
+          print('review contact set')
+          PY
