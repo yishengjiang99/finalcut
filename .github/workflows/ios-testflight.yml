@@ -25,17 +25,25 @@ jobs:
       EXPORT_PATH: ${{ github.workspace }}/build/export
       TEAM_ID: 83D36RPMUM
       BUNDLE_ID: com.ragnus.w2
-      # Profile name must match the App Store provisioning profile for com.ragnus.w2
       PROFILE_NAME: FinalCap App Store
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Bundle BigBuckBunny as the sample clip
+        run: |
+          set -euo pipefail
+          test -f public/BigBuckBunny.mp4
+          mkdir -p ios/FinalCut/SampleMedia
+          cp public/BigBuckBunny.mp4 ios/FinalCut/SampleMedia/finalcap-test-video.mp4
+          cp public/BigBuckBunny.mp4 ios/FinalCut/SampleMedia/BigBuckBunny.mp4
+          ls -la ios/FinalCut/SampleMedia public/BigBuckBunny.mp4
+          ffprobe -v error -show_entries stream=width,height,codec_type -of default=nw=1 ios/FinalCut/SampleMedia/finalcap-test-video.mp4 || true
+
       - name: Select Xcode
         run: |
           set -euo pipefail
-          # Prefer Xcode 26 (ASC SDK requirement as of 2026); fall back to 16.x
           for app in /Applications/Xcode_26.0.app /Applications/Xcode_26.app /Applications/Xcode-26.app /Applications/Xcode_16.4.app /Applications/Xcode_16.3.app /Applications/Xcode_16.2.app /Applications/Xcode_16.app /Applications/Xcode.app; do
             if [[ -d "$app" ]]; then
               sudo xcode-select -s "$app"
@@ -74,7 +82,6 @@ jobs:
           KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
           echo -n "$P12_BASE64" | base64 --decode > "$CERT_PATH"
           echo -n "$PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
-          # Create ephemeral keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -82,7 +89,6 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | sed s/\"//g)
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          # Profile UUID from file
           UUID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract UUID raw -)
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
           echo "Installed profile UUID=$UUID"
@@ -123,7 +129,6 @@ jobs:
           </dict>
           </plist>
           PLIST
-          # Strip leading indentation from heredoc
           sed -i '' 's/^          //' "$GITHUB_WORKSPACE/ExportOptions.plist"
           plutil -lint "$GITHUB_WORKSPACE/ExportOptions.plist"
 
@@ -180,7 +185,6 @@ jobs:
             --file "$IPA" \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool-upload.log"
-          # Apple may still exit 0 while rejecting the package — fail hard on validation noise.
           if grep -Eiq 'UPLOAD FAILED|Validation failed|STATE_ERROR\.VALIDATION_ERROR|Failed to upload package|ERROR:\s*\[altool' "$RUNNER_TEMP/altool-upload.log"; then
             echo "::error::altool upload/validation failed (see log)"
             exit 1
@@ -197,6 +201,7 @@ jobs:
             echo "### TestFlight upload"
             echo "- Bundle: \`$BUNDLE_ID\`"
             echo "- Build: \`${{ github.run_number }}\`"
+            echo "- Sample: BigBuckBunny.mp4 copied over finalcap-test-video.mp4"
             echo "- Notes: ${{ github.event.inputs.notes }}"
-            echo "- Wait a few minutes in App Store Connect for processing, then assign testers."
+            echo "- Wait a few minutes in App Store Connect for processing, then install the new build."
           } >> "$GITHUB_STEP_SUMMARY"
