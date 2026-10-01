@@ -167,13 +167,14 @@ describe('allowlist thresholds', () => {
     expect(tools).toHaveLength(46);
   });
 
-  it('seed: the "iOS allowlist (build 10)" block in docs/ios/native-tools.md + generate_captions, at minBuild 10', () => {
+  it('seed: the "iOS allowlist (build 10)" block in docs/ios/native-tools.md matches minBuild 10', () => {
     const doc = readFileSync(path.join(here, '..', '..', 'docs', 'ios', 'native-tools.md'), 'utf8');
     const section = doc.slice(doc.indexOf('## iOS allowlist (build 10)'));
     const block = section.slice(section.indexOf('```') + 3, section.indexOf('```', section.indexOf('```') + 3));
     const documented = block.split('\n').map(l => l.trim()).filter(Boolean);
-    expect(documented).toHaveLength(20);
-    expect([...allowlisted].sort()).toEqual([...documented, 'generate_captions'].sort());
+    // The doc block is the full build-10 allowlist, including generate_captions.
+    expect(documented).toHaveLength(21);
+    expect([...allowlisted].sort()).toEqual([...documented].sort());
     expect(allowlisted).toHaveLength(21);
     for (const serverOnly of ['translate_captions', 'burn_subtitles']) expect(allowlisted).not.toContain(serverOnly);
     for (const name of allowlisted) {

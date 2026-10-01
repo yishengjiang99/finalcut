@@ -9,8 +9,8 @@
 // Any other UA (web, older iOS builds that don't send this UA and still upload to the server)
 // is unaffected and gets every tool exactly as before.
 //
-// Seeded from docs/ios/native-tools.md "iOS allowlist (build 10)" (20 tools), plus
-// generate_captions (on-device speech; translation removed from the iOS definition).
+// Seeded from docs/ios/native-tools.md "iOS allowlist (build 10)" (21 tools,
+// including generate_captions — on-device speech; translation removed from the iOS definition).
 // To ship a tool natively in a new build, add `tool_name: <that build>` here. An entry is either
 // a number (minBuild) or `{ minBuild, maxBuild }` (both inclusive) to retire a tool in later builds.
 // The grouped effect tools (iOS-only definitions in iosGroupedTools.js) are gated on
