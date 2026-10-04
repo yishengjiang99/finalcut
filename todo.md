@@ -1,10 +1,10 @@
 # TODO — FinalCap
-_Last updated: 2026-10-02 5:10 PM PT by Chief of Staff_
+_Last updated: 2026-10-04 9:07 AM PT by Chief of Staff_
 
 On-device iOS work from `feat/ios-native-build10` is on `main` (tip `55c1b26`). Branch tip `dd71d71` is still one UI-test commit ahead of the merge base used for TestFlight. v1.0 build 12 is in App Review. ImgBot PR #84 still open. Main CI is green at tip after the allowlist-test seed; older ASC script commits on 2026-09-30 remain red in history.
 
 ## Now (in progress)
-- [ ] v1.0 build 12 in App Review (WAITING_FOR_REVIEW; BBB listing screenshots + age rating + content rights + free price; submission `079ac244` submitted 2026-09-30 ~2:03 PM PT / 21:03 UTC). Check with read-only **ASC status** only; do NOT re-run cancel/submit while waiting — Chief of Staff — submit run 36776867554; status rechecked 2026-10-02 ~5:09 PM PT (run 37080832078)
+- [ ] v1.0 build 12 in App Review (WAITING_FOR_REVIEW; BBB listing screenshots + age rating + content rights + free price; submission `079ac244` submitted 2026-09-30 ~2:03 PM PT / 21:03 UTC). Check with read-only **ASC status** only; do NOT re-run cancel/submit while waiting — Chief of Staff — submit run 36776867554; status rechecked 2026-10-04 ~9:10 AM PT (run 37215745069)
 - [ ] Land the one open UI-test fix from `feat/ios-native-build10` (`dd71d71`: no-Upload pill find by id/label + on-screen-by-frame) onto `main` — iOS
 - [ ] Keep `translate_captions` and `burn_subtitles` off the iOS allowlist — Backend
 - [ ] Grouped effect tools (build-gated; `GROUPED_EFFECTS_MIN_BUILD` still placeholder) — Backend + iOS — `c166321`
