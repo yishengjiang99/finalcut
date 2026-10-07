@@ -2,6 +2,7 @@
 // These functions call the server API instead of using client-side FFmpeg
 
 import { captionSourceFor, recordCaptionBurn } from './captionLineage.js';
+import { runLyricCaptionsWeb, describeSong } from './lyricCaptionsClient.js';
 
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {
@@ -1105,6 +1106,36 @@ export const toolFunctions = {
     } catch (error) {
       addMessage({ text: 'Error generating captions: ' + error.message });
       return 'Failed to generate captions: ' + error.message;
+    }
+  },
+
+  // Audio-in, captions-out: only the WAV goes up for transcription. The web app has no
+  // client-side ffmpeg, so the burn-in uses the server fallback (the video is uploaded for that
+  // step, as for every other web edit).
+  lyric_captions: async (args, inputVideoFileData, setVideoFileData, addMessage) => {
+    try {
+      // Same rule as generate_captions: never burn on top of burned captions.
+      const { bytes: videoFileData, replacing } = captionSourceFor(inputVideoFileData);
+      if ((currentFileMimeType || '').startsWith('image/')) throw new Error('Lyric captions are not supported for photos');
+      if (!args?.target_language) throw new Error('target_language is required');
+      const headers = sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {};
+      addMessage({ text: 'Extracting audio and transcribing lyrics…' });
+      const { burned, summary, result, audioBytes } = await runLyricCaptionsWeb(args, videoFileData, { headers });
+      recordCaptionBurn(videoFileData, burned);
+      setVideoFileData(burned);
+      const lines = result.lines?.length || 0;
+      const songText = describeSong(result.song);
+      const kb = (n) => `${Math.round(n / 1024)} KB`;
+      addMessage({
+        // No lyric text in the bubble: it is in the video.
+        text: `Bilingual captions burned in (${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage}). ${songText}`,
+        videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })),
+        mimeType: 'video/mp4',
+      });
+      return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText}${replacing ? ' Replaced the captions burned earlier.' : ''} Uploaded ${kb(audioBytes)} of audio for transcription; burn-in: server fallback (the web app has no client-side ffmpeg).`;
+    } catch (error) {
+      addMessage({ text: 'Error creating lyric captions: ' + error.message });
+      return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}: ${error.message}`;
     }
   },
 

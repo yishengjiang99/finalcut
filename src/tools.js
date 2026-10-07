@@ -936,6 +936,47 @@ export const tools = [
   {
     type: 'function',
     function: {
+      name: 'lyric_captions',
+      description: 'Bilingual lyric/speech captions. Use when the user asks to add lyrics or lyric captions, subtitle or caption a song or music video, translate the lyrics on the video, or show the original line plus a translation (e.g. "add lyrics captions", "subtitle the song in Chinese", "translate the lyrics on the video to Spanish"). Fill target_language from the language the user wants the translation in, and source_language only if they name the sung language. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the sung or spoken audio with word timestamps (only the audio track is sent to the server, never the video), identifies the song and corrects misheard lyrics against the published lyrics, translates each line into target_language, and burns two-line captions into the video (original on top, translation below, about 20% up from the bottom). Use for music videos, songs, and karaoke-style or bilingual captions; use generate_captions for plain subtitles. Videos only — not supported for photos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          target_language: {
+            type: 'string',
+            description: 'Language for the translation line, as a code or name: "zh-Hans", "zh-Hant", "es", "ja", "English".'
+          },
+          source_language: {
+            type: 'string',
+            description: 'Sung/spoken language as a code ("en", "de", "ko"), or "auto" (default) to detect it.',
+            default: 'auto'
+          },
+          mode: {
+            type: 'string',
+            description: '"lyrics" for a song (identify it and correct lyrics), "speech" for talking (fix obvious errors only), or "auto" (default) to decide.',
+            enum: ['auto', 'lyrics', 'speech'],
+            default: 'auto'
+          },
+          position_from_bottom_pct: {
+            type: 'number',
+            description: 'Caption baseline height above the bottom edge, as a percentage of the video height (0-45). Default 20.',
+            minimum: 0,
+            maximum: 45,
+            default: 20
+          },
+          font_size: {
+            type: 'integer',
+            description: 'Optional font size in video pixels. Default is about video height / 27.',
+            minimum: 8,
+            maximum: 400
+          }
+        },
+        required: ['target_language']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'add_video_transition',
       description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos. Videos only — not supported for photos.',
       parameters: {
@@ -1028,4 +1069,4 @@ export const tools = [
   }
 ];
 
-export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic) only use frame edits: apply_color_filter, adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation, crop_video, resize_video, rotate_video, flip_video_horizontal, flip_video_vertical, add_text, convert_image_format — never trim, speed, audio, captions, or transitions on a photo. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video.';
+export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic) only use frame edits: apply_color_filter, adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation, crop_video, resize_video, rotate_video, flip_video_horizontal, flip_video_vertical, add_text, convert_image_format — never trim, speed, audio, captions, or transitions on a photo. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video. For songs, music videos, or when the user wants the original line plus a translation, call lyric_captions with target_language instead.';

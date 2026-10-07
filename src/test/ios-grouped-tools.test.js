@@ -110,10 +110,10 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     });
   }
 
-  it('counts: iOS/10 = 21 tools, web and FinalCap/11 CFNetwork = 46', () => {
+  it('counts: iOS/10 = 21 tools, web and FinalCap/11 CFNetwork = 47', () => {
     expect(JSON.parse(snapshotFile('ios-build10')).schema.tools).toHaveLength(21);
-    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(46);
-    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(46);
+    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(47);
+    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(47);
   });
 
   it('build cutoff-1 is still exactly the build-10 list', () => {
@@ -178,7 +178,7 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
   it('non-iOS UAs never get grouped tools, whatever build they claim', () => {
     for (const ua of [undefined, 'Mozilla/5.0', `FinalCap/${CUTOFF} CFNetwork/1.0`, `finalcap-ios/${CUTOFF}`]) {
       const offered = names(offeredToolsFor({ userAgent: ua }));
-      expect(offered).toHaveLength(46);
+      expect(offered).toHaveLength(47);
       for (const g of GROUPED) expect(offered).not.toContain(g);
     }
   });

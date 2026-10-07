@@ -1,6 +1,14 @@
 // Regression: captioning a video that already had burned captions (e.g. "add captions" then
 // "translate them") burned the text a second time, because each tool gets the previous output.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const lyricWeb = vi.hoisted(() => ({ inputs: [] }));
+vi.mock('../lyricCaptionsClient.js', () => ({
+  describeSong: (song) => (song ? `Song: "${song.title}"` : 'No song identified.'),
+  runLyricCaptionsWeb: async (args, bytes) => {
+    lyricWeb.inputs.push(bytes);
+    return { burned: new Uint8Array(20 + lyricWeb.inputs.length), audioBytes: 44, summary: { translatedCount: 1 }, result: { lines: [{}], language: 'de', targetLanguage: 'zh-Hans', mode: 'lyrics', song: { title: 'T' } } };
+  },
+}));
 import { toolFunctions } from '../toolFunctions.js';
 import { noteDerivedVideo, videoHasBurnedCaptions, CAPTIONS_ALREADY_BURNED } from '../captionLineage.js';
 
@@ -70,5 +78,25 @@ describe('generate_captions never burns on top of burned captions', () => {
     noteDerivedVideo(a, b);
     const { result } = await caption({}, b);
     expect(result).toMatch(/with burn-in\.$/);
+  });
+});
+
+describe('lyric_captions follows the same rule', () => {
+  it('re-burns from the uncaptioned source after generate_captions or a previous lyric_captions', async () => {
+    const original = new Uint8Array([1, 1, 1]);
+    const { output: captioned } = await caption({}, original);
+    let out = captioned;
+    const set = (d) => { noteDerivedVideo(out, d); out = d; };
+    const r1 = await toolFunctions.lyric_captions({ target_language: 'zh-Hans' }, captioned, set, vi.fn());
+    expect(lyricWeb.inputs.at(-1)).toBe(original);
+    expect(r1).toMatch(/Replaced the captions burned earlier/);
+    expect(r1).toMatch(/1 lines, de → zh-Hans/);
+    const r2 = await toolFunctions.lyric_captions({ target_language: 'es' }, out, set, vi.fn());
+    expect(lyricWeb.inputs.at(-1)).toBe(original);
+    expect(r2).toMatch(/Replaced/);
+    const edited = new Uint8Array([2]);
+    noteDerivedVideo(out, edited);
+    const r3 = await toolFunctions.lyric_captions({ target_language: 'es' }, edited, set, vi.fn());
+    expect(r3).toContain(CAPTIONS_ALREADY_BURNED);
   });
 });

@@ -8,6 +8,7 @@ import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
 import { chatRouter } from './src/server/chat.js';
 import { jobsRouter } from './src/server/jobs.js';
+import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 
@@ -54,6 +55,7 @@ app.use(captionsRouter);
 app.use(videoRouter);
 app.use(chatRouter);
 app.use(jobsRouter);
+app.use(lyricCaptionsRouter);
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);

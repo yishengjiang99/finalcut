@@ -164,7 +164,7 @@ describe('allowlist thresholds', () => {
     expect(filterToolsForUserAgent(tools, WEB_UA)).toBe(tools);
     expect(filterToolsForUserAgent(tools, OLD_IOS_UA)).toBe(tools);
     expect(filterToolsForUserAgent(tools, undefined)).toBe(tools);
-    expect(tools).toHaveLength(46);
+    expect(tools).toHaveLength(47);
   });
 
   it('seed: the "iOS allowlist (build 10)" block in docs/ios/native-tools.md matches minBuild 10', () => {
@@ -265,7 +265,7 @@ describe('POST /api/chat execution:"client" with a FinalCap-iOS UA', () => {
     xaiCalls.length = 0;
     xaiResponder = finalAnswer;
     await chatAs(WEB_UA, { execution: 'client', messages: [{ role: 'user', content: 'x' }] });
-    expect(xaiCalls[0].tools).toHaveLength(46);
+    expect(xaiCalls[0].tools).toHaveLength(47);
   });
 });
 
@@ -333,10 +333,10 @@ describe('GET /api/tools/schema by User-Agent', () => {
     }
   });
 
-  it('web UA → all 46 tools, identical to the committed schema', async () => {
+  it('web UA → all 47 tools, identical to the committed schema', async () => {
     const body = await (await getSchema(WEB_UA)).json();
     expect(body).toEqual(JSON.parse(JSON.stringify(buildToolsSchema())));
-    expect(body.tools).toHaveLength(46);
+    expect(body.tools).toHaveLength(47);
   });
 });
 
