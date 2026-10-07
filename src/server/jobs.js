@@ -4,6 +4,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { TMP_DIR, APP_BASE_URL } from './config.js';
 import {
+  apiLimiter,
   videoProcessLimiter,
   requireAuthenticatedUser,
   requireInferenceAccess,
@@ -45,6 +46,8 @@ export function publicJob(job, baseUrl) {
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
+  // Small tool-specific result metadata (e.g. lyric_captions: song title/artist/link).
+  if (job.status === 'succeeded' && job.summary) body.summary = job.summary;
   if (job.status === 'succeeded' && job.resultContentType) {
     body.resultUrl = `${baseUrl}/api/jobs/${job.id}/result`;
     body.contentType = job.resultContentType;
@@ -96,6 +99,52 @@ async function runProcessVideoJob(job) {
     }
   }
 }
+
+/**
+ * Register a custom async job (same store, poll and result routes as process-video).
+ * `runner(job)` writes job.resultPath/resultContentType (and optionally job.summary) and may
+ * update job.progress; a thrown error with `.code` becomes the job's machine-readable code.
+ */
+export async function enqueueCustomJob(fields, runner) {
+  await ensureJobsDir();
+  const now = new Date().toISOString();
+  const job = {
+    id: randomUUID(),
+    status: 'queued',
+    progress: 0,
+    error: null,
+    mediaType: MEDIA_TYPE_VIDEO,
+    resultPath: null,
+    resultContentType: null,
+    createdAt: now,
+    updatedAt: now,
+    ...fields,
+  };
+  jobs.set(job.id, job);
+  setImmediate(async () => {
+    job.status = 'running';
+    job.updatedAt = new Date().toISOString();
+    try {
+      await runner(job);
+      job.status = 'succeeded';
+      job.progress = 1;
+    } catch (err) {
+      console.error(`Job ${job.id} (${job.operation}) failed:`, err?.message || err);
+      job.status = 'failed';
+      job.error = err?.message || 'Processing failed';
+      if (err?.code && typeof err.code === 'string') job.errorCode = err.code;
+    } finally {
+      job.updatedAt = new Date().toISOString();
+      if (job.inputPath) {
+        fs.unlink(job.inputPath).catch(() => {});
+        job.inputPath = null;
+      }
+    }
+  });
+  return job;
+}
+
+export { JOBS_DIR, getJobBaseUrl };
 
 const router = express.Router();
 
@@ -224,7 +273,9 @@ router.post(
  */
 router.get(
   '/api/jobs/:id',
-  videoProcessLimiter,
+  // Status polls are cheap reads; the 20-per-15-min video budget would 429 a client that polls a
+  // one-minute job every few seconds.
+  apiLimiter,
   requireAuthenticatedUser,
   requireActiveSubscription,
   async (req, res) => {
@@ -250,13 +301,15 @@ router.get(
   requireActiveSubscription,
   async (req, res) => {
     const job = jobs.get(req.params.id);
-    if (!job || job.status !== 'succeeded' || !job.resultPath) {
+    if (!job || job.status !== 'succeeded' || (!job.resultPath && !job.resultJson)) {
       return res.status(404).json({ error: 'Result not available' });
     }
     const sample = isValidSampleModeRequest(req);
     if (!sample && job.userId != null && req.user?.id != null && job.userId !== req.user.id) {
       return res.status(404).json({ error: 'Result not available' });
     }
+    // JSON results (lyric_captions) are kept in memory, never written to disk.
+    if (job.resultJson) return res.json(job.resultJson);
     try {
       await fs.access(job.resultPath);
     } catch {
