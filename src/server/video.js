@@ -11,6 +11,7 @@ import {
   upload,
 } from './middleware.js';
 import { getMimeTypeToFormat, getExtFromMimeType, parseAudioInput } from './utils.js';
+import { dedupeSrtCues, translatedTrackWithoutDuplicates } from './captionHelpers.js';
 import { detectMediaType, MEDIA_TYPE_IMAGE } from './mediaType.js';
 import { isIosGroupedTool } from './iosGroupedTools.js';
 import {
@@ -212,19 +213,20 @@ export function buildFadeFilter(numVideos, duration, hasAudio) {
   return [...filters, ...audioFilters].join(';');
 }
 
-const router = express.Router();
-
-// A translation request can occasionally return the source text unchanged
-// (for example, when the requested language matches the detected language).
-// Burning both tracks would make every caption appear twice.
-function subtitleTextSignature(srt) {
-  return String(srt || '')
-    .replace(/^\s*\d+\s*$/gm, '')
-    .replace(/^\s*\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->.*$/gm, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLocaleLowerCase();
+/**
+ * The SRT tracks burn_subtitles burns: the original with repeated transcriber lines merged, and
+ * the translation minus cues that just repeat the original text ('' = single-track burn).
+ * Without this, a same-language or partial translation burned the same line twice.
+ */
+export function burnSubtitleTracks(srtContent, translatedSrtContent) {
+  const primary = dedupeSrtCues(srtContent);
+  const translatedTrack = typeof translatedSrtContent === 'string' && translatedSrtContent.trim()
+    ? translatedTrackWithoutDuplicates(primary, dedupeSrtCues(translatedSrtContent))
+    : '';
+  return { srtContent: primary, translatedTrack };
 }
+
+const router = express.Router();
 
 // Video processing endpoint
 // Client posts video as a raw body stream; operation, args, and file type are in request headers.
@@ -263,8 +265,8 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
     }
 
     if (operation === 'burn_subtitles') {
-      const { srtContent, translatedSrtContent, style = 'default', position = 'bottom' } = parsedArgs;
-      if (!srtContent || typeof srtContent !== 'string' || !srtContent.trim()) {
+      const { translatedSrtContent, style = 'default', position = 'bottom' } = parsedArgs;
+      if (!parsedArgs.srtContent || typeof parsedArgs.srtContent !== 'string' || !parsedArgs.srtContent.trim()) {
         return res.status(400).json({ error: 'srtContent is required for burn_subtitles' });
       }
       const validStyles = ['default', 'white_on_black', 'yellow'];
@@ -276,9 +278,9 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
         return res.status(400).json({ error: `position must be one of: ${validPositions.join(', ')}` });
       }
 
-      const hasTranslation = typeof translatedSrtContent === 'string'
-        && translatedSrtContent.trim().length > 0
-        && subtitleTextSignature(translatedSrtContent) !== subtitleTextSignature(srtContent);
+      // Each line must be burned exactly once (see burnSubtitleTracks).
+      const { srtContent, translatedTrack } = burnSubtitleTracks(parsedArgs.srtContent, translatedSrtContent);
+      const hasTranslation = Boolean(translatedTrack);
 
       let inputPath = null;
       let srtPath = null;
@@ -320,7 +322,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
         let videoFilter;
         if (hasTranslation) {
           translatedSrtPath = path.join(tmpDir, `translated-${randomUUID()}.srt`);
-          await fs.writeFile(translatedSrtPath, translatedSrtContent, 'utf8');
+          await fs.writeFile(translatedSrtPath, translatedTrack, 'utf8');
 
           // Translated track is placed at the opposite end of the video
           const translatedAlignment = position === 'top' ? ASS_ALIGN_BOTTOM : ASS_ALIGN_TOP;

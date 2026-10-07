@@ -182,3 +182,70 @@ export function srtHasSpeech(srt) {
   }
   return true;
 }
+
+/** Caption text compared without case, punctuation, symbols, or spacing. */
+export function normalizeCaptionText(text) {
+  return String(text ?? '').normalize('NFKC').toLocaleLowerCase().replace(/[\p{P}\p{S}\s]+/gu, '');
+}
+
+function srtTimeToSeconds(ts) {
+  const m = /^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/.exec(String(ts).trim());
+  return m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 1000 : NaN;
+}
+
+/**
+ * Transcribers (Whisper especially) can emit the same line twice in a row, as back-to-back or
+ * overlapping segments. Merge those into one segment so the line is shown once.
+ */
+export function dedupeSegments(segments, { maxGapSec = 1 } = {}) {
+  const out = [];
+  for (const seg of segments) {
+    const prev = out[out.length - 1];
+    const key = normalizeCaptionText(seg.text);
+    if (prev && key && key === normalizeCaptionText(prev.text) && (prev.speaker || null) === (seg.speaker || null)
+      && seg.start - prev.end <= maxGapSec) {
+      prev.end = Math.max(prev.end, seg.end);
+      continue;
+    }
+    out.push({ ...seg });
+  }
+  return out;
+}
+
+/** Same as dedupeSegments, on SRT text (for SRT a client sends to burn_subtitles). */
+export function dedupeSrtCues(srt) {
+  const cues = parseSrtCues(srt);
+  if (!cues.length) return String(srt || '');
+  const segs = cues.map(c => ({ start: srtTimeToSeconds(c.start), end: srtTimeToSeconds(c.end), text: c.text, cue: c }));
+  const kept = [];
+  for (const s of segs) {
+    const prev = kept[kept.length - 1];
+    if (prev && normalizeCaptionText(s.text) && normalizeCaptionText(s.text) === normalizeCaptionText(prev.text) && s.start - prev.endSec <= 1) {
+      prev.endSec = Math.max(prev.endSec, s.end);
+      prev.cue = { ...prev.cue, end: s.cue.end };
+      continue;
+    }
+    kept.push({ ...s, endSec: s.end });
+  }
+  return cuesToSrt(kept.map((k, i) => ({ index: i + 1, timingLine: `${k.cue.start} --> ${k.cue.end}`, text: k.cue.text })));
+}
+
+/**
+ * The translated track for a dual-track burn, minus every cue whose "translation" is the original
+ * text again (untranslated names, padding for cues the model skipped, or a same-language
+ * "translation" that only changed punctuation). Burning those would show the same line twice.
+ * Returns '' when nothing is left (burn a single track).
+ */
+export function translatedTrackWithoutDuplicates(originalSrt, translatedSrt) {
+  const original = parseSrtCues(originalSrt);
+  const translated = parseSrtCues(translatedSrt);
+  if (!translated.length) return '';
+  const byTiming = new Map(original.map(c => [c.timingLine, c]));
+  const kept = translated.filter((c, i) => {
+    const key = normalizeCaptionText(c.text);
+    if (!key) return false;
+    const orig = byTiming.get(c.timingLine) || original[i];
+    return !orig || normalizeCaptionText(orig.text) !== key;
+  });
+  return kept.length ? cuesToSrt(kept.map((c, i) => ({ ...c, index: i + 1 }))) : '';
+}

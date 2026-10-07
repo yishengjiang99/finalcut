@@ -1,6 +1,8 @@
 // Server-side video processing tool functions
 // These functions call the server API instead of using client-side FFmpeg
 
+import { captionSourceFor, recordCaptionBurn } from './captionLineage.js';
+
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {
   '9:16': { width: 1080, height: 1920, description: 'Stories, Reels, & TikToks' },
@@ -952,8 +954,12 @@ export const toolFunctions = {
   get_video_dimensions: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.get_video_info(args, videoFileData, setVideoFileData, addMessage),
 
-  generate_captions: async (args, videoFileData, setVideoFileData, addMessage) => {
+  generate_captions: async (args, inputVideoFileData, setVideoFileData, addMessage) => {
     try {
+      // Never caption on top of burned captions (that is what showed the text twice): re-burn
+      // from the uncaptioned source, or refuse if other edits were applied on top since.
+      const { bytes: videoFileData, replacing } = captionSourceFor(inputVideoFileData);
+      const replacedNote = replacing ? ' Replaced the captions burned earlier (re-burned from the uncaptioned video).' : '';
       const language = args.language || 'auto';
       const translateLanguage = args.translate_language || null;
       const burnIn = args.burn_in !== false; // default true
@@ -1075,6 +1081,7 @@ export const toolFunctions = {
       }
 
       const burned = await collectStreamChunks(burnResponse.body.getReader());
+      recordCaptionBurn(videoFileData, burned);
       setVideoFileData(burned);
       const burnedUrl = URL.createObjectURL(new Blob([burned], { type: 'video/mp4' }));
       const dual = translatedSrt ? ` Dual-track burn-in (translated ${translateLanguage} + original).` : '';
@@ -1094,7 +1101,7 @@ export const toolFunctions = {
           mimeType: 'text/plain',
         });
       }
-      return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in.`;
+      return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in.${replacedNote}`;
     } catch (error) {
       addMessage({ text: 'Error generating captions: ' + error.message });
       return 'Failed to generate captions: ' + error.message;

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { tools } from './tools.js';
+import { noteDerivedVideo } from './captionLineage.js';
 import { toolFunctions } from './toolFunctions.js';
 
 export function assertToolCallApplied(result, functionName) {
@@ -201,6 +202,7 @@ export function useCallAPI({
           // same response (for example: volume, then brightness).
           let workingVideoFileData = videoFileData;
           const updateWorkingVideoFileData = data => {
+            noteDerivedVideo(workingVideoFileData, data);
             workingVideoFileData = data;
             setVideoFileData(data);
           };

@@ -24,6 +24,7 @@ import {
   mergeTranslatedSrt,
   srtHasSpeech,
   stripLlmFences,
+  dedupeSegments,
 } from './captionHelpers.js';
 
 // ── Batch Audio Transcription Helpers ─────────────────────────────────────────
@@ -203,10 +204,11 @@ export async function transcribeWithOpenAI(filePath, timestampOffsetSec = 0, lan
  * Merge segment arrays from multiple transcribed chunks into a single sorted list.
  */
 export function mergeDiarizedSegmentsWithOffsets(chunksResults) {
-  return chunksResults
+  // Repeated back-to-back segments (a Whisper habit) become one caption, not the same line twice.
+  return dedupeSegments(chunksResults
     .flat()
     .filter(seg => seg.text)
-    .sort((a, b) => a.start - b.start);
+    .sort((a, b) => a.start - b.start));
 }
 
 /**
