@@ -12,7 +12,7 @@
 </head>
 <body>
   <h1>FinalCap Privacy Policy</h1>
-  <p class="meta">Effective: 2026-09-26 · Product: FinalCap (iOS + web) at grepawk.com · Operator: grepawk / Yisheng Jiang</p>
+  <p class="meta">Effective: 2026-09-26 · Last updated: 2026-10-06 · Product: FinalCap (iOS + web) at grepawk.com · Operator: grepawk / Yisheng Jiang</p>
   <p>This policy describes how FinalCap handles information when you use our iOS app and website. It does <strong>not</strong> cover unrelated grepawk products (for example Grok Camera / Photo Recipes) unless you use those separately.</p>
 
   <h2>Information we collect</h2>
@@ -20,6 +20,7 @@
     <li><strong>Account data</strong> — email and provider identifiers if you sign in (Apple, Google, or other methods we enable).</li>
     <li><strong>Photos and videos (iOS)</strong> — on iPhone, your photos and videos stay on your device. Edits are applied and exported on the iPhone. We do not upload your media unless you turn on <em>Settings → Cloud processing</em> (off by default); with it on, a clip is uploaded only for an edit the iPhone can't do yet, such as server captions.</li>
     <li><strong>Edit requests</strong> — your typed or dictated request, basic media details (type, size, duration, whether there is audio), and up to 4 small still frames of your edit, sent so the AI understands your clip. On the web, clips you import are uploaded and processed on our servers.</li>
+    <li><strong>Lyric captions (optional)</strong> — runs only when you ask for lyric captions. Your video's audio is uploaded to our server and sent to OpenAI (whisper-1 model) to transcribe it; our server deletes the uploaded audio right after transcription. The transcript text (not the audio) is then sent to xAI (Grok, which may search the web) to identify the song, look up its lyrics, and translate the lines. Your audio is never sent to xAI. On the web, the captions are burned into your video on our server, the same as other web edits. On iOS, lyric captions runs only with Cloud processing on, after asking you before uploading, and follows the same OpenAI/xAI handling.</li>
     <li><strong>Microphone and speech (iOS)</strong> — used only for dictation. Speech is turned into text on your iPhone and the audio is never uploaded. Only the resulting text is sent as your edit request.</li>
     <li><strong>Purchases</strong> — App Store transaction identifiers (iOS) or Stripe customer/subscription ids (web). We do not receive your full card number from Apple.</li>
     <li><strong>Diagnostics</strong> — optional crash or performance logs if enabled.</li>
@@ -27,17 +28,17 @@
 
   <h2>How we use information</h2>
   <ul>
-    <li>Provide editing, captioning, preview, and export.</li>
+    <li>Provide editing, captioning (including lyric captions and translation), preview, and export.</li>
     <li>Authenticate you and enforce quotas or subscriptions.</li>
     <li>Improve reliability and prevent abuse.</li>
     <li>Comply with law and App Store / payment provider rules.</li>
   </ul>
 
   <h2>Sharing</h2>
-  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts, OpenAI/xAI-class APIs as configured, Apple, Stripe on web). We do not sell your personal information.</p>
+  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; xAI for Grok AI models, including lyric lookup and translation; Apple; and Stripe on web). We do not sell your personal information.</p>
 
   <h2>Retention</h2>
-  <p>Uploaded media and job outputs are kept as needed to provide the service and then deleted or anonymized according to our retention schedule and your deletion requests, subject to legal holds.</p>
+  <p>Uploaded media and job outputs are kept as needed to provide the service and then deleted or anonymized according to our retention schedule and your deletion requests, subject to legal holds. For lyric captions, the uploaded audio is deleted right after transcription, and the transcript lines and translations are kept in server memory for up to 30 minutes so the caption burn-in step can use them, then expire.</p>
 
   <h2>Your choices</h2>
   <ul>
