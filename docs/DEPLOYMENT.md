@@ -241,6 +241,37 @@ Replace:
 - Lock `.env` down with `sudo chown finalcut:finalcut .env && sudo chmod 600 .env`. Deploys
   exclude `.env*`, so the file keeps this ownership.
 
+#### lyric_captions dependencies
+
+`lyric_captions` (bilingual lyric/speech captions, see [`docs/api/LYRIC_CAPTIONS.md`](api/LYRIC_CAPTIONS.md))
+needs no Python, model download, or GPU on the server. Speech-to-text is OpenAI `whisper-1` (word
+timestamps) and lyric correction/translation is Grok, so the only new requirements are an API key
+and, for the web's server-side burn-in, a CJK font. Run once on the droplet:
+
+```bash
+# 1. Font for the burned captions: one family (Noto Sans CJK SC, Bold) for Latin and Chinese lines.
+sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
+fc-match "Noto Sans CJK SC:bold"
+#   expect: NotoSansCJK-Bold.ttc: "Noto Sans CJK SC" "Bold"
+# Optional: other scripts (Arabic, Hebrew, Thai, Devanagari) fall back through fontconfig.
+# sudo apt-get install -y fonts-noto-core
+
+# 2. ffmpeg must have libass (the "ass" filter). Ubuntu 22.04's ffmpeg 4.4.2 is built with it,
+#    and burn_subtitles already depends on it. Both lines should print:
+ffmpeg -hide_banner -filters 2>/dev/null | grep -E ' (ass|subtitles) +V->V'
+
+# 3. OPENAI_API_KEY must be set in .env (XAI_API_TOKEN already is). Check without printing it:
+sudo grep -q '^OPENAI_API_KEY=.\+' /home/finalcut/apps/pages/finalcut/.env && echo "OPENAI_API_KEY set"
+
+# 4. Pick up the font cache and new code.
+sudo systemctl restart finalcut
+```
+
+Optional `.env` settings: `LYRIC_CAPTIONS_MODEL` (Grok model used with the `web_search` tool,
+default `grok-4.7`) and `LYRIC_CAPTIONS_FALLBACK_MODEL` (used without search, default `grok-3`).
+When a dependency is missing, `POST /api/lyric-captions` and the burn endpoint return
+`503 {"code":"lyric_captions_unavailable"}` naming what's missing, before any edit is charged.
+
 #### Build the Frontend
 
 ```bash
