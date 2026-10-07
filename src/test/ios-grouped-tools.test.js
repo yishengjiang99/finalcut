@@ -34,6 +34,7 @@ import { buildToolsSchema, offeredToolsFor, toolsForMediaType } from '../server/
 import { tools } from '../tools.js';
 import {
   GROUPED_EFFECTS_MIN_BUILD,
+  LYRIC_CAPTIONS_MIN_BUILD,
   IOS_TOOL_ALLOWLIST,
   filterToolsForUserAgent,
   iosBuildRange,
@@ -60,6 +61,16 @@ const names = (list) => list.map(t => t.function.name);
 const CUTOFF = GROUPED_EFFECTS_MIN_BUILD;
 const GROUPED = ['channel_mixer', 'color_adjust', 'apply_filter', 'stylize', 'blur_sharpen', 'lut', 'vignette_grain', 'segment', 'audio_effect'];
 const RETIRED = ['adjust_brightness', 'adjust_contrast', 'adjust_saturation', 'adjust_hue'];
+// lyric_captions has its own gate (LYRIC_CAPTIONS_MIN_BUILD, lyric-captions-ios-gate.test.js). These
+// grouped-tool counts hold whichever of the two placeholders is flipped first.
+const lyricAt = (b) => (b >= LYRIC_CAPTIONS_MIN_BUILD ? 1 : 0);
+const withoutLyric = (list) => list.filter(n => n !== 'lyric_captions');
+const withoutLyricDefs = (defs) => defs.filter(t => t.function.name !== 'lyric_captions');
+function withoutLyricSchema(schema) {
+  const mediaTypes = { ...schema.mediaTypes };
+  delete mediaTypes.lyric_captions;
+  return { ...schema, tools: withoutLyricDefs(schema.tools), mediaTypes };
+}
 
 // Same serialization as the fixture capture (taken on main before this change).
 function serialize(userAgent) {
@@ -118,9 +129,9 @@ describe('snapshots: existing clients are byte-identical to main before the chan
 
   it('build cutoff-1 is still exactly the build-10 list', () => {
     const at10 = JSON.parse(snapshotFile('ios-build10'));
-    expect(JSON.stringify(buildToolsSchema({ userAgent: ios(CUTOFF - 1) }))).toBe(JSON.stringify(at10.schema));
+    expect(JSON.stringify(withoutLyricSchema(buildToolsSchema({ userAgent: ios(CUTOFF - 1) })))).toBe(JSON.stringify(at10.schema));
     for (const mt of ['video', 'image']) {
-      expect(JSON.stringify(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt }))).toBe(JSON.stringify(at10.offered[mt]));
+      expect(JSON.stringify(withoutLyricDefs(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt })))).toBe(JSON.stringify(at10.offered[mt]));
     }
   });
 
@@ -152,9 +163,9 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
   it('gets 26 tools: the 21 minus the four adjust_* plus the 9 grouped', () => {
     const offered = names(offeredToolsFor({ userAgent: ios(CUTOFF) }));
     expect(build10).toHaveLength(21);
-    expect(offered).toEqual([...build10.filter(n => !RETIRED.includes(n)), ...GROUPED]);
-    expect(offered).toHaveLength(26);
-    expect(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) }))).toEqual(offered);
+    expect(withoutLyric(offered)).toEqual([...build10.filter(n => !RETIRED.includes(n)), ...GROUPED]);
+    expect(offered).toHaveLength(26 + lyricAt(CUTOFF));
+    expect(withoutLyric(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) })))).toEqual(withoutLyric(offered));
   });
 
   it('media types: photos get the 8 photo-capable grouped tools, not audio_effect', () => {
@@ -199,12 +210,12 @@ describe('GET /api/tools/schema applies the same filtering', () => {
     const body = await (await getSchema(ios(CUTOFF))).json();
     expect(body.schemaVersion).toBe('1');
     expect(body.tools).toEqual(JSON.parse(JSON.stringify(offeredToolsFor({ userAgent: ios(CUTOFF) }))));
-    expect(body.tools).toHaveLength(26);
+    expect(body.tools).toHaveLength(26 + lyricAt(CUTOFF));
     expect(Object.keys(body.mediaTypes)).toEqual(names(body.tools));
     expect(body.mediaTypes.audio_effect).toEqual(['video']);
     for (const g of GROUPED.filter(n => n !== 'audio_effect')) expect(body.mediaTypes[g]).toEqual(['video', 'image']);
     const before = await (await getSchema(ios(CUTOFF - 1))).json();
-    expect(names(before.tools)).toHaveLength(21);
+    expect(names(before.tools)).toHaveLength(21 + lyricAt(CUTOFF - 1));
     expect(names(before.tools)).not.toContain('lut');
   });
 });

@@ -27,7 +27,7 @@ import { jobsRouter, JOBS_DIR } from '../server/jobs.js';
 import { issueSampleAccessToken, videoProcessLimiter, apiLimiter } from '../server/middleware.js';
 import { tools } from '../tools.js';
 import { offeredToolsFor, buildToolsSchema } from '../server/toolsSchema.js';
-import { IOS_TOOL_ALLOWLIST } from '../server/iosToolAllowlist.js';
+import { IOS_TOOL_ALLOWLIST, LYRIC_CAPTIONS_MIN_BUILD } from '../server/iosToolAllowlist.js';
 import { encodeWavMono16, runLyricCaptionsWeb, describeSong } from '../lyricCaptionsClient.js';
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
@@ -398,16 +398,17 @@ describe('HTTP: POST /api/lyric-captions + jobs + burn', () => {
 });
 
 describe('tool schema and clients', () => {
-  it('web gets lyric_captions (video only, target_language required); iOS does not', () => {
+  it('web gets lyric_captions (video only, target_language required); iOS only from LYRIC_CAPTIONS_MIN_BUILD', () => {
     const def = tools.find(t => t.function.name === 'lyric_captions');
     expect(def.function.parameters.required).toEqual(['target_language']);
     expect(Object.keys(def.function.parameters.properties)).toEqual(['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size']);
     expect(buildToolsSchema().mediaTypes.lyric_captions).toEqual(['video']);
     expect(offeredToolsFor({ mediaType: 'image' }).map(t => t.function.name)).not.toContain('lyric_captions');
-    expect(IOS_TOOL_ALLOWLIST.lyric_captions).toBeUndefined();
-    for (const build of [10, 11, 999]) {
+    expect(IOS_TOOL_ALLOWLIST.lyric_captions).toBe(LYRIC_CAPTIONS_MIN_BUILD);
+    for (const build of [10, 11, 12, LYRIC_CAPTIONS_MIN_BUILD - 1]) {
       expect(offeredToolsFor({ userAgent: `FinalCap-iOS/${build}` }).map(t => t.function.name)).not.toContain('lyric_captions');
     }
+    expect(offeredToolsFor({ userAgent: `FinalCap-iOS/${LYRIC_CAPTIONS_MIN_BUILD}` }).map(t => t.function.name)).toContain('lyric_captions');
   });
 
   it('WAV encoder writes a 16 kHz mono PCM header', () => {

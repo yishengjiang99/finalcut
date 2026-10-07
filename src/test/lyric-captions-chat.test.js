@@ -110,7 +110,7 @@ describe('lyric_captions in /api/chat', () => {
     expect(JSON.parse(sentTool.content)).toMatchObject({ ok: true, output: { lineCount: 12, song: { title: 'T' } } });
   });
 
-  it('photos are not offered lyric_captions; FinalCap-iOS builds are not offered it (needs Cloud processing)', async () => {
+  it('photos are not offered lyric_captions; FinalCap-iOS builds below LYRIC_CAPTIONS_MIN_BUILD are not offered it', async () => {
     reply = () => json({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '- Answer:\n  ok\n- Lesson:\n  x' } }] });
     await postChat({ execution: 'client', messages: [{ role: 'user', content: 'add lyrics captions' }], media: { type: 'image', width: 100, height: 100 } });
     expect(offeredNames(xaiCalls[0])).not.toContain('lyric_captions');
