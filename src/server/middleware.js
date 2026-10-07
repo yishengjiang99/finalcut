@@ -129,8 +129,13 @@ export async function requireAuthenticatedUser(req, res, next) {
   }
 }
 
+/**
+ * Subscribers and iOS installs pass. With FREE_EDITS_IOS=unlimited every iOS client passes too
+ * (an iOS Google sign-in has no device id), so polling a job it was allowed to start, or reading
+ * supported formats, is never paywalled.
+ */
 export function requireActiveSubscription(req, res, next) {
-  if (isValidSampleModeRequest(req)) {
+  if (isValidSampleModeRequest(req) || hasUnlimitedFreeEdits(req)) {
     return next();
   }
   if (!req.user?.has_subscription && !req.user?.device_install_id) {

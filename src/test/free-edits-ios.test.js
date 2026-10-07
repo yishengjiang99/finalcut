@@ -15,7 +15,7 @@ vi.mock('../db.js', () => db);
 import express from 'express';
 import { authRouter } from '../server/auth.js';
 import { chatRouter } from '../server/chat.js';
-import { requireAuthenticatedUser, requireInferenceAccess } from '../server/middleware.js';
+import { requireActiveSubscription, requireAuthenticatedUser, requireInferenceAccess } from '../server/middleware.js';
 import {
   hasUnlimitedFreeEdits,
   isFreeEditsIosUnlimited,
@@ -57,6 +57,8 @@ beforeAll(async () => {
     next();
   });
   app.post('/metered', requireAuthenticatedUser, requireInferenceAccess, (req, res) => res.json({ ok: true }));
+  // Same guard as GET /api/jobs/:id (+ /result) and /api/supported-formats.
+  app.get('/subscribed', requireAuthenticatedUser, requireActiveSubscription, (req, res) => res.json({ ok: true }));
   app.use(authRouter);
   app.use(chatRouter);
   await new Promise((resolve) => { server = app.listen(0, '127.0.0.1', resolve); });
@@ -136,6 +138,25 @@ describe('FREE_EDITS_IOS unset: today\'s behavior', () => {
   it('Google mobile Bearer user without a subscription still gets 403', async () => {
     const res = await call('/metered', { ua: IOS10_UA, bearer: 'google-token' });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('job polling guard (requireActiveSubscription)', () => {
+  it('unset: an iOS Google sign-in without a subscription or device id is refused (today\'s behavior)', async () => {
+    expect((await call('/subscribed', { method: 'GET', ua: IOS10_UA, bearer: 'google-token' })).status).toBe(403);
+    expect((await call('/subscribed', { method: 'GET', ua: IOS10_UA, bearer: 'device-token' })).status).toBe(200);
+  });
+
+  it('unlimited: every iOS client can poll the jobs it was allowed to start; web cookie users stay paywalled', async () => {
+    process.env.FREE_EDITS_IOS = 'unlimited';
+    for (const bearer of ['google-token', 'device-token']) {
+      expect((await call('/subscribed', { method: 'GET', ua: IOS10_UA, bearer })).status).toBe(200);
+      expect((await call('/subscribed', { method: 'GET', ua: BUILD9_UA, bearer })).status).toBe(200);
+    }
+    for (const ua of [WEB_UA, IOS10_UA]) {
+      expect((await call('/subscribed', { method: 'GET', ua, session: 'web' })).status).toBe(403);
+    }
+    expect((await call('/subscribed', { method: 'GET', ua: WEB_UA, session: 'paid' })).status).toBe(200);
   });
 });
 
