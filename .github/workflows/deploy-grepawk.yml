@@ -1,0 +1,104 @@
+# Deploy FinalCut web + API backend to https://grepawk.com
+#
+# Triggers on every push to main: changes to main auto-update the backend
+# server on grepawk.com. Can also be run manually (Actions → Run workflow).
+#
+# Required repository secret:
+#   DEPLOY_SSH_KEY          — private SSH key that can SSH as DEPLOY_USER@DEPLOY_HOST
+#                             (same key as photo-recipes' DEPLOY_SSH_KEY works)
+#
+# Optional repository secret:
+#   DEPLOY_SSH_KNOWN_HOSTS  — known_hosts lines for DEPLOY_HOST (else ssh-keyscan)
+#
+# Repository variables (Settings → Variables):
+#   DEPLOY_HOST   = grepawk.com
+#   DEPLOY_USER   = root
+#   DEPLOY_DIR    = /home/finalcut/apps/pages/finalcut
+#   SERVER_NAME   = grepawk.com
+#
+# Setup (from a machine whose key is already authorized on the server):
+#   gh secret set DEPLOY_SSH_KEY < ~/.ssh/id_ed25519 -R yishengjiang99/finalcut
+#   ssh-keyscan -H grepawk.com | gh secret set DEPLOY_SSH_KNOWN_HOSTS -R yishengjiang99/finalcut
+
+name: Deploy grepawk.com
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-grepawk
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DEPLOY_SSH_KEY:-}" ]]; then
+            echo "DEPLOY_SSH_KEY secret is required. See the header of this workflow for setup." >&2
+            exit 1
+          fi
+          if [[ -z "${DEPLOY_HOST:-}" ]]; then
+            echo "DEPLOY_HOST variable is required (e.g. grepawk.com)." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then
+            printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            "${{ vars.DEPLOY_USER }}@${DEPLOY_HOST}" 'echo ssh-ok'
+
+      - name: Deploy via scripts/deploy-grepawk.sh
+        env:
+          FINALCUT_DEPLOY_HOST: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          FINALCUT_DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+        run: |
+          set -euo pipefail
+          : "${FINALCUT_DEPLOY_HOST:?DEPLOY_HOST/DEPLOY_USER variables required}"
+          : "${FINALCUT_DEPLOY_DIR:?DEPLOY_DIR variable required}"
+          chmod +x scripts/deploy-grepawk.sh
+          # rsyncs the checkout (writes a REVISION file with the short HEAD),
+          # rebuilds on the server, then restarts the finalcut systemd service.
+          scripts/deploy-grepawk.sh
+
+      - name: Post-deploy smoke
+        env:
+          SERVER_NAME: ${{ vars.SERVER_NAME }}
+        run: |
+          set -euo pipefail
+          BASE="https://${SERVER_NAME}"
+          echo "==> homepage"
+          curl -fsS -o /dev/null -m 20 "${BASE}/"
+          echo "==> /api/health"
+          HEALTH="$(curl -fsS -m 20 "${BASE}/api/health")"
+          echo "$HEALTH"
+          echo "$HEALTH" | grep -q '"ok":true'
+          EXPECTED="$(git rev-parse --short HEAD)"
+          COMMIT="$(echo "$HEALTH" | grep -o '"commit":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+          echo "deployed commit: ${COMMIT:-'(none)'} (expected ${EXPECTED})"
+          if [[ -n "${COMMIT:-}" && "$COMMIT" != "$EXPECTED"* && "$EXPECTED" != "$COMMIT"* ]]; then
+            echo "commit mismatch: server is not running this push" >&2
+            exit 1
+          fi
+          echo "deploy OK"
