@@ -50,6 +50,10 @@ enum ToolCatalog {
         "extract_audio": [],
         "get_supported_formats": [],
         "generate_captions": [],
+        // Server-side FFmpeg fallback (POST /api/ffmpeg-cli[/run]). Known to the planner so an
+        // unhandled request falls through to the cloud path instead of "unknown_tool"; never in
+        // NativeToolParser.supportedTools, so on-device planning yields unsupportedOnDevice.
+        "ffmpeg_cli": ["action"],
         "add_video_transition": ["transition"],
         "apply_color_filter": ["filter"],
         "adjust_contrast": ["contrast"],
@@ -128,6 +132,9 @@ enum ToolCatalog {
         case captions(language: String, translateLanguage: String?, burnIn: Bool)
         /// Answered on device without an upload.
         case localQuery(tool: String)
+        /// Server-side FFmpeg fallback: upload the video to POST /api/ffmpeg-cli/run
+        /// (or JSON-only discover/plan) and download the processed result.
+        case ffmpegCli(arguments: [String: JSONValue])
         /// Not executed; returned to the model as `{ ok: false, error }`.
         case reject(error: String)
     }
@@ -146,6 +153,9 @@ enum ToolCatalog {
         case .serverJob(let operation, _) where !photoSupportedOperations.contains(operation):
             return .reject(error: ServerErrorCode.unsupportedForPhoto)
         case .captions:
+            return .reject(error: ServerErrorCode.unsupportedForPhoto)
+        case .ffmpegCli:
+            // Video-only for now: photos never upload for server processing.
             return .reject(error: ServerErrorCode.unsupportedForPhoto)
         default:
             return plan
@@ -187,6 +197,8 @@ enum ToolCatalog {
                 args["start"] = .number(start)
             }
             return .serverJob(operation: "audio_fade", args: args)
+        case "ffmpeg_cli":
+            return .ffmpegCli(arguments: arguments)
         default:
             return .serverJob(operation: serverOperation[tool] ?? tool, args: arguments)
         }

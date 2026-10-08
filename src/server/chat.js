@@ -27,8 +27,8 @@ import {
 } from './clientExecution.js';
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
-import { filterToolsForUserAgent } from './iosToolAllowlist.js';
-import { FFMPEG_FALLBACK_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
+import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD } from './iosToolAllowlist.js';
+import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 const router = express.Router();
 
@@ -153,9 +153,11 @@ export function buildSystemMessage({ ffmpegFallback = false } = {}) {
     PHOTO_SUPPORTED_OPS.join(', ') +
     '); color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
     'Never call trim, speed, audio, caption, or transition tools on a photo — explain they only apply to videos.\n\n';
+  const fallbackGuidance = ffmpegFallback === 'ios' ? FFMPEG_FALLBACK_GUIDANCE_IOS
+    : ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE : '';
   const outputContract =
     photoGuidance +
-    (ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE + '\n\n' : '') +
+    (fallbackGuidance ? fallbackGuidance + '\n\n' : '') +
     'When a request requires multiple edits, emit one tool call for each edit in the order they should be applied. The tool calls will be executed sequentially on the current media.\n\n' +
     'Always end your FINAL response (after any tool use is complete) with exactly this format:\n' +
     '- Answer:\n' +
@@ -235,11 +237,13 @@ export function restrictStreamingBodyForIos(body, userAgent) {
 }
 
 /**
- * Streaming (web) mode: offer the server-side ffmpeg_cli fallback tool last, after the client's
- * built-in tools. FinalCap-iOS UAs and requests without tools are left as-is.
+ * Streaming mode: offer the server-side ffmpeg_cli fallback tool last, after the client's
+ * built-in tools. For FinalCap-iOS UAs the tool is appended too, but restrictStreamingBodyForIos
+ * (applied after this) strips it again via the build allowlist unless the build ships the
+ * fallback executor (FFMPEG_CLI_MIN_BUILD). Requests without tools are left as-is.
  */
 export function addFfmpegFallbackTool(body, userAgent) {
-  if (parseFinalCapIosUserAgent(userAgent).isFinalCapIos || !Array.isArray(body.tools) || !body.tools.length) return body;
+  if (!Array.isArray(body.tools) || !body.tools.length) return body;
   if (body.tools.some(t => t?.function?.name === FFMPEG_CLI_TOOL_NAME)) return body;
   return { ...body, tools: [...body.tools, ffmpegCliToolDefinition] };
 }
@@ -305,6 +309,11 @@ async function handleClientExecution(req, res, userId) {
     CLIENT_EXECUTION_INSTRUCTIONS,
     mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
   ];
+  // The server-side ffmpeg_cli fallback is offered to iOS builds that ship its executor
+  // (see FFMPEG_CLI_MIN_BUILD): last resort when no on-device tool can handle the request.
+  if (offeredTools.some(t => t.function.name === FFMPEG_CLI_TOOL_NAME)) {
+    contextLines.push(FFMPEG_FALLBACK_GUIDANCE_IOS);
+  }
   if (skippedTools.length) {
     contextLines.push(`The user declined these steps this turn (not failures): ${skippedTools.join(', ')}. Do not call them again in this turn.`);
   }
@@ -474,7 +483,11 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
 
     // Keep the client payload focused on the latest actionable request, but
     // always restore the server-owned system contract.
-    const systemMessage = buildSystemMessage({ ffmpegFallback: !parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
+    const iosInfo = parseFinalCapIosUserAgent(req.get('user-agent'));
+    const fallbackMode = iosInfo.isFinalCapIos
+      ? (iosInfo.build >= FFMPEG_CLI_MIN_BUILD ? 'ios' : false)
+      : true;
+    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode });
 
     // Enable streaming for xAI API
     const response = await fetch('https://api.x.ai/v1/chat/completions', {

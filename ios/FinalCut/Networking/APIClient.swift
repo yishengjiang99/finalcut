@@ -73,6 +73,8 @@ final class APIClient {
     var translateCaptionsURL: URL { url(for: APIEndpoints.translateCaptions) }
     var createCheckoutSessionURL: URL { url(for: APIEndpoints.createCheckoutSession) }
     var verifyCheckoutSessionURL: URL { url(for: APIEndpoints.verifyCheckoutSession) }
+    var ffmpegCliURL: URL { url(for: APIEndpoints.ffmpegCli) }
+    var ffmpegCliRunURL: URL { url(for: APIEndpoints.ffmpegCliRun) }
     var authGoogleURL: URL { url(for: APIEndpoints.authGoogle) }
     var authLogoutURL: URL { url(for: APIEndpoints.authLogout) }
 
@@ -360,6 +362,83 @@ final class APIClient {
         } catch {
             throw APIError.decoding
         }
+    }
+
+    // MARK: - FFmpeg CLI fallback (server-side, last resort)
+
+    /// JSON-only `discover` / `plan` step of the ffmpeg_cli tool. No media involved;
+    /// the raw JSON goes back to the model so it can decide the next step.
+    func ffmpegCliJSON(action: String, params: [String: Any]) async throws -> Data {
+        var payload: [String: Any] = ["action": action]
+        for (key, value) in params { payload[key] = value }
+        let body = try JSONSerialization.data(withJSONObject: payload, options: [])
+        let request = makeRequest(url: ffmpegCliURL, method: "POST", auth: .bearerPreferred, body: body)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        return data
+    }
+
+    struct FfmpegCliRunResult {
+        var data: Data
+        var outputFormat: String
+        var command: String
+        var explanation: String
+    }
+
+    /// Uploads a video for server-side FFmpeg processing (`action: "run"`) and returns the
+    /// processed bytes. The server validates the command and reports `X-Output-Format`,
+    /// `X-FFmpeg-Command` and `X-FFmpeg-Explanation` headers.
+    func runFfmpegCli(
+        videoData: Data,
+        fileName: String = "video.mp4",
+        mimeType: String = "video/mp4",
+        args: [String: Any]
+    ) async throws -> FfmpegCliRunResult {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let crlf = "\r\n"
+
+        func append(_ string: String) {
+            body.append(Data(string.utf8))
+        }
+
+        func appendField(name: String, value: String) {
+            append("--\(boundary)\(crlf)")
+            append("Content-Disposition: form-data; name=\"\(name)\"\(crlf)\(crlf)")
+            append("\(value)\(crlf)")
+        }
+
+        let argsData = try JSONSerialization.data(withJSONObject: args, options: [])
+        appendField(name: "args", value: String(data: argsData, encoding: .utf8) ?? "{}")
+
+        append("--\(boundary)\(crlf)")
+        append("Content-Disposition: form-data; name=\"video\"; filename=\"\(fileName)\"\(crlf)")
+        append("Content-Type: \(mimeType)\(crlf)\(crlf)")
+        body.append(videoData)
+        append(crlf)
+        append("--\(boundary)--\(crlf)")
+
+        var request = makeRequest(
+            url: ffmpegCliRunURL,
+            method: "POST",
+            auth: .bearerPreferred,
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
+        // Server-side FFmpeg runs can take minutes (the server caps at 5).
+        request.timeoutInterval = 600
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        let http = response as? HTTPURLResponse
+        func header(_ name: String) -> String {
+            http?.value(forHTTPHeaderField: name)?.removingPercentEncoding ?? ""
+        }
+        return FfmpegCliRunResult(
+            data: data,
+            outputFormat: header("X-Output-Format"),
+            command: header("X-FFmpeg-Command"),
+            explanation: header("X-FFmpeg-Explanation")
+        )
     }
 
     /// Single poll: GET /api/jobs/:id

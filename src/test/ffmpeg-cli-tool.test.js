@@ -36,6 +36,14 @@ describe('ffmpeg discovery', () => {
     expect(await d.hasEncoder('libx264')).toBe(true);
     expect(await d.suggestFilters('vignett')).toContain('vignette');
   });
+
+  it('parses ffmpeg 8 two-char filter flags (and still accepts three-char)', () => {
+    const v8 = 'Filters:\n TS aap               AA->A      Apply Affine Projection.\n .. abench            A->A       Benchmark part of a filtergraph.\n';
+    expect(parseFilters(v8).map(f => f.name)).toEqual(['aap', 'abench']);
+    expect(parseFilters(v8)[0].flags).toBe('TS');
+    const v7 = 'Filters:\n TSC scale             V->V       Scale the input video size.\n';
+    expect(parseFilters(v7).map(f => f.name)).toEqual(['scale']);
+  });
 });
 
 describe('ffmpeg commander', () => {
@@ -91,8 +99,97 @@ describe('chat integration', () => {
     const web = addFfmpegFallbackTool(body, 'Mozilla/5.0');
     expect(web.tools.map(t => t.function.name)).toEqual(['trim_video', 'ffmpeg_cli']);
     expect(addFfmpegFallbackTool(web, 'Mozilla/5.0')).toBe(web);
-    expect(addFfmpegFallbackTool(body, 'FinalCap-iOS/10')).toBe(body);
+    // iOS: appended here too; the build allowlist (restrictStreamingBodyForIos) strips it
+    // again for builds without the fallback executor.
+    const ios = addFfmpegFallbackTool(body, 'FinalCap-iOS/10');
+    expect(ios.tools.map(t => t.function.name)).toEqual(['trim_video', 'ffmpeg_cli']);
     expect(buildSystemMessage({ ffmpegFallback: true }).content).toContain('ffmpeg_cli');
+    expect(buildSystemMessage({ ffmpegFallback: 'ios' }).content).toContain('on-device');
     expect(buildSystemMessage().content).not.toContain('ffmpeg_cli');
+  });
+
+  it('streaming: ffmpeg_cli survives for new iOS builds, stripped for old', async () => {
+    const { addFfmpegFallbackTool, restrictStreamingBodyForIos } = await import('../server/chat.js');
+    const body = { tools: [{ type: 'function', function: { name: 'trim_video' } }] };
+    const composed11 = restrictStreamingBodyForIos(addFfmpegFallbackTool(body, 'FinalCap-iOS/11'), 'FinalCap-iOS/11');
+    expect(composed11.tools.map(t => t.function.name)).toContain('ffmpeg_cli');
+    const composed10 = restrictStreamingBodyForIos(addFfmpegFallbackTool(body, 'FinalCap-iOS/10'), 'FinalCap-iOS/10');
+    expect(composed10.tools.map(t => t.function.name)).not.toContain('ffmpeg_cli');
+  });
+});
+
+describe('ffmpeg binary selection', () => {
+  it('defaults to FFMPEG_PATH (the binary /api/health probes), else PATH ffmpeg', async () => {
+    const { FFMPEG_BIN } = await import('../../server/ffmpeg/ffmpeg-executor.js');
+    expect(FFMPEG_BIN).toBe(process.env.FFMPEG_PATH || 'ffmpeg');
+    const { FfmpegDiscovery } = await import('../../server/ffmpeg/ffmpeg-discovery.js');
+    const d = new FfmpegDiscovery({ run: async () => ({ stdout: '', stderr: '', code: 0 }), cachePath: null });
+    expect(d.bin).toBe(FFMPEG_BIN);
+    const { executeCommand } = await import('../../server/ffmpeg/ffmpeg-executor.js');
+    const seen = [];
+    await executeCommand({ args: ['-version'], outputPath: 'o' }, { run: async (bin, args) => { seen.push(bin); return { stdout: '', stderr: '', code: 0 }; } });
+    expect(seen).toEqual([FFMPEG_BIN]);
+  });
+
+  it('an explicit binary always wins over the default', async () => {
+    const { executeCommand } = await import('../../server/ffmpeg/ffmpeg-executor.js');
+    const seen = [];
+    await executeCommand({ args: ['-version'], outputPath: 'o' }, {
+      run: async (bin, args) => { seen.push({ bin, args }); return { stdout: '', stderr: '', code: 0 }; },
+      bin: '/opt/ffmpeg/bin/ffmpeg',
+    });
+    expect(seen[0].bin).toBe('/opt/ffmpeg/bin/ffmpeg');
+  });
+});
+
+describe('inference engine: runFfmpegCli invokes the configured ffmpeg CLI', () => {
+  it('calls the configured binary with the validated args', async () => {
+    const { FfmpegDiscovery } = await import('../../server/ffmpeg/ffmpeg-discovery.js');
+    const { runFfmpegCli } = await import('../../server/tools/ffmpeg-cli-tool.js');
+    const FILTERS = ' T.. vignette          V->V       Make or reverse a vignette effect.\n';
+    const run = async (bin, args) => ({ stdout: args.includes('-filters') ? FILTERS : '', stderr: '', code: 0 });
+    const discovery = new FfmpegDiscovery({ run, cachePath: null });
+    const seen = [];
+    const execRun = async (bin, args) => { seen.push({ bin, args }); return { stdout: '', stderr: '', code: 0 }; };
+    const result = await runFfmpegCli(
+      { args: { action: 'run', video_filters: 'vignette', output_format: 'mp4' }, inputPath: 'in.mp4' },
+      { discovery, exec: { run: execRun, bin: 'custom-ffmpeg' } }
+    );
+    expect(result.ok).toBe(true);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].bin).toBe('custom-ffmpeg');
+    expect(seen[0].args).toContain('-vf');
+    expect(seen[0].args).toContain('vignette');
+    expect(seen[0].args).toContain('-nostdin');
+    expect(result.command.startsWith('ffmpeg ')).toBe(true);
+  });
+
+  it('validation failures never reach the binary', async () => {
+    const { FfmpegDiscovery } = await import('../../server/ffmpeg/ffmpeg-discovery.js');
+    const { runFfmpegCli } = await import('../../server/tools/ffmpeg-cli-tool.js');
+    const discovery = new FfmpegDiscovery({ run: async () => ({ stdout: '', stderr: '', code: 0 }), cachePath: null });
+    const seen = [];
+    const result = await runFfmpegCli(
+      { args: { action: 'run', video_filters: 'nope_filter_xyz', output_format: 'mp4' }, inputPath: 'in.mp4' },
+      { discovery, exec: { run: async (bin, args) => { seen.push(args); return { stdout: '', stderr: '', code: 0 }; }, bin: 'custom-ffmpeg' } }
+    );
+    expect(result.ok).toBe(false);
+    expect(seen).toHaveLength(0);
+    expect(result.errors.join(';')).toMatch(/Unknown filter/);
+  });
+});
+
+describe('iOS tool offering', () => {
+  it('offers ffmpeg_cli last to qualifying builds, video only', async () => {
+    const { offeredToolsFor, mediaTypesForTool } = await import('../server/toolsSchema.js');
+    const names11 = offeredToolsFor({ userAgent: 'FinalCap-iOS/11' }).map(t => t.function.name);
+    expect(names11[names11.length - 1]).toBe('ffmpeg_cli');
+    const names10 = offeredToolsFor({ userAgent: 'FinalCap-iOS/10' }).map(t => t.function.name);
+    expect(names10).not.toContain('ffmpeg_cli');
+    expect(mediaTypesForTool('ffmpeg_cli')).toEqual(['video']);
+    const names11img = offeredToolsFor({ userAgent: 'FinalCap-iOS/11', mediaType: 'image' }).map(t => t.function.name);
+    expect(names11img).not.toContain('ffmpeg_cli');
+    const web = offeredToolsFor({ userAgent: 'Mozilla/5.0' }).map(t => t.function.name);
+    expect(web).not.toContain('ffmpeg_cli');
   });
 });

@@ -37,6 +37,17 @@ export const FFMPEG_FALLBACK_GUIDANCE =
   `Routing: always prefer the dedicated editing tools. Only if NONE of them can fulfil the request, use ${FFMPEG_CLI_TOOL_NAME}: ` +
   'discover relevant filters, plan the command, tell the user briefly which approach you chose and why, then run it.';
 
+/**
+ * Same last-resort routing for the iOS app, where the tool executes on the server:
+ * the app uploads the current video, the server processes it with FFmpeg, and the
+ * result downloads back as the new clip. Videos only — never call it for photos.
+ */
+export const FFMPEG_FALLBACK_GUIDANCE_IOS =
+  `Routing: always prefer the on-device editing tools. Only if NONE of them can fulfil the request, use ${FFMPEG_CLI_TOOL_NAME}: ` +
+  'it runs on the server (the app uploads the current video and the processed result downloads back as the new clip). ' +
+  'First call with action "discover" and a query to find matching FFmpeg filters/codecs, then "plan" to validate the command, ' +
+  'tell the user briefly which approach you chose and why, then call with action "run" to execute it. Videos only.';
+
 /** Existing tools first; the FFmpeg CLI tool is appended only as the last-resort entry. */
 export function withFfmpegFallback(tools = builtinTools) {
   if (tools.some(t => t.function.name === FFMPEG_CLI_TOOL_NAME)) return tools;

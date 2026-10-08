@@ -5,6 +5,12 @@ export const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_BUFFER = 10 * 1024 * 1024;
 const MAX_TAIL = 4000;
 
+/**
+ * FFmpeg binary the inference engine invokes. FFMPEG_PATH wins when set (the same
+ * binary /api/health probes); otherwise the first `ffmpeg` on PATH.
+ */
+export const FFMPEG_BIN = process.env.FFMPEG_PATH || 'ffmpeg';
+
 /** Low-level runner: resolves { stdout, stderr, code } and never rejects on non-zero exit. */
 export function runProcess(bin, args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
@@ -24,7 +30,7 @@ export function runProcess(bin, args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
  * Execute a validated command ({ args }) and return a standard result:
  * { ok, output, stderr, error? }
  */
-export async function executeCommand(command, { run = runProcess, bin = 'ffmpeg', timeoutMs } = {}) {
+export async function executeCommand(command, { run = runProcess, bin = FFMPEG_BIN, timeoutMs } = {}) {
   if (!command || !Array.isArray(command.args) || !command.args.length) {
     return { ok: false, error: 'No command to execute', stderr: '' };
   }

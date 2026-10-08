@@ -1140,6 +1140,8 @@ final class EditorViewModel: ObservableObject {
             return record(result, kind: nil)
         case .serverJob(let operation, let args):
             return await runServerJob(tool: tool, operation: operation, args: args)
+        case .ffmpegCli(let args):
+            return await runFfmpegCliTool(call: call, arguments: args)
         }
     }
 
@@ -1387,6 +1389,92 @@ final class EditorViewModel: ObservableObject {
             // Sync error bodies (submit 400/415) carry the same stable codes.
             return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
         }
+    }
+
+    /// Server-side FFmpeg fallback for `ffmpeg_cli` tool calls: no on-device (AVFoundation)
+    /// tool can handle the request, so it runs on the server instead.
+    /// - `discover` / `plan` are JSON-only (no upload); the result goes back to the model.
+    /// - `run` uploads the flattened current video to POST /api/ffmpeg-cli/run and the
+    ///   processed bytes download back, rebased onto the edit stack as the new base —
+    ///   seamless for the user (previous state stays undoable).
+    private func runFfmpegCliTool(call: ClientToolCall, arguments: [String: JSONValue]) async -> ClientToolResult {
+        guard let client = apiClient else {
+            return record(.failure("no_media", on: .server), kind: .generic)
+        }
+        let action = arguments["action"]?.stringValue ?? ""
+        var params = arguments.mapValues { $0.foundationValue }
+        params.removeValue(forKey: "action")
+        do {
+            try await prepareAuth(client)
+        } catch {
+            return record(.failure("auth_failed", on: .server), kind: .generic)
+        }
+        switch action {
+        case "discover", "plan":
+            do {
+                let data = try await client.ffmpegCliJSON(action: action, params: params)
+                let text = String(data: data, encoding: .utf8) ?? "{}"
+                return record(.success(on: .server, output: ["result": .string(text)]), kind: nil)
+            } catch {
+                return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
+            }
+        case "run":
+            break
+        default:
+            return record(.failure(ServerErrorCode.invalidArguments, on: .device), kind: .invalidArguments)
+        }
+        guard localVideoURL != nil else {
+            return record(.failure("no_media", on: .server), kind: .generic)
+        }
+        // Cloud steps bake the device edits in first (Design §3 "flatten"); the result becomes
+        // the stack's new base and the pre-cloud state stays undoable.
+        state = .processing
+        isCloudStepRunning = true
+        defer { isCloudStepRunning = false }
+        guard let mediaURL = await flattenedMediaURL() else {
+            return record(.failure("render_failed", on: .device), kind: .generic)
+        }
+        do {
+            // Cloud processing is on (this path is unreachable with it off).
+            state = .uploading
+            processingOverlay = .editing
+            let uploadData = try Data(contentsOf: mediaURL)
+            state = .processing
+            let result = try await client.runFfmpegCli(
+                videoData: uploadData,
+                fileName: mediaURL.lastPathComponent,
+                mimeType: MediaMIME.mimeType(for: mediaURL),
+                args: params
+            )
+            let ext = Self.ffmpegCliOutputExtension(for: result.outputFormat)
+            let out = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ffmpeg-cli-\(call.id).\(ext)")
+            try result.data.write(to: out)
+            await rebaseStack(onto: out)
+            let detail = result.explanation.isEmpty ? "Processed with FFmpeg" : result.explanation
+            messages.append(ChatMessage(role: .system, content: "\(detail) · \(UXCopy.cloud)"))
+            return record(.success(on: .server, output: [
+                "outputFormat": .string(result.outputFormat),
+                "command": .string(result.command),
+                "explanation": .string(result.explanation),
+            ]), kind: nil)
+        } catch is CancellationError {
+            return .failure("cancelled", on: .server)
+        } catch {
+            if let apiError = error as? APIError, apiError.isPaywall {
+                handlePaywallIfNeeded(apiError)
+                return .failure("paywall", on: .server)
+            }
+            // Sync error bodies (400 validation errors) carry the same stable codes.
+            return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
+        }
+    }
+
+    /// Safe file extension for an ffmpeg_cli output format (server allowlist mirror).
+    private static func ffmpegCliOutputExtension(for format: String) -> String {
+        let known: Set<String> = ["mp4", "mov", "webm", "mkv", "gif", "mp3", "wav", "m4a", "aac", "ogg", "flac", "jpg", "png"]
+        let lower = format.lowercased()
+        return known.contains(lower) ? lower : "mp4"
     }
 
     /// The file a cloud step should upload: the base when there are no device edits, else a

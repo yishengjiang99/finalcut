@@ -27,6 +27,14 @@ import { APPLY_COLOR_FILTER_GROUPED_DESCRIPTION } from './iosGroupedTools.js';
  */
 export const GROUPED_EFFECTS_MIN_BUILD = 1_000_000_000;
 
+/**
+ * First FinalCap-iOS build with the server-side ffmpeg_cli fallback executor: when no
+ * on-device (AVFoundation) tool can handle the request, the app uploads the video to
+ * POST /api/ffmpeg-cli/run and the processed result downloads back as the new clip.
+ * Builds below this never get the tool offered. Bump when the implementation ships.
+ */
+export const FFMPEG_CLI_MIN_BUILD = 11;
+
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });
 
@@ -66,8 +74,9 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   vignette_grain: GROUPED_EFFECTS_MIN_BUILD,
   segment: GROUPED_EFFECTS_MIN_BUILD,
   audio_effect: GROUPED_EFFECTS_MIN_BUILD,
+  // Server-side last resort: no AVFoundation tool can do it → upload, process, download.
+  ffmpeg_cli: FFMPEG_CLI_MIN_BUILD,
 });
-
 /**
  * Definition narrowing for the FinalCap-iOS schema (device limits from native-tools.md).
  * Per tool: `params` patches (merged into a property), `removeParams` (dropped, and removed

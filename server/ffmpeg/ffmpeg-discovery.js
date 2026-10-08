@@ -2,7 +2,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runProcess } from './ffmpeg-executor.js';
+import { runProcess, FFMPEG_BIN } from './ffmpeg-executor.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_CACHE_PATH = path.join(DIR, 'ffmpeg-cache.json');
@@ -18,11 +18,12 @@ const SOURCES = {
   formats: ['-hide_banner', '-formats'],
 };
 
-/** " T.. scale  V->V  Scale the input video" → { name, flags, io, description } */
+/** " T.. scale  V->V  Scale the input video" → { name, flags, io, description }
+ *  (ffmpeg ≤7 uses 3-char flags "TSC"; ffmpeg 8+ uses 2-char flags "TS".) */
 export function parseFilters(text) {
   const out = [];
   for (const line of text.split('\n')) {
-    const m = line.match(/^\s([T.][S.][C.])\s+(\S+)\s+(\S+)\s+(.*)$/);
+    const m = line.match(/^\s([T.][S.](?:[C.])?)\s+(\S+)\s+(\S+)\s+(.*)$/);
     if (m && m[2] !== '=') out.push({ name: m[2], flags: m[1], io: m[3], description: m[4].trim() });
   }
   return out;
@@ -54,7 +55,7 @@ function matching(list, query, limit) {
 }
 
 export class FfmpegDiscovery {
-  constructor({ run = runProcess, bin = 'ffmpeg', cachePath = DEFAULT_CACHE_PATH, ttlMs = CACHE_TTL_MS } = {}) {
+  constructor({ run = runProcess, bin = FFMPEG_BIN, cachePath = DEFAULT_CACHE_PATH, ttlMs = CACHE_TTL_MS } = {}) {
     this.run = run;
     this.bin = bin;
     this.cachePath = cachePath;

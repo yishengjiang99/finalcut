@@ -1,8 +1,10 @@
 # Client tool execution (`POST /api/chat` with `execution: "client"`)
 
 Lets a native client (iOS) plan edits with Grok and **execute the tool calls on the
-device**. The server never runs ffmpeg in this mode and never receives the media;
-it only sees metadata and (optionally) up to 4 small thumbnails.
+device**. The server never runs ffmpeg for the turn itself; it only sees metadata and
+(optionally) up to 4 small thumbnails — unless the app uploads media to a metered media
+route (`/api/jobs/process-video`, or the `ffmpeg_cli` fallback's `/api/ffmpeg-cli/run`)
+because no on-device tool can handle the request.
 
 Omitting `execution` keeps the existing streaming (SSE) behaviour exactly as before.
 Any other value than `"client"` is rejected with 400.

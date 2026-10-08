@@ -20,6 +20,11 @@ enum APIEndpoints {
     static let authGoogle = "/auth/google"
     static let authLogout = "/auth/logout"
 
+    /// FFmpeg CLI fallback: JSON-only discover/plan (no media).
+    static let ffmpegCli = "/api/ffmpeg-cli"
+    /// FFmpeg CLI fallback: multipart video + args JSON → processed media bytes.
+    static let ffmpegCliRun = "/api/ffmpeg-cli/run"
+
     /// Poll job status: GET /api/jobs/:id
     static func jobStatus(_ id: String) -> String {
         "/api/jobs/\(id)"
