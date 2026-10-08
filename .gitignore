@@ -16,3 +16,6 @@ ffmpeg-8.0.1
 **/xcuserdata/
 tmp/
 REVISION
+
+# FFmpeg capability discovery cache
+server/ffmpeg/ffmpeg-cache.json
