@@ -47,6 +47,21 @@
 5. **Document Results**: Add review section to `tasks/todo.md`
 6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
+## iOS Unit Testing
+
+When modifying code in the `ios/` directory:
+
+1. **Add Tests for New Features**: Add unit tests to `ios/FinalCutTests/` for any new functionality
+2. **Update Tests for Changes**: Modify existing tests if changing functionality in tested code
+3. **Test Coverage**: Aim to cover the main logic paths of your iOS changes
+4. **Test Naming**: Use clear, descriptive test names that explain what is being tested
+5. **CI Gate**: iOS unit tests (FinalCutTests and FinalCutUITests) are automatically run via `.github/workflows/ios-unit-tests.yml` when `ios/**` files change
+6. **Local Validation**: Before pushing, run tests locally with:
+   ```bash
+   cd ios
+   xcodebuild -project FinalCut.xcodeproj -scheme FinalCut -destination "platform=iOS Simulator,name=iPhone 15" -only-testing:FinalCutTests test
+   ```
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
