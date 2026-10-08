@@ -116,6 +116,12 @@ async function processVideoOnServer(operation, args, videoFileData) {
   return collectStreamChunks(response.body.getReader());
 }
 
+const FFMPEG_CLI_MIME_TYPES = {
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', gif: 'image/gif',
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac',
+  jpg: 'image/jpeg', png: 'image/png'
+};
+
 // Content-Type of the most recent /api/process-video result (image/* for photos).
 let lastResultContentType = null;
 
@@ -1136,6 +1142,45 @@ export const toolFunctions = {
     } catch (error) {
       addMessage({ text: 'Error creating lyric captions: ' + error.message });
       return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}: ${error.message}`;
+    }
+  },
+
+  ffmpeg_cli: async (args, videoFileData, setVideoFileData, addMessage) => {
+    const authHeaders = sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {};
+    try {
+      const { action, ...params } = args || {};
+      if (action === 'discover' || action === 'plan') {
+        const response = await fetch('/api/ffmpeg-cli', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ action, ...params })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok && !body.errors) throw new Error(body.error || 'FFmpeg CLI request failed');
+        return JSON.stringify(body);
+      }
+      if (action !== 'run') throw new Error('action must be discover, plan or run');
+
+      const formData = new FormData();
+      formData.append('video', new Blob([videoFileData], { type: currentFileMimeType || 'video/mp4' }), 'input');
+      formData.append('args', JSON.stringify(params));
+      const response = await fetch('/api/ffmpeg-cli/run', { method: 'POST', headers: authHeaders, body: formData });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const detail = body.errors?.length ? `${body.errors.join('; ')}${body.suggestions && Object.keys(body.suggestions).length ? ` Suggestions: ${JSON.stringify(body.suggestions)}` : ''}` : (body.error || 'FFmpeg CLI failed');
+        throw new Error(detail);
+      }
+      const format = response.headers.get('X-Output-Format') || 'mp4';
+      const command = decodeURIComponent(response.headers.get('X-FFmpeg-Command') || '');
+      const explanation = decodeURIComponent(response.headers.get('X-FFmpeg-Explanation') || '');
+      const data = new Uint8Array(await response.arrayBuffer());
+      const mimeType = FFMPEG_CLI_MIME_TYPES[format] || 'application/octet-stream';
+      if (mimeType.startsWith('video/') && format !== 'gif') setVideoFileData(data);
+      addMessage({ text: `Processed with FFmpeg: ${explanation}`, videoUrl: URL.createObjectURL(new Blob([data], { type: mimeType })), mimeType });
+      return `FFmpeg command ran successfully (${command}). ${explanation}`;
+    } catch (error) {
+      addMessage({ text: 'Error running FFmpeg: ' + error.message });
+      return 'Failed to run FFmpeg: ' + error.message;
     }
   },
 

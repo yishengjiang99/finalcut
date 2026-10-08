@@ -83,3 +83,16 @@ describe('routing', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe('chat integration', () => {
+  it('adds ffmpeg_cli last for web, not for iOS, and only guides when enabled', async () => {
+    const { addFfmpegFallbackTool, buildSystemMessage } = await import('../server/chat.js');
+    const body = { tools: [{ type: 'function', function: { name: 'trim_video' } }] };
+    const web = addFfmpegFallbackTool(body, 'Mozilla/5.0');
+    expect(web.tools.map(t => t.function.name)).toEqual(['trim_video', 'ffmpeg_cli']);
+    expect(addFfmpegFallbackTool(web, 'Mozilla/5.0')).toBe(web);
+    expect(addFfmpegFallbackTool(body, 'FinalCap-iOS/10')).toBe(body);
+    expect(buildSystemMessage({ ffmpegFallback: true }).content).toContain('ffmpeg_cli');
+    expect(buildSystemMessage().content).not.toContain('ffmpeg_cli');
+  });
+});

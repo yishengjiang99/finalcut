@@ -28,6 +28,7 @@ import {
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
 import { filterToolsForUserAgent } from './iosToolAllowlist.js';
+import { FFMPEG_FALLBACK_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 const router = express.Router();
 
@@ -146,7 +147,7 @@ export function flushStreamFilter(filter) {
 
 // ─── System prompt builder ───────────────────────────────────────────────────
 
-export function buildSystemMessage() {
+export function buildSystemMessage({ ffmpegFallback = false } = {}) {
   const photoGuidance =
     'The current media may be a video OR a photo (jpg, png, webp, heic). For a photo, only call frame edits (' +
     PHOTO_SUPPORTED_OPS.join(', ') +
@@ -154,6 +155,7 @@ export function buildSystemMessage() {
     'Never call trim, speed, audio, caption, or transition tools on a photo — explain they only apply to videos.\n\n';
   const outputContract =
     photoGuidance +
+    (ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE + '\n\n' : '') +
     'When a request requires multiple edits, emit one tool call for each edit in the order they should be applied. The tool calls will be executed sequentially on the current media.\n\n' +
     'Always end your FINAL response (after any tool use is complete) with exactly this format:\n' +
     '- Answer:\n' +
@@ -230,6 +232,16 @@ export function restrictStreamingBodyForIos(body, userAgent) {
     delete next.tool_choice;
   }
   return next;
+}
+
+/**
+ * Streaming (web) mode: offer the server-side ffmpeg_cli fallback tool last, after the client's
+ * built-in tools. FinalCap-iOS UAs and requests without tools are left as-is.
+ */
+export function addFfmpegFallbackTool(body, userAgent) {
+  if (parseFinalCapIosUserAgent(userAgent).isFinalCapIos || !Array.isArray(body.tools) || !body.tools.length) return body;
+  if (body.tools.some(t => t?.function?.name === FFMPEG_CLI_TOOL_NAME)) return body;
+  return { ...body, tools: [...body.tools, ffmpegCliToolDefinition] };
 }
 
 // ─── Client-execution mode (tools run on the device) ─────────────────────────
@@ -462,7 +474,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
 
     // Keep the client payload focused on the latest actionable request, but
     // always restore the server-owned system contract.
-    const systemMessage = buildSystemMessage();
+    const systemMessage = buildSystemMessage({ ffmpegFallback: !parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
 
     // Enable streaming for xAI API
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
@@ -471,12 +483,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
-      body: JSON.stringify(restrictStreamingBodyForIos({
+      body: JSON.stringify(restrictStreamingBodyForIos(addFfmpegFallbackTool({
         ...req.body,
         messages: [systemMessage, ...req.body.messages],
         model: 'grok-3', // Specify the new model here
         stream: true // Enable streaming
-      }, req.get('user-agent')))
+      }, req.get('user-agent')), req.get('user-agent')))
     });
 
     if (!response.ok) {
