@@ -90,8 +90,19 @@ jobs:
           BASE="https://${SERVER_NAME}"
           echo "==> homepage"
           curl -fsS -o /dev/null -m 20 "${BASE}/"
-          echo "==> /api/health"
-          HEALTH="$(curl -fsS -m 20 "${BASE}/api/health")"
+          echo "==> /api/health (poll until the restarted backend is ready)"
+          HEALTH=""
+          for i in $(seq 1 30); do
+            if HEALTH="$(curl -fsS -m 10 "${BASE}/api/health" 2>/dev/null)"; then
+              echo "backend ready after ~$((i * 10))s"
+              break
+            fi
+            sleep 10
+          done
+          if [[ -z "${HEALTH}" ]]; then
+            echo "/api/health never became ready within 5 minutes" >&2
+            exit 1
+          fi
           echo "$HEALTH"
           echo "$HEALTH" | grep -q '"ok":true'
           EXPECTED="$(git rev-parse --short HEAD)"
