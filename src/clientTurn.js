@@ -2,6 +2,7 @@
 // tool call comes back here and runs in ffmpeg.wasm; only small results (ok/error, duration,
 // frame size) go back for the next round. The media is not part of any request.
 import { toolFunctions, getCurrentFileMimeType, resetLastExecution, getLastExecution, setToolStatusListener } from './toolFunctions.js';
+import { track, msBucket } from './telemetry.js';
 import { noteDerivedVideo } from './captionLineage.js';
 import { probeMedia, summarizeProbe, subscribeEngine } from './wasm/ffmpegEngine.js';
 
@@ -139,6 +140,7 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
               report(toolRunStatus(call.name, index, reply.toolCalls.length));
               onToolStart?.(call.name, call.arguments);
               resetLastExecution();
+              const toolStartedAt = Date.now();
               const before = working;
               const text = call.name === 'add_video_transition'
                 ? await toolFunction(call.arguments, working, setWorking, addMessage, uploadedVideos)
@@ -148,6 +150,7 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
               const changed = working !== before;
               if (changed) media = await describeMedia(working, getCurrentFileMimeType());
               result = toolResultFor(text, getLastExecution(), changed ? media : undefined);
+              track('tool_executed', { tool: call.name, ok: Boolean(result.ok), engine: String(result.executedOn || 'browser').slice(0, 32), ms_bucket: msBucket(Date.now() - toolStartedAt) });
             }
             if (!result.ok) blocked = call.name;
           }

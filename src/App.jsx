@@ -9,8 +9,9 @@ import {
   setUploadConsentHandler,
 } from './engineMode.js';
 import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
-import logoUrl from '../logo.png';
-import explainerVideoUrl from '../docs/finalcap-explainer.mp4';
+import logoUrl from './brand/logo-96.webp';
+import Landing from './Landing.jsx';
+import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './telemetry.js';
 import './App.css';
 
 // Sample commands for quick access
@@ -25,33 +26,6 @@ const sampleCommands = [
   { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
 ];
 
-const landingStats = [
-  ['500+', 'FFmpeg filters & effects'],
-  ['11', 'Caption languages'],
-  ['4K', 'Max export resolution'],
-  ['~10s', 'Typical edit turnaround']
-];
-
-const landingFeatures = [
-  ['💬', 'Chat to edit', 'Describe the edit in words. Trim, crop, resize, rotate, overlay text — the AI plans the filter chain for you.', 'trim seconds 5–15'],
-  ['🔤', 'AI captions', 'Generate accurate subtitles, translate across 11 languages, and burn them in with styled typography.', 'add Spanish captions'],
-  ['🎨', 'Color & effects', 'Brightness, saturation, hue, vignette, film looks — 500+ real FFmpeg filters, not presets.', 'make it moodier'],
-  ['📱', 'Social presets', 'One sentence to 9:16 for Reels and TikTok, 1:1 for feeds, or 16:9 for YouTube — reframed automatically.', 'make it vertical'],
-  ['⚡', 'Speed & audio', 'Time-remap, volume, fade, loudness normalization, EQ — full audio pipeline included.', '2x speed, keep pitch'],
-  ['📦', 'Any format out', 'MP4, WebM, MOV, GIF, MP3 extraction — server-side rendering up to 4K.', 'export as GIF']
-];
-
-const landingSteps = [
-  ['Drop in your video', 'Upload a file or try the built-in sample. Your media stays private to your session.', '“BigBuckBunny.mp4 attached ✓”'],
-  ['Describe the edit', "Type it like you'd tell an editor. Ask follow-ups, stack changes, undo anything.", '“Cut the boring middle, punch up the colors”'],
-  ['Download the result', "Rendering happens in the background while you keep working. Grab the MP4 when it's ready.", '“✓ Done in 11s — Download MP4”']
-];
-
-const landingExamples = [
-  ['🏙️', 'linear-gradient(135deg,#1a2233,#2c3a58)', '“Convert to 9:16 for Instagram Reels”', '✓ Cropped 1080×1920 · 8s'],
-  ['🎤', 'linear-gradient(135deg,#231a33,#3a2c58)', '“Generate captions and translate to Spanish”', '✓ 47 lines · burned in · 14s'],
-  ['🌅', 'linear-gradient(135deg,#1a3327,#2c5844)', '“Trim 0:05–0:15, 2x speed, boost saturation”', '✓ 3 edits chained · 9s']
-];
 
 const captionCommands = [
   'Generate captions for this video',
@@ -170,7 +144,7 @@ export const isVisibleMessage = (msg) => msg?.role !== 'tool' && Boolean(msg?.co
 // Welcome message with sample links
 const welcomeMessage = {
   role: 'assistant',
-  content: 'Welcome to FinalCap! Upload a video or audio file to get started, then tell me what to do with it — or pick a starting point below.',
+  content: 'Welcome to FinalCap! Open a video or audio file to get started (it stays on your device), then tell me what to do with it, or pick a starting point below.',
   id: 0,
   excludeFromAPI: true,
   showSampleLinks: true
@@ -349,6 +323,12 @@ export default function App() {
         if (response.ok) {
           const data = await response.json();
           if (data.authenticated) {
+            try {
+              if (sessionStorage.getItem('finalcap.signin.started')) {
+                sessionStorage.removeItem('finalcap.signin.started');
+                track('signup', { method: 'google' });
+              }
+            } catch { /* storage blocked */ }
             // Only hide landing page if user has subscription
             if (data.user && data.user.hasSubscription) {
               setShowLanding(false);
@@ -364,6 +344,11 @@ export default function App() {
 
     checkAuth();
   }, []);
+
+  // Anonymous funnel telemetry (src/telemetry.js): landing view on first load.
+  useEffect(() => {
+    if (showLanding) trackOnce('landing_view', landingProps());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check if user is returning from successful payment
   useEffect(() => {
@@ -386,6 +371,7 @@ export default function App() {
           if (response.ok) {
             const data = await response.json();
             if (data.verified && data.paymentStatus === 'paid') {
+              track('upgrade', { step: 'paid', method: 'stripe' });
               // Hide landing page and show editor after verified payment
               setShowLanding(false);
               // Clean up the URL without reloading the page
@@ -422,6 +408,7 @@ export default function App() {
   }, []);
 
   const answerUploadConsent = (allowed) => {
+    if (uploadConsent) track('upload_consent', { allowed: Boolean(allowed), uploads: String(uploadConsent.uploads || 'file'), tool: uploadConsent.tool });
     uploadConsent?.resolve(allowed);
     setUploadConsent(null);
   };
@@ -512,7 +499,7 @@ export default function App() {
       let hasError = false;
 
       // Upload progress is a transient status, not part of the conversation
-      toast(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`);
+      toast(`Opening ${files.length} file${files.length > 1 ? 's' : ''}…`);
 
       // Process all files
       for (let i = 0; i < files.length; i++) {
@@ -565,10 +552,18 @@ export default function App() {
       }
 
       if (newVideos.length === 0) {
-        if (!hasError) toast('No valid files were uploaded');
+        if (!hasError) toast('No valid files were opened');
         e.target.value = '';
         return;
       }
+
+      track('video_loaded', {
+        source: 'file',
+        files: newVideos.length,
+        kind: newVideos[0].isAudio ? 'audio' : 'video',
+        container: String(newVideos[0].mimeType || 'unknown').split(';')[0].slice(0, 64),
+        size_bucket: sizeBucket(newVideos[0].data?.byteLength),
+      });
 
       // Update the uploaded videos list
       setUploadedVideos(prev => [...prev, ...newVideos]);
@@ -587,9 +582,9 @@ export default function App() {
       }));
 
       setMessages(prev => [...prev, ...uploadedMessages]);
-      if (!hasError) toast(`${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}`);
+      if (!hasError) toast(`${newVideos.length} file${newVideos.length > 1 ? 's' : ''} ready for editing${newVideos.length > 1 ? ' or transitions' : ''}`);
     } catch (error) {
-      toast('Error uploading files: ' + error.message);
+      toast('Error opening files: ' + error.message);
     }
 
     // Clear the input so the same files can be uploaded again if needed
@@ -602,6 +597,7 @@ export default function App() {
     if (!text || isCallingAPI) return;
     if (!hasStringOverride) setChatInput('');
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
+    trackOnce('first_prompt', { prompt_len_bucket: lengthBucket(text.length), input: hasStringOverride ? 'suggestion' : 'typed' });
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
 
@@ -730,6 +726,7 @@ export default function App() {
   const handleExport = () => {
     if (!activeMedia) return toast('Add a video or audio file first');
     downloadFile(activeMedia.url, mediaFilename(activeMedia));
+    track('export', { format: String(activeMedia.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
     toast(`Exported “${activeMedia.label}”`);
   };
 
@@ -754,7 +751,7 @@ export default function App() {
       const response = await fetch(sampleVideoUrl);
       if (!response.ok) {
         // If sample video doesn't exist, just show a message
-        toast('Sample video not available. Please upload your own video.');
+        toast('Sample video not available. Please open your own video.');
         return;
       }
 
@@ -775,162 +772,25 @@ export default function App() {
       activateMedia(uploadedMessage.id);
       setMessages(prev => [...prev, uploadedMessage]);
       toast('Sample video loaded and ready for editing');
+      track('video_loaded', { source: 'sample', kind: 'video', files: 1 });
 
     } catch (error) {
-      toast('Error loading sample video. Please upload your own video.');
+      toast('Error loading sample video. Please open your own video.');
     }
   };
 
   // Landing page component
   if (showLanding) {
     return (
-      <div className="fc landing">
-        <nav className="lp-nav">
-          <div className="wrap">
-            <a className="lp-brand" href="#">
-              <img src={logoUrl} alt="" />
-              FinalCap
-            </a>
-            <div className="lp-nav-links">
-              <a href="#features">Features</a>
-              <a href="#how">How it works</a>
-              <a href="#examples">Examples</a>
-            </div>
-            <div className="spacer" />
-            <button className="btn-ghost" onClick={handleGetStarted}>Sign in</button>
-            <button className="btn-primary" onClick={handleGetStarted}>Get started free</button>
-          </div>
-        </nav>
-
-        <header className="hero">
-          <div className="wrap">
-            <div>
-              <div className="eyebrow"><span className="dot" /> AI video editor</div>
-              <h1>Edit video by <span className="grad">describing it.</span></h1>
-              <p className="hero-sub">Type what you want — trim, captions, color, speed, formats. FinalCap turns your words into frame-perfect edits in seconds. No timeline. No learning curve.</p>
-
-              {authError && <div className="auth-error">{authError}</div>}
-
-              <div className="cta-row">
-                <button className="btn-primary big" onClick={handleGetStarted}>Start editing — it's free</button>
-                <button className="btn-secondary" onClick={loadSampleVideo}><span className="play">▶</span> Watch it work</button>
-              </div>
-              <div className="micro-proof">
-                <span><span className="ok">✓</span> Free to try</span>
-                <span><span className="ok">✓</span> No credit card</span>
-                <span><span className="ok">✓</span> Runs in your browser</span>
-              </div>
-            </div>
-            <div className="hero-visual" aria-hidden="true">
-              <div className="editor-card">
-                <div className="ec-video">
-                  <video src={explainerVideoUrl} autoPlay muted loop playsInline preload="metadata" />
-                  <span className="tag">preview</span>
-                </div>
-                <div className="ec-chat">
-                  <div className="ec-bubble user">Convert this to 9:16 for Reels and add burned-in captions</div>
-                  <div className="ec-bubble ai"><b>✓ Done in 11s</b> — cropped to 1080×1920, captions burned in.</div>
-                </div>
-              </div>
-              <div className="float-card fc-1">
-                <div className="ic">💬</div>
-                <div>Captions generated<small>English → Spanish available</small></div>
-              </div>
-              <div className="float-card fc-2">
-                <div className="ic">⚙️</div>
-                <div>Rendering 4K…<div className="pbar-mini"><i /></div></div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="stats">
-          <div className="wrap">
-            {landingStats.map(([num, label]) => (
-              <div className="stat" key={label}>
-                <div className="num"><span className="grad">{num}</span></div>
-                <div className="lbl">{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <section className="block" id="features">
-          <div className="wrap">
-            <div className="kicker reveal">Features</div>
-            <h2 className="sec reveal">Everything a timeline does, in one sentence</h2>
-            <p className="sec-sub reveal">FinalCap understands plain language and maps it to professional-grade FFmpeg operations.</p>
-            <div className="feat-grid">
-              {landingFeatures.map(([icon, name, description, example]) => (
-                <div className="feat reveal" key={name}>
-                  <div className="fic">{icon}</div>
-                  <h3>{name}</h3>
-                  <p>{description}</p>
-                  <span className="try">Try: “{example}” →</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="block alt" id="how">
-          <div className="wrap">
-            <div className="kicker reveal">How it works</div>
-            <h2 className="sec reveal">Three steps. Zero timeline.</h2>
-            <p className="sec-sub reveal">If you can describe it, you can edit it.</p>
-            <div className="steps">
-              {landingSteps.map(([name, description, example], index) => (
-                <div className="step reveal" key={name}>
-                  <div className="n">{index + 1}</div>
-                  <h3>{name}</h3>
-                  <p>{description}</p>
-                  <div className="eg">{example}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="block" id="examples">
-          <div className="wrap">
-            <div className="kicker reveal">Examples</div>
-            <h2 className="sec reveal">One sentence in, finished video out</h2>
-            <p className="sec-sub reveal">Real prompts, real results.</p>
-            <div className="examples">
-              {landingExamples.map(([icon, background, prompt, result]) => (
-                <div className="ex reveal" key={prompt}>
-                  <div className="thumb" style={{ background }}>{icon}<span className="arrow">→</span></div>
-                  <div className="cap">
-                    <div className="q">{prompt}</div>
-                    <div className="a">{result}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <div className="wrap">
-          <div className="cta-band reveal">
-            <h2>Your next edit is one sentence away.</h2>
-            <p>Join free, upload a video, and describe your first edit. It takes less than a minute.</p>
-            <div className="cta-row">
-              <button className="btn-primary big" onClick={handleGetStarted}>Start editing free</button>
-              <button className="btn-secondary" onClick={loadSampleVideo}>Try with a sample video</button>
-            </div>
-          </div>
-        </div>
-
-        <footer>
-          <div className="wrap">
-            <div className="spacer" />
-            <a href="/legal/privacy.html">Privacy</a>
-            <a href="/legal/terms.html">Terms</a>
-            <a href="/legal/licenses.html">Open-source licenses</a>
-            <a href="/legal/support.html">Contact</a>
-          </div>
-        </footer>
-      </div>
+      <Landing
+        onGetStarted={() => {
+          track('cta_click', { cta: 'start' });
+          try { sessionStorage.setItem('finalcap.signin.started', '1'); } catch { /* storage blocked */ }
+          handleGetStarted();
+        }}
+        onLoadSample={() => { track('cta_click', { cta: 'sample' }); loadSampleVideo(); }}
+        authError={authError}
+      />
     );
   }
 
@@ -1035,7 +895,7 @@ export default function App() {
       )}
       <header className="topbar">
         <div className="brand">
-          <img src={logoUrl} alt="" />
+          <img src={logoUrl} alt="FinalCap logo" width="30" height="30" />
           <span className="brand-name">FinalCap</span> <small>AI Video Editor</small>
         </div>
         <nav className="nav">
@@ -1146,7 +1006,7 @@ export default function App() {
           {view === 'library' && (
             <div className="view">
               <h2>Library</h2>
-              <p className="lead">Every upload and edit result in this session. Any of them can become the clip your next edit applies to.</p>
+              <p className="lead">Every clip you opened and every edit result in this session. Any of them can become the clip your next edit applies to.</p>
               {media.length === 0 && <p className="rail-empty">No media yet.</p>}
               <div className="grid">
                 {media.map(item => (
@@ -1164,7 +1024,7 @@ export default function App() {
                         {item.id !== activeMediaId && (
                           <button className="chip-btn primary" disabled={isCallingAPI} onClick={() => handleSelectMedia(item)}>✎ Edit this</button>
                         )}
-                        <button className="chip-btn" onClick={() => downloadFile(item.url, mediaFilename(item))}>⬇ Download</button>
+                        <button className="chip-btn" onClick={() => { downloadFile(item.url, mediaFilename(item)); track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'library' }); }}>⬇ Download</button>
                         <button className="chip-btn" onClick={() => showMessage(item.id)}>Show in chat</button>
                       </div>
                     </div>

@@ -14,6 +14,7 @@ import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { v2Router } from './src/server/v2.js';
+import { telemetryRouter, scheduleTelemetryPurge } from './src/server/telemetry.js';
 
 const app = express();
 
@@ -32,6 +33,11 @@ app.use(createHealthRouter());
 
 // iOS suggestion pills: public, pre-login, no session/DB (own rate limiter).
 app.use(iosSuggestionsRouter);
+
+// Anonymous first-party telemetry: before the session middleware so it never sets a cookie
+// (own small JSON parser + rate limiter; stores no IP). See src/server/telemetry.js.
+app.use(telemetryRouter);
+if (process.env.NODE_ENV !== 'test') scheduleTelemetryPurge();
 
 // Initialize database
 let sessionStore;

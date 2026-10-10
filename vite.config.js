@@ -48,11 +48,9 @@ export default defineConfig({
   worker: { format: 'es' },
   optimizeDeps: { exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'] },
   build: {
-    sourcemap: true,           // already default in dev, but explicit is fine
-  },
-  esbuild: {
-    // Sometimes helps sourcemap stability (tradeoff: slightly slower transforms)
-    sourcemap: 'inline',
+    // No source maps in the production build: they were inlined into the main bundle (about
+    // 1.1 MB of base64) and published the full source. Dev still gets Vite's own source maps.
+    sourcemap: false,
   },
   mode: 'production',
   base: '/', // Ensure assets are served from the root `/`
