@@ -10,6 +10,11 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   const fps = FPS_STEPS[fpsIdx];
   const playAfterExpandRef = useRef(false);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const [showThumb, setShowThumb] = useState(true); // thumbnail first; tap to open the full player
+  // Audio files skip the video thumbnail (isAudio state is only known after the player mounts).
+  const looksLikeAudio = mimeType
+    ? mimeType.startsWith('audio/')
+    : ['.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', 'audio/'].some((s) => (videoUrl || '').includes(s));
   const [isAudio, setIsAudio] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState(null);
@@ -270,7 +275,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || isAudio || !vttUrl || isCollapsed || autoRecordStartedRef.current || isRecording || downloadUrl) return;
+    if (!video || isAudio || !vttUrl || isCollapsed || showThumb || autoRecordStartedRef.current || isRecording || downloadUrl) return;
 
     const startAutoRecording = () => {
       if (autoRecordStartedRef.current) return;
@@ -284,7 +289,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     }
     video.addEventListener('loadedmetadata', startAutoRecording, { once: true });
     return () => video.removeEventListener('loadedmetadata', startAutoRecording);
-  }, [vttUrl, isAudio, isCollapsed, isRecording, downloadUrl, handleStartRecording]);
+  }, [vttUrl, isAudio, isCollapsed, showThumb, isRecording, downloadUrl, handleStartRecording]);
 
   const fallbackAnchorDownload = (url, filename) => {
     const a = document.createElement('a');
@@ -396,9 +401,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Mini-bar play: expand first, then start playback once the video element mounts.
+  // Mini-bar play / thumbnail tap: expand first, then start playback once the video element mounts.
   useEffect(() => {
-    if (!isCollapsed && playAfterExpandRef.current && videoRef.current && !isAudio) {
+    if (!isCollapsed && !showThumb && playAfterExpandRef.current && videoRef.current && !isAudio) {
       playAfterExpandRef.current = false;
       try {
         const p = videoRef.current.play();
@@ -406,7 +411,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       } catch (_) { /* ignore */ }
       setIsPlaying(true);
     }
-  }, [isCollapsed, isAudio]);
+  }, [isCollapsed, showThumb, isAudio]);
 
   const togglePlayFromSurface = () => handlePlayPause();
 
@@ -451,6 +456,53 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     : 'Download';
 
 
+  // ---- Thumbnail (default): a small thumb; tap to open the full player ----
+  if (showThumb && !looksLikeAudio) {
+    return (
+      <button
+        type="button"
+        onClick={() => { playAfterExpandRef.current = true; setShowThumb(false); }}
+        aria-label={`Open video: ${title}`}
+        title="Open video"
+        style={{
+          position: 'relative', display: 'block', width: '100%', maxWidth: '200px',
+          padding: 0, border: 'none', borderRadius: '10px', overflow: 'hidden',
+          backgroundColor: '#000', cursor: 'pointer', WebkitTapHighlightColor: 'transparent'
+        }}
+      >
+        <video
+          src={videoUrl}
+          preload="metadata"
+          muted
+          playsInline
+          onLoadedMetadata={(e) => { if (!duration) setDuration(e.currentTarget.duration || 0); }}
+          style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', display: 'block', backgroundColor: '#000' }}
+        />
+        <span style={{
+          position: 'absolute', inset: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none'
+        }}>
+          <span style={{
+            width: '44px', height: '44px', borderRadius: '50%',
+            backgroundColor: 'rgba(10,14,20,.62)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '17px', paddingLeft: '3px'
+          }}>▶</span>
+        </span>
+        {duration > 0 && (
+          <span style={{
+            position: 'absolute', right: '6px', bottom: '6px', pointerEvents: 'none',
+            fontSize: '10px', fontWeight: '600', color: '#fff',
+            backgroundColor: 'rgba(10,14,20,.72)', borderRadius: '5px', padding: '2px 6px',
+            fontVariantNumeric: 'tabular-nums'
+          }}>
+            {formatShort(duration)}
+          </span>
+        )}
+      </button>
+    );
+  }
+
   // ---- Collapsed: 64px mini bar ----
   if (isCollapsed) {
     return (
@@ -471,7 +523,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           width: '88px', height: '50px', borderRadius: '6px', flex: 'none',
           backgroundColor: '#000', display: 'flex', alignItems: 'center',
           justifyContent: 'center', fontSize: '18px', color: '#9aa7bb'
-        }}>{isAudio ? '\u266A' : '\u25B6'}</div>
+        }}>{isAudio ? '♪' : '▶'}</div>
         <div style={{ minWidth: 0, marginRight: 'auto' }}>
           <div style={{
             fontSize: '12px', fontWeight: '600', color: '#e8edf4',
@@ -484,10 +536,10 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           )}
         </div>
         <button aria-label="Play" title="Play" onClick={() => { playAfterExpandRef.current = true; setIsCollapsed(false); }} style={tbtn(false)}>
-          \u25B6
+          ▶
         </button>
         <button aria-label="Expand preview" title="Expand" onClick={() => setIsCollapsed(false)} style={tbtn(false)}>
-          \u2303
+          ⌃
         </button>
         <div style={{
           position: 'absolute', left: 0, bottom: 0, height: '3px',
@@ -511,7 +563,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px' }}>
             <span style={{ fontSize: '13px', fontWeight: '700', color: '#e8edf4' }}>{title}</span>
             <button aria-label="Collapse preview" title="Collapse" onClick={() => setIsCollapsed(true)} style={chipBtn}>
-              \u2304
+              ⌄
             </button>
           </div>
           <audio
@@ -569,7 +621,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
                   onClick={(e) => { e.stopPropagation(); setIsCollapsed(true); }}
                   style={overlayBtn}
                 >
-                  \u2304
+                  ⌄
                 </button>
                 <span style={{
                   fontSize: '11px', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,.85)',
@@ -586,7 +638,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
                 onClick={(e) => { e.stopPropagation(); handlePlayPause(); }}
                 style={centerPlayBtn}
               >
-                \u25B6
+                ▶
               </button>
             )}
 
@@ -637,7 +689,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
               fontVariantNumeric: 'tabular-nums',
               whiteSpace: 'nowrap'
             }}>
-              {formatTime(currentTime)} \u00B7 F {getCurrentFrame()} / {getTotalFrames()}
+              {formatTime(currentTime)} · F {getCurrentFrame()} / {getTotalFrames()}
             </span>
             <button
               aria-label={`Frame rate ${fps} frames per second. Activate to change.`}
@@ -654,7 +706,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
               disabled={currentTime <= 0}
               style={tbtn(currentTime <= 0)}
             >
-              \u23EE
+              ⏮
             </button>
             <button
               aria-label="Step forward one frame"
@@ -663,7 +715,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
               disabled={duration > 0 && currentTime >= duration}
               style={tbtn(duration > 0 && currentTime >= duration)}
             >
-              \u23ED
+              ⏭
             </button>
             <button
               aria-label={downloadLabel}
@@ -672,13 +724,13 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
               disabled={dlPending}
               style={tbtn(dlPending)}
             >
-              {dlPending ? '\u23FA' : '\u2B07'}
+              {dlPending ? '⏺' : '⬇'}
             </button>
           </div>
 
           {corsError && (
             <p style={{ color: '#f85149', fontSize: '11px', margin: 0, padding: '6px 10px', backgroundColor: '#151b25' }}>
-              \u26A0 CORS error: canvas export/recording may fail for cross-origin videos.
+              ⚠ CORS error: canvas export/recording may fail for cross-origin videos.
             </p>
           )}
         </>
