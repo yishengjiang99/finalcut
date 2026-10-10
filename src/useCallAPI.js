@@ -3,6 +3,8 @@ import { tools } from './tools.js';
 import { noteDerivedVideo } from './captionLineage.js';
 import { toolFunctions, getCurrentFileMimeType, ffmpegCliStringFallback } from './toolFunctions.js';
 import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
+import { getEngineMode, ENGINE_CLIENT } from './engineMode.js';
+import { runClientTurn } from './clientTurn.js';
 
 export function assertToolCallApplied(result, functionName) {
   if (typeof result !== 'string' || !result.trim() || /^Failed\b/i.test(result.trim())) {
@@ -158,6 +160,7 @@ export function useCallAPI({
   uploadedVideos,
   refreshSampleAccessToken,
   onAuthExpired,
+  onToolStart,
 }) {
   const callAPI = useCallback(async function runTurn(currentMessages, options = {}) {
     const followUpRound = options.followUpRound || 0;
@@ -177,8 +180,51 @@ export function useCallAPI({
       ...(options.signal ? { signal: options.signal } : {})
     });
 
+    // In-browser editing: the model's tool calls run in ffmpeg.wasm and nothing is uploaded.
+    // Without a file there is nothing to edit, so that stays an ordinary streamed chat.
+    const postClientChat = async (body) => {
+      const send = () => fetch('/api/v2/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(body),
+        ...(options.signal ? { signal: options.signal } : {})
+      });
+      let response = await send();
+      let failure = response.ok ? null : await chatRequestError(response);
+      if (failure?.authExpired && shouldUseSampleAuth && refreshSampleAccessToken) {
+        authHeaders = { 'sample-access-token': await refreshSampleAccessToken() };
+        response = await send();
+        failure = response.ok ? null : await chatRequestError(response);
+      }
+      if (failure) throw failure;
+      return response.json();
+    };
+
     setIsCallingAPI(true); // Set loading state before API call
     try {
+      if (getEngineMode() === ENGINE_CLIENT && currentVideoFileData) {
+        return await runClientTurn({
+          messages: currentMessages,
+          videoFileData: currentVideoFileData,
+          post: postClientChat,
+          signal: options.signal,
+          ui: {
+            setProcessing,
+            setVideoFileData,
+            addMessage,
+            uploadedVideos,
+            onToolStart,
+            onStatus: options.onStatus,
+            nextId: () => messageIdCounterRef.current++,
+            addAssistantMessage: (content) => {
+              const id = messageIdCounterRef.current++;
+              setMessages(prev => [...prev, { role: 'assistant', content, id }]);
+              return id;
+            },
+          },
+        });
+      }
+
       let response = await postChat();
       let failure = response.ok ? null : await chatRequestError(response);
 
@@ -336,6 +382,8 @@ export function useCallAPI({
               throw new Error(`Invalid arguments for xAI tool call "${funcName}": ${parseError.message}`);
             }
 
+            onToolStart?.(funcName, args);
+
             // Pass uploadedVideos only to functions that need it
             let result;
             if (funcName === 'add_video_transition') {
@@ -415,7 +463,7 @@ export function useCallAPI({
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
     }
-  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos, refreshSampleAccessToken, onAuthExpired]);
+  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos, refreshSampleAccessToken, onAuthExpired, onToolStart]);
 
   return callAPI;
 }

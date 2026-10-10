@@ -13,6 +13,7 @@ import { jobsRouter } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
+import { v2Router } from './src/server/v2.js';
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use(ffmpegCliRouter);
 app.use(chatRouter);
 app.use(jobsRouter);
 app.use(lyricCaptionsRouter);
+app.use(v2Router);
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);

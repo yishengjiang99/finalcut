@@ -4,6 +4,11 @@ import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType 
 import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
+import {
+  ENGINE_CLIENT, ENGINE_SERVER, fetchClientConfig, resolveEngineMode, setEngineMode,
+  setUploadConsentHandler, getCloudCaptions, setCloudCaptions,
+} from './engineMode.js';
+import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
 import logoUrl from '../logo.png';
 import './App.css';
 
@@ -129,6 +134,26 @@ function TimeAgo({ at }) {
 }
 
 const JOB_STATUS_TEXT = { done: 'Done', error: 'Failed', cancelled: 'Cancelled' };
+
+// A prompt can finish without changing the clip (a question, or a lookup the model stopped at).
+export const jobStatusText = (job) => (
+  job.status === 'done' && !job.producedFile ? 'Done — no edit was made' : JOB_STATUS_TEXT[job.status]
+);
+
+// What the dock shows while a tool runs: lookups are not edits, so they are not "processing".
+export const toolStageText = (toolName, args) => {
+  if (toolName === 'get_video_dimensions') return 'Reading video details…';
+  if (toolName === 'ffmpeg_cli' && args?.action !== 'run') return 'Working out the ffmpeg command…';
+  return 'Processing with ffmpeg…';
+};
+// "about 1 min 20 s left" for the running edit; nothing until FFmpeg has reported enough to estimate.
+export const timeLeftText = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  return seconds >= 60 ? `about ${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s left` : `about ${Math.max(1, Math.round(seconds))} s left`;
+};
+
+// What an upload to the server would send, for the consent prompt.
+const UPLOAD_NOUN = { video: 'your video', photo: 'your photo', audio: 'the audio of your clip (not the video)' };
 const JOB_ICONS = { done: '✅', error: '⚠️', cancelled: '🚫' };
 
 // Tool results and tool-call-only assistant turns are for the model, not the chat window.
@@ -185,6 +210,13 @@ export default function App() {
   const [toastText, setToastText] = useState('');
   const toastTimerRef = useRef(null);
   const jobIdCounterRef = useRef(1);
+  const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
+  const [engineMode, setEngineModeState] = useState(ENGINE_SERVER); // 'client' once the feature flag says so
+  const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
+  const [cloudCaptionsAvailable, setCloudCaptionsAvailable] = useState(false);
+  const [cloudCaptions, setCloudCaptionsState] = useState(() => getCloudCaptions());
+  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
+  const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
   // Which clip the next edit applies to. Bytes are kept per media message so any
   // clip (an upload or an earlier result) can become the edit target again.
@@ -345,6 +377,39 @@ export default function App() {
     verifyPayment();
   }, []);
 
+  // Feature flag: edit in this browser (ffmpeg.wasm, nothing uploaded) or on the server.
+  useEffect(() => {
+    let ignore = false;
+    fetchClientConfig().then((config) => {
+      if (ignore) return;
+      const { mode } = resolveEngineMode({ flag: config?.clientFFmpeg });
+      setEngineMode(mode);
+      setEngineModeState(mode);
+      if (config?.limits?.clip) setClipLimits(config.limits.clip);
+      setCloudCaptionsAvailable(Boolean(config?.captions?.cloud));
+    });
+    return () => { ignore = true; };
+  }, []);
+
+  // A step that cannot run in the browser asks here before anything is uploaded. The answer is
+  // "no" unless the user presses the upload button.
+  useEffect(() => {
+    setUploadConsentHandler((request) => new Promise((resolve) => {
+      setUploadConsent({ ...request, resolve });
+    }));
+    return () => setUploadConsentHandler(null);
+  }, []);
+
+  const answerUploadConsent = (allowed) => {
+    uploadConsent?.resolve(allowed);
+    setUploadConsent(null);
+  };
+
+  const toggleCloudCaptions = (enabled) => {
+    setCloudCaptions(enabled);
+    setCloudCaptionsState(enabled);
+  };
+
   // Server status for the top bar (unauthenticated endpoint)
   useEffect(() => {
     let ignore = false;
@@ -375,6 +440,10 @@ export default function App() {
     const id = messageIdCounterRef.current++;
     let parentId = null;
     if (videoUrl) {
+      if (currentJobRef.current) {
+        const jobId = currentJobRef.current.id;
+        setJobs(prev => prev.map(job => job.id === jobId ? { ...job, producedFile: true } : job));
+      }
       const resultBytes = pendingResultBytesRef.current;
       pendingResultBytesRef.current = null;
       if (resultBytes && shouldRenderVideoPreview({ videoUrl, videoType, mimeType })) {
@@ -415,6 +484,7 @@ export default function App() {
     uploadedVideos,
     refreshSampleAccessToken: () => getSampleAccessToken({ force: true }),
     onAuthExpired: () => setSessionExpired(true),
+    onToolStart: (toolName, args) => setToolStage(toolStageText(toolName, args)),
   });
 
   const handleUpload = async (e) => {
@@ -448,7 +518,18 @@ export default function App() {
           continue;
         }
 
-        // Read file as array buffer for server-side processing
+        // In-browser editing has to fit the clip in this tab's memory.
+        if (engineMode === ENGINE_CLIENT) {
+          const clip = checkClip({ bytes: file.size }, { limits: clipLimits });
+          if (clip.level === 'block') {
+            addMessage({ text: `"${file.name}" is too large to edit in this browser. ${clip.reasons.join(' ')} Try a shorter or lower-resolution clip.` });
+            hasError = true;
+            continue;
+          }
+          if (clip.level === 'warn') addMessage({ text: `"${file.name}": ${clip.reasons.join(' ')}` });
+        }
+
+        // Read file as array buffer for processing
         const arrayBuffer = await file.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
         const url = URL.createObjectURL(file);
@@ -524,9 +605,10 @@ export default function App() {
 
     // Track this prompt as a job in the processing dock; the controller lets it be cancelled.
     const controller = new AbortController();
-    const job = { id: jobIdCounterRef.current++, prompt: text, status: 'running', startedAt: Date.now(), endedAt: null, resultMessageId: null };
+    const job = { id: jobIdCounterRef.current++, prompt: text, status: 'running', startedAt: Date.now(), endedAt: null, resultMessageId: null, producedFile: false };
     currentJobRef.current = { id: job.id, controller };
     pendingResultBytesRef.current = null;
+    setToolStage(null);
     setFetchAbortSignal(controller.signal);
     setJobs(prev => [job, ...prev]);
     setDockOpen(true);
@@ -534,8 +616,11 @@ export default function App() {
     let status;
     try {
       // callAPI appends to the array it is given; hand it a copy, not the array held in state.
-      status = await callAPI([...newMessages], { signal: controller.signal });
+      status = await callAPI([...newMessages], { signal: controller.signal, onStatus: setTurnStatus });
     } finally {
+      setTurnStatus(null);
+      // A pending upload question belongs to the job that just ended.
+      setUploadConsent(prev => { prev?.resolve(false); return null; });
       currentJobRef.current = null;
       setFetchAbortSignal(null);
     }
@@ -731,6 +816,7 @@ export default function App() {
         <footer>
           <p>© 2026 FinalCap. All rights reserved.</p>
           <p>AI-powered video editing made simple</p>
+          <p><a href="/legal/licenses.html">Open-source licenses</a> · <a href="/legal/privacy.html">Privacy</a></p>
         </footer>
       </div>
     );
@@ -742,6 +828,9 @@ export default function App() {
   const originals = media.filter(item => item.kind === 'original');
   const captionFiles = messages.filter(msg => msg.videoUrl && (msg.videoType === 'subtitle-srt' || msg.vttUrl));
   const showTyping = isCallingAPI && !processing && !messages[messages.length - 1]?.streaming;
+  const onDevice = engineMode === ENGINE_CLIENT;
+  const hasProgress = typeof turnStatus?.progress === 'number';
+  const runningStage = turnStatus?.text || (processing ? (toolStage || 'Processing with ffmpeg…') : 'Planning the edit…');
   const statusText = health === null
     ? 'checking server…'
     : health.ok
@@ -818,6 +907,22 @@ export default function App() {
 
   return (
     <div className="fc editor">
+      {uploadConsent && (
+        <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+          <div className="consent">
+            <h3 id="consent-title">This step uploads {UPLOAD_NOUN[uploadConsent.uploads] || 'your file'}</h3>
+            <p>
+              “{String(uploadConsent.tool || 'This edit').replace(/_/g, ' ')}” cannot run in this browser
+              {uploadConsent.reason ? ` (${uploadConsent.reason})` : ''}. It can run on our server instead, which means
+              sending {UPLOAD_NOUN[uploadConsent.uploads] || 'your file'} there. Nothing is uploaded unless you choose to.
+            </p>
+            <div className="consent-actions">
+              <button className="jbtn open" autoFocus onClick={() => answerUploadConsent(false)}>Keep it on my device (skip this step)</button>
+              <button className="jbtn" onClick={() => answerUploadConsent(true)}>Upload and continue</button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="topbar">
         <div className="brand">
           <img src={logoUrl} alt="" />
@@ -829,6 +934,11 @@ export default function App() {
           ))}
         </nav>
         <div className="spacer"></div>
+        {onDevice && (
+          <div className="status-pill device-badge" title="Edits run in this browser with FFmpeg (WebAssembly). Your video is not sent to our servers.">
+            🔒 Processed on your device, nothing uploaded
+          </div>
+        )}
         <div className="status-pill">
           <span className={`status-dot${health === null ? ' pending' : (health.ok ? '' : ' down')}`}></span> {statusText}
         </div>
@@ -838,6 +948,7 @@ export default function App() {
 
       <div className="layout">
         <aside className="rail">
+          <div className="rail-scroll">
           <h3>Project media</h3>
           {media.length === 0 && <p className="rail-empty">No media yet. Add a video or audio file to start editing.</p>}
           {media.map(item => (
@@ -858,10 +969,53 @@ export default function App() {
               <div className="thumb">{JOB_ICONS[job.status]}</div>
               <div className="meta">
                 <div className="name">{job.prompt}</div>
-                <div className="sub">{JOB_STATUS_TEXT[job.status].toLowerCase()} · <TimeAgo at={job.endedAt} /></div>
+                <div className="sub">{jobStatusText(job).toLowerCase()} · <TimeAgo at={job.endedAt} /></div>
               </div>
             </button>
           ))}
+          </div>
+
+          {/* Processing dock: one entry per sent prompt */}
+          <div className={`dock${dockOpen ? '' : ' collapsed'}`}>
+            <button type="button" className="dock-head" onClick={() => setDockOpen(open => !open)}>
+              <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
+              <span className="title">Processing</span>
+              <span className="count">
+                {runningJobs.length > 0 ? `${runningJobs.length} running` : (jobs.length > 0 ? `${jobs.length} done` : '0 running')}
+              </span>
+              <span className="chev">▲</span>
+            </button>
+            <div className="dock-body">
+              {jobs.length === 0 && (
+                <div className="dock-empty">Nothing processing right now.<br />Send an edit and watch it run here.</div>
+              )}
+              {jobs.map(job => (
+                <div key={job.id} className={`job ${job.status}`}>
+                  <div className="jthumb">🎬</div>
+                  <div className="jmain">
+                    <div className="jtitle" title={job.prompt}>{job.prompt}</div>
+                    <div className="jstage">
+                      {job.status === 'running' ? runningStage : jobStatusText(job)}
+                      {job.status === 'running' && hasProgress && ` ${Math.round(turnStatus.progress * 100)}%`}
+                      {job.status === 'running' && hasProgress && timeLeftText(turnStatus.etaSeconds) && ` · ${timeLeftText(turnStatus.etaSeconds)}`}
+                    </div>
+                    <div className={`pbar${job.status === 'running' && hasProgress ? ' determinate' : ''}`}>
+                      <i style={job.status === 'running' && hasProgress ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined}></i>
+                    </div>
+                    <div className="jfoot">
+                      <Elapsed job={job} />
+                      {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
+                      {job.status !== 'running' && job.resultMessageId !== null && (
+                        <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
+                      )}
+                      {job.status === 'error' && <button className="jbtn open" disabled={isCallingAPI} onClick={() => handleSend(job.prompt)}>Retry</button>}
+                      {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </aside>
 
         <div className="main">
@@ -940,45 +1094,6 @@ export default function App() {
           )}
 
           <div className="composer-zone">
-            {/* Processing dock: one entry per sent prompt */}
-            <div className={`dock${dockOpen ? '' : ' collapsed'}`}>
-              <button type="button" className="dock-head" onClick={() => setDockOpen(open => !open)}>
-                <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
-                <span className="title">Processing</span>
-                <span className="count">
-                  {runningJobs.length > 0 ? `${runningJobs.length} running` : (jobs.length > 0 ? `${jobs.length} done` : '0 running')}
-                </span>
-                <span className="chev">▲</span>
-              </button>
-              <div className="dock-body">
-                {jobs.length === 0 && (
-                  <div className="dock-empty">Nothing processing right now.<br />Send an edit and watch it run here.</div>
-                )}
-                {jobs.map(job => (
-                  <div key={job.id} className={`job ${job.status}`}>
-                    <div className="jthumb">🎬</div>
-                    <div className="jmain">
-                      <div className="jtitle" title={job.prompt}>{job.prompt}</div>
-                      <div className="jstage">
-                        {job.status === 'running'
-                          ? (processing ? 'Processing with ffmpeg…' : 'Planning the edit…')
-                          : JOB_STATUS_TEXT[job.status]}
-                      </div>
-                      <div className="pbar"><i></i></div>
-                      <div className="jfoot">
-                        <Elapsed job={job} />
-                        {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
-                        {job.status !== 'running' && job.resultMessageId !== null && (
-                          <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
-                        )}
-                        {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="composer">
               <div className="prompt-chips">
                 {sampleCommands.map((cmd) => (
@@ -1022,7 +1137,13 @@ export default function App() {
                 </button>
               </div>
               <div className="composer-foot">
-                <span className="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
+                <span className="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <a href="/legal/licenses.html" target="_blank" rel="noopener">Open-source licenses</a></span>
+                {onDevice && cloudCaptionsAvailable && (
+                  <label className="cloud-captions" title="Off: captions are transcribed on this device. On: the audio track (never the video) is uploaded for more accurate transcription.">
+                    <input type="checkbox" checked={cloudCaptions} onChange={(e) => toggleCloudCaptions(e.target.checked)} />
+                    Cloud captions (uploads audio only)
+                  </label>
+                )}
                 {media.length > 0 && (
                   <select
                     className="target-select"

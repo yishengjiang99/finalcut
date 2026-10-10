@@ -187,9 +187,16 @@ body {
   width: 240px;
   background: var(--bg-2);
   border-right: 1px solid var(--line-soft);
-  padding: 16px 12px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
+}
+
+.rail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 12px;
 }
 
 .rail h3 {
@@ -897,26 +904,15 @@ body {
 }
 
 /* ---------- processing dock ---------- */
-/* Anchored to the composer zone so it floats over the chat's bottom-right
-   corner without covering the send button or the target picker. */
+/* Pinned to the bottom of the left rail, below the scrolling media list. */
 .dock {
-  position: absolute;
-  right: 32px;
-  bottom: calc(100% + 6px);
-  width: 372px;
-  max-width: calc(100% - 24px);
-  z-index: 100;
+  flex-shrink: 0;
+  margin: 0 10px 12px;
   background: rgba(18, 23, 32, .97);
   border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
-  backdrop-filter: blur(16px);
+  border-radius: 14px;
   overflow: hidden;
   animation: dockIn .35s cubic-bezier(.2, .9, .3, 1.2);
-}
-
-.dock.collapsed {
-  width: auto;
 }
 
 @keyframes dockIn {
@@ -936,7 +932,7 @@ body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 13px 16px;
+  padding: 11px 12px;
   cursor: pointer;
   background: none;
   border: none;
@@ -1001,9 +997,9 @@ body {
 }
 
 .dock-body {
-  max-height: min(380px, 50vh);
+  max-height: min(380px, 40vh);
   overflow-y: auto;
-  padding: 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1017,15 +1013,15 @@ body {
   background: var(--bg-2);
   border: 1px solid var(--line-soft);
   border-radius: 13px;
-  padding: 11px 12px;
+  padding: 9px 10px;
   display: flex;
-  gap: 11px;
+  gap: 9px;
   animation: rise .25s ease-out;
 }
 
 .job .jthumb {
-  width: 58px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
   flex-shrink: 0;
   position: relative;
@@ -1126,8 +1122,9 @@ body {
 
 .job .jfoot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
 }
 
@@ -1358,8 +1355,22 @@ body {
 }
 
 @media (max-width: 900px) {
+  /* No room for the rail: keep only the processing dock, as a strip above the chat. */
+  .layout {
+    flex-direction: column;
+  }
+
   .rail {
+    width: auto;
+    border-right: none;
+  }
+
+  .rail-scroll {
     display: none;
+  }
+
+  .dock {
+    margin: 8px 12px 0;
   }
 
   .topbar {
@@ -1410,13 +1421,79 @@ body {
     margin-left: 0;
   }
 
-  .dock {
-    right: 12px;
-  }
 }
 
 @media (max-width: 480px) {
   .brand-name {
     display: none;
   }
+}
+
+/* ---------- in-browser editing ---------- */
+.status-pill.device-badge {
+  color: #7ee0a1;
+  border-color: rgba(126, 224, 161, .35);
+  white-space: nowrap;
+}
+
+.job.running .pbar.determinate i {
+  animation: none;
+  transform: none;
+  transition: width .2s linear;
+}
+
+.composer-foot .hint a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.cloud-captions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.landing footer a {
+  color: inherit;
+}
+
+.consent-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .6);
+}
+
+.consent {
+  max-width: 460px;
+  padding: 22px;
+  border-radius: 14px;
+  background: #151a24;
+  border: 1px solid rgba(255, 255, 255, .12);
+  color: #e8ecf3;
+}
+
+.consent h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+
+.consent p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #b6bfce;
+}
+
+.consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
