@@ -425,7 +425,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           src={videoUrl} 
           style={{ 
             width: '100%', 
-            maxWidth: '400px', 
+            maxWidth: '240px', 
             marginBottom: '12px'
           }} 
           controls
@@ -458,7 +458,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             ref={canvasRef}
             style={{
               width: '100%',
-              maxWidth: '400px',
+              maxWidth: '240px',
               borderRadius: '4px',
               display: 'block',
               marginBottom: '12px',

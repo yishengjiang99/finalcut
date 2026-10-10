@@ -5,7 +5,7 @@ import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
 import {
-  ENGINE_CLIENT, ENGINE_SERVER, fetchClientConfig, resolveEngineMode, setEngineMode,
+  ENGINE_CLIENT, fetchClientConfig, resolveEngineMode, setEngineMode,
   setUploadConsentHandler, getCloudCaptions, setCloudCaptions,
 } from './engineMode.js';
 import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
@@ -217,8 +217,8 @@ export default function App() {
   const [toastText, setToastText] = useState('');
   const toastTimerRef = useRef(null);
   const jobIdCounterRef = useRef(1);
-  const [, setToolStage] = useState(null); // what the running job's current tool is doing
-  const [engineMode, setEngineModeState] = useState(ENGINE_SERVER); // 'client' once the feature flag says so
+  const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
+  const [engineMode, setEngineModeState] = useState(ENGINE_CLIENT); // client is the default; the flag can still say server
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
   const [cloudCaptionsAvailable, setCloudCaptionsAvailable] = useState(false);
   const [cloudCaptions, setCloudCaptionsState] = useState(() => getCloudCaptions());
@@ -950,7 +950,6 @@ export default function App() {
   const finishedJobs = jobs.filter(job => job.status !== 'running');
   const originals = media.filter(item => item.kind === 'original');
   const captionFiles = messages.filter(msg => msg.videoUrl && (msg.videoType === 'subtitle-srt' || msg.vttUrl));
-  const showTyping = isCallingAPI && !processing && !messages[messages.length - 1]?.streaming;
   const onDevice = engineMode === ENGINE_CLIENT;
   const statusText = health === null
     ? 'checking server…'
@@ -1116,9 +1115,12 @@ export default function App() {
                   )}
                 </React.Fragment>
               ))}
-              {showTyping && (
+              {isCallingAPI && !messages[messages.length - 1]?.streaming && (
                 <div className="msg assistant">
-                  <div className="bubble typing"><span></span><span></span><span></span></div>
+                  <div className="bubble typing" aria-live="polite">
+                    <span></span><span></span><span></span>
+                    <span className="typing-stage">{toolStage || 'Working\u2026'}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1205,7 +1207,7 @@ export default function App() {
                 <button className="icon-btn" title="Attach video or audio" disabled={isCallingAPI} onClick={openFilePicker}>📎</button>
                 <textarea
                   ref={textareaRef}
-                  rows={2}
+                  rows={1}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => {

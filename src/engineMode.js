@@ -28,6 +28,9 @@ function rolloutBucket(storage = globalThis.localStorage) {
 }
 
 /**
+ * Client (in-browser ffmpeg.wasm) is the default everywhere, including phones.
+ * Server-side processing is chosen only by the server kill-switch
+ * (CLIENT_FFMPEG=off), an explicit ?engine=server override, or a percent rollout.
  * @param {{ flag?: { mode: 'on'|'off'|'percent', percent?: number }, search?: string, supported?: boolean, bucket?: number }} input
  * @returns {{ mode: 'client'|'server', reason: string }}
  */
@@ -36,7 +39,6 @@ export function resolveEngineMode({ flag, search = globalThis.location?.search |
   if (override === ENGINE_SERVER) return { mode: ENGINE_SERVER, reason: 'override' };
   if (override === ENGINE_CLIENT) return { mode: ENGINE_CLIENT, reason: 'override' };
   if (flag?.mode === 'off') return { mode: ENGINE_SERVER, reason: 'flag_off' };
-  if (!supported) return { mode: ENGINE_SERVER, reason: 'browser' };
   if (flag?.mode === 'percent') {
     const b = bucket ?? rolloutBucket();
     return b < (flag.percent || 0) ? { mode: ENGINE_CLIENT, reason: 'rollout' } : { mode: ENGINE_SERVER, reason: 'rollout' };
@@ -44,8 +46,8 @@ export function resolveEngineMode({ flag, search = globalThis.location?.search |
   return { mode: ENGINE_CLIENT, reason: 'default' };
 }
 
-// Until the flag has been read the app behaves as before (server), so nothing changes by accident.
-let engineMode = ENGINE_SERVER;
+// Until the flag has been read the app assumes the client engine (the default).
+let engineMode = ENGINE_CLIENT;
 
 export function setEngineMode(mode) {
   engineMode = mode === ENGINE_CLIENT ? ENGINE_CLIENT : ENGINE_SERVER;
