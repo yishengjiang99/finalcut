@@ -97,13 +97,13 @@ async function trimOnce(page, { start, end, precise = false }) {
 }
 
 test('trim runs in the browser with no media upload', async ({ page, context, baseURL }, testInfo) => {
-  const { expectedMode, isolated } = testInfo.project.metadata;
+  const { expectedMode, isolated, query = '' } = testInfo.project.metadata;
   const guard = await installNetworkGuard(context, page, baseURL);
   const consoleErrors = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
   // Headers on the /v2 document and the wasm MIME type.
-  const docResp = await page.goto('/v2/');
+  const docResp = await page.goto(`/v2/${query}`);
   const h = docResp.headers();
   if (isolated) {
     expect(h['cross-origin-opener-policy']).toBe('same-origin');
@@ -151,7 +151,7 @@ test('trim runs in the browser with no media upload', async ({ page, context, ba
 
   // Warm load: new page in the same context (HTTP cache holds the immutable core files).
   const page2 = await context.newPage();
-  await page2.goto('/v2/');
+  await page2.goto(`/v2/${query}`);
   await page2.getByTestId('file-input').setInputFiles(FIXTURE);
   const warm = await trimOnce(page2, { start: 1, end: 3 });
   expect(warm.mode).toBe(expectedMode);

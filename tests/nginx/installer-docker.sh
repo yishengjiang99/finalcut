@@ -25,7 +25,7 @@ tests/e2e/check-v2-headers.sh "$B"
 tests/e2e/compare-route-headers.sh "$W/before.txt" "$B"
 # Forced failure: point the site at an app dir whose snippet is broken; install must fail, restore
 # the config byte-for-byte, and nginx must keep serving.
-docker exec "$NAME" sh -c 'mkdir -p /tmp/bad/nginx /tmp/bad/dist/v2 && echo "location /v2/ { bogus_directive on; }" > /tmp/bad/nginx/finalcut-v2.locations.conf && cp /srv/nginx/finalcut-v2-headers.conf /tmp/bad/nginx/ && touch /tmp/bad/dist/v2/index.html && sed -i "s#root /srv/dist;#root /tmp/bad/dist;#" /etc/nginx/nginx.conf && nginx -s reload'
+docker exec "$NAME" sh -c 'mkdir -p /tmp/bad/nginx /tmp/bad/dist/v2 && echo "location /v2/ { bogus_directive on; }" > /tmp/bad/nginx/finalcut-v2.locations.conf && cp /srv/nginx/finalcut-v2-headers.conf /tmp/bad/nginx/ && touch /tmp/bad/dist/v2/index.html /tmp/bad/dist/index.html && sed -i "s#root /srv/dist;#root /tmp/bad/dist;#" /etc/nginx/nginx.conf && nginx -s reload'
 sleep 1
 pre="$(docker exec "$NAME" sh -c 'md5sum /etc/nginx/nginx.conf /etc/nginx/snippets/*')"
 if ex install /tmp/bad; then echo "install of a broken snippet should have failed" >&2; exit 1; fi

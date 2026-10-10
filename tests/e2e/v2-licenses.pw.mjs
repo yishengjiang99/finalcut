@@ -11,7 +11,7 @@ const lock = JSON.parse(readFileSync(path.join(ROOT, 'vendor', 'ffmpeg-source.lo
 const SRC = '/v2/vendor/ffmpeg/source/';
 
 test.beforeEach(({}, testInfo) => {
-  test.skip(testInfo.project.name !== 'mt', 'static pages: run once');
+  test.skip(!['mt', 'prod-mt'].includes(testInfo.project.name), 'static pages: run once');
 });
 
 async function sameOriginLinks(page, baseURL) {
