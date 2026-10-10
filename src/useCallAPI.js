@@ -83,12 +83,10 @@ export function buildChatRequestBody(messages, hasMedia, media = null) {
   const inferenceMessages = messagesForCurrentTurn(messages);
   if (!hasMedia) {
     return {
-      model: 'grok-beta',
       messages: [{ role: 'system', content: NO_MEDIA_NOTE }, ...inferenceMessages]
     };
   }
   return {
-    model: 'grok-beta',
     messages: inferenceMessages,
     tools: tools,
     tool_choice: 'auto',

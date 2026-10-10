@@ -126,7 +126,7 @@ The uploaded audio and the converted WAV are deleted as soon as transcription fi
 4. Correction and translation: one Grok call with numbered lines. For `lyrics`/`auto` it uses the
    Responses API (`POST /v1/responses`, `tools:[{"type":"web_search"}]`,
    `include:["no_inline_citations"]`, model `LYRIC_CAPTIONS_MODEL`, default `grok-4.7`). If that
-   fails, it falls back to chat completions (`LYRIC_CAPTIONS_FALLBACK_MODEL`, default `grok-3`),
+   fails, it falls back to chat completions (`LYRIC_CAPTIONS_FALLBACK_MODEL`, default `XAI_UTILITY_MODEL`),
    using model knowledge only. `speech` goes straight to the fallback. The reply must keep one line
    per input index. Extra lines are discarded, so no lyric text beyond what was sung in the clip is
    ever returned.

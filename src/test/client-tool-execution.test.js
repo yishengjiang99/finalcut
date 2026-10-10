@@ -130,14 +130,14 @@ describe('client execution mode', () => {
 
     const sent = xaiCalls[0];
     expect(sent.stream).toBe(false);
-    expect(sent.model).toBe('grok-3');
+    expect(sent.model).toBe('grok-4.3');
     expect(sent.messages[0].role).toBe('system');
     expect(sent.messages[0].content).toContain('type=image, resolution=4032x3024');
     // Photo → only photo-capable tools are offered.
     const offered = sent.tools.map(t => t.function.name);
     expect(offered).toContain('apply_color_filter');
     expect(offered).not.toContain('trim_video');
-    // grok-3 has no image input → thumbnails not forwarded as images.
+    // XAI_CLIENT_MODEL is not set → thumbnails not forwarded as images.
     expect(JSON.stringify(sent.messages)).not.toContain('image_url');
   });
 
@@ -278,10 +278,11 @@ describe('client execution mode', () => {
 });
 
 describe('server (default) mode is unchanged', () => {
-  it('streams SSE and forwards the original body with system message, grok-3 and stream:true', async () => {
+  it('streams SSE and forwards the original body with system message, the chat model and stream:true', async () => {
     const sse = 'data: {"choices":[{"delta":{"content":"Hello there, this is a streamed reply."}}]}\n\ndata: [DONE]\n\n';
     xaiResponder = () => new Response(sse, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-    const reqBody = { messages: [{ role: 'user', content: 'hi' }], tools: [tools[0]], temperature: 0.2 };
+    // model, n and max_tokens are not the client's to set: they are dropped.
+    const reqBody = { messages: [{ role: 'user', content: 'hi' }], tools: [tools[0]], temperature: 0.2, model: 'grok-beta', n: 4, max_tokens: 100000 };
     const res = await postChat(reqBody);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/event-stream');
@@ -294,7 +295,7 @@ describe('server (default) mode is unchanged', () => {
     );
     const sent = xaiCalls[0];
     expect(Object.keys(sent)).toEqual(['messages', 'tools', 'temperature', 'model', 'stream']);
-    expect(sent).toMatchObject({ model: 'grok-3', stream: true, temperature: 0.2 });
+    expect(sent).toMatchObject({ model: 'grok-4.3', stream: true, temperature: 0.2 });
     // The web tools array is forwarded as sent: the FFmpeg fallback is not a tool there.
     expect(sent.tools).toEqual([tools[0]]);
     expect(sent.messages[0].role).toBe('system');
