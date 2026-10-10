@@ -1801,14 +1801,6 @@ body {
   text-decoration: underline;
 }
 
-.cloud-captions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-faint);
-  cursor: pointer;
-}
 
 .landing footer a {
   color: inherit;

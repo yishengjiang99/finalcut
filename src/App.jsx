@@ -6,7 +6,7 @@ import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
 import {
   fetchClientConfig,
-  setUploadConsentHandler, getCloudCaptions, setCloudCaptions,
+  setUploadConsentHandler,
 } from './engineMode.js';
 import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
 import logoUrl from '../logo.png';
@@ -220,8 +220,6 @@ export default function App() {
   const jobIdCounterRef = useRef(1);
   const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
-  const [cloudCaptionsAvailable, setCloudCaptionsAvailable] = useState(false);
-  const [cloudCaptions, setCloudCaptionsState] = useState(() => getCloudCaptions());
   const [, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
   const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
@@ -410,7 +408,6 @@ export default function App() {
     fetchClientConfig().then((config) => {
       if (ignore) return;
       if (config?.limits?.clip) setClipLimits(config.limits.clip);
-      setCloudCaptionsAvailable(Boolean(config?.captions?.cloud));
     });
     return () => { ignore = true; };
   }, []);
@@ -427,11 +424,6 @@ export default function App() {
   const answerUploadConsent = (allowed) => {
     uploadConsent?.resolve(allowed);
     setUploadConsent(null);
-  };
-
-  const toggleCloudCaptions = (enabled) => {
-    setCloudCaptions(enabled);
-    setCloudCaptionsState(enabled);
   };
 
   // Server status for the top bar (unauthenticated endpoint)
@@ -1229,12 +1221,6 @@ export default function App() {
               </div>
               <div className="composer-foot">
                 <span className="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <a href="/legal/licenses.html" target="_blank" rel="noopener">Open-source licenses</a></span>
-                {onDevice && cloudCaptionsAvailable && (
-                  <label className="cloud-captions" title="Off: captions are transcribed on this device. On: the audio track (never the video) is uploaded for more accurate transcription.">
-                    <input type="checkbox" checked={cloudCaptions} onChange={(e) => toggleCloudCaptions(e.target.checked)} />
-                    Cloud captions (uploads audio only)
-                  </label>
-                )}
               </div>
             </div>
           </div>
