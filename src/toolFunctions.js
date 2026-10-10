@@ -44,6 +44,10 @@ export function setCurrentFileMimeType(mimeType) {
   currentFileMimeType = (typeof mimeType === 'string' && mimeType) ? mimeType : 'video/mp4';
 }
 
+export function getCurrentFileMimeType() {
+  return currentFileMimeType;
+}
+
 function normalizeAudioFileInput(audioFile) {
   if (typeof audioFile === 'string') {
     const trimmed = audioFile.trim();
@@ -122,6 +126,61 @@ const FFMPEG_CLI_MIME_TYPES = {
   mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac',
   jpg: 'image/jpeg', png: 'image/png'
 };
+
+const ffmpegCliAuthHeaders = () => (sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {});
+
+// Uploads the current media to POST /api/ffmpeg-cli/run and shows the result. Throws on failure,
+// with the FFmpeg stderr tail on error.stderr.
+async function runFfmpegOnServer(params, videoFileData, setVideoFileData, addMessage, authHeaders, signal) {
+  const formData = new FormData();
+  formData.append('video', new Blob([videoFileData], { type: currentFileMimeType || 'video/mp4' }), 'input');
+  formData.append('args', JSON.stringify(params));
+  const response = await fetch('/api/ffmpeg-cli/run', { method: 'POST', headers: authHeaders, body: formData, ...(signal ? { signal } : {}) });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const detail = body.errors?.length ? `${body.errors.join('; ')}${body.suggestions && Object.keys(body.suggestions).length ? ` Suggestions: ${JSON.stringify(body.suggestions)}` : ''}` : (body.error || 'FFmpeg CLI failed');
+    throw Object.assign(new Error(detail), { stderr: body.stderr || '' });
+  }
+  const format = response.headers.get('X-Output-Format') || 'mp4';
+  const command = decodeURIComponent(response.headers.get('X-FFmpeg-Command') || '');
+  const explanation = decodeURIComponent(response.headers.get('X-FFmpeg-Explanation') || '');
+  const data = new Uint8Array(await response.arrayBuffer());
+  const mimeType = FFMPEG_CLI_MIME_TYPES[format] || 'application/octet-stream';
+  if (mimeType.startsWith('video/') && format !== 'gif') setVideoFileData(data);
+  addMessage({ text: `Processed with FFmpeg: ${explanation}`, videoUrl: URL.createObjectURL(new Blob([data], { type: mimeType })), mimeType });
+  return `FFmpeg command ran successfully (${command}). ${explanation}`;
+}
+
+export const MAX_CLI_STRING_ATTEMPTS = 3;
+
+/**
+ * No tool matched the request: ask inference for the FFmpeg CLI string and run it, sending each
+ * failure (validation error or FFmpeg stderr) back for a corrected command. Returns null when
+ * inference says the message is not an edit FFmpeg can do, otherwise the result string.
+ */
+export async function ffmpegCliStringFallback(request, videoFileData, setVideoFileData, addMessage, { signal, onRun } = {}) {
+  const authHeaders = ffmpegCliAuthHeaders();
+  const attempts = [];
+  for (let i = 0; i < MAX_CLI_STRING_ATTEMPTS; i++) {
+    const response = await fetch('/api/ffmpeg-cli', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify({ action: 'command', request, attempts }),
+      ...(signal ? { signal } : {})
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'FFmpeg CLI request failed');
+    if (!body.command) return attempts.length ? `Failed to run FFmpeg: ${attempts.at(-1).error}` : null;
+    onRun?.();
+    try {
+      return await runFfmpegOnServer({ command: body.command }, videoFileData, setVideoFileData, addMessage, authHeaders, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      attempts.push({ command: body.command, error: [error.message, error.stderr].filter(Boolean).join('\n') });
+    }
+  }
+  return `Failed to run FFmpeg: ${attempts.at(-1).error}`;
+}
 
 // Content-Type of the most recent /api/process-video result (image/* for photos).
 let lastResultContentType = null;
@@ -951,9 +1010,12 @@ export const toolFunctions = {
         height: preset.height
       }, videoFileData);
       setVideoFileData(data);
-      const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage({ text: `Processed video (resized to ${args.preset}):\n${preset.description}`, videoUrl: videoUrl, mimeType: 'video/mp4' });
-      return `Video resized to ${args.preset} aspect ratio successfully.`;
+      // A photo comes back as an image, not an mp4.
+      const resultType = (lastResultContentType || 'video/mp4').split(';')[0].trim();
+      const isPhoto = resultType.startsWith('image/');
+      const videoUrl = URL.createObjectURL(new Blob([data], { type: resultType }));
+      addMessage({ text: `Processed ${isPhoto ? 'photo' : 'video'} (resized to ${args.preset}):\n${preset.description}`, videoUrl: videoUrl, mimeType: resultType });
+      return `${isPhoto ? 'Photo' : 'Video'} resized to ${args.preset} aspect ratio successfully.`;
     } catch (error) {
       addMessage({ text: 'Error resizing video to preset: ' + error.message });
       return 'Failed to resize video to preset: ' + error.message;
@@ -1147,7 +1209,7 @@ export const toolFunctions = {
   },
 
   ffmpeg_cli: async (args, videoFileData, setVideoFileData, addMessage) => {
-    const authHeaders = sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {};
+    const authHeaders = ffmpegCliAuthHeaders();
     try {
       const { action, ...params } = args || {};
       if (action === 'discover' || action === 'plan') {
@@ -1162,23 +1224,7 @@ export const toolFunctions = {
       }
       if (action !== 'run') throw new Error('action must be discover, plan or run');
 
-      const formData = new FormData();
-      formData.append('video', new Blob([videoFileData], { type: currentFileMimeType || 'video/mp4' }), 'input');
-      formData.append('args', JSON.stringify(params));
-      const response = await fetch('/api/ffmpeg-cli/run', { method: 'POST', headers: authHeaders, body: formData });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        const detail = body.errors?.length ? `${body.errors.join('; ')}${body.suggestions && Object.keys(body.suggestions).length ? ` Suggestions: ${JSON.stringify(body.suggestions)}` : ''}` : (body.error || 'FFmpeg CLI failed');
-        throw new Error(detail);
-      }
-      const format = response.headers.get('X-Output-Format') || 'mp4';
-      const command = decodeURIComponent(response.headers.get('X-FFmpeg-Command') || '');
-      const explanation = decodeURIComponent(response.headers.get('X-FFmpeg-Explanation') || '');
-      const data = new Uint8Array(await response.arrayBuffer());
-      const mimeType = FFMPEG_CLI_MIME_TYPES[format] || 'application/octet-stream';
-      if (mimeType.startsWith('video/') && format !== 'gif') setVideoFileData(data);
-      addMessage({ text: `Processed with FFmpeg: ${explanation}`, videoUrl: URL.createObjectURL(new Blob([data], { type: mimeType })), mimeType });
-      return `FFmpeg command ran successfully (${command}). ${explanation}`;
+      return await runFfmpegOnServer(params, videoFileData, setVideoFileData, addMessage, authHeaders);
     } catch (error) {
       addMessage({ text: 'Error running FFmpeg: ' + error.message });
       return 'Failed to run FFmpeg: ' + error.message;

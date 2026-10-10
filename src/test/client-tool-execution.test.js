@@ -37,7 +37,6 @@ vi.mock('fluent-ffmpeg', () => {
 import express from 'express';
 import { chatRouter, cleanFinalText } from '../server/chat.js';
 import { issueSampleAccessToken } from '../server/middleware.js';
-import { ffmpegCliToolDefinition } from '../ffmpegFallback.js';
 import { buildToolsSchema, TOOLS_SCHEMA_VERSION } from '../server/toolsSchema.js';
 import { tools } from '../tools.js';
 import {
@@ -296,7 +295,8 @@ describe('server (default) mode is unchanged', () => {
     const sent = xaiCalls[0];
     expect(Object.keys(sent)).toEqual(['messages', 'tools', 'temperature', 'model', 'stream']);
     expect(sent).toMatchObject({ model: 'grok-3', stream: true, temperature: 0.2 });
-    expect(sent.tools).toEqual([tools[0], ffmpegCliToolDefinition]);
+    // The web tools array is forwarded as sent: the FFmpeg fallback is not a tool there.
+    expect(sent.tools).toEqual([tools[0]]);
     expect(sent.messages[0].role).toBe('system');
     expect(sent.messages.slice(1)).toEqual(reqBody.messages);
     expect(sent.messages[0].content).not.toContain('executed on the user');

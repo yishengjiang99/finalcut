@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { tools } from './tools.js';
 import { noteDerivedVideo } from './captionLineage.js';
-import { toolFunctions } from './toolFunctions.js';
+import { toolFunctions, getCurrentFileMimeType, ffmpegCliStringFallback } from './toolFunctions.js';
 import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
 
 export function assertToolCallApplied(result, functionName) {
@@ -62,7 +62,24 @@ export function needsFollowUp(toolCalls) {
   });
 }
 
-export function buildChatRequestBody(messages, hasMedia) {
+// A reply without tool calls means no tool matched. For a video or audio file the request
+// is then put to inference as "what is the ffmpeg CLI string for …" (photos have no fallback).
+export function cliStringFallbackRequest(messages, toolCalls, hasMedia, mimeType) {
+  if (toolCalls.length || !hasMedia || (typeof mimeType === 'string' && mimeType.startsWith('image/'))) return null;
+  const content = filterMessagesForInference(messages)[0]?.content;
+  return typeof content === 'string' && content.trim() ? content.trim() : null;
+}
+
+// What the server tells the model about the attached file, so it does not have to guess
+// whether it is editing a video, a photo or audio.
+export function mediaForInference(mimeType) {
+  if (typeof mimeType !== 'string' || !mimeType) return null;
+  if (mimeType.startsWith('image/')) return { type: 'image' };
+  if (mimeType.startsWith('audio/')) return { type: 'audio' };
+  return { type: 'video' };
+}
+
+export function buildChatRequestBody(messages, hasMedia, media = null) {
   const inferenceMessages = messagesForCurrentTurn(messages);
   if (!hasMedia) {
     return {
@@ -74,7 +91,8 @@ export function buildChatRequestBody(messages, hasMedia) {
     model: 'grok-beta',
     messages: inferenceMessages,
     tools: tools,
-    tool_choice: 'auto'
+    tool_choice: 'auto',
+    ...(media ? { media } : {})
   };
 }
 
@@ -128,7 +146,7 @@ export function useCallAPI({
           'Content-Type': 'application/json',
           ...authHeaders
         },
-        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData))),
+        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData), mediaForInference(getCurrentFileMimeType()))),
         ...(options.signal ? { signal: options.signal } : {})
       });
 
@@ -309,6 +327,26 @@ export function useCallAPI({
             throw new Error('The FFmpeg fallback did not finish within the allowed number of steps');
           }
           return await runTurn(currentMessages, { ...options, followUpRound: followUpRound + 1, videoFileData: workingVideoFileData });
+        }
+      }
+
+      const fallbackRequest = followUpRound === 0
+        ? cliStringFallbackRequest(currentMessages, toolCallsArray, Boolean(currentVideoFileData), getCurrentFileMimeType())
+        : null;
+      if (fallbackRequest) {
+        try {
+          const updateVideoFileData = data => {
+            noteDerivedVideo(currentVideoFileData, data);
+            setVideoFileData(data);
+          };
+          // The spinner only starts once inference has returned a command to run.
+          const result = await ffmpegCliStringFallback(fallbackRequest, currentVideoFileData, updateVideoFileData, addMessage, {
+            signal: options.signal,
+            onRun: () => setProcessing(true)
+          });
+          if (result !== null) assertToolCallApplied(result, 'ffmpeg');
+        } finally {
+          setProcessing(false);
         }
       }
       return 'done';

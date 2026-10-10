@@ -8,7 +8,7 @@ import {
 } from './middleware.js';
 import { enqueueChatInteraction, saveLesson } from '../db.js';
 import { PHOTO_SUPPORTED_OPS, PHOTO_OUTPUT_FORMATS, COLOR_FILTER_PRESETS } from './ffmpegOps.js';
-import { buildToolsSchema, offeredToolsFor } from './toolsSchema.js';
+import { buildToolsSchema, mediaTypesForTool, offeredToolsFor, toolsForMediaType } from './toolsSchema.js';
 import {
   CLIENT_SCHEMA_VERSION,
   CLIENT_EXECUTION_INSTRUCTIONS,
@@ -28,7 +28,7 @@ import {
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
 import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD } from './iosToolAllowlist.js';
-import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
+import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, FFMPEG_CLI_STRING_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 const router = express.Router();
 
@@ -153,26 +153,63 @@ export function flushStreamFilter(filter) {
 
 // ─── System prompt builder ───────────────────────────────────────────────────
 
-export function buildSystemMessage({ ffmpegFallback = false } = {}) {
-  const photoGuidance =
-    'The current media may be a video OR a photo (jpg, png, webp, heic). For a photo, only call frame edits (' +
-    PHOTO_SUPPORTED_OPS.join(', ') +
-    '); color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
-    'Never call trim, speed, audio, caption, or transition tools on a photo — explain they only apply to videos.\n\n';
-  const fallbackGuidance = ffmpegFallback === 'ios' ? FFMPEG_FALLBACK_GUIDANCE_IOS
-    : ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE : '';
-  const outputContract =
-    photoGuidance +
-    (fallbackGuidance ? fallbackGuidance + '\n\n' : '') +
-    'When a request requires multiple edits, emit one tool call for each edit in the order they should be applied. The tool calls will be executed sequentially on the current media.\n\n' +
-    'Always end your FINAL response (after any tool use is complete) with exactly this format:\n' +
-    '- Answer:\n' +
-    '  <your answer here>\n' +
-    '- Lesson:\n' +
-    '  <1-2 sentences summarizing a key insight, max 240 chars, no private data>\n' +
-    'No third section.';
+const ROLE =
+  'You are the editing assistant in FinalCap, a chat-based video, photo and audio editor. ' +
+  'The user attaches a media file and describes edits in plain language; you carry them out by calling the provided tools, which run on the current media. ' +
+  'When the user asks a question or just chats, answer directly without calling tools.';
 
-  return { role: 'system', content: outputContract };
+const PHOTO_TOOL_HINTS =
+  'Tools with "video" in their name, such as crop_video and rotate_video, edit a photo the same way. ' +
+  'Color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
+  `To change the file format of a photo use convert_image_format (${PHOTO_OUTPUT_FORMATS.join(', ')}), never convert_video_format. ` +
+  'Trimming, speed changes, audio edits, captions and transitions need a timeline or a soundtrack, so they do not exist for a photo: ' +
+  'say so briefly instead of calling a tool or looking for a workaround.';
+
+/** Media type a streaming client declared ("video" | "image" | "audio"), or null when absent or unknown. */
+export function streamingMediaType(media) {
+  const type = media && typeof media === 'object' ? media.type : null;
+  return type === 'video' || type === 'image' || type === 'audio' ? type : null;
+}
+
+/**
+ * What the model is told about the current media. `mediaType` is "video" | "image" | "audio",
+ * "none" when nothing is attached, or null when the client did not say (older clients).
+ */
+function mediaGuidance(mediaType, { ffmpegFallback = false } = {}) {
+  if (mediaType === 'none') return '';
+  if (mediaType === 'video') return 'Current media: a video.';
+  if (mediaType === 'audio') return 'Current media: an audio file.';
+  if (mediaType === 'image') {
+    return 'Current media: a photo (still image). Only tools that work on a single frame are offered. ' + PHOTO_TOOL_HINTS;
+  }
+  return 'The current media may be a video or a photo (jpg, png, webp, heic); work out which from the conversation. ' +
+    `On a photo, call only these tools: ${toolsForMediaType('image').map(t => t.function.name).join(', ')}. ` +
+    PHOTO_TOOL_HINTS +
+    (ffmpegFallback === 'cli_string' ? ' These photo limits take priority over the routing rule below: FFmpeg is never used on a photo.'
+      : ffmpegFallback ? ` These photo limits take priority over the routing rule below: never call ${FFMPEG_CLI_TOOL_NAME} on a photo.` : '');
+}
+
+export function buildSystemMessage({ ffmpegFallback = false, mediaType = null } = {}) {
+  // The FFmpeg fallback handles videos and audio only, so it is never described for a photo.
+  const fallbackGuidance = mediaType === 'image' || mediaType === 'none' ? ''
+    : ffmpegFallback === 'ios' ? FFMPEG_FALLBACK_GUIDANCE_IOS
+    : ffmpegFallback === 'cli_string' ? FFMPEG_CLI_STRING_GUIDANCE
+    : ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE : '';
+  const sections = [
+    ROLE,
+    mediaGuidance(mediaType, { ffmpegFallback: fallbackGuidance ? ffmpegFallback : false }),
+    fallbackGuidance,
+    'When a request needs several edits, emit one tool call per edit, in the order they should be applied. ' +
+    'The calls run sequentially and each one operates on the output of the one before it, so work out the arguments of later calls ' +
+    'from the result you expect from earlier ones: after a crop to 800x600 the frame is 800x600 and later coordinates are relative to it; ' +
+    'after a trim, later timestamps are relative to the trimmed clip.',
+    'Write your reply to the user as plain text, once, with no heading or label. ' +
+    'Then end your FINAL response (after any tool use is complete) with one last line in exactly this form:\n' +
+    'Lesson: <1-2 sentences summarizing a key insight, max 240 chars, no private data>\n' +
+    'The Lesson line is removed before the user sees the reply. Write nothing after it and do not repeat your reply.',
+  ];
+
+  return { role: 'system', content: sections.filter(Boolean).join('\n\n') };
 }
 
 function messageContentToText(content) {
@@ -244,14 +281,33 @@ export function restrictStreamingBodyForIos(body, userAgent) {
 
 /**
  * Streaming mode: offer the server-side ffmpeg_cli fallback tool last, after the client's
- * built-in tools. For FinalCap-iOS UAs the tool is appended too, but restrictStreamingBodyForIos
- * (applied after this) strips it again via the build allowlist unless the build ships the
- * fallback executor (FFMPEG_CLI_MIN_BUILD). Requests without tools are left as-is.
+ * built-in tools, to FinalCap-iOS only; restrictStreamingBodyForIos (applied after this) strips
+ * it again via the build allowlist unless the build ships the fallback executor
+ * (FFMPEG_CLI_MIN_BUILD). The web app gets no fallback tool: when no tool is called it asks
+ * for the FFmpeg CLI string instead. Requests without tools are left as-is.
  */
 export function addFfmpegFallbackTool(body, userAgent) {
+  if (!parseFinalCapIosUserAgent(userAgent).isFinalCapIos) return body;
   if (!Array.isArray(body.tools) || !body.tools.length) return body;
   if (body.tools.some(t => t?.function?.name === FFMPEG_CLI_TOOL_NAME)) return body;
   return { ...body, tools: [...body.tools, ffmpegCliToolDefinition] };
+}
+
+/**
+ * Streaming mode: for a photo, keep only the tools that work on a single frame (this also drops
+ * the videos-only ffmpeg_cli fallback). Any other media type gets the body back untouched.
+ */
+export function restrictStreamingToolsToMedia(body, mediaType) {
+  if (mediaType !== 'image' || !Array.isArray(body.tools)) return body;
+  const next = { ...body };
+  const tools = body.tools.filter(t => mediaTypesForTool(t?.function?.name).includes('image'));
+  if (tools.length) {
+    next.tools = tools;
+  } else {
+    delete next.tools;
+    delete next.tool_choice;
+  }
+  return next;
 }
 
 // ─── Client-execution mode (tools run on the device) ─────────────────────────
@@ -329,7 +385,7 @@ async function handleClientExecution(req, res, userId) {
   if (roundCapReached) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
   }
-  const baseSystem = buildSystemMessage();
+  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null });
   const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
 
   const modelMessages = [systemMessage];
@@ -492,8 +548,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const iosInfo = parseFinalCapIosUserAgent(req.get('user-agent'));
     const fallbackMode = iosInfo.isFinalCapIos
       ? (iosInfo.build >= FFMPEG_CLI_MIN_BUILD ? 'ios' : false)
-      : true;
-    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode });
+      : 'cli_string';
+    // `media` is the client's description of the attached file; it is not an xAI field.
+    const { media: clientMedia, ...clientBody } = req.body;
+    const hasTools = Array.isArray(clientBody.tools) && clientBody.tools.length > 0;
+    const mediaType = hasTools ? streamingMediaType(clientMedia) : 'none';
+    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType });
 
     debugChat('request', JSON.stringify({
       userId,
@@ -509,12 +569,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
-      body: JSON.stringify(restrictStreamingBodyForIos(addFfmpegFallbackTool({
-        ...req.body,
+      body: JSON.stringify(restrictStreamingBodyForIos(restrictStreamingToolsToMedia(addFfmpegFallbackTool({
+        ...clientBody,
         messages: [systemMessage, ...req.body.messages],
         model: 'grok-3', // Specify the new model here
         stream: true // Enable streaming
-      }, req.get('user-agent')), req.get('user-agent')))
+      }, req.get('user-agent')), mediaType), req.get('user-agent')))
     });
 
     if (!response.ok) {

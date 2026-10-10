@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { ffmpegCliToolDefinition } from '../ffmpegFallback.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -310,7 +309,7 @@ describe('POST /api/chat streaming mode with a FinalCap-iOS UA', () => {
     const res = await chatAs(WEB_UA, reqBody);
     await res.text();
     expect(Object.keys(xaiCalls[0])).toEqual(['messages', 'tools', 'tool_choice', 'temperature', 'model', 'stream']);
-    expect(xaiCalls[0].tools).toEqual([chorus, trim, ffmpegCliToolDefinition]);
+    expect(xaiCalls[0].tools).toEqual([chorus, trim]);
   });
 });
 

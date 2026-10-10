@@ -56,6 +56,14 @@ export const FFMPEG_FALLBACK_GUIDANCE_IOS =
   'tell the user briefly which approach you chose and why, then call with action "run" to execute it. Videos only. ' +
   DISCOVER_BEFORE_REFUSING;
 
+/**
+ * Web: the fallback is not a tool. When the reply carries no tool call, the app asks inference
+ * for the FFmpeg CLI string for the request (POST /api/ffmpeg-cli, action "command") and runs it.
+ */
+export const FFMPEG_CLI_STRING_GUIDANCE =
+  'Routing: always prefer the editing tools. If NONE of them can fulfil an edit the user asks for, do not call a tool and never answer that it is unsupported: ' +
+  'reply with one short sentence saying you will work it out with FFmpeg directly. The app then finds and runs the FFmpeg command itself.';
+
 /** Existing tools first; the FFmpeg CLI tool is appended only as the last-resort entry. */
 export function withFfmpegFallback(tools = builtinTools) {
   if (tools.some(t => t.function.name === FFMPEG_CLI_TOOL_NAME)) return tools;
