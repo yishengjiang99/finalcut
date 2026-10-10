@@ -32,7 +32,7 @@ describe('App Component', () => {
   it('renders the app component', () => {
     render(<App />);
     // The landing page is shown initially, so we won't see the chat input yet
-    const getStartedButton = screen.getByText('Get Started');
+    const getStartedButton = screen.getByText('Get started free');
     expect(getStartedButton).toBeInTheDocument();
   });
 
@@ -45,7 +45,7 @@ describe('App Component', () => {
 
     render(<App />);
     // Landing page doesn't have file input initially
-    expect(screen.queryByText('Get Started')).toBeInTheDocument();
+    expect(screen.queryByText('Get started free')).toBeInTheDocument();
   });
 
   it('renders landing page with title', () => {
@@ -53,20 +53,19 @@ describe('App Component', () => {
     expect(screen.getByText('FinalCap')).toBeInTheDocument();
   });
 
-  it('renders landing page with Get Started button', () => {
+  it('renders landing page with Get started button', () => {
     render(<App />);
-    expect(screen.getByText('Get Started')).toBeInTheDocument();
+    expect(screen.getByText('Get started free')).toBeInTheDocument();
   });
 
-  it('renders landing page with Try with Sample Video button', () => {
+  it('renders landing page with sample video button', () => {
     render(<App />);
-    expect(screen.getByText('Try with Sample Video')).toBeInTheDocument();
+    expect(screen.getByText('Try with a sample video')).toBeInTheDocument();
   });
 
   it('renders footer on landing page', () => {
     render(<App />);
     expect(screen.getByText('© 2026 FinalCap. All rights reserved.')).toBeInTheDocument();
-    expect(screen.getByText('AI-powered video editing made simple')).toBeInTheDocument();
   });
 
   it('does not expose token in client-side code', () => {
@@ -118,7 +117,7 @@ describe('App Component', () => {
 
     // Landing page should not be shown after verification
     await waitFor(() => {
-      expect(screen.queryByText('Get Started')).not.toBeInTheDocument();
+      expect(screen.queryByText('Get started free')).not.toBeInTheDocument();
     });
     
     // Editor interface should be shown (check for file input)

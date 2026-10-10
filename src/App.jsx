@@ -24,14 +24,32 @@ const sampleCommands = [
   { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
 ];
 
-const landingTools = [
-  ['✂️ Video Editing', 'Trim, crop, resize, and rotate'],
-  ['🎨 Visual Effects', 'Brightness, hue, saturation, text'],
-  ['🎵 Audio Tools', 'Volume, fade, equalizer, filters'],
-  ['⚡ Speed Control', 'Speed up or slow down media'],
-  ['📱 Social Media', 'Instagram, TikTok, YouTube presets'],
-  ['🔄 Format Conversion', 'Convert MP4, WebM, MOV formats'],
-  ['💬 AI Captioning', 'Generate and translate subtitles']
+const landingStats = [
+  ['500+', 'FFmpeg filters & effects'],
+  ['11', 'Caption languages'],
+  ['4K', 'Max export resolution'],
+  ['~10s', 'Typical edit turnaround']
+];
+
+const landingFeatures = [
+  ['💬', 'Chat to edit', 'Describe the edit in words. Trim, crop, resize, rotate, overlay text — the AI plans the filter chain for you.', 'trim seconds 5–15'],
+  ['🔤', 'AI captions', 'Generate accurate subtitles, translate across 11 languages, and burn them in with styled typography.', 'add Spanish captions'],
+  ['🎨', 'Color & effects', 'Brightness, saturation, hue, vignette, film looks — 500+ real FFmpeg filters, not presets.', 'make it moodier'],
+  ['📱', 'Social presets', 'One sentence to 9:16 for Reels and TikTok, 1:1 for feeds, or 16:9 for YouTube — reframed automatically.', 'make it vertical'],
+  ['⚡', 'Speed & audio', 'Time-remap, volume, fade, loudness normalization, EQ — full audio pipeline included.', '2x speed, keep pitch'],
+  ['📦', 'Any format out', 'MP4, WebM, MOV, GIF, MP3 extraction — server-side rendering up to 4K.', 'export as GIF']
+];
+
+const landingSteps = [
+  ['Drop in your video', 'Upload a file or try the built-in sample. Your media stays private to your session.', '“BigBuckBunny.mp4 attached ✓”'],
+  ['Describe the edit', "Type it like you'd tell an editor. Ask follow-ups, stack changes, undo anything.", '“Cut the boring middle, punch up the colors”'],
+  ['Download the result', "Rendering happens in the background while you keep working. Grab the MP4 when it's ready.", '“✓ Done in 11s — Download MP4”']
+];
+
+const landingExamples = [
+  ['🏙️', 'linear-gradient(135deg,#1a2233,#2c3a58)', '“Convert to 9:16 for Instagram Reels”', '✓ Cropped 1080×1920 · 8s'],
+  ['🎤', 'linear-gradient(135deg,#231a33,#3a2c58)', '“Generate captions and translate to Spanish”', '✓ 47 lines · burned in · 14s'],
+  ['🌅', 'linear-gradient(135deg,#1a3327,#2c5844)', '“Trim 0:05–0:15, 2x speed, boost saturation”', '✓ 3 edits chained · 9s']
 ];
 
 const captionCommands = [
@@ -244,6 +262,24 @@ export default function App() {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [chatInput, showLanding, view]);
+
+  // Fade landing sections in as they scroll into view
+  useEffect(() => {
+    if (!showLanding) return;
+    const targets = document.querySelectorAll('.landing .reveal');
+    if (typeof IntersectionObserver === 'undefined') {
+      targets.forEach(el => el.classList.add('in'));
+      return;
+    }
+    const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        observer.unobserve(entry.target);
+      }
+    }), { threshold: .12 });
+    targets.forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [showLanding]);
 
   useEffect(() => {
     if (chatWindowRef.current) {
@@ -495,14 +531,8 @@ export default function App() {
       const newVideos = [];
       let hasError = false;
 
-      // Show uploading status
-      const uploadingMessage = {
-        role: 'user',
-        content: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`,
-        excludeFromAPI: true,
-        id: messageIdCounterRef.current++
-      };
-      setMessages(prev => [...prev, uploadingMessage]);
+      // Upload progress is a transient status, not part of the conversation
+      toast(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`);
 
       // Process all files
       for (let i = 0; i < files.length; i++) {
@@ -513,7 +543,7 @@ export default function App() {
         const isVideo = file.type.startsWith('video/');
 
         if (!isAudio && !isVideo) {
-          addMessage({ text: `Error: File "${file.name}" is not a valid audio or video file.` });
+          toast(`“${file.name}” is not a valid audio or video file`);
           hasError = true;
           continue;
         }
@@ -557,7 +587,8 @@ export default function App() {
       }
 
       if (newVideos.length === 0) {
-        addMessage({ text: 'Error: No valid files were uploaded.' });
+        if (!hasError) toast('No valid files were uploaded');
+        e.target.value = '';
         return;
       }
 
@@ -565,10 +596,10 @@ export default function App() {
       setUploadedVideos(prev => [...prev, ...newVideos]);
       setIsSampleMode(false);
 
-      // Show all uploaded files in the chat
-      const uploadedMessages = newVideos.map((video, index) => ({
+      // Each upload gets a clip card in the chat, with no status bubble
+      const uploadedMessages = newVideos.map((video) => ({
         role: 'user',
-        content: `Uploaded ${video.isAudio ? 'audio' : 'video'}: ${video.name}`,
+        content: '',
         videoUrl: video.url,
         videoType: 'original',
         mimeType: video.mimeType,
@@ -577,17 +608,10 @@ export default function App() {
         id: video.id
       }));
 
-      const summaryMessage = {
-        role: 'user',
-        content: `${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}.`,
-        excludeFromAPI: true,
-        id: messageIdCounterRef.current++
-      };
-
-      // Update UI state with uploaded messages
-      setMessages(prev => [...prev, ...uploadedMessages, summaryMessage]);
+      setMessages(prev => [...prev, ...uploadedMessages]);
+      if (!hasError) toast(`${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}`);
     } catch (error) {
-      addMessage({ text: 'Error uploading files: ' + error.message });
+      toast('Error uploading files: ' + error.message);
     }
 
     // Clear the input so the same files can be uploaded again if needed
@@ -626,7 +650,7 @@ export default function App() {
     }
     if (controller.signal.aborted) status = 'cancelled';
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: status || 'done', endedAt: Date.now() } : j));
-    if (status === 'cancelled') addMessage({ text: `Cancelled: “${text}”.` });
+    if (status === 'cancelled') toast(`Cancelled: “${text}”`);
   };
 
   const cancelJob = (job) => {
@@ -702,7 +726,7 @@ export default function App() {
     const parent = mediaById(item.parentId);
     if (!parent) return toast('The clip this edit was made from is no longer in the project');
     if (await selectMedia(parent)) {
-      addMessage({ text: `Undid “${item.label}”. Your next edit applies to “${parent.label}”.` });
+      toast(`Undid “${item.label}”. Your next edit applies to “${parent.label}”.`);
     }
   };
 
@@ -757,7 +781,7 @@ export default function App() {
       const response = await fetch(sampleVideoUrl);
       if (!response.ok) {
         // If sample video doesn't exist, just show a message
-        addMessage({ text: 'Sample video not available. Please upload your own video.' });
+        toast('Sample video not available. Please upload your own video.');
         return;
       }
 
@@ -773,15 +797,14 @@ export default function App() {
       setCurrentFileMimeType('video/mp4');
 
       // Show selected video
-      const uploadedMessage = { role: 'user', content: 'Selected sample video:', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'BigBuckBunny.mp4', id: messageIdCounterRef.current++ };
+      const uploadedMessage = { role: 'user', content: '', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'BigBuckBunny.mp4', id: messageIdCounterRef.current++ };
       mediaBytesRef.current.set(uploadedMessage.id, data);
       activateMedia(uploadedMessage.id);
-      const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', excludeFromAPI: true, id: messageIdCounterRef.current++ };
-
-      setMessages(prev => [...prev, uploadedMessage, userMessage]);
+      setMessages(prev => [...prev, uploadedMessage]);
+      toast('Sample video loaded and ready for editing');
 
     } catch (error) {
-      addMessage({ text: 'Error loading sample video. Please upload your own video.' });
+      toast('Error loading sample video. Please upload your own video.');
     }
   };
 
@@ -789,34 +812,151 @@ export default function App() {
   if (showLanding) {
     return (
       <div className="fc landing">
-        <div className="landing-main">
-          <div className="landing-inner">
-            <img className="landing-logo" src={logoUrl} alt="" />
-            <h1>FinalCap</h1>
-            <p className="tagline">AI Video Editor — chat to edit, caption, and export</p>
+        <nav className="lp-nav">
+          <div className="wrap">
+            <a className="lp-brand" href="#">
+              <img src={logoUrl} alt="" />
+              FinalCap
+            </a>
+            <div className="lp-nav-links">
+              <a href="#features">Features</a>
+              <a href="#how">How it works</a>
+              <a href="#examples">Examples</a>
+            </div>
+            <div className="spacer" />
+            <button className="btn-ghost" onClick={handleGetStarted}>Sign in</button>
+            <button className="btn-primary" onClick={handleGetStarted}>Get started free</button>
+          </div>
+        </nav>
 
-            {authError && <div className="auth-error">{authError}</div>}
+        <header className="hero">
+          <div className="wrap">
+            <div>
+              <div className="eyebrow"><span className="dot" /> AI video editor</div>
+              <h1>Edit video by <span className="grad">describing it.</span></h1>
+              <p className="hero-sub">Type what you want — trim, captions, color, speed, formats. FinalCap turns your words into frame-perfect edits in seconds. No timeline. No learning curve.</p>
 
-            <h2>Available Tools</h2>
-            <div className="tool-grid">
-              {landingTools.map(([name, description]) => (
-                <div className="tool" key={name}>
+              {authError && <div className="auth-error">{authError}</div>}
+
+              <div className="cta-row">
+                <button className="btn-primary big" onClick={handleGetStarted}>Start editing — it's free</button>
+                <button className="btn-secondary" onClick={loadSampleVideo}><span className="play">▶</span> Watch it work</button>
+              </div>
+              <div className="micro-proof">
+                <span><span className="ok">✓</span> Free to try</span>
+                <span><span className="ok">✓</span> No credit card</span>
+                <span><span className="ok">✓</span> Runs in your browser</span>
+              </div>
+            </div>
+            <div className="hero-visual" aria-hidden="true">
+              <div className="editor-card">
+                <div className="ec-video">
+                  <span className="tag">preview</span>
+                  <div className="big-play">▶</div>
+                </div>
+                <div className="ec-chat">
+                  <div className="ec-bubble user">Convert this to 9:16 for Reels and add burned-in captions</div>
+                  <div className="ec-bubble ai"><b>✓ Done in 11s</b> — cropped to 1080×1920, captions burned in.</div>
+                </div>
+              </div>
+              <div className="float-card fc-1">
+                <div className="ic">💬</div>
+                <div>Captions generated<small>English → Spanish available</small></div>
+              </div>
+              <div className="float-card fc-2">
+                <div className="ic">⚙️</div>
+                <div>Rendering 4K…<div className="pbar-mini"><i /></div></div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="stats">
+          <div className="wrap">
+            {landingStats.map(([num, label]) => (
+              <div className="stat" key={label}>
+                <div className="num"><span className="grad">{num}</span></div>
+                <div className="lbl">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <section className="block" id="features">
+          <div className="wrap">
+            <div className="kicker reveal">Features</div>
+            <h2 className="sec reveal">Everything a timeline does, in one sentence</h2>
+            <p className="sec-sub reveal">FinalCap understands plain language and maps it to professional-grade FFmpeg operations.</p>
+            <div className="feat-grid">
+              {landingFeatures.map(([icon, name, description, example]) => (
+                <div className="feat reveal" key={name}>
+                  <div className="fic">{icon}</div>
                   <h3>{name}</h3>
                   <p>{description}</p>
+                  <span className="try">Try: “{example}” →</span>
                 </div>
               ))}
             </div>
+          </div>
+        </section>
 
-            <div className="landing-cta">
-              <button className="cta-primary" onClick={handleGetStarted}>Get Started</button>
-              <button className="cta-secondary" onClick={loadSampleVideo}>Try with Sample Video</button>
+        <section className="block alt" id="how">
+          <div className="wrap">
+            <div className="kicker reveal">How it works</div>
+            <h2 className="sec reveal">Three steps. Zero timeline.</h2>
+            <p className="sec-sub reveal">If you can describe it, you can edit it.</p>
+            <div className="steps">
+              {landingSteps.map(([name, description, example], index) => (
+                <div className="step reveal" key={name}>
+                  <div className="n">{index + 1}</div>
+                  <h3>{name}</h3>
+                  <p>{description}</p>
+                  <div className="eg">{example}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="block" id="examples">
+          <div className="wrap">
+            <div className="kicker reveal">Examples</div>
+            <h2 className="sec reveal">One sentence in, finished video out</h2>
+            <p className="sec-sub reveal">Real prompts, real results.</p>
+            <div className="examples">
+              {landingExamples.map(([icon, background, prompt, result]) => (
+                <div className="ex reveal" key={prompt}>
+                  <div className="thumb" style={{ background }}>{icon}<span className="arrow">→</span></div>
+                  <div className="cap">
+                    <div className="q">{prompt}</div>
+                    <div className="a">{result}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="wrap">
+          <div className="cta-band reveal">
+            <h2>Your next edit is one sentence away.</h2>
+            <p>Join free, upload a video, and describe your first edit. It takes less than a minute.</p>
+            <div className="cta-row">
+              <button className="btn-primary big" onClick={handleGetStarted}>Start editing free</button>
+              <button className="btn-secondary" onClick={loadSampleVideo}>Try with a sample video</button>
             </div>
           </div>
         </div>
+
         <footer>
-          <p>© 2026 FinalCap. All rights reserved.</p>
-          <p>AI-powered video editing made simple</p>
-          <p><a href="/legal/licenses.html">Open-source licenses</a> · <a href="/legal/privacy.html">Privacy</a></p>
+          <div className="wrap">
+            <span>© 2026 FinalCap. All rights reserved.</span>
+            <div className="spacer" />
+            <a href="/legal/privacy.html">Privacy</a>
+            <a href="/legal/terms.html">Terms</a>
+            <a href="/legal/licenses.html">Open-source licenses</a>
+            <a href="/legal/support.html">Contact</a>
+          </div>
         </footer>
       </div>
     );
