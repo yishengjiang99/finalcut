@@ -3,6 +3,7 @@ import cors from 'cors';
 import { initDatabase } from './src/db.js';
 import { PORT, stripe, nodeEnvWarning } from './src/server/config.js';
 import { setupAuth, authRouter } from './src/server/auth.js';
+import { MySQLSessionStore } from './src/server/sessionStore.js';
 import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
@@ -12,6 +13,7 @@ import { jobsRouter } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
+import { v2Router } from './src/server/v2.js';
 
 const app = express();
 
@@ -32,15 +34,18 @@ app.use(createHealthRouter());
 app.use(iosSuggestionsRouter);
 
 // Initialize database
+let sessionStore;
 try {
   await initDatabase();
+  sessionStore = new MySQLSessionStore();
 } catch (error) {
   console.warn('WARNING: Could not initialize database. Google login features may not work.');
   console.warn('Error:', error.message);
+  console.warn('WARNING: Login sessions are kept in memory and will not survive a restart.');
 }
 
 // Configure session middleware, Passport, and Google OAuth strategy
-setupAuth(app);
+setupAuth(app, { sessionStore });
 
 // Stripe webhook endpoint must be mounted before JSON body parsing
 // so Stripe signature verification receives the raw body.
@@ -58,6 +63,7 @@ app.use(ffmpegCliRouter);
 app.use(chatRouter);
 app.use(jobsRouter);
 app.use(lyricCaptionsRouter);
+app.use(v2Router);
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);

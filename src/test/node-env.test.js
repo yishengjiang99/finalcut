@@ -19,7 +19,7 @@ describe('NODE_ENV handling', () => {
   });
 
   it('the build sets NODE_ENV=production itself', () => {
-    expect(JSON.parse(read('package.json')).scripts.build).toBe('NODE_ENV=production vite build');
+    expect(JSON.parse(read('package.json')).scripts.build).toMatch(/(^|&& )NODE_ENV=production vite build$/);
   });
 
   it('env templates do not set NODE_ENV; the systemd unit does', () => {

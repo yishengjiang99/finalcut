@@ -1,5 +1,6 @@
 import express from 'express';
 import { XAI_API_TOKEN } from './config.js';
+import { XAI_CHAT_MODEL, XAI_CHAT_COMPLETIONS_URL } from './xai.js';
 import {
   apiLimiter,
   requireAuthenticatedUser,
@@ -296,7 +297,20 @@ export function cleanFinalText(text) {
 
 /** Model for client-execution turns (defaults to the same model as the streaming chat). */
 export function getClientExecutionModel() {
-  return process.env.XAI_CLIENT_MODEL || 'grok-3';
+  return process.env.XAI_CLIENT_MODEL || XAI_CHAT_MODEL;
+}
+
+/** Server-answered lookup rounds (profile.serverTools) allowed inside one request. */
+const MAX_SERVER_LOOKUPS = 6;
+
+/** A non-streaming xAI call may take this long before the request is answered with a 504. */
+const XAI_REQUEST_TIMEOUT_MS = 120_000;
+
+/** Fields of a streaming /api/chat body that are passed on to xAI; anything else is dropped. */
+const FORWARDED_CHAT_FIELDS = ['tools', 'tool_choice', 'temperature', 'top_p'];
+
+export function forwardedChatFields(body) {
+  return Object.fromEntries(Object.entries(body || {}).filter(([key]) => FORWARDED_CHAT_FIELDS.includes(key)));
 }
 
 /**
@@ -304,7 +318,16 @@ export function getClientExecutionModel() {
  * One model call per request: returns either tool calls for the device to run or the final answer.
  * Never runs ffmpeg or touches uploaded media.
  */
-async function handleClientExecution(req, res, userId) {
+/**
+ * `profile` adapts the handler for another client that runs tools itself (the web app's
+ * /api/v2/chat). Without one, behaviour is exactly the iOS contract of POST /api/chat:
+ *   tools({ userAgent, mediaType })  the tools offered to the model
+ *   instructions                     replaces CLIENT_EXECUTION_INSTRUCTIONS
+ *   guidance                         extra system-prompt lines
+ *   serverTools                      { name: async (args) => result } answered on the server
+ *                                    (text lookups only), then the model is asked again
+ */
+export async function handleClientExecution(req, res, userId, profile = null) {
   let media;
   let thumbnails;
   let conversation;
@@ -333,18 +356,21 @@ async function handleClientExecution(req, res, userId) {
   });
 
   const model = getClientExecutionModel();
-  const thumbnailsAsImages = thumbnails.length > 0 && modelSupportsVision(model);
+  // Thumbnails leave the server only when XAI_CLIENT_MODEL names a vision model: the default
+  // model accepts images too, but forwarding frames stays an explicit choice.
+  const thumbnailsAsImages = thumbnails.length > 0 && Boolean(process.env.XAI_CLIENT_MODEL) && modelSupportsVision(model);
   const rounds = countToolRounds(conversation);
   const skippedTools = skippedToolsInTurn(conversation);
   const unsupportedTools = unsupportedToolsInTurn(conversation);
   const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
 
   // FinalCap-iOS UA → only allowlisted on-device tools (incl. iOS-only grouped tools); any other UA → unchanged.
-  const offeredTools = offeredToolsFor({ userAgent: req.get('user-agent'), mediaType: media?.type })
+  const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent: req.get('user-agent'), mediaType: media?.type })
     .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
   const contextLines = [
-    CLIENT_EXECUTION_INSTRUCTIONS,
+    profile?.instructions || CLIENT_EXECUTION_INSTRUCTIONS,
     mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
+    ...(profile?.guidance || []),
   ];
   // The server-side ffmpeg_cli fallback is offered to iOS builds that ship its executor
   // (see FFMPEG_CLI_MIN_BUILD): last resort when no on-device tool can handle the request.
@@ -354,7 +380,9 @@ async function handleClientExecution(req, res, userId) {
   if (skippedTools.length) {
     contextLines.push(`The user declined these steps this turn (not failures): ${skippedTools.join(', ')}. Do not call them again in this turn.`);
   }
-  if (unsupportedTools.length) {
+  if (unsupportedTools.length && profile) {
+    contextLines.push(`These edits could not run in this browser: ${unsupportedTools.join(', ')}. Do not call them again in this turn; briefly tell the user.`);
+  } else if (unsupportedTools.length) {
     contextLines.push(`These edits are not available on the phone yet: ${unsupportedTools.join(', ')}. Do not call them again in this turn; briefly tell the user they are not available on the phone yet.`);
   }
   if (roundCapReached) {
@@ -385,38 +413,95 @@ async function handleClientExecution(req, res, userId) {
     requestBody.tool_choice = 'auto';
   }
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${XAI_API_TOKEN}`
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    let errorBody = {};
+  // Server-answered lookups (profile.serverTools) are resolved here and the model is asked again;
+  // anything else goes back to the client. Without a profile this loop runs exactly once.
+  const serverTools = profile?.serverTools || {};
+  let choice = {};
+  let servedModel = null;
+  let modelToolCalls = [];
+  for (let lookups = 0; ; lookups += 1) {
+    requestBody.messages = modelMessages;
+    let response;
     try {
-      errorBody = await response.json();
-    } catch {
-      errorBody = { message: response.statusText };
+      response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
+        method: 'POST',
+        signal: AbortSignal.timeout(XAI_REQUEST_TIMEOUT_MS),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${XAI_API_TOKEN}`
+        },
+        body: JSON.stringify(requestBody),
+      });
+    } catch (error) {
+      if (error?.name !== 'TimeoutError') throw error;
+      enqueueChatError({
+        userId,
+        message: 'xAI API request timed out',
+        source: 'xai_api',
+        requestMessageCount: conversation.length,
+        metadata: { timeoutMs: XAI_REQUEST_TIMEOUT_MS, execution: 'client' },
+      });
+      return res.status(504).json({ error: 'The model took too long to answer. Try again.', schemaVersion: CLIENT_SCHEMA_VERSION });
     }
-    const message = errorBody.error?.message || errorBody.message || response.statusText || 'xAI API request failed';
-    enqueueChatError({
-      userId,
-      message,
-      source: 'xai_api',
-      requestMessageCount: conversation.length,
-      metadata: { status: response.status, statusText: response.statusText, execution: 'client' },
-    });
-    return res.status(response.status).json({ error: message, schemaVersion: CLIENT_SCHEMA_VERSION });
-  }
 
-  const data = await response.json();
-  const choice = data?.choices?.[0]?.message || {};
-  const allowedNames = new Set(offeredTools.map(t => t.function.name));
-  const modelToolCalls = (Array.isArray(choice.tool_calls) ? choice.tool_calls : [])
-    .filter(call => !roundCapReached && allowedNames.has(call?.function?.name));
+    if (!response.ok) {
+      let errorBody = {};
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = { message: response.statusText };
+      }
+      const message = errorBody.error?.message || errorBody.message || response.statusText || 'xAI API request failed';
+      enqueueChatError({
+        userId,
+        message,
+        source: 'xai_api',
+        requestMessageCount: conversation.length,
+        metadata: { status: response.status, statusText: response.statusText, execution: 'client' },
+      });
+      return res.status(response.status).json({ error: message, source: 'xai', schemaVersion: CLIENT_SCHEMA_VERSION });
+    }
+
+    const data = await response.json();
+    servedModel = data?.model || null;
+    choice = data?.choices?.[0]?.message || {};
+    const allowedNames = new Set(offeredTools.map(t => t.function.name));
+    modelToolCalls = (Array.isArray(choice.tool_calls) ? choice.tool_calls : [])
+      .filter(call => !roundCapReached && allowedNames.has(call?.function?.name));
+
+    const lookupCalls = modelToolCalls.filter(call => Object.hasOwn(serverTools, call.function.name));
+    if (!lookupCalls.length) break;
+    if (lookups >= MAX_SERVER_LOOKUPS) {
+      modelToolCalls = modelToolCalls.filter(call => !lookupCalls.includes(call));
+      break;
+    }
+    const lookupMessage = {
+      role: 'assistant',
+      content: typeof choice.content === 'string' ? choice.content : null,
+      tool_calls: lookupCalls.map(call => ({
+        id: call.id,
+        type: 'function',
+        function: { name: call.function.name, arguments: typeof call.function.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function.arguments ?? {}) },
+      })),
+    };
+    const lookupResults = [];
+    for (const call of lookupMessage.tool_calls) {
+      let result;
+      try {
+        result = await serverTools[call.function.name](JSON.parse(call.function.arguments || '{}'));
+      } catch (error) {
+        result = { ok: false, error: error?.message || 'lookup failed' };
+      }
+      lookupResults.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+    }
+    conversation.push(lookupMessage, ...lookupResults);
+    modelMessages.push(lookupMessage, ...lookupResults);
+    // After the last lookup the model has to act on what it found: the lookups are withdrawn.
+    if (lookups + 1 >= MAX_SERVER_LOOKUPS && requestBody.tools) {
+      requestBody.tools = requestBody.tools.filter(t => !Object.hasOwn(serverTools, t.function.name));
+      modelMessages.push({ role: 'system', content: 'Lookup limit reached for this request: do not search again. Run the command you worked out, or give the final answer.' });
+    }
+  }
 
   if (modelToolCalls.length) {
     const assistantMessage = {
@@ -454,7 +539,7 @@ async function handleClientExecution(req, res, userId) {
   const rawText = typeof choice.content === 'string' ? choice.content : '';
   const message = cleanFinalText(rawText)
     || (unsupportedTools.length
-      ? 'Sorry, that edit isn\'t available on the phone yet.'
+      ? (profile ? 'Sorry, that edit could not run in this browser.' : 'Sorry, that edit isn\'t available on the phone yet.')
       : (skippedTools.length ? 'Okay — I skipped the steps you declined.' : 'Done.'));
   enqueueChatInteraction({
     userId,
@@ -463,7 +548,7 @@ async function handleClientExecution(req, res, userId) {
     // Usage numbers for on-device edits: a completed edit turn is a final answer after
     // at least one tool result with ok:true (each request is also counted by the quota).
     metadata: {
-      model,
+      model: servedModel || model,
       streamed: false,
       execution: 'client',
       toolRounds: rounds,
@@ -533,17 +618,22 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       tools: Array.isArray(req.body.tools) ? req.body.tools.length : 0,
     }));
 
+    // Stop the xAI request when the client goes away, so nothing is generated for nobody.
+    const upstream = new AbortController();
+    res.on('close', () => upstream.abort());
+
     // Enable streaming for xAI API
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
       method: 'POST',
+      signal: upstream.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
       body: JSON.stringify(restrictStreamingBodyForIos(restrictStreamingToolsToMedia(addFfmpegFallbackTool({
-        ...clientBody,
         messages: [systemMessage, ...req.body.messages],
-        model: 'grok-3', // Specify the new model here
+        ...forwardedChatFields(clientBody),
+        model: XAI_CHAT_MODEL,
         stream: true // Enable streaming
       }, req.get('user-agent')), mediaType), req.get('user-agent')))
     });
@@ -566,7 +656,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           statusText: response.statusText,
         },
       });
-      return res.status(response.status).json({ error: message });
+      return res.status(response.status).json({ error: message, source: 'xai' });
     }
 
     // Set headers for Server-Sent Events (SSE)
@@ -580,6 +670,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
 
     let lineBuffer = '';
     let assistantText = '';
+    let servedModel = null; // the model xAI reports, which can differ from the one requested
     const filter = createStreamFilter();
     let doneFlushed = false;
     let lastParsed = null; // keep reference for flush emit
@@ -641,6 +732,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           }
 
           const delta = parsed.choices?.[0]?.delta;
+          if (parsed.model) servedModel = parsed.model;
 
           if (delta?.content) {
             assistantText += delta.content;
@@ -670,13 +762,16 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
         text: assistantText,
       }));
     } catch (streamError) {
-      console.error('Error streaming response:', streamError);
-      enqueueChatError({
-        userId,
-        message: serializeError(streamError),
-        source: 'xai_stream',
-        requestMessageCount: req.body.messages.length,
-      });
+      // An aborted read means the client left; that is not a stream failure.
+      if (!upstream.signal.aborted) {
+        console.error('Error streaming response:', streamError);
+        enqueueChatError({
+          userId,
+          message: serializeError(streamError),
+          source: 'xai_stream',
+          requestMessageCount: req.body.messages.length,
+        });
+      }
       res.end();
     }
 
@@ -686,11 +781,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       interactionType: 'ai2human',
       content: assistantText,
       metadata: {
-        model: 'grok-3',
+        model: servedModel || XAI_CHAT_MODEL,
         streamed: true,
       },
     });
   } catch (error) {
+    if (error?.name === 'AbortError') return; // the client left before xAI answered
     console.error('Error in /api/chat:', error);
     enqueueChatError({
       userId,

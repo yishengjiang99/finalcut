@@ -87,10 +87,12 @@ export function describeSong(song) {
  * Whole web flow. `deps` lets tests replace the WebAudio extraction.
  * Returns { burned: Uint8Array, summary, result } — result.lines stay in the browser.
  */
-export async function runLyricCaptionsWeb(args, videoBytes, { headers = {}, extract = extractAudioWav, poll = pollJob } = {}) {
+export async function runLyricCaptionsWeb(args, videoBytes, { headers = {}, extract = extractAudioWav, poll = pollJob, size = null, burn = null } = {}) {
   const wav = await extract(videoBytes);
   const form = new FormData();
   form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
+  // With the frame size the result carries a ready-made ASS script, which the browser can burn itself.
+  if (size) { form.append('width', String(size.width)); form.append('height', String(size.height)); }
   for (const key of ['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size']) {
     if (args[key] !== undefined && args[key] !== null && args[key] !== '') form.append(key, String(args[key]));
   }
@@ -106,15 +108,20 @@ export async function runLyricCaptionsWeb(args, videoBytes, { headers = {}, extr
   if (!resultRes.ok) throw new Error(`Could not fetch lyric captions (${resultRes.status})`);
   const result = await resultRes.json();
 
-  const burnForm = new FormData();
-  burnForm.append('video', new Blob([videoBytes], { type: 'video/mp4' }), 'input.mp4');
-  const burnRes = await fetch(`/api/lyric-captions/${encodeURIComponent(started.jobId)}/burn`, { method: 'POST', headers, body: burnForm });
-  if (!burnRes.ok) {
-    const body = await burnRes.json().catch(() => ({}));
-    const err = new Error(body.error || `Burn-in failed (${burnRes.status})`);
-    err.code = body.code;
-    throw err;
-  }
-  const burned = new Uint8Array(await burnRes.arrayBuffer());
+  // Server burn: uploads the video. In-browser editing passes `burn` and only falls back to this
+  // after the user agrees.
+  const burnOnServer = async () => {
+    const burnForm = new FormData();
+    burnForm.append('video', new Blob([videoBytes], { type: 'video/mp4' }), 'input.mp4');
+    const burnRes = await fetch(`/api/lyric-captions/${encodeURIComponent(started.jobId)}/burn`, { method: 'POST', headers, body: burnForm });
+    if (!burnRes.ok) {
+      const body = await burnRes.json().catch(() => ({}));
+      const err = new Error(body.error || `Burn-in failed (${burnRes.status})`);
+      err.code = body.code;
+      throw err;
+    }
+    return new Uint8Array(await burnRes.arrayBuffer());
+  };
+  const burned = burn ? await burn(result, burnOnServer) : await burnOnServer();
   return { burned, summary: job.summary || null, result, audioBytes: wav.byteLength };
 }

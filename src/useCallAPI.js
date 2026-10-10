@@ -3,6 +3,8 @@ import { tools } from './tools.js';
 import { noteDerivedVideo } from './captionLineage.js';
 import { toolFunctions, getCurrentFileMimeType, ffmpegCliStringFallback } from './toolFunctions.js';
 import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
+import { getEngineMode, ENGINE_CLIENT } from './engineMode.js';
+import { runClientTurn } from './clientTurn.js';
 
 export function assertToolCallApplied(result, functionName) {
   if (typeof result !== 'string' || !result.trim() || /^Failed\b/i.test(result.trim())) {
@@ -47,11 +49,15 @@ export function messagesForCurrentTurn(messages) {
   return [latestUserMessage, ...followUps];
 }
 
-// ffmpeg_cli discover/plan only gather information: the model has to see the
-// result to take the next step, so those rounds are sent back for a follow-up.
+// ffmpeg_cli discover/plan and get_video_dimensions only gather information: the model has
+// to see the result to take the next step, so those rounds are sent back for a follow-up.
 export const MAX_TOOL_FOLLOW_UPS = 6;
+const INFO_ONLY_TOOL_NAMES = new Set(['get_video_dimensions']);
 
 export function needsFollowUp(toolCalls) {
+  // A lookup made alongside an edit needs no second round; a lookup on its own does
+  // (for example reading the frame size before centering text).
+  if (toolCalls.length > 0 && toolCalls.every(call => INFO_ONLY_TOOL_NAMES.has(call?.function?.name))) return true;
   return toolCalls.some(call => {
     if (call?.function?.name !== FFMPEG_CLI_TOOL_NAME) return false;
     try {
@@ -83,17 +89,41 @@ export function buildChatRequestBody(messages, hasMedia, media = null) {
   const inferenceMessages = messagesForCurrentTurn(messages);
   if (!hasMedia) {
     return {
-      model: 'grok-beta',
       messages: [{ role: 'system', content: NO_MEDIA_NOTE }, ...inferenceMessages]
     };
   }
   return {
-    model: 'grok-beta',
     messages: inferenceMessages,
     tools: tools,
     tool_choice: 'auto',
     ...(media ? { media } : {})
   };
+}
+
+// A failed /api/chat response. The 401s raised by our own auth layer are told apart from
+// errors the server relays from xAI (those carry source: 'xai').
+export class ChatRequestError extends Error {
+  constructor(status, body = {}, statusText = '') {
+    const detail = (typeof body?.error === 'string' && body.error) || statusText || 'no details';
+    const fromXai = body?.source === 'xai';
+    const authExpired = status === 401 && !fromXai;
+    super(authExpired
+      ? 'Your session has expired. Sign in again to continue.'
+      : `${fromXai ? 'xAI API error' : 'Request failed'} (${status}): ${detail}`);
+    this.name = 'ChatRequestError';
+    this.status = status;
+    this.authExpired = authExpired;
+  }
+}
+
+async function chatRequestError(response) {
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    // Not JSON (a proxy error page, say): the status line is all there is.
+  }
+  return new ChatRequestError(response.status, body, response.statusText);
 }
 
 async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
@@ -128,31 +158,86 @@ export function useCallAPI({
   setVideoFileData,
   addMessage,
   uploadedVideos,
+  refreshSampleAccessToken,
+  onAuthExpired,
+  onToolStart,
 }) {
   const callAPI = useCallback(async function runTurn(currentMessages, options = {}) {
     const followUpRound = options.followUpRound || 0;
     const currentVideoFileData = options.videoFileData ?? videoFileData;
     const forcedSampleToken = options.sampleAccessToken || null;
     const shouldUseSampleAuth = Boolean(forcedSampleToken || (isSampleMode && sampleAccessToken));
-    const authHeaders = shouldUseSampleAuth
+    let authHeaders = shouldUseSampleAuth
       ? { 'sample-access-token': forcedSampleToken || sampleAccessToken }
       : {};
+    const postChat = () => fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData), mediaForInference(getCurrentFileMimeType()))),
+      ...(options.signal ? { signal: options.signal } : {})
+    });
+
+    // In-browser editing: the model's tool calls run in ffmpeg.wasm and nothing is uploaded.
+    // Without a file there is nothing to edit, so that stays an ordinary streamed chat.
+    const postClientChat = async (body) => {
+      const send = () => fetch('/api/v2/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(body),
+        ...(options.signal ? { signal: options.signal } : {})
+      });
+      let response = await send();
+      let failure = response.ok ? null : await chatRequestError(response);
+      if (failure?.authExpired && shouldUseSampleAuth && refreshSampleAccessToken) {
+        authHeaders = { 'sample-access-token': await refreshSampleAccessToken() };
+        response = await send();
+        failure = response.ok ? null : await chatRequestError(response);
+      }
+      if (failure) throw failure;
+      return response.json();
+    };
 
     setIsCallingAPI(true); // Set loading state before API call
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders
-        },
-        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData), mediaForInference(getCurrentFileMimeType()))),
-        ...(options.signal ? { signal: options.signal } : {})
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+      if (getEngineMode() === ENGINE_CLIENT && currentVideoFileData) {
+        return await runClientTurn({
+          messages: currentMessages,
+          videoFileData: currentVideoFileData,
+          post: postClientChat,
+          signal: options.signal,
+          ui: {
+            setProcessing,
+            setVideoFileData,
+            addMessage,
+            uploadedVideos,
+            onToolStart,
+            onStatus: options.onStatus,
+            nextId: () => messageIdCounterRef.current++,
+            addAssistantMessage: (content) => {
+              const id = messageIdCounterRef.current++;
+              setMessages(prev => [...prev, { role: 'assistant', content, id }]);
+              return id;
+            },
+          },
+        });
       }
+
+      let response = await postChat();
+      let failure = response.ok ? null : await chatRequestError(response);
+
+      // Sample tokens are short-lived and do not survive a server restart: get a new one and retry once.
+      if (failure?.authExpired && shouldUseSampleAuth && refreshSampleAccessToken) {
+        const freshToken = await refreshSampleAccessToken();
+        authHeaders = { 'sample-access-token': freshToken };
+        options = { ...options, sampleAccessToken: freshToken };
+        response = await postChat();
+        failure = response.ok ? null : await chatRequestError(response);
+      }
+
+      if (failure) throw failure;
 
       // Handle streaming response
       const reader = response.body.getReader();
@@ -297,6 +382,8 @@ export function useCallAPI({
               throw new Error(`Invalid arguments for xAI tool call "${funcName}": ${parseError.message}`);
             }
 
+            onToolStart?.(funcName, args);
+
             // Pass uploadedVideos only to functions that need it
             let result;
             if (funcName === 'add_video_transition') {
@@ -353,6 +440,14 @@ export function useCallAPI({
     } catch (error) {
       // Cancelling aborts the in-flight request; that is not an error to report.
       if (options.signal?.aborted) return 'cancelled';
+      if (error instanceof ChatRequestError) {
+        // An expired session cannot report itself: /api/chat-error needs the same auth.
+        if (error.authExpired) {
+          onAuthExpired?.();
+          addMessage({ text: error.message });
+          return 'error';
+        }
+      }
       await reportChatError(error, {
         authHeaders,
         messageCount: currentMessages.length,
@@ -363,12 +458,12 @@ export function useCallAPI({
             .filter(Boolean)
         }
       });
-      addMessage({ text: 'Error communicating with xAI API: ' + error.message });
+      addMessage({ text: error instanceof ChatRequestError ? error.message : 'Error communicating with xAI API: ' + error.message });
       return 'error';
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
     }
-  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos]);
+  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos, refreshSampleAccessToken, onAuthExpired, onToolStart]);
 
   return callAPI;
 }

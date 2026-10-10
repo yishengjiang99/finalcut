@@ -4,6 +4,11 @@ import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType 
 import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
+import {
+  ENGINE_CLIENT, ENGINE_SERVER, fetchClientConfig, resolveEngineMode, setEngineMode,
+  setUploadConsentHandler, getCloudCaptions, setCloudCaptions,
+} from './engineMode.js';
+import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
 import logoUrl from '../logo.png';
 import './App.css';
 
@@ -19,14 +24,32 @@ const sampleCommands = [
   { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
 ];
 
-const landingTools = [
-  ['✂️ Video Editing', 'Trim, crop, resize, and rotate'],
-  ['🎨 Visual Effects', 'Brightness, hue, saturation, text'],
-  ['🎵 Audio Tools', 'Volume, fade, equalizer, filters'],
-  ['⚡ Speed Control', 'Speed up or slow down media'],
-  ['📱 Social Media', 'Instagram, TikTok, YouTube presets'],
-  ['🔄 Format Conversion', 'Convert MP4, WebM, MOV formats'],
-  ['💬 AI Captioning', 'Generate and translate subtitles']
+const landingStats = [
+  ['500+', 'FFmpeg filters & effects'],
+  ['11', 'Caption languages'],
+  ['4K', 'Max export resolution'],
+  ['~10s', 'Typical edit turnaround']
+];
+
+const landingFeatures = [
+  ['💬', 'Chat to edit', 'Describe the edit in words. Trim, crop, resize, rotate, overlay text — the AI plans the filter chain for you.', 'trim seconds 5–15'],
+  ['🔤', 'AI captions', 'Generate accurate subtitles, translate across 11 languages, and burn them in with styled typography.', 'add Spanish captions'],
+  ['🎨', 'Color & effects', 'Brightness, saturation, hue, vignette, film looks — 500+ real FFmpeg filters, not presets.', 'make it moodier'],
+  ['📱', 'Social presets', 'One sentence to 9:16 for Reels and TikTok, 1:1 for feeds, or 16:9 for YouTube — reframed automatically.', 'make it vertical'],
+  ['⚡', 'Speed & audio', 'Time-remap, volume, fade, loudness normalization, EQ — full audio pipeline included.', '2x speed, keep pitch'],
+  ['📦', 'Any format out', 'MP4, WebM, MOV, GIF, MP3 extraction — server-side rendering up to 4K.', 'export as GIF']
+];
+
+const landingSteps = [
+  ['Drop in your video', 'Upload a file or try the built-in sample. Your media stays private to your session.', '“BigBuckBunny.mp4 attached ✓”'],
+  ['Describe the edit', "Type it like you'd tell an editor. Ask follow-ups, stack changes, undo anything.", '“Cut the boring middle, punch up the colors”'],
+  ['Download the result', "Rendering happens in the background while you keep working. Grab the MP4 when it's ready.", '“✓ Done in 11s — Download MP4”']
+];
+
+const landingExamples = [
+  ['🏙️', 'linear-gradient(135deg,#1a2233,#2c3a58)', '“Convert to 9:16 for Instagram Reels”', '✓ Cropped 1080×1920 · 8s'],
+  ['🎤', 'linear-gradient(135deg,#231a33,#3a2c58)', '“Generate captions and translate to Spanish”', '✓ 47 lines · burned in · 14s'],
+  ['🌅', 'linear-gradient(135deg,#1a3327,#2c5844)', '“Trim 0:05–0:15, 2x speed, boost saturation”', '✓ 3 edits chained · 9s']
 ];
 
 const captionCommands = [
@@ -129,6 +152,26 @@ function TimeAgo({ at }) {
 }
 
 const JOB_STATUS_TEXT = { done: 'Done', error: 'Failed', cancelled: 'Cancelled' };
+
+// A prompt can finish without changing the clip (a question, or a lookup the model stopped at).
+export const jobStatusText = (job) => (
+  job.status === 'done' && !job.producedFile ? 'Done — no edit was made' : JOB_STATUS_TEXT[job.status]
+);
+
+// What the dock shows while a tool runs: lookups are not edits, so they are not "processing".
+export const toolStageText = (toolName, args) => {
+  if (toolName === 'get_video_dimensions') return 'Reading video details…';
+  if (toolName === 'ffmpeg_cli' && args?.action !== 'run') return 'Working out the ffmpeg command…';
+  return 'Processing with ffmpeg…';
+};
+// "about 1 min 20 s left" for the running edit; nothing until FFmpeg has reported enough to estimate.
+export const timeLeftText = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  return seconds >= 60 ? `about ${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s left` : `about ${Math.max(1, Math.round(seconds))} s left`;
+};
+
+// What an upload to the server would send, for the consent prompt.
+const UPLOAD_NOUN = { video: 'your video', photo: 'your photo', audio: 'the audio of your clip (not the video)' };
 const JOB_ICONS = { done: '✅', error: '⚠️', cancelled: '🚫' };
 
 // Tool results and tool-call-only assistant turns are for the model, not the chat window.
@@ -160,6 +203,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
   const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
   const [authError, setAuthError] = useState(null); // Track authentication errors
+  const [sessionExpired, setSessionExpired] = useState(false); // Set when the server rejects the login session
   const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
@@ -184,6 +228,13 @@ export default function App() {
   const [toastText, setToastText] = useState('');
   const toastTimerRef = useRef(null);
   const jobIdCounterRef = useRef(1);
+  const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
+  const [engineMode, setEngineModeState] = useState(ENGINE_SERVER); // 'client' once the feature flag says so
+  const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
+  const [cloudCaptionsAvailable, setCloudCaptionsAvailable] = useState(false);
+  const [cloudCaptions, setCloudCaptionsState] = useState(() => getCloudCaptions());
+  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
+  const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
   // Which clip the next edit applies to. Bytes are kept per media message so any
   // clip (an upload or an earlier result) can become the edit target again.
@@ -212,6 +263,24 @@ export default function App() {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [chatInput, showLanding, view]);
 
+  // Fade landing sections in as they scroll into view
+  useEffect(() => {
+    if (!showLanding) return;
+    const targets = document.querySelectorAll('.landing .reveal');
+    if (typeof IntersectionObserver === 'undefined') {
+      targets.forEach(el => el.classList.add('in'));
+      return;
+    }
+    const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        observer.unobserve(entry.target);
+      }
+    }), { threshold: .12 });
+    targets.forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [showLanding]);
+
   useEffect(() => {
     if (chatWindowRef.current) {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
@@ -226,10 +295,10 @@ export default function App() {
     setSampleModeAccessToken(sampleAccessToken);
   }, [sampleAccessToken]);
 
-  const getSampleAccessToken = async () => {
-    if (sampleAccessToken) return sampleAccessToken;
+  const getSampleAccessToken = async ({ force = false } = {}) => {
+    if (sampleAccessToken && !force) return sampleAccessToken;
 
-    if (window.__FINALCUT_SAMPLE_TOKEN_PROMISE__) {
+    if (!force && window.__FINALCUT_SAMPLE_TOKEN_PROMISE__) {
       try {
         const token = await window.__FINALCUT_SAMPLE_TOKEN_PROMISE__;
         if (token) {
@@ -251,6 +320,8 @@ export default function App() {
       throw new Error('Sample access token missing in response');
     }
     setSampleAccessTokenState(token);
+    // Tools read the token from toolFunctions; update it now, ahead of the next render.
+    setSampleModeAccessToken(token);
     return token;
   };
 
@@ -342,6 +413,39 @@ export default function App() {
     verifyPayment();
   }, []);
 
+  // Feature flag: edit in this browser (ffmpeg.wasm, nothing uploaded) or on the server.
+  useEffect(() => {
+    let ignore = false;
+    fetchClientConfig().then((config) => {
+      if (ignore) return;
+      const { mode } = resolveEngineMode({ flag: config?.clientFFmpeg });
+      setEngineMode(mode);
+      setEngineModeState(mode);
+      if (config?.limits?.clip) setClipLimits(config.limits.clip);
+      setCloudCaptionsAvailable(Boolean(config?.captions?.cloud));
+    });
+    return () => { ignore = true; };
+  }, []);
+
+  // A step that cannot run in the browser asks here before anything is uploaded. The answer is
+  // "no" unless the user presses the upload button.
+  useEffect(() => {
+    setUploadConsentHandler((request) => new Promise((resolve) => {
+      setUploadConsent({ ...request, resolve });
+    }));
+    return () => setUploadConsentHandler(null);
+  }, []);
+
+  const answerUploadConsent = (allowed) => {
+    uploadConsent?.resolve(allowed);
+    setUploadConsent(null);
+  };
+
+  const toggleCloudCaptions = (enabled) => {
+    setCloudCaptions(enabled);
+    setCloudCaptionsState(enabled);
+  };
+
   // Server status for the top bar (unauthenticated endpoint)
   useEffect(() => {
     let ignore = false;
@@ -372,6 +476,10 @@ export default function App() {
     const id = messageIdCounterRef.current++;
     let parentId = null;
     if (videoUrl) {
+      if (currentJobRef.current) {
+        const jobId = currentJobRef.current.id;
+        setJobs(prev => prev.map(job => job.id === jobId ? { ...job, producedFile: true } : job));
+      }
       const resultBytes = pendingResultBytesRef.current;
       pendingResultBytesRef.current = null;
       if (resultBytes && shouldRenderVideoPreview({ videoUrl, videoType, mimeType })) {
@@ -410,6 +518,9 @@ export default function App() {
     setVideoFileData: setWorkingVideoFileData,
     addMessage,
     uploadedVideos,
+    refreshSampleAccessToken: () => getSampleAccessToken({ force: true }),
+    onAuthExpired: () => setSessionExpired(true),
+    onToolStart: (toolName, args) => setToolStage(toolStageText(toolName, args)),
   });
 
   const handleUpload = async (e) => {
@@ -420,14 +531,8 @@ export default function App() {
       const newVideos = [];
       let hasError = false;
 
-      // Show uploading status
-      const uploadingMessage = {
-        role: 'user',
-        content: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`,
-        excludeFromAPI: true,
-        id: messageIdCounterRef.current++
-      };
-      setMessages(prev => [...prev, uploadingMessage]);
+      // Upload progress is a transient status, not part of the conversation
+      toast(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`);
 
       // Process all files
       for (let i = 0; i < files.length; i++) {
@@ -438,12 +543,23 @@ export default function App() {
         const isVideo = file.type.startsWith('video/');
 
         if (!isAudio && !isVideo) {
-          addMessage({ text: `Error: File "${file.name}" is not a valid audio or video file.` });
+          toast(`“${file.name}” is not a valid audio or video file`);
           hasError = true;
           continue;
         }
 
-        // Read file as array buffer for server-side processing
+        // In-browser editing has to fit the clip in this tab's memory.
+        if (engineMode === ENGINE_CLIENT) {
+          const clip = checkClip({ bytes: file.size }, { limits: clipLimits });
+          if (clip.level === 'block') {
+            addMessage({ text: `"${file.name}" is too large to edit in this browser. ${clip.reasons.join(' ')} Try a shorter or lower-resolution clip.` });
+            hasError = true;
+            continue;
+          }
+          if (clip.level === 'warn') addMessage({ text: `"${file.name}": ${clip.reasons.join(' ')}` });
+        }
+
+        // Read file as array buffer for processing
         const arrayBuffer = await file.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
         const url = URL.createObjectURL(file);
@@ -471,7 +587,8 @@ export default function App() {
       }
 
       if (newVideos.length === 0) {
-        addMessage({ text: 'Error: No valid files were uploaded.' });
+        if (!hasError) toast('No valid files were uploaded');
+        e.target.value = '';
         return;
       }
 
@@ -479,10 +596,10 @@ export default function App() {
       setUploadedVideos(prev => [...prev, ...newVideos]);
       setIsSampleMode(false);
 
-      // Show all uploaded files in the chat
-      const uploadedMessages = newVideos.map((video, index) => ({
+      // Each upload gets a clip card in the chat, with no status bubble
+      const uploadedMessages = newVideos.map((video) => ({
         role: 'user',
-        content: `Uploaded ${video.isAudio ? 'audio' : 'video'}: ${video.name}`,
+        content: '',
         videoUrl: video.url,
         videoType: 'original',
         mimeType: video.mimeType,
@@ -491,17 +608,10 @@ export default function App() {
         id: video.id
       }));
 
-      const summaryMessage = {
-        role: 'user',
-        content: `${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}.`,
-        excludeFromAPI: true,
-        id: messageIdCounterRef.current++
-      };
-
-      // Update UI state with uploaded messages
-      setMessages(prev => [...prev, ...uploadedMessages, summaryMessage]);
+      setMessages(prev => [...prev, ...uploadedMessages]);
+      if (!hasError) toast(`${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}`);
     } catch (error) {
-      addMessage({ text: 'Error uploading files: ' + error.message });
+      toast('Error uploading files: ' + error.message);
     }
 
     // Clear the input so the same files can be uploaded again if needed
@@ -519,9 +629,10 @@ export default function App() {
 
     // Track this prompt as a job in the processing dock; the controller lets it be cancelled.
     const controller = new AbortController();
-    const job = { id: jobIdCounterRef.current++, prompt: text, status: 'running', startedAt: Date.now(), endedAt: null, resultMessageId: null };
+    const job = { id: jobIdCounterRef.current++, prompt: text, status: 'running', startedAt: Date.now(), endedAt: null, resultMessageId: null, producedFile: false };
     currentJobRef.current = { id: job.id, controller };
     pendingResultBytesRef.current = null;
+    setToolStage(null);
     setFetchAbortSignal(controller.signal);
     setJobs(prev => [job, ...prev]);
     setDockOpen(true);
@@ -529,14 +640,17 @@ export default function App() {
     let status;
     try {
       // callAPI appends to the array it is given; hand it a copy, not the array held in state.
-      status = await callAPI([...newMessages], { signal: controller.signal });
+      status = await callAPI([...newMessages], { signal: controller.signal, onStatus: setTurnStatus });
     } finally {
+      setTurnStatus(null);
+      // A pending upload question belongs to the job that just ended.
+      setUploadConsent(prev => { prev?.resolve(false); return null; });
       currentJobRef.current = null;
       setFetchAbortSignal(null);
     }
     if (controller.signal.aborted) status = 'cancelled';
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: status || 'done', endedAt: Date.now() } : j));
-    if (status === 'cancelled') addMessage({ text: `Cancelled: “${text}”.` });
+    if (status === 'cancelled') toast(`Cancelled: “${text}”`);
   };
 
   const cancelJob = (job) => {
@@ -612,7 +726,7 @@ export default function App() {
     const parent = mediaById(item.parentId);
     if (!parent) return toast('The clip this edit was made from is no longer in the project');
     if (await selectMedia(parent)) {
-      addMessage({ text: `Undid “${item.label}”. Your next edit applies to “${parent.label}”.` });
+      toast(`Undid “${item.label}”. Your next edit applies to “${parent.label}”.`);
     }
   };
 
@@ -667,7 +781,7 @@ export default function App() {
       const response = await fetch(sampleVideoUrl);
       if (!response.ok) {
         // If sample video doesn't exist, just show a message
-        addMessage({ text: 'Sample video not available. Please upload your own video.' });
+        toast('Sample video not available. Please upload your own video.');
         return;
       }
 
@@ -683,15 +797,14 @@ export default function App() {
       setCurrentFileMimeType('video/mp4');
 
       // Show selected video
-      const uploadedMessage = { role: 'user', content: 'Selected sample video:', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'BigBuckBunny.mp4', id: messageIdCounterRef.current++ };
+      const uploadedMessage = { role: 'user', content: '', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'BigBuckBunny.mp4', id: messageIdCounterRef.current++ };
       mediaBytesRef.current.set(uploadedMessage.id, data);
       activateMedia(uploadedMessage.id);
-      const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', excludeFromAPI: true, id: messageIdCounterRef.current++ };
-
-      setMessages(prev => [...prev, uploadedMessage, userMessage]);
+      setMessages(prev => [...prev, uploadedMessage]);
+      toast('Sample video loaded and ready for editing');
 
     } catch (error) {
-      addMessage({ text: 'Error loading sample video. Please upload your own video.' });
+      toast('Error loading sample video. Please upload your own video.');
     }
   };
 
@@ -699,33 +812,151 @@ export default function App() {
   if (showLanding) {
     return (
       <div className="fc landing">
-        <div className="landing-main">
-          <div className="landing-inner">
-            <img className="landing-logo" src={logoUrl} alt="" />
-            <h1>FinalCap</h1>
-            <p className="tagline">AI Video Editor — chat to edit, caption, and export</p>
+        <nav className="lp-nav">
+          <div className="wrap">
+            <a className="lp-brand" href="#">
+              <img src={logoUrl} alt="" />
+              FinalCap
+            </a>
+            <div className="lp-nav-links">
+              <a href="#features">Features</a>
+              <a href="#how">How it works</a>
+              <a href="#examples">Examples</a>
+            </div>
+            <div className="spacer" />
+            <button className="btn-ghost" onClick={handleGetStarted}>Sign in</button>
+            <button className="btn-primary" onClick={handleGetStarted}>Get started free</button>
+          </div>
+        </nav>
 
-            {authError && <div className="auth-error">{authError}</div>}
+        <header className="hero">
+          <div className="wrap">
+            <div>
+              <div className="eyebrow"><span className="dot" /> AI video editor</div>
+              <h1>Edit video by <span className="grad">describing it.</span></h1>
+              <p className="hero-sub">Type what you want — trim, captions, color, speed, formats. FinalCap turns your words into frame-perfect edits in seconds. No timeline. No learning curve.</p>
 
-            <h2>Available Tools</h2>
-            <div className="tool-grid">
-              {landingTools.map(([name, description]) => (
-                <div className="tool" key={name}>
+              {authError && <div className="auth-error">{authError}</div>}
+
+              <div className="cta-row">
+                <button className="btn-primary big" onClick={handleGetStarted}>Start editing — it's free</button>
+                <button className="btn-secondary" onClick={loadSampleVideo}><span className="play">▶</span> Watch it work</button>
+              </div>
+              <div className="micro-proof">
+                <span><span className="ok">✓</span> Free to try</span>
+                <span><span className="ok">✓</span> No credit card</span>
+                <span><span className="ok">✓</span> Runs in your browser</span>
+              </div>
+            </div>
+            <div className="hero-visual" aria-hidden="true">
+              <div className="editor-card">
+                <div className="ec-video">
+                  <span className="tag">preview</span>
+                  <div className="big-play">▶</div>
+                </div>
+                <div className="ec-chat">
+                  <div className="ec-bubble user">Convert this to 9:16 for Reels and add burned-in captions</div>
+                  <div className="ec-bubble ai"><b>✓ Done in 11s</b> — cropped to 1080×1920, captions burned in.</div>
+                </div>
+              </div>
+              <div className="float-card fc-1">
+                <div className="ic">💬</div>
+                <div>Captions generated<small>English → Spanish available</small></div>
+              </div>
+              <div className="float-card fc-2">
+                <div className="ic">⚙️</div>
+                <div>Rendering 4K…<div className="pbar-mini"><i /></div></div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="stats">
+          <div className="wrap">
+            {landingStats.map(([num, label]) => (
+              <div className="stat" key={label}>
+                <div className="num"><span className="grad">{num}</span></div>
+                <div className="lbl">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <section className="block" id="features">
+          <div className="wrap">
+            <div className="kicker reveal">Features</div>
+            <h2 className="sec reveal">Everything a timeline does, in one sentence</h2>
+            <p className="sec-sub reveal">FinalCap understands plain language and maps it to professional-grade FFmpeg operations.</p>
+            <div className="feat-grid">
+              {landingFeatures.map(([icon, name, description, example]) => (
+                <div className="feat reveal" key={name}>
+                  <div className="fic">{icon}</div>
                   <h3>{name}</h3>
                   <p>{description}</p>
+                  <span className="try">Try: “{example}” →</span>
                 </div>
               ))}
             </div>
+          </div>
+        </section>
 
-            <div className="landing-cta">
-              <button className="cta-primary" onClick={handleGetStarted}>Get Started</button>
-              <button className="cta-secondary" onClick={loadSampleVideo}>Try with Sample Video</button>
+        <section className="block alt" id="how">
+          <div className="wrap">
+            <div className="kicker reveal">How it works</div>
+            <h2 className="sec reveal">Three steps. Zero timeline.</h2>
+            <p className="sec-sub reveal">If you can describe it, you can edit it.</p>
+            <div className="steps">
+              {landingSteps.map(([name, description, example], index) => (
+                <div className="step reveal" key={name}>
+                  <div className="n">{index + 1}</div>
+                  <h3>{name}</h3>
+                  <p>{description}</p>
+                  <div className="eg">{example}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="block" id="examples">
+          <div className="wrap">
+            <div className="kicker reveal">Examples</div>
+            <h2 className="sec reveal">One sentence in, finished video out</h2>
+            <p className="sec-sub reveal">Real prompts, real results.</p>
+            <div className="examples">
+              {landingExamples.map(([icon, background, prompt, result]) => (
+                <div className="ex reveal" key={prompt}>
+                  <div className="thumb" style={{ background }}>{icon}<span className="arrow">→</span></div>
+                  <div className="cap">
+                    <div className="q">{prompt}</div>
+                    <div className="a">{result}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="wrap">
+          <div className="cta-band reveal">
+            <h2>Your next edit is one sentence away.</h2>
+            <p>Join free, upload a video, and describe your first edit. It takes less than a minute.</p>
+            <div className="cta-row">
+              <button className="btn-primary big" onClick={handleGetStarted}>Start editing free</button>
+              <button className="btn-secondary" onClick={loadSampleVideo}>Try with a sample video</button>
             </div>
           </div>
         </div>
+
         <footer>
-          <p>© 2026 FinalCap. All rights reserved.</p>
-          <p>AI-powered video editing made simple</p>
+          <div className="wrap">
+            <span>© 2026 FinalCap. All rights reserved.</span>
+            <div className="spacer" />
+            <a href="/legal/privacy.html">Privacy</a>
+            <a href="/legal/terms.html">Terms</a>
+            <a href="/legal/licenses.html">Open-source licenses</a>
+            <a href="/legal/support.html">Contact</a>
+          </div>
         </footer>
       </div>
     );
@@ -737,6 +968,9 @@ export default function App() {
   const originals = media.filter(item => item.kind === 'original');
   const captionFiles = messages.filter(msg => msg.videoUrl && (msg.videoType === 'subtitle-srt' || msg.vttUrl));
   const showTyping = isCallingAPI && !processing && !messages[messages.length - 1]?.streaming;
+  const onDevice = engineMode === ENGINE_CLIENT;
+  const hasProgress = typeof turnStatus?.progress === 'number';
+  const runningStage = turnStatus?.text || (processing ? (toolStage || 'Processing with ffmpeg…') : 'Planning the edit…');
   const statusText = health === null
     ? 'checking server…'
     : health.ok
@@ -813,6 +1047,22 @@ export default function App() {
 
   return (
     <div className="fc editor">
+      {uploadConsent && (
+        <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+          <div className="consent">
+            <h3 id="consent-title">This step uploads {UPLOAD_NOUN[uploadConsent.uploads] || 'your file'}</h3>
+            <p>
+              “{String(uploadConsent.tool || 'This edit').replace(/_/g, ' ')}” cannot run in this browser
+              {uploadConsent.reason ? ` (${uploadConsent.reason})` : ''}. It can run on our server instead, which means
+              sending {UPLOAD_NOUN[uploadConsent.uploads] || 'your file'} there. Nothing is uploaded unless you choose to.
+            </p>
+            <div className="consent-actions">
+              <button className="jbtn open" autoFocus onClick={() => answerUploadConsent(false)}>Keep it on my device (skip this step)</button>
+              <button className="jbtn" onClick={() => answerUploadConsent(true)}>Upload and continue</button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="topbar">
         <div className="brand">
           <img src={logoUrl} alt="" />
@@ -824,14 +1074,21 @@ export default function App() {
           ))}
         </nav>
         <div className="spacer"></div>
+        {onDevice && (
+          <div className="status-pill device-badge" title="Edits run in this browser with FFmpeg (WebAssembly). Your video is not sent to our servers.">
+            🔒 Processed on your device, nothing uploaded
+          </div>
+        )}
         <div className="status-pill">
           <span className={`status-dot${health === null ? ' pending' : (health.ok ? '' : ' down')}`}></span> {statusText}
         </div>
+        {sessionExpired && <button className="btn-export" onClick={handleGetStarted} title="Your session has expired">Sign in again</button>}
         <button className="btn-export" onClick={handleExport} disabled={!activeMedia} title={activeMedia ? `Download “${activeMedia.label}”` : 'Add a file to export'}>Export</button>
       </header>
 
       <div className="layout">
         <aside className="rail">
+          <div className="rail-scroll">
           <h3>Project media</h3>
           {media.length === 0 && <p className="rail-empty">No media yet. Add a video or audio file to start editing.</p>}
           {media.map(item => (
@@ -852,10 +1109,53 @@ export default function App() {
               <div className="thumb">{JOB_ICONS[job.status]}</div>
               <div className="meta">
                 <div className="name">{job.prompt}</div>
-                <div className="sub">{JOB_STATUS_TEXT[job.status].toLowerCase()} · <TimeAgo at={job.endedAt} /></div>
+                <div className="sub">{jobStatusText(job).toLowerCase()} · <TimeAgo at={job.endedAt} /></div>
               </div>
             </button>
           ))}
+          </div>
+
+          {/* Processing dock: one entry per sent prompt */}
+          <div className={`dock${dockOpen ? '' : ' collapsed'}`}>
+            <button type="button" className="dock-head" onClick={() => setDockOpen(open => !open)}>
+              <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
+              <span className="title">Processing</span>
+              <span className="count">
+                {runningJobs.length > 0 ? `${runningJobs.length} running` : (jobs.length > 0 ? `${jobs.length} done` : '0 running')}
+              </span>
+              <span className="chev">▲</span>
+            </button>
+            <div className="dock-body">
+              {jobs.length === 0 && (
+                <div className="dock-empty">Nothing processing right now.<br />Send an edit and watch it run here.</div>
+              )}
+              {jobs.map(job => (
+                <div key={job.id} className={`job ${job.status}`}>
+                  <div className="jthumb">🎬</div>
+                  <div className="jmain">
+                    <div className="jtitle" title={job.prompt}>{job.prompt}</div>
+                    <div className="jstage">
+                      {job.status === 'running' ? runningStage : jobStatusText(job)}
+                      {job.status === 'running' && hasProgress && ` ${Math.round(turnStatus.progress * 100)}%`}
+                      {job.status === 'running' && hasProgress && timeLeftText(turnStatus.etaSeconds) && ` · ${timeLeftText(turnStatus.etaSeconds)}`}
+                    </div>
+                    <div className={`pbar${job.status === 'running' && hasProgress ? ' determinate' : ''}`}>
+                      <i style={job.status === 'running' && hasProgress ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined}></i>
+                    </div>
+                    <div className="jfoot">
+                      <Elapsed job={job} />
+                      {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
+                      {job.status !== 'running' && job.resultMessageId !== null && (
+                        <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
+                      )}
+                      {job.status === 'error' && <button className="jbtn open" disabled={isCallingAPI} onClick={() => handleSend(job.prompt)}>Retry</button>}
+                      {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </aside>
 
         <div className="main">
@@ -934,45 +1234,6 @@ export default function App() {
           )}
 
           <div className="composer-zone">
-            {/* Processing dock: one entry per sent prompt */}
-            <div className={`dock${dockOpen ? '' : ' collapsed'}`}>
-              <button type="button" className="dock-head" onClick={() => setDockOpen(open => !open)}>
-                <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
-                <span className="title">Processing</span>
-                <span className="count">
-                  {runningJobs.length > 0 ? `${runningJobs.length} running` : (jobs.length > 0 ? `${jobs.length} done` : '0 running')}
-                </span>
-                <span className="chev">▲</span>
-              </button>
-              <div className="dock-body">
-                {jobs.length === 0 && (
-                  <div className="dock-empty">Nothing processing right now.<br />Send an edit and watch it run here.</div>
-                )}
-                {jobs.map(job => (
-                  <div key={job.id} className={`job ${job.status}`}>
-                    <div className="jthumb">🎬</div>
-                    <div className="jmain">
-                      <div className="jtitle" title={job.prompt}>{job.prompt}</div>
-                      <div className="jstage">
-                        {job.status === 'running'
-                          ? (processing ? 'Processing with ffmpeg…' : 'Planning the edit…')
-                          : JOB_STATUS_TEXT[job.status]}
-                      </div>
-                      <div className="pbar"><i></i></div>
-                      <div className="jfoot">
-                        <Elapsed job={job} />
-                        {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
-                        {job.status !== 'running' && job.resultMessageId !== null && (
-                          <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
-                        )}
-                        {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="composer">
               <div className="prompt-chips">
                 {sampleCommands.map((cmd) => (
@@ -1016,7 +1277,13 @@ export default function App() {
                 </button>
               </div>
               <div className="composer-foot">
-                <span className="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
+                <span className="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <a href="/legal/licenses.html" target="_blank" rel="noopener">Open-source licenses</a></span>
+                {onDevice && cloudCaptionsAvailable && (
+                  <label className="cloud-captions" title="Off: captions are transcribed on this device. On: the audio track (never the video) is uploaded for more accurate transcription.">
+                    <input type="checkbox" checked={cloudCaptions} onChange={(e) => toggleCloudCaptions(e.target.checked)} />
+                    Cloud captions (uploads audio only)
+                  </label>
+                )}
                 {media.length > 0 && (
                   <select
                     className="target-select"

@@ -268,7 +268,7 @@ sudo systemctl restart finalcut
 ```
 
 Optional `.env` settings: `LYRIC_CAPTIONS_MODEL` (Grok model used with the `web_search` tool,
-default `grok-4.7`) and `LYRIC_CAPTIONS_FALLBACK_MODEL` (used without search, default `grok-3`).
+default `grok-4.7`) and `LYRIC_CAPTIONS_FALLBACK_MODEL` (used without search, default `XAI_UTILITY_MODEL`).
 When a dependency is missing, `POST /api/lyric-captions` and the burn endpoint return
 `503 {"code":"lyric_captions_unavailable"}` naming what's missing, before any edit is charged.
 

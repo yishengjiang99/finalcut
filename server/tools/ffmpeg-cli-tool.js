@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { tools as builtinTools } from '../../src/tools.js';
 import { FFMPEG_CLI_TOOL_NAME, ffmpegCliToolDefinition, FFMPEG_FALLBACK_GUIDANCE, withFfmpegFallback } from '../../src/ffmpegFallback.js';
 import { TMP_DIR, XAI_API_TOKEN } from '../../src/server/config.js';
+import { XAI_UTILITY_MODEL, XAI_CHAT_COMPLETIONS_URL } from '../../src/server/xai.js';
 import { videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, upload } from '../../src/server/middleware.js';
 import { discovery as defaultDiscovery } from '../ffmpeg/ffmpeg-discovery.js';
 import { buildCommand, CommandValidationError } from '../ffmpeg/ffmpeg-commander.js';
@@ -61,12 +62,17 @@ export async function planCommand({ args = {}, inputPath = 'input.mp4', outputPa
  * Returns { ok, command } with command null when the model answers NONE (not an edit, or not doable).
  */
 export async function askForCliString({ request, attempts }, { fetchImpl = fetch } = {}) {
-  const response = await fetchImpl('https://api.x.ai/v1/chat/completions', {
+  const response = await fetchImpl(XAI_CHAT_COMPLETIONS_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(60_000),
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XAI_API_TOKEN}` },
-    body: JSON.stringify({ model: 'grok-3', messages: buildCliStringMessages(request, attempts), stream: false, temperature: 0 }),
+    body: JSON.stringify({ model: XAI_UTILITY_MODEL, messages: buildCliStringMessages(request, attempts), stream: false, temperature: 0 }),
   });
-  if (!response.ok) throw new Error(`xAI API request failed with status ${response.status}`);
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    const detail = errorBody.error?.message || (typeof errorBody.error === 'string' ? errorBody.error : '') || response.statusText;
+    throw new Error(`xAI API request failed with status ${response.status}${detail ? `: ${detail}` : ''}`);
+  }
   const data = await response.json();
   return { ok: true, command: extractCommand(data.choices?.[0]?.message?.content) };
 }

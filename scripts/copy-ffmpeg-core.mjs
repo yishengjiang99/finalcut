@@ -21,7 +21,11 @@ export const PINNED = {
   '@ffmpeg/util': '0.12.2',
   '@ffmpeg/core': '0.12.10',
   '@ffmpeg/core-mt': '0.12.10',
+  '@huggingface/transformers': '4.3.1',
 };
+
+// Installed by @huggingface/transformers (pinned in package.json).
+const ORT_VERSION = '1.31.0-dev.20260914-8d85527a0';
 
 const CORES = [
   { mode: 'mt', pkg: '@ffmpeg/core-mt', files: ['ffmpeg-core.js', 'ffmpeg-core.wasm', 'ffmpeg-core.worker.js'] },
@@ -57,6 +61,37 @@ for (const { mode, pkg, files } of CORES) {
     copyFileSync(from, path.join(dest, f));
     const buf = readFileSync(from);
     manifest.cores[mode].files[f] = { bytes: statSync(from).size, sha256: createHash('sha256').update(buf).digest('hex') };
+  }
+}
+// The @ffmpeg/ffmpeg class worker, served from the same isolated path as the cores. Loading it
+// from here (classWorkerURL) instead of the app bundle means the worker script always carries
+// the COOP/COEP/CORP headers, whatever the page's own asset location sends.
+{
+  const version = PINNED['@ffmpeg/ffmpeg'];
+  const src = path.join(ROOT, 'node_modules', '@ffmpeg/ffmpeg', 'dist', 'esm');
+  const dest = path.join(OUT, 'ffmpeg', version);
+  mkdirSync(dest, { recursive: true });
+  manifest.classWorker = { package: `@ffmpeg/ffmpeg@${version}`, base: `/v2/ffmpeg-core/ffmpeg/${version}/`, files: {} };
+  for (const f of ['worker.js', 'const.js', 'errors.js']) {
+    const from = path.join(src, f);
+    if (!existsSync(from)) fail(`missing @ffmpeg/ffmpeg@${version}/dist/esm/${f}`);
+    copyFileSync(from, path.join(dest, f));
+    manifest.classWorker.files[f] = { bytes: statSync(from).size, sha256: createHash('sha256').update(readFileSync(from)).digest('hex') };
+  }
+}
+// The ONNX runtime that on-device captions (transformers.js Whisper) run on. Self-hosted here for
+// the same reason as the class worker. The factory is copied as .js so it is served as JavaScript.
+{
+  const pkg = JSON.parse(readFileSync(path.join(ROOT, 'node_modules', 'onnxruntime-web', 'package.json'), 'utf8'));
+  if (pkg.version !== ORT_VERSION) fail(`onnxruntime-web: installed ${pkg.version}, expected ${ORT_VERSION} (update ORT_VERSION here and in src/whisper.js)`);
+  const src = path.join(ROOT, 'node_modules', 'onnxruntime-web', 'dist');
+  const dest = path.join(OUT, 'ort', ORT_VERSION);
+  mkdirSync(dest, { recursive: true });
+  manifest.ort = { package: `onnxruntime-web@${ORT_VERSION}`, base: `/v2/ffmpeg-core/ort/${ORT_VERSION}/`, files: {} };
+  for (const [from, to] of [['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.js'], ['ort-wasm-simd-threaded.asyncify.wasm', 'ort-wasm-simd-threaded.asyncify.wasm']]) {
+    if (!existsSync(path.join(src, from))) fail(`missing onnxruntime-web@${ORT_VERSION}/dist/${from}`);
+    copyFileSync(path.join(src, from), path.join(dest, to));
+    manifest.ort.files[to] = { bytes: statSync(path.join(src, from)).size, sha256: createHash('sha256').update(readFileSync(path.join(src, from))).digest('hex') };
   }
 }
 writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
