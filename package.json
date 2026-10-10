@@ -8,6 +8,8 @@
     "dev:client": "npx vite .",
     "dev:server": "nodemon server.js",
     "build": "NODE_ENV=production vite build",
+    "build:v2": "node scripts/copy-ffmpeg-core.mjs && vite build -c vite.v2.config.js",
+    "dev:v2": "node scripts/copy-ffmpeg-core.mjs && vite -c vite.v2.config.js",
     "preview": "vite preview",
     "test": "vitest --run",
     "server": "node server.js",
@@ -18,10 +20,16 @@
     "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js",
     "ios": "./scripts/run-ios-device.sh",
     "ios:simulator": "./scripts/run-ios-simulator.sh",
-    "schema:tools": "node scripts/generate-tools-schema.js"
+    "schema:tools": "node scripts/generate-tools-schema.js",
+    "test:e2e:v2": "playwright test -c tests/e2e/playwright.config.mjs",
+    "test:contract:ios": "node tests/contract/ios-endpoints.mjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
+    "@ffmpeg/core": "0.12.10",
+    "@ffmpeg/core-mt": "0.12.10",
+    "@ffmpeg/ffmpeg": "0.12.15",
+    "@ffmpeg/util": "0.12.2",
     "axios": "^1.13.5",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

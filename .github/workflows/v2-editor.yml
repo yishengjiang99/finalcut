@@ -1,0 +1,141 @@
+name: v2 editor (ffmpeg.wasm) + iOS contract
+
+# PR checks for the new /v2 in-browser editor. Does not deploy anything and does not touch
+# deploy-grepawk.yml or ci.yml. Runs only throwaway local servers / containers on the runner.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-editor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: e2e /v2 (mt + st, no-upload)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Unit tests (/v2 helpers)
+        run: npx vitest --run src/test/wasm-v2.test.js
+      - name: ffprobe for output verification
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build /v2 (copies self-hosted cores, verifies pinned versions)
+        run: npm run build:v2
+      - name: Playwright e2e (mt with COOP/COEP, st without)
+        run: npm run test:e2e:v2
+      - name: Timings
+        if: always()
+        run: |
+          for f in test-results/e2e-v2/timings-*.json; do echo "== $f"; cat "$f"; echo; done
+          {
+            echo '### /v2 e2e timings'
+            echo '| mode | cold load ms | trim (copy) ms | trim (x264) ms | warm load ms |'
+            echo '|---|---|---|---|---|'
+            for m in mt st; do
+              f="test-results/e2e-v2/timings-$m.json"; [ -f "$f" ] || continue
+              node -e "const t=require('./$f');console.log('| '+t.mode+' | '+t.coldLoadMs+' | '+t.coldTrimExecMs+' | '+t.preciseTrimExecMs+' | '+t.warmLoadMs+' |')"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-v2-results
+          path: test-results/e2e-v2/
+          retention-days: 7
+
+  ios-contract:
+    name: iOS endpoint contract (base vs PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      XAI_API_TOKEN: ci-dummy-not-a-real-key
+      SESSION_SECRET: ci-dummy-session-secret
+      MYSQL_DISABLED: 'true'
+      ALLOW_UNAUTH_SAMPLE_MODE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: head
+      - name: Checkout base (main or PR base)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'main' }}
+          path: base
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install base + head
+        run: |
+          (cd base && npm ci --no-audit --no-fund)
+          (cd head && npm ci --no-audit --no-fund)
+      - name: Start base server (:3101) and PR server (:3102)
+        run: |
+          (cd base && PORT=3101 nohup node server.js > ../base.log 2>&1 &)
+          (cd head && PORT=3102 nohup node server.js > ../head.log 2>&1 &)
+          for p in 3101 3102; do
+            for i in $(seq 1 30); do curl -fs "http://127.0.0.1:$p/api/health" >/dev/null && break; sleep 1; done
+          done
+      - name: Contract vs base server (record)
+        run: node head/tests/contract/ios-endpoints.mjs --base http://127.0.0.1:3101 --record before.json
+      - name: Contract vs PR server (compare, must be identical)
+        run: node head/tests/contract/ios-endpoints.mjs --base http://127.0.0.1:3102 --compare before.json
+      - name: Server logs
+        if: failure()
+        run: tail -100 base.log head.log
+
+  nginx-v2:
+    name: nginx /v2 snippet (nginx -t, headers, existing routes unchanged)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Build current editor + /v2
+        run: npm run build && npm run build:v2
+      - name: Render test configs (baseline without include, candidate with include)
+        run: |
+          mkdir -p /tmp/ngx
+          sed 's#__V2_INCLUDE__##' nginx/test/nginx.test.conf.tmpl > /tmp/ngx/baseline.conf
+          sed 's#__V2_INCLUDE__#include snippets/finalcut-v2.locations.conf;#' nginx/test/nginx.test.conf.tmpl > /tmp/ngx/v2.conf
+      - name: nginx -t (nginx 1.18, same major as production)
+        run: |
+          for c in baseline v2; do
+            docker run --rm -v /tmp/ngx/$c.conf:/etc/nginx/nginx.conf:ro \
+              -v "$PWD/nginx/finalcut-v2.locations.conf:/etc/nginx/snippets/finalcut-v2.locations.conf:ro" \
+              -v "$PWD/nginx/finalcut-v2-headers.conf:/etc/nginx/snippets/finalcut-v2-headers.conf:ro" \
+              -v "$PWD/dist:/srv/dist:ro" nginx:1.18.0 nginx -t
+          done
+      - name: Start baseline (:8081) and candidate (:8080)
+        run: |
+          docker run -d --name ngx-base -p 8081:8080 -v /tmp/ngx/baseline.conf:/etc/nginx/nginx.conf:ro -v "$PWD/dist:/srv/dist:ro" nginx:1.18.0
+          docker run -d --name ngx-v2 -p 8080:8080 -v /tmp/ngx/v2.conf:/etc/nginx/nginx.conf:ro \
+            -v "$PWD/nginx/finalcut-v2.locations.conf:/etc/nginx/snippets/finalcut-v2.locations.conf:ro" \
+            -v "$PWD/nginx/finalcut-v2-headers.conf:/etc/nginx/snippets/finalcut-v2-headers.conf:ro" \
+            -v "$PWD/dist:/srv/dist:ro" nginx:1.18.0
+          for p in 8080 8081; do for i in $(seq 1 20); do curl -fs "http://127.0.0.1:$p/" >/dev/null && break; sleep 1; done; done
+      - name: /v2 headers (COOP/COEP/CORP, application/wasm)
+        run: tests/e2e/check-v2-headers.sh http://127.0.0.1:8080
+      - name: Existing routes identical with and without the include
+        run: tests/e2e/compare-route-headers.sh http://127.0.0.1:8081 http://127.0.0.1:8080
+      - name: nginx logs
+        if: failure()
+        run: docker logs ngx-v2; docker logs ngx-base

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FinalCap open-source licenses</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
+    h1 { font-size: 1.5rem; } h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+    .meta { color: #555; font-size: 0.9rem; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    th, td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; vertical-align: top; }
+    code { font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>Open-source licenses</h1>
+  <p class="meta">Last updated: 2026-10-09 · Applies to the FinalCap web editor at grepawk.com/v2 (preview)</p>
+
+  <p>The FinalCap web editor at <a href="/v2/">/v2</a> edits your videos inside your browser using FFmpeg compiled to WebAssembly
+  (ffmpeg.wasm). The FFmpeg core we send to your browser is built with <code>--enable-gpl</code> and includes libx264 and libx265,
+  so that core is distributed under the <strong>GNU General Public License, version 2 or later</strong>. We serve these files
+  unmodified from the published npm packages listed below. You can get the complete corresponding source code from the links
+  in this table: each one points to the exact release tag or commit used for that build.</p>
+
+  <h2>FFmpeg in your browser</h2>
+  <table>
+    <tr><th>Component</th><th>Version we serve</th><th>License</th><th>Source</th></tr>
+    <tr><td>FFmpeg (libavcodec, libavformat, libavfilter, …)</td><td>n5.1.4 (inside the ffmpeg.wasm core)</td><td>LGPL-2.1-or-later; the combined build is GPL-2.0-or-later because of <code>--enable-gpl</code></td>
+      <td><a href="https://github.com/FFmpeg/FFmpeg/tree/n5.1.4">FFmpeg n5.1.4 tag</a> · <a href="https://ffmpeg.org/releases/ffmpeg-5.1.4.tar.xz">ffmpeg-5.1.4.tar.xz</a> · <a href="https://ffmpeg.org/legal.html">FFmpeg legal</a></td></tr>
+    <tr><td>ffmpeg.wasm core, single-thread (<code>@ffmpeg/core</code>)</td><td>0.12.10</td><td>GPL-2.0-or-later</td>
+      <td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10">ffmpeg.wasm v0.12.10 tag</a> (Dockerfile + build scripts) · <a href="https://www.npmjs.com/package/@ffmpeg/core/v/0.12.10">npm</a></td></tr>
+    <tr><td>ffmpeg.wasm core, multithreaded (<code>@ffmpeg/core-mt</code>)</td><td>0.12.10</td><td>GPL-2.0-or-later</td>
+      <td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10">ffmpeg.wasm v0.12.10 tag</a> · <a href="https://www.npmjs.com/package/@ffmpeg/core-mt/v/0.12.10">npm</a></td></tr>
+    <tr><td>ffmpeg.wasm JavaScript API (<code>@ffmpeg/ffmpeg</code>)</td><td>0.12.15</td><td>MIT</td>
+      <td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v12.15">ffmpeg.wasm v12.15 tag</a> · <a href="https://www.npmjs.com/package/@ffmpeg/ffmpeg/v/0.12.15">npm</a></td></tr>
+    <tr><td>ffmpeg.wasm utilities (<code>@ffmpeg/util</code>)</td><td>0.12.2</td><td>MIT</td>
+      <td><a href="https://www.npmjs.com/package/@ffmpeg/util/v/0.12.2">npm</a></td></tr>
+    <tr><td>x264 (H.264 encoder)</td><td>ffmpegwasm/x264 branch <code>4-cores</code>, commit <code>33cac6b7</code> (X264_BUILD 164)</td><td>GPL-2.0-or-later</td>
+      <td><a href="https://github.com/ffmpegwasm/x264/tree/33cac6b77d5b9259c552156013a817ab23119612">x264 source at 33cac6b7</a> · upstream <a href="https://www.videolan.org/developers/x264.html">VideoLAN x264</a></td></tr>
+  </table>
+
+  <h2>Other libraries compiled into the same core</h2>
+  <p>Versions are the ones pinned in the ffmpeg.wasm v0.12.10 <a href="https://github.com/ffmpegwasm/ffmpeg.wasm/blob/v0.12.10/Dockerfile">Dockerfile</a>.</p>
+  <table>
+    <tr><th>Library</th><th>Version / tag</th><th>License</th><th>Source</th></tr>
+    <tr><td>x265 (HEVC encoder)</td><td>3.4</td><td>GPL-2.0-or-later</td><td><a href="https://github.com/ffmpegwasm/x265/tree/3.4">ffmpegwasm/x265@3.4</a></td></tr>
+    <tr><td>libvpx (VP8/VP9)</td><td>v1.13.1</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/libvpx/tree/v1.13.1">ffmpegwasm/libvpx@v1.13.1</a></td></tr>
+    <tr><td>LAME (MP3)</td><td>master (as of the v0.12.10 build)</td><td>LGPL-2.0-or-later</td><td><a href="https://github.com/ffmpegwasm/lame">ffmpegwasm/lame</a></td></tr>
+    <tr><td>libogg</td><td>v1.3.4</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/Ogg/tree/v1.3.4">ffmpegwasm/Ogg@v1.3.4</a></td></tr>
+    <tr><td>libtheora</td><td>v1.1.1</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/theora/tree/v1.1.1">ffmpegwasm/theora@v1.1.1</a></td></tr>
+    <tr><td>libvorbis</td><td>v1.3.3</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/vorbis/tree/v1.3.3">ffmpegwasm/vorbis@v1.3.3</a></td></tr>
+    <tr><td>Opus</td><td>v1.3.1</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/opus/tree/v1.3.1">ffmpegwasm/opus@v1.3.1</a></td></tr>
+    <tr><td>zlib</td><td>v1.2.11</td><td>Zlib</td><td><a href="https://github.com/ffmpegwasm/zlib/tree/v1.2.11">ffmpegwasm/zlib@v1.2.11</a></td></tr>
+    <tr><td>libwebp</td><td>v1.3.2</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/libwebp/tree/v1.3.2">ffmpegwasm/libwebp@v1.3.2</a></td></tr>
+    <tr><td>FreeType</td><td>VER-2-10-4</td><td>FTL or GPL-2.0-or-later</td><td><a href="https://github.com/ffmpegwasm/freetype2/tree/VER-2-10-4">ffmpegwasm/freetype2@VER-2-10-4</a></td></tr>
+    <tr><td>GNU FriBidi</td><td>v1.0.9</td><td>LGPL-2.1-or-later</td><td><a href="https://github.com/fribidi/fribidi/tree/v1.0.9">fribidi@v1.0.9</a></td></tr>
+    <tr><td>HarfBuzz</td><td>5.2.0</td><td>MIT ("Old MIT")</td><td><a href="https://github.com/harfbuzz/harfbuzz/tree/5.2.0">harfbuzz@5.2.0</a></td></tr>
+    <tr><td>libass</td><td>0.15.0</td><td>ISC</td><td><a href="https://github.com/libass/libass/tree/0.15.0">libass@0.15.0</a></td></tr>
+    <tr><td>zimg</td><td>release-3.0.5</td><td>WTFPL</td><td><a href="https://github.com/sekrit-twc/zimg/tree/release-3.0.5">zimg@release-3.0.5</a></td></tr>
+  </table>
+
+  <h2>License texts</h2>
+  <ul>
+    <li><a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.html">GNU General Public License v2.0</a></li>
+    <li><a href="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html">GNU Lesser General Public License v2.1</a></li>
+    <li><a href="https://opensource.org/license/mit">MIT License</a></li>
+  </ul>
+
+  <h2>Written offer</h2>
+  <p>If you cannot get the source code from the links above, email <a href="mailto:yisheng.jiang@gmail.com">yisheng.jiang@gmail.com</a> (the contact on our <a href="/legal/support.html">support page</a>) and,
+  for at least three years after we last serve a given version, we will provide the complete corresponding source code
+  for the GPL components we distribute, for no more than the cost of physically performing the distribution.</p>
+  <p><a href="/v2/">Back to the editor</a> · <a href="/legal/privacy.html">Privacy</a></p>
+</body>
+</html>

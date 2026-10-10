@@ -19,3 +19,8 @@ REVISION
 
 # FFmpeg capability discovery cache
 server/ffmpeg/ffmpeg-cache.json
+
+# /v2 editor: ffmpeg.wasm cores are copied from node_modules by scripts/copy-ffmpeg-core.mjs
+v2/public/ffmpeg-core/
+test-results/
+playwright-report/
