@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       section:
-        description: 'app = service/app layout (default); nginx = nginx/firewall/port-80/mysql read-only report'
+        description: 'app = service/app layout (default); nginx = nginx/firewall/port-80/mysql read-only report; vhosts = photo/music vhost files + static roots'
         type: choice
-        options: [app, nginx]
+        options: [app, nginx, vhosts]
         default: app
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
           if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true; fi
           chmod 600 ~/.ssh/known_hosts
       - name: Inspect (read-only)
-        if: ${{ github.event.inputs.section != 'nginx' }}
+        if: ${{ github.event.inputs.section == 'app' || github.event.inputs.section == '' }}
         run: |
           set -uo pipefail
           git ls-tree --name-only HEAD > /tmp/tracked.txt
@@ -105,3 +105,20 @@ jobs:
           REMOTE
           { printf "APP_DIR='%s'\n" "$APP_DIR"; cat /tmp/nginx-remote.sh; } > /tmp/nfull.sh
           ssh -o BatchMode=yes "$TARGET" 'bash -s' < /tmp/nfull.sh || true
+      - name: "Inspect photo/music vhosts + static roots (read-only)"
+        if: ${{ github.event.inputs.section == 'vhosts' }}
+        run: |
+          set -uo pipefail
+          cat > /tmp/vh.sh <<'REMOTE'
+          set -u
+          for f in /etc/nginx/sites-enabled/music.grepawk.com /etc/nginx/sites-enabled/photo-recipes; do
+            echo "== FULL $f -> $(readlink -f "$f")"; cat -n "$(readlink -f "$f")"
+          done
+          echo "== ls /var/www/music-radar"; ls -la /var/www/music-radar /var/www/music-radar/screenshots 2>&1 | head -60
+          echo "== ls /var/www (dirs)"; ls -la /var/www 2>&1 | head -40
+          echo "== services listening 87xx/88xx"; ss -ltnp 2>/dev/null | grep -E ':(87|88)[0-9]{2}\s' || true
+          echo "== systemd units music*/photo*"; systemctl list-units --type=service --no-pager 2>/dev/null | grep -iE 'music|photo|radar|reader' || true
+          for u in music-radar-api photo-recipes; do echo "-- $u"; systemctl cat "$u" 2>/dev/null | grep -E '^(WorkingDirectory|ExecStart|EnvironmentFile)=' ; done
+          echo "== /etc/letsencrypt/renewal"; ls /etc/letsencrypt/renewal 2>&1
+          REMOTE
+          ssh -o BatchMode=yes "$TARGET" 'bash -s' < /tmp/vh.sh || true
