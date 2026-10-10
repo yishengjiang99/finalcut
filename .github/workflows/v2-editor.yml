@@ -146,6 +146,10 @@ jobs:
         run: tests/e2e/check-v2-headers.sh http://127.0.0.1:8080
       - name: Existing routes identical with and without the include
         run: tests/e2e/compare-route-headers.sh http://127.0.0.1:8081 http://127.0.0.1:8080
+      - name: Production installer against real nginx 1.18 (install, idempotent, forced failure restores)
+        run: tests/nginx/installer-docker.sh 8082
+      - name: Installer unit harness (stubbed nginx)
+        run: bash tests/nginx/finalcut-v2-nginx.test.sh
       - name: nginx logs
         if: failure()
         run: docker logs ngx-v2; docker logs ngx-base

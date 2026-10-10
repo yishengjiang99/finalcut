@@ -61,3 +61,33 @@ Decided by the Chief of Staff, 2026-10-09. Amends D4.
   - SDL2 2.24.2 (Emscripten port, `-sUSE_SDL=2`);
   - Emscripten 3.1.40 (toolchain and the system libraries linked into the wasm).
 - Correction to the first spike commit: `@ffmpeg/core` 0.12.10 was released from commit `71aa99d3` (tag `v12.15`, 2025-01-07). The git tag `v0.12.10` is an older release of `@ffmpeg/ffmpeg` that shipped core 0.12.6. The licenses page now links the right commit.
+
+## 2026-10-09: guarded production deploy of /v2 (approved by Yisheng)
+
+PR #99 merged; from now on changes go straight to `main` (no PRs). Implements D6 and the iOS hard constraint.
+
+### D9. Deploy = gate → build on runner → read-only preflight → ship → scoped nginx → gate → rollback
+- `.github/workflows/deploy-grepawk.yml` (push to main), using the existing SSH key, host, user and dir variables. No new hosts or credentials.
+- **Gate before**: the iOS contract test (`tests/contract/ios-endpoints.mjs`) runs against production and is recorded as the baseline, together with a header snapshot of the existing routes. A failing gate stops the job before anything changes.
+- **Build on the runner**: `npm run build` then `npm run build:v2`. The server no longer builds. `dist/` is uploaded to `dist.new` and swapped in, and the old one is kept as `dist.prev`.
+- **Preflight (read-only, over SSH)**: `nginx -t` passes on the current config, sudo/root works, and exactly one nginx file contains `root $DEPLOY_DIR/dist;` exactly once. Otherwise the job stops with nothing changed.
+- **nginx**: `scripts/nginx/finalcut-v2-nginx.sh install`:
+  - backs up to `/var/backups/finalcut-nginx/<ts>`;
+  - installs the two snippets in `/etc/nginx/snippets/`;
+  - adds a single marked `include` right after that `root` line (this site's server block only);
+  - runs `nginx -t`, then reloads;
+  - restores the backup and reloads on any failure.
+
+  It is idempotent. It is tested in CI with stubs and inside real `nginx:1.18.0`, including a forced failure.
+- **Gate after**:
+  - health and commit;
+  - the iOS contract with **no drift** vs the baseline (only a manual `allow_contract_drift` dispatch can relax this);
+  - `/v2` COOP/COEP/CORP and `application/wasm`;
+  - existing routes' headers identical to the snapshot;
+  - licenses and Corresponding Source reachable, with SHA256SUMS identical to the build.
+- **Rollback** on any failure after shipping:
+  - nginx is restored from this run's backup only (keyed by run id);
+  - `dist` is swapped back only if this run swapped it;
+  - then the contract and header checks are re-run.
+
+  Server code and node_modules are not rolled back automatically.

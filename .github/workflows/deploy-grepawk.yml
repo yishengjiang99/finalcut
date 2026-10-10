@@ -3,6 +3,21 @@
 # Triggers on every push to main: changes to main auto-update the backend
 # server on grepawk.com. Can also be run manually (Actions → Run workflow).
 #
+# Guarded deploy (docs/DECISIONS.md D6/D9):
+#   1. GATE (before touching prod): iOS endpoint contract test against prod (21 checks, recorded as
+#      the baseline) + a header snapshot of existing routes. Any failure aborts here.
+#   2. Build on the runner: npm run build && npm run build:v2 (pinned cores + verified GPL source).
+#   3. Installer tests: stubbed harness + the real installer inside nginx:1.18.0 (docker).
+#   4. PREFLIGHT over SSH, read-only: nginx -t passes, sudo works, exactly one nginx file holds
+#      `root $DEPLOY_DIR/dist;`. If prod can't be managed this way the job stops here, unchanged.
+#   5. Ship: dist -> $DEPLOY_DIR/dist.new; code rsync; npm ci; dist.new -> dist (old kept as
+#      dist.prev); restart finalcut.
+#   6. nginx: scripts/nginx/finalcut-v2-nginx.sh install (backup -> snippets -> one include in this
+#      site's server block -> nginx -t -> reload; restores the backup on any failure).
+#   7. GATE (after): health + commit, contract test vs the step-1 baseline (no drift), /v2 headers,
+#      existing routes' headers identical to the step-1 snapshot, licenses + source reachable.
+#   8. Any failure after step 5 started: nginx rollback (only this run's backup) + dist.prev -> dist.
+#
 # Required repository secret:
 #   DEPLOY_SSH_KEY          — private SSH key that can SSH as DEPLOY_USER@DEPLOY_HOST
 #                             (same key as photo-recipes' DEPLOY_SSH_KEY works)
@@ -26,6 +41,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      allow_contract_drift:
+        description: 'Allow iOS contract drift after deploy (only for an intentional, reviewed API change)'
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-grepawk
@@ -34,12 +54,63 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     permissions:
       contents: read
+    env:
+      BASE: https://${{ vars.SERVER_NAME }}
+      APP_DIR: ${{ vars.DEPLOY_DIR }}
+      TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+      DEPLOY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Check deploy variables
+        run: |
+          set -euo pipefail
+          : "${APP_DIR:?DEPLOY_DIR variable required}"
+          [[ -n "${{ vars.SERVER_NAME }}" && -n "${{ vars.DEPLOY_HOST }}" && -n "${{ vars.DEPLOY_USER }}" ]] || { echo "SERVER_NAME/DEPLOY_HOST/DEPLOY_USER variables required" >&2; exit 1; }
+
+      - name: "GATE (pre-deploy): iOS contract test against production"
+        run: |
+          set -euo pipefail
+          mkdir -p deploy-gate
+          node tests/contract/ios-endpoints.mjs --base "$BASE" --record deploy-gate/contract-before.json
+          tests/e2e/compare-route-headers.sh --dump "$BASE" > deploy-gate/route-headers-before.txt
+          echo "baseline recorded; production is healthy for the iOS app"
+
+      - run: npm ci
+
+      - name: Cache GPL source archives (keyed on pinned checksums)
+        uses: actions/cache@v4
+        with:
+          path: .cache/ffmpeg-source
+          key: ffmpeg-source-${{ hashFiles('vendor/ffmpeg-source.lock.json') }}
+
+      - name: Build (npm run build, then npm run build:v2)
+        run: |
+          set -euo pipefail
+          npm run build
+          npm run build:v2
+          npm run source:verify
+          for f in dist/index.html dist/legal/licenses.html dist/v2/index.html \
+                   dist/v2/ffmpeg-core/mt/0.12.10/ffmpeg-core.wasm dist/v2/ffmpeg-core/st/0.12.10/ffmpeg-core.wasm \
+                   dist/v2/vendor/ffmpeg/source/SHA256SUMS dist/v2/vendor/ffmpeg/source/index.html; do
+            test -s "$f" || { echo "missing build output: $f" >&2; exit 1; }
+          done
+          (cd dist/v2/vendor/ffmpeg/source && sha256sum -c --quiet SHA256SUMS)
+          du -sh dist dist/v2
+
+      - name: Installer tests (stubbed harness + real nginx 1.18 in docker)
+        run: |
+          bash tests/nginx/finalcut-v2-nginx.test.sh
+          tests/nginx/installer-docker.sh 8082
 
       - name: Configure SSH
         env:
@@ -66,50 +137,98 @@ jobs:
             ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           fi
           chmod 600 ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            "${{ vars.DEPLOY_USER }}@${DEPLOY_HOST}" 'echo ssh-ok'
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TARGET" 'echo ssh-ok'
 
-      - name: Deploy via scripts/deploy-grepawk.sh
+      - name: "PREFLIGHT (read-only): can this deploy manage nginx for this site?"
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes "$TARGET" "bash -s -- preflight '$APP_DIR'" < scripts/nginx/finalcut-v2-nginx.sh
+          ssh -o BatchMode=yes "$TARGET" "set -e; cd '$APP_DIR'; df -Pk . | awk 'NR==2{print \"free KiB:\", \$4; if (\$4 < 1048576) {print \"less than 1 GiB free\" > \"/dev/stderr\"; exit 1}}'"
+          echo "--- files in prod dist that the new build would remove (informational):"
+          { rsync -rn --delete --itemize-changes --exclude /v2/ dist/ "$TARGET:$APP_DIR/dist/" || true; } | grep '^\*deleting' || echo "(none)"
+
+      - name: Ship dist (dist.new) + code, npm ci, swap dist, restart
+        id: ship
         env:
           FINALCUT_DEPLOY_HOST: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
           FINALCUT_DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          FINALCUT_PREBUILT_DIST: '1'
+          FINALCUT_DEPLOY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          : "${FINALCUT_DEPLOY_HOST:?DEPLOY_HOST/DEPLOY_USER variables required}"
-          : "${FINALCUT_DEPLOY_DIR:?DEPLOY_DIR variable required}"
+          echo "SHIPPED=1" >> "$GITHUB_ENV"
+          rsync -a --delete --no-owner --no-group --chmod=D755,F644 dist/ "$TARGET:$APP_DIR/dist.new/"
           chmod +x scripts/deploy-grepawk.sh
-          # rsyncs the checkout (writes a REVISION file with the short HEAD),
-          # rebuilds on the server, then restarts the finalcut systemd service.
           scripts/deploy-grepawk.sh
 
-      - name: Post-deploy smoke
-        env:
-          SERVER_NAME: ${{ vars.SERVER_NAME }}
+      - name: Install /v2 nginx snippet (backup, nginx -t, reload; restores on failure)
         run: |
           set -euo pipefail
-          BASE="https://${SERVER_NAME}"
-          echo "==> homepage"
-          curl -fsS -o /dev/null -m 20 "${BASE}/"
+          echo "NGINX_TOUCHED=1" >> "$GITHUB_ENV"
+          ssh -o BatchMode=yes "$TARGET" "FINALCUT_DEPLOY_ID='$DEPLOY_ID' bash '$APP_DIR/scripts/nginx/finalcut-v2-nginx.sh' install '$APP_DIR'"
+
+      - name: "GATE (post-deploy): health, iOS contract (no drift), /v2 headers, existing routes"
+        env:
+          ALLOW_DRIFT: ${{ github.event.inputs.allow_contract_drift || 'false' }}
+        run: |
+          set -euo pipefail
           echo "==> /api/health (poll until the restarted backend is ready)"
           HEALTH=""
           for i in $(seq 1 30); do
-            if HEALTH="$(curl -fsS -m 10 "${BASE}/api/health" 2>/dev/null)"; then
-              echo "backend ready after ~$((i * 10))s"
-              break
-            fi
+            if HEALTH="$(curl -fsS -m 10 "${BASE}/api/health" 2>/dev/null)"; then echo "backend ready after ~$((i * 10))s"; break; fi
             sleep 10
           done
-          if [[ -z "${HEALTH}" ]]; then
-            echo "/api/health never became ready within 5 minutes" >&2
-            exit 1
-          fi
-          echo "$HEALTH"
+          [[ -n "${HEALTH}" ]] || { echo "/api/health never became ready within 5 minutes" >&2; exit 1; }
           echo "$HEALTH" | grep -q '"ok":true'
           EXPECTED="$(git rev-parse --short HEAD)"
           COMMIT="$(echo "$HEALTH" | grep -o '"commit":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
           echo "deployed commit: ${COMMIT:-'(none)'} (expected ${EXPECTED})"
-          if [[ -n "${COMMIT:-}" && "$COMMIT" != "$EXPECTED"* && "$EXPECTED" != "$COMMIT"* ]]; then
-            echo "commit mismatch: server is not running this push" >&2
-            exit 1
+          if [[ -n "${COMMIT:-}" && "$COMMIT" != "$EXPECTED"* && "$EXPECTED" != "$COMMIT"* ]]; then echo "commit mismatch" >&2; exit 1; fi
+          echo "==> iOS contract vs pre-deploy baseline"
+          if [[ "$ALLOW_DRIFT" == "true" ]]; then
+            node tests/contract/ios-endpoints.mjs --base "$BASE"
+          else
+            node tests/contract/ios-endpoints.mjs --base "$BASE" --compare deploy-gate/contract-before.json
           fi
+          echo "==> /v2 headers"
+          tests/e2e/check-v2-headers.sh "$BASE"
+          echo "==> existing routes: headers vs pre-deploy snapshot"
+          tests/e2e/compare-route-headers.sh deploy-gate/route-headers-before.txt "$BASE"
+          echo "==> licenses + Corresponding Source"
+          for p in /legal/licenses.html /v2/vendor/ffmpeg/source/ /v2/vendor/ffmpeg/source/SHA256SUMS /v2/vendor/ffmpeg/source/versions.json; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$BASE$p")"; echo "$code $p"; [[ "$code" == 200 ]]
+          done
+          curl -fsS "$BASE/v2/vendor/ffmpeg/source/SHA256SUMS" | diff - dist/v2/vendor/ffmpeg/source/SHA256SUMS
           echo "deploy OK"
+
+      - name: ROLLBACK (nginx backup from this run + previous dist)
+        if: failure() && env.SHIPPED == '1'
+        run: |
+          set -uo pipefail
+          rc=0
+          if [[ "${NGINX_TOUCHED:-}" == "1" ]]; then
+            ssh -o BatchMode=yes "$TARGET" "bash '$APP_DIR/scripts/nginx/finalcut-v2-nginx.sh' rollback '$DEPLOY_ID'" || rc=1
+          fi
+          # dist: swap back only if THIS run swapped (marker written by deploy-grepawk.sh right after the swap)
+          ssh -o BatchMode=yes "$TARGET" "set -e; cd '$APP_DIR'
+            if [ \"\$(cat .dist-swapped-by 2>/dev/null)\" = '$DEPLOY_ID' ] && [ -d dist.prev ]; then
+              rm -rf dist.failed; mv dist dist.failed; mv dist.prev dist; rm -f .dist-swapped-by; echo 'dist rolled back to dist.prev'
+            elif [ ! -d dist ] && [ -d dist.prev ]; then
+              mv dist.prev dist; echo 'dist restored from dist.prev (swap was interrupted)'
+            else
+              echo 'dist was not swapped by this run; unchanged'
+            fi
+            rm -rf dist.new" || rc=1
+          sleep 3
+          node tests/contract/ios-endpoints.mjs --base "$BASE" --compare deploy-gate/contract-before.json || rc=1
+          tests/e2e/compare-route-headers.sh deploy-gate/route-headers-before.txt "$BASE" || rc=1
+          echo "NOTE: server code (rsynced) and node_modules are not rolled back; re-run this workflow on the previous commit if needed."
+          exit $rc
+
+      - name: Upload gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-gate-${{ github.run_id }}
+          path: deploy-gate/
+          if-no-files-found: ignore
