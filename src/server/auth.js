@@ -25,6 +25,7 @@ import {
   IOS_DEVICE_SESSION_TTL_MS,
   APPLE_IAP_PRODUCT_ID,
   IOS_FREE_DAILY_INFERENCE_LIMIT,
+  APP_BASE_URL,
 } from './config.js';
 import { getDailyInferenceUsage } from '../db.js';
 import { hasUnlimitedFreeEdits } from './clientInfo.js';
@@ -34,6 +35,7 @@ import {
   issueSampleAccessToken,
   attachBearerUser,
   extractBearerToken,
+  getBaseUrlFromRequest,
 } from './middleware.js';
 
 /**
@@ -384,18 +386,25 @@ router.get('/api/sample-access-token', apiLimiter, (req, res) => {
   res.json({ token, expiresInMs: SAMPLE_TOKEN_TTL_MS });
 });
 
+// Post-login landing URL. Relative by default; with APP_BASE_URL set (e.g. the Vite dev
+// origin, since Google calls back on the API port) it sends the browser back to the app.
+function appUrl(path = '/') {
+  const base = (APP_BASE_URL || '').replace(/\/+$/, '');
+  return `${base}${path}`;
+}
+
 router.get('/auth/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
 router.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
+  passport.authenticate('google', { failureRedirect: appUrl('/') }),
   async (req, res) => {
     try {
       // Validate user object
       if (!req.user || !req.user.email) {
         console.error('Invalid user object after authentication:', req.user);
-        return res.redirect('/?error=invalid_user');
+        return res.redirect(appUrl('/?error=invalid_user'));
       }
 
       console.log(`Google auth callback for user: ${req.user.email}`);
@@ -404,7 +413,7 @@ router.get('/auth/google/callback',
       // Check if Stripe is available
       if (!stripe) {
         console.error('Stripe not configured - subscription signup not available');
-        return res.redirect('/?error=payment_not_configured');
+        return res.redirect(appUrl('/?error=payment_not_configured'));
       }
 
       // Check if user has subscription
@@ -422,8 +431,8 @@ router.get('/auth/google/callback',
             },
           ],
           mode: 'subscription',
-          success_url: `${req.protocol}://${req.get('host')}/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${req.protocol}://${req.get('host')}/`,
+          success_url: `${getBaseUrlFromRequest(req)}/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${getBaseUrlFromRequest(req)}/`,
         });
 
         console.log('Stripe session created, redirecting to:', session.url);
@@ -432,13 +441,13 @@ router.get('/auth/google/callback',
 
       // User has subscription, redirect to app
       console.log('User has subscription, redirecting to app');
-      res.redirect('/');
+      res.redirect(appUrl('/'));
     } catch (error) {
       console.error('Error in auth callback:', error);
       console.error('Error name:', error.name);
       console.error('Error message:', error.message);
       console.error('Error stack:', error.stack);
-      res.redirect('/?error=auth_failed');
+      res.redirect(appUrl('/?error=auth_failed'));
     }
   }
 );
@@ -448,7 +457,7 @@ router.get('/auth/logout', (req, res) => {
     if (err) {
       console.error('Logout error:', err);
     }
-    res.redirect('/');
+    res.redirect(appUrl('/'));
   });
 });
 

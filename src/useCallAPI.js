@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { tools } from './tools.js';
 import { noteDerivedVideo } from './captionLineage.js';
 import { toolFunctions } from './toolFunctions.js';
+import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
 
 export function assertToolCallApplied(result, functionName) {
   if (typeof result !== 'string' || !result.trim() || /^Failed\b/i.test(result.trim())) {
@@ -18,6 +19,63 @@ export function filterMessagesForInference(messages) {
   return latestUserMessage
     ? [{ role: 'user', content: latestUserMessage.content }]
     : [];
+}
+
+// Without media there is nothing for the editing tools to act on, so send a
+// plain chat request and tell the model why no tools are offered.
+export const NO_MEDIA_NOTE = 'No video, photo, or audio file is attached yet. Chat normally and answer questions. If the user asks for an edit, ask them to upload a file first; never claim an edit was applied.';
+
+// The latest request plus the tool calls and results that followed it, so the
+// model can continue a multi-step tool exchange (ffmpeg_cli discover → plan → run).
+export function messagesForCurrentTurn(messages) {
+  const [latestUserMessage] = filterMessagesForInference(messages);
+  if (!latestUserMessage) return [];
+
+  const start = messages.findLastIndex(message =>
+    message?.role === 'user' && !message?.excludeFromAPI && !message?.apiContent);
+  const followUps = messages.slice(start + 1)
+    .filter(message => !message?.excludeFromAPI)
+    .flatMap(message => {
+      if (message?.role === 'tool') {
+        return [{ role: 'tool', tool_call_id: message.tool_call_id, name: message.name, content: message.content }];
+      }
+      if (message?.role === 'assistant' && message.tool_calls?.length) {
+        return [{ role: 'assistant', content: message.content ?? null, tool_calls: message.tool_calls }];
+      }
+      return [];
+    });
+  return [latestUserMessage, ...followUps];
+}
+
+// ffmpeg_cli discover/plan only gather information: the model has to see the
+// result to take the next step, so those rounds are sent back for a follow-up.
+export const MAX_TOOL_FOLLOW_UPS = 6;
+
+export function needsFollowUp(toolCalls) {
+  return toolCalls.some(call => {
+    if (call?.function?.name !== FFMPEG_CLI_TOOL_NAME) return false;
+    try {
+      return JSON.parse(call.function.arguments || '{}').action !== 'run';
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function buildChatRequestBody(messages, hasMedia) {
+  const inferenceMessages = messagesForCurrentTurn(messages);
+  if (!hasMedia) {
+    return {
+      model: 'grok-beta',
+      messages: [{ role: 'system', content: NO_MEDIA_NOTE }, ...inferenceMessages]
+    };
+  }
+  return {
+    model: 'grok-beta',
+    messages: inferenceMessages,
+    tools: tools,
+    tool_choice: 'auto'
+  };
 }
 
 async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
@@ -53,7 +111,9 @@ export function useCallAPI({
   addMessage,
   uploadedVideos,
 }) {
-  const callAPI = useCallback(async (currentMessages, options = {}) => {
+  const callAPI = useCallback(async function runTurn(currentMessages, options = {}) {
+    const followUpRound = options.followUpRound || 0;
+    const currentVideoFileData = options.videoFileData ?? videoFileData;
     const forcedSampleToken = options.sampleAccessToken || null;
     const shouldUseSampleAuth = Boolean(forcedSampleToken || (isSampleMode && sampleAccessToken));
     const authHeaders = shouldUseSampleAuth
@@ -68,12 +128,7 @@ export function useCallAPI({
           'Content-Type': 'application/json',
           ...authHeaders
         },
-        body: JSON.stringify({
-          model: 'grok-beta',
-          messages: filterMessagesForInference(currentMessages),
-          tools: tools,
-          tool_choice: 'auto'
-        })
+        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData)))
       });
 
       if (!response.ok) {
@@ -196,11 +251,11 @@ export function useCallAPI({
         // Server-side processing - show spinner during ffmpeg processing
         setProcessing(true);
 
+        let workingVideoFileData = currentVideoFileData;
         try {
           // React state updates are asynchronous. Keep a local working value so
           // each tool receives the bytes produced by the previous tool in this
           // same response (for example: volume, then brightness).
-          let workingVideoFileData = videoFileData;
           const updateWorkingVideoFileData = data => {
             noteDerivedVideo(workingVideoFileData, data);
             workingVideoFileData = data;
@@ -244,6 +299,13 @@ export function useCallAPI({
         } finally {
           // Hide spinner as soon as all tool calls in this response are done.
           setProcessing(false);
+        }
+
+        if (needsFollowUp(toolCallsArray)) {
+          if (followUpRound >= MAX_TOOL_FOLLOW_UPS) {
+            throw new Error('The FFmpeg fallback did not finish within the allowed number of steps');
+          }
+          await runTurn(currentMessages, { ...options, followUpRound: followUpRound + 1, videoFileData: workingVideoFileData });
         }
       }
     } catch (error) {

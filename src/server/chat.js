@@ -32,6 +32,12 @@ import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, ffmpegCliToolDe
 
 const router = express.Router();
 
+// Verbose request/response tracing for local debugging (DEBUG_CHAT=1 npm run dev).
+const DEBUG_CHAT = process.env.DEBUG_CHAT === '1';
+function debugChat(...args) {
+  if (DEBUG_CHAT) console.log('[chat]', ...args);
+}
+
 // ─── Streaming filter helpers (exported for unit tests) ──────────────────────
 
 /**
@@ -489,6 +495,13 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       : true;
     const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode });
 
+    debugChat('request', JSON.stringify({
+      userId,
+      user: latestUserText,
+      roles: req.body.messages.map(m => m?.role),
+      tools: Array.isArray(req.body.tools) ? req.body.tools.length : 0,
+    }));
+
     // Enable streaming for xAI API
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -539,6 +552,8 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const filter = createStreamFilter();
     let doneFlushed = false;
     let lastParsed = null; // keep reference for flush emit
+    const debugToolCalls = {}; // index → { name, arguments }, only filled when DEBUG_CHAT
+    let debugFinishReason = null;
 
     // Emit a synthetic SSE data line with the given content, reusing parsed event structure
     function emitContent(parsed, content) {
@@ -604,12 +619,25 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
               emitContent(parsed, toForward);
             }
           } else {
+            if (DEBUG_CHAT) {
+              for (const call of delta?.tool_calls || []) {
+                const entry = debugToolCalls[call.index] ||= { name: '', arguments: '' };
+                if (call.function?.name) entry.name = call.function.name;
+                if (call.function?.arguments) entry.arguments += call.function.arguments;
+              }
+              debugFinishReason = parsed.choices?.[0]?.finish_reason || debugFinishReason;
+            }
             // Non-content delta (role, tool_calls, finish_reason, etc.) – forward as-is
             res.write(`${line}\n\n`);
           }
         }
       }
       res.end();
+      debugChat('response', JSON.stringify({
+        finishReason: debugFinishReason,
+        toolCalls: Object.values(debugToolCalls),
+        text: assistantText,
+      }));
     } catch (streamError) {
       console.error('Error streaming response:', streamError);
       enqueueChatError({

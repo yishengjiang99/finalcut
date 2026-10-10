@@ -5,12 +5,12 @@ import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 
 // Sample button style constant
-const sampleButtonStyle = { 
-  padding: '8px 12px', 
+const sampleButtonStyle = {
+  padding: '8px 12px',
   backgroundColor: '#2a2f3a',
   color: '#d8dee9',
   border: '1px solid #3a4250',
-  borderRadius: '6px', 
+  borderRadius: '6px',
   cursor: 'pointer',
   fontSize: '14px',
   textAlign: 'left',
@@ -28,6 +28,9 @@ const sampleCommands = [
   { icon: '🔊', text: 'Adjust audio volume to 150%' },
   { icon: '📱', text: 'Convert this video to 9:16 aspect ratio for Instagram' }
 ];
+
+// Tool results and tool-call-only assistant turns are for the model, not the chat window.
+export const isVisibleMessage = (msg) => msg?.role !== 'tool' && Boolean(msg?.content || msg?.videoUrl);
 
 // Welcome message with sample links
 const welcomeMessage = {
@@ -58,7 +61,7 @@ export default function App() {
   const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
-  
+
   const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: -1 }, welcomeMessage]);
   const [chatInput, setChatInput] = useState('');
   const [videoFileData, setVideoFileData] = useState(null);
@@ -99,7 +102,7 @@ export default function App() {
       }
     }
 
-    const response = await fetch('https://grepawk.com/api/sample-access-token');
+    const response = await fetch('/api/sample-access-token');
     if (!response.ok) {
       throw new Error('Failed to initialize sample access token');
     }
@@ -126,7 +129,7 @@ export default function App() {
         // Check for error parameters in URL
         const urlParams = new URLSearchParams(window.location.search);
         const errorParam = urlParams.get('error');
-        
+
         if (errorParam) {
           const errorMessages = {
             'payment_not_configured': 'Subscription service is not configured. Please contact support.',
@@ -134,14 +137,14 @@ export default function App() {
             'auth_failed': 'Authentication failed. Please try again.',
             'invalid_user': 'User authentication failed. Please try again.'
           };
-          
+
           setAuthError(errorMessages[errorParam] || 'An error occurred. Please try again.');
-          
+
           // Clean up the URL
           window.history.replaceState({}, '', '/');
           return;
         }
-        
+
         const response = await fetch('/api/auth/status', {
           headers: getSampleAuthHeaders()
         });
@@ -169,7 +172,7 @@ export default function App() {
     const verifyPayment = async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const sessionId = urlParams.get('session_id');
-      
+
       if (sessionId && window.location.pathname === '/success') {
         try {
           // Verify the session with the backend
@@ -239,18 +242,18 @@ export default function App() {
       let hasError = false;
 
       // Show uploading status
-      const uploadingMessage = { 
-        role: 'user', 
-        content: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`, 
+      const uploadingMessage = {
+        role: 'user',
+        content: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`,
         excludeFromAPI: true,
-        id: messageIdCounterRef.current++ 
+        id: messageIdCounterRef.current++
       };
       setMessages(prev => [...prev, uploadingMessage]);
 
       // Process all files
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
+
         // Determine if it's audio or video
         const isAudio = file.type.startsWith('audio/');
         const isVideo = file.type.startsWith('video/');
@@ -304,11 +307,11 @@ export default function App() {
         id: messageIdCounterRef.current++
       }));
 
-      const summaryMessage = { 
-        role: 'user', 
-        content: `${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}.`, 
+      const summaryMessage = {
+        role: 'user',
+        content: `${newVideos.length} file${newVideos.length > 1 ? 's' : ''} uploaded and ready for editing${newVideos.length > 1 ? ' or transitions' : ''}.`,
         excludeFromAPI: true,
-        id: messageIdCounterRef.current++ 
+        id: messageIdCounterRef.current++
       };
 
       // Update UI state with uploaded messages
@@ -324,10 +327,7 @@ export default function App() {
   const handleSend = async (textOverride = null) => {
     const hasStringOverride = typeof textOverride === 'string';
     const text = (hasStringOverride ? textOverride : chatInput).trim();
-    if (!text || !videoFileData) {
-      if (!videoFileData) alert('Please upload a video or audio file first.');
-      return;
-    }
+    if (!text) return;
     if (!hasStringOverride) setChatInput('');
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     const newMessages = [...messages, newMessage];
@@ -350,7 +350,7 @@ export default function App() {
     setShowLanding(false);
     // Sample video path - using BigBuckBunny.mp4 as specified
     const sampleVideoUrl = '/BigBuckBunny.mp4';
-    
+
     try {
       await getSampleAccessToken();
 
@@ -361,24 +361,24 @@ export default function App() {
         addMessage({ text: 'Sample video not available. Please upload your own video.' });
         return;
       }
-      
+
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
       const data = new Uint8Array(arrayBuffer);
       setVideoFileData(data);
       const url = URL.createObjectURL(blob);
       setIsSampleMode(true);
-      
+
       setFileType('video');
       setFileMimeType('video/mp4');
       setCurrentFileMimeType('video/mp4');
-      
+
       // Show selected video
       const uploadedMessage = { role: 'user', content: 'Selected sample video:', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', id: messageIdCounterRef.current++ };
       const userMessage = { role: 'user', content: 'Sample video loaded and ready for editing.', excludeFromAPI: true, id: messageIdCounterRef.current++ };
-      
+
       setMessages(prev => [...prev, uploadedMessage, userMessage]);
-      
+
     } catch (error) {
       addMessage({ text: 'Error loading sample video. Please upload your own video.' });
     }
@@ -421,13 +421,13 @@ export default function App() {
             <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center', color: '#8b949e' }}>
               AI Video Editor — chat to edit, caption, and export
             </p>
-            
+
             {authError && (
-              <div style={{ 
-                padding: '15px', 
-                marginBottom: '20px', 
-                backgroundColor: '#3c1e1e', 
-                border: '1px solid #f85149', 
+              <div style={{
+                padding: '15px',
+                marginBottom: '20px',
+                backgroundColor: '#3c1e1e',
+                border: '1px solid #f85149',
                 borderRadius: '6px',
                 color: '#f85149',
                 textAlign: 'center'
@@ -471,13 +471,13 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', marginTop: '15px' }}>
-              <button 
+              <button
                 onClick={handleGetStarted}
                 style={primaryButtonStyle}
               >
                 Get Started
               </button>
-              <button 
+              <button
                 onClick={loadSampleVideo}
                 style={secondaryButtonStyle}
               >
@@ -486,10 +486,10 @@ export default function App() {
             </div>
           </div>
         </div>
-        <footer style={{ 
-          padding: '20px', 
-          textAlign: 'center', 
-          borderTop: '1px solid #30363d', 
+        <footer style={{
+          padding: '20px',
+          textAlign: 'center',
+          borderTop: '1px solid #30363d',
           backgroundColor: '#161b22',
           color: '#8b949e',
           fontSize: '14px'
@@ -540,13 +540,13 @@ export default function App() {
           </div>
         )}
         <div ref={chatWindowRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px', paddingTop: '50px', WebkitOverflowScrolling: 'touch' }}>
-          {messages.slice(1).map((msg) => (
+          {messages.slice(1).filter(isVisibleMessage).map((msg) => (
             <div key={msg.id} style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '8px', maxWidth: '80%', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', marginLeft: msg.role === 'user' ? 'auto' : 0, marginRight: msg.role === 'user' ? 0 : 'auto', backgroundColor: msg.role === 'user' ? '#d0d0d0' : '#21262d', color: msg.role === 'user' ? '#000000' : '#c9d1d9', wordWrap: 'break-word' }}>
               <p style={{ margin: 0 }}>{msg.content}</p>
               {msg.showSampleLinks && (
                 <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {sampleCommands.map((cmd, idx) => (
-                    <button 
+                    <button
                       key={idx}
                       onClick={() => handleSampleClick(cmd.text)}
                       style={sampleButtonStyle}
@@ -587,27 +587,27 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', gap: '8px', borderTop: '1px solid #30363d', backgroundColor: '#161b22' }}>
           <input type="file" onChange={handleUpload} accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac" multiple style={{ width: '100%', padding: '8px', fontSize: '16px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: '4px' }} />
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <input 
-              type="text" 
-              value={chatInput} 
-              onChange={(e) => setChatInput(e.target.value)} 
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()} 
-              placeholder="Describe the video edit..." 
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+              placeholder={videoFileData ? 'Describe the video edit...' : 'Ask anything, or upload a file to edit...'}
               disabled={isCallingAPI}
-              style={{ 
-                width: '100%', 
-                padding: '16px', 
+              style={{
+                width: '100%',
+                padding: '16px',
                 paddingRight: isCallingAPI ? '50px' : '16px',
                 border: '2px solid #3b4452',
-                borderRadius: '8px', 
-                fontSize: '18px', 
+                borderRadius: '8px',
+                fontSize: '18px',
                 fontWeight: '500',
-                backgroundColor: '#0d1117', 
+                backgroundColor: '#0d1117',
                 color: '#c9d1d9',
                 outline: 'none',
                 transition: 'border-color 0.2s, box-shadow 0.2s',
                 boxShadow: '0 0 0 3px rgba(110, 118, 129, 0.18)'
-              }} 
+              }}
             />
             {isCallingAPI && (
               <div style={{
@@ -622,14 +622,14 @@ export default function App() {
               }}></div>
             )}
           </div>
-          <button onClick={handleSend} disabled={!videoFileData || isCallingAPI} style={{ padding: '12px 16px', backgroundColor: (videoFileData && !isCallingAPI) ? '#2f3644' : '#21262d', color: (videoFileData && !isCallingAPI) ? '#e6edf3' : '#6e7681', border: '1px solid #424a59', borderRadius: '4px', cursor: (videoFileData && !isCallingAPI) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
+          <button onClick={handleSend} disabled={isCallingAPI} style={{ padding: '12px 16px', backgroundColor: (!isCallingAPI) ? '#2f3644' : '#21262d', color: (!isCallingAPI) ? '#e6edf3' : '#6e7681', border: '1px solid #424a59', borderRadius: '4px', cursor: (!isCallingAPI) ? 'pointer' : 'not-allowed', fontSize: '16px', fontWeight: '500', WebkitTapHighlightColor: 'transparent' }}>
             {isCallingAPI ? 'Sending...' : 'Send'}
           </button>
         </div>
-        <footer style={{ 
-          padding: '12px', 
-          textAlign: 'center', 
-          borderTop: '1px solid #30363d', 
+        <footer style={{
+          padding: '12px',
+          textAlign: 'center',
+          borderTop: '1px solid #30363d',
           backgroundColor: '#161b22',
           color: '#8b949e',
           fontSize: '12px'

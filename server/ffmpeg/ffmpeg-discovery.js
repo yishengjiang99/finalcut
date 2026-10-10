@@ -48,8 +48,9 @@ function matching(list, query, limit) {
   for (const item of list) {
     const name = item.name.toLowerCase();
     const hay = `${name} ${item.description.toLowerCase()}`;
-    if (!words.every(w => hay.includes(w) || name.includes(w))) continue;
-    scored.push({ item, score: words.reduce((s, w) => s + (name === w ? 3 : name.includes(w) ? 2 : 1), 0) });
+    // Any word may match; items matching more words (and by name) rank first.
+    const score = words.reduce((s, w) => s + (name === w ? 3 : name.includes(w) ? 2 : hay.includes(w) ? 1 : 0), 0);
+    if (score > 0) scored.push({ item, score });
   }
   return scored.sort((a, b) => b.score - a.score).slice(0, limit).map(s => s.item);
 }

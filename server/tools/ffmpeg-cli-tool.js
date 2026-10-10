@@ -67,13 +67,24 @@ export async function runFfmpegCli({ args = {}, inputPath }, deps = {}) {
 
 export const ffmpegCliRouter = express.Router();
 
+const DEBUG_CHAT = process.env.DEBUG_CHAT === '1';
+function debugCli(...args) {
+  if (DEBUG_CHAT) console.log('[ffmpeg-cli]', ...args);
+}
+
 // JSON-only: discovery and planning (no media needed)
 ffmpegCliRouter.post('/api/ffmpeg-cli', express.json({ limit: '50kb' }), videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   const body = req.body || {};
   try {
-    if (body.action === 'discover') return res.json(await discoverCapabilities(body));
+    debugCli('request', JSON.stringify(body));
+    if (body.action === 'discover') {
+      const found = await discoverCapabilities(body);
+      debugCli('discover', JSON.stringify({ query: body.query, filters: found.filters.map(f => f.name), encoders: found.encoders.map(e => e.name), codecs: found.codecs.map(c => c.name) }));
+      return res.json(found);
+    }
     if (body.action === 'plan') {
       const plan = await planCommand({ args: body });
+      debugCli('plan', JSON.stringify(plan));
       if (plan.ok) delete plan.args;
       return res.status(plan.ok ? 200 : 400).json(plan);
     }
@@ -93,7 +104,9 @@ ffmpegCliRouter.post('/api/ffmpeg-cli/run', videoProcessLimiter, requireAuthenti
   let outputPath;
   try {
     await fs.writeFile(inputPath, req.file.buffer);
+    debugCli('run request', JSON.stringify(args));
     const result = await runFfmpegCli({ args, inputPath });
+    debugCli('run result', JSON.stringify({ ok: result.ok, command: result.command, error: result.error, errors: result.errors, stderr: result.stderr?.slice(-2000) }));
     outputPath = result.outputPath;
     if (!result.ok) return res.status(400).json({ error: result.error || result.errors?.join('; ') || 'FFmpeg failed', errors: result.errors, suggestions: result.suggestions, stderr: result.stderr });
     const buf = await fs.readFile(outputPath);
