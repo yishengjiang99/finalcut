@@ -6,7 +6,7 @@
 <title>FinalCap — Site Redesign Mockup</title>
 <!--
   MOCKUP ONLY — not wired to any backend.
-  Send a prompt to see the inline processing status animate a job.
+  Send a prompt to see a simulated edit run: typing dots, then a result card.
 -->
 <style>
   :root {
@@ -206,56 +206,6 @@
     background: var(--bg-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
     padding: 1px 6px; font-family: var(--font); font-size: 11px; color: var(--text-dim);
   }
-  /* ---------- inline processing status (in-flow above the composer) ---------- */
-  .inline-status {
-    background: rgba(18,23,32,.97); border: 1px solid var(--line); border-radius: 14px;
-    overflow: hidden; margin-bottom: 10px; animation: rise .25s ease-out;
-  }
-  .inline-status[hidden] { display: none; }
-  .is-head {
-    width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 14px;
-    background: none; border: none; cursor: pointer; color: var(--text); font-family: var(--font);
-  }
-  .is-head .dot-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.4s infinite; flex-shrink: 0; }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(124,108,246,.5);} 50% { box-shadow: 0 0 0 7px rgba(124,108,246,0);} }
-  .is-head .is-title { font-size: 13.5px; font-weight: 700; }
-  .is-head .is-count { font-size: 11.5px; color: var(--text-dim); background: var(--bg-2); border: 1px solid var(--line); padding: 2px 9px; border-radius: 999px; }
-  .is-head .chev { margin-left: auto; color: var(--text-faint); font-size: 13px; transition: transform .2s; }
-  .inline-status.collapsed .is-head .chev { transform: rotate(180deg); }
-  .is-body { padding: 2px 10px 10px; display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
-  .inline-status.collapsed .is-body { display: none; }
-  .is-bar { height: 3px; background: #202836; }
-  .is-bar i { display: block; height: 100%; width: 0%; background: var(--accent-grad); transition: width .4s ease; }
-
-  .job {
-    background: var(--bg-2); border: 1px solid var(--line-soft); border-radius: 13px; padding: 11px 12px;
-    display: flex; gap: 11px; animation: rise .25s ease-out;
-  }
-  .job .jthumb {
-    width: 58px; height: 38px; border-radius: 8px; flex-shrink: 0; position: relative; overflow: hidden;
-    background: linear-gradient(135deg,#1d2635,#33415c); display: flex; align-items: center; justify-content: center; font-size: 16px;
-  }
-  .job.done .jthumb::after {
-    content: "✓"; position: absolute; inset: 0; background: rgba(20,30,24,.55);
-    display: flex; align-items: center; justify-content: center; color: var(--ok); font-size: 20px; font-weight: 800;
-  }
-  .job .jmain { flex: 1; min-width: 0; }
-  .job .jtitle { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .job .jstage { font-size: 11.5px; color: var(--text-dim); margin: 3px 0 7px; display: flex; justify-content: space-between; }
-  .job .jstage .pct { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
-  .pbar { height: 6px; background: #202836; border-radius: 4px; overflow: hidden; }
-  .pbar i { display: block; height: 100%; width: 0%; background: var(--accent-grad); border-radius: 4px; transition: width .4s ease; }
-  .job.done .pbar i { background: var(--ok); }
-  .job .jfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-  .job .elapsed { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-  .job .jbtn {
-    margin-left: auto; background: none; border: 1px solid var(--line); color: var(--text-dim);
-    font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 8px; cursor: pointer; transition: all .15s;
-  }
-  .job .jbtn:hover { color: var(--danger); border-color: var(--danger); }
-  .job .jbtn.open { color: #0b0e13; background: var(--accent-grad); border: none; }
-  .job .jbtn.open:hover { color: #0b0e13; }
-
   .toast {
     position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); z-index: 200;
     background: var(--bg-3); border: 1px solid var(--line); color: var(--text); font-size: 13.5px; font-weight: 500;
@@ -403,16 +353,6 @@
 
     <div class="composer-zone">
       <!-- inline processing status: part of the layout, never covers the composer -->
-      <div class="inline-status collapsed" id="inlineStatus" hidden>
-        <button class="is-head" id="isHead">
-          <span class="dot-pulse" id="isDot"></span>
-          <span class="is-title">Processing</span>
-          <span class="is-count" id="isCount"></span>
-          <span class="chev">▲</span>
-        </button>
-        <div class="is-body" id="isBody"></div>
-        <div class="is-bar"><i id="isBarFill"></i></div>
-      </div>
       <div class="composer">
         <div class="attachments" id="attachments"></div>
         <div class="composer-row">
@@ -485,8 +425,7 @@
   const $ = id => document.getElementById(id);
   const chat = $('chat'), input = $('input'), sendBtn = $('sendBtn'),
         chipsEl = $('chips'), attachEl = $('attachments'),
-        statusEl = $('inlineStatus'), statusBody = $('isBody'), statusCount = $('isCount'),
-        statusDot = $('isDot'), statusBar = $('isBarFill'), toastEl = $('toast');
+        toastEl = $('toast');
 
   window.toast = function(msg){
     toastEl.textContent = msg; toastEl.classList.add('show');
@@ -549,75 +488,11 @@
     attachEl.appendChild(el);
   };
 
-  /* ---------- inline processing status ---------- */
-  const jobs = new Map(); let jobSeq = 0;
-  const stages = ['Queued','Analyzing media','Transcoding 1080p','Applying filters','Finalizing'];
-  $('isHead').onclick = ()=> statusEl.classList.toggle('collapsed');
-
-  function refreshStatus(){
-    const list = [...jobs.values()];
-    const running = list.filter(j=>!j.done && !j.cancelled);
-    const total = list.length;
-    /* inline status sits above the composer in the page flow — visible only while jobs exist */
-    statusEl.hidden = total === 0;
-    if (total === 0) return;
-    statusCount.textContent = running.length > 0 ? running.length + ' running' : total + ' done';
-    statusDot.style.background = running.length > 0 ? 'var(--accent)' : 'var(--ok)';
-    statusDot.style.animation = running.length > 0 ? '' : 'none';
-    statusDot.style.boxShadow = running.length > 0 ? '' : '0 0 8px var(--ok)';
-    const avg = running.length ? running.reduce((s,j)=>s+j.pct,0) / running.length : 100;
-    statusBar.style.width = Math.min(100, avg) + '%';
-    statusBar.style.background = running.length ? 'var(--accent-grad)' : 'var(--ok)';
-  }
-
-  function addJob(prompt){
-    const id = ++jobSeq;
-    const el = document.createElement('div');
-    el.className = 'job';
-    el.innerHTML =
-      '<div class="jthumb">🎬</div>' +
-      '<div class="jmain">' +
-        '<div class="jtitle"></div>' +
-        '<div class="jstage"><span class="stage">Queued</span><span class="pct">0%</span></div>' +
-        '<div class="pbar"><i></i></div>' +
-        '<div class="jfoot"><span class="elapsed">0s</span><button class="jbtn">Cancel</button></div>' +
-      '</div>';
-    el.querySelector('.jtitle').textContent = prompt.length > 42 ? prompt.slice(0,42)+'…' : prompt;
-    const bar = el.querySelector('.pbar i'), stageEl = el.querySelector('.stage'),
-          pctEl = el.querySelector('.pct'), elapsedEl = el.querySelector('.elapsed'),
-          btn = el.querySelector('.jbtn');
-    statusBody.prepend(el);
-    statusEl.classList.remove('collapsed');
-
-    const job = { id, el, done:false, cancelled:false, pct:0, secs:0, prompt };
-    jobs.set(id, job);
-    btn.onclick = ()=>{
-      if (job.done) { el.style.opacity='0'; setTimeout(()=>{ el.remove(); jobs.delete(id); refreshStatus(); }, 250); }
-      else { job.cancelled = true; clearInterval(job.timer); stageEl.textContent='Cancelled'; btn.textContent='Dismiss';
-             btn.onclick=()=>{ el.remove(); jobs.delete(id); refreshStatus(); }; refreshStatus();
-             addMsg('assistant','Job cancelled: “'+job.prompt+'”. Nothing was changed.'); }
-    };
-    job.timer = setInterval(()=>{
-      if (job.cancelled) return;
-      job.secs++;
-      elapsedEl.textContent = job.secs + 's';
-      job.pct = Math.min(100, job.pct + 4 + Math.random()*7);
-      const stageIdx = Math.min(stages.length-1, Math.floor(job.pct/100*stages.length));
-      stageEl.textContent = stages[stageIdx] + '…';
-      pctEl.textContent = Math.floor(job.pct) + '%';
-      bar.style.width = job.pct + '%';
-      if (job.pct >= 100) {
-        clearInterval(job.timer); job.done = true; el.classList.add('done');
-        stageEl.textContent = 'Done'; pctEl.textContent = '100%';
-        btn.textContent = 'Open result'; btn.classList.add('open');
-        btn.onclick = ()=>{ el.scrollIntoView({behavior:'smooth', block:'center'});
-          addMsg('assistant','Result for “'+job.prompt+'” is ready — see the card above.'); };
-        finishJob(job);
-      }
-      refreshStatus();
-    }, 450);
-    refreshStatus();
-    return job;
+  /* ---------- edit simulation (no status panel: typing dots, then the result) ---------- */
+  function simulateJob(prompt){
+    const job = { prompt, secs: 0 };
+    const timer = setInterval(()=>{ job.secs++; }, 1000);
+    setTimeout(()=>{ clearInterval(timer); if (job.secs < 1) job.secs = 1; finishJob(job); }, 2600 + Math.random()*1500);
   }
 
   function addMsg(role, html, isHTML){
@@ -668,21 +543,18 @@
     addMsg('user', text);
     input.value = ''; autoGrow();
     const typing = addTyping();
-    const job = addJob(text);
-    setTimeout(()=>{
-      typing.remove();
-      addMsg('assistant','On it — running <b>“' + text.replace(/</g,'&lt;') + '”</b> with ffmpeg in the background. You can keep chatting; progress shows right above the composer.', true);
-    }, 900);
+    addMsg('assistant','On it — running <b>“' + text.replace(/</g,'&lt;') + '”</b> with ffmpeg in the background. You can keep chatting.', true);
+    simulateJob(text);
+    setTimeout(()=>{ typing.remove(); }, 2800);
   }
   sendBtn.onclick = send;
   input.addEventListener('keydown', e=>{
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
-  refreshStatus();
   autoGrow();
-  /* demo: start one job shortly after load so the status bar shows its real state */
-  setTimeout(()=>{ addJob('Resize to 1280×720'); }, 900);
+  /* demo: run one edit shortly after load */
+  setTimeout(()=>{ simulateJob('Resize to 1280×720'); }, 900);
 })();
 </script>
 </body>

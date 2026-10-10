@@ -91,7 +91,7 @@ describe('App Component', () => {
     expect(document.querySelector('select.target-select')).toBeNull();
   });
 
-  it('keeps processing status inline and hidden when there are no jobs', async () => {
+  it('has no processing status panel at all', async () => {
     delete window.location;
     window.location = {
       pathname: '/success',
@@ -109,11 +109,15 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(screen.queryByText('Get started free')).not.toBeInTheDocument();
     });
-    // No floating dock anywhere; the inline status only renders while jobs exist.
+    // The processing panel is gone entirely: no dock, no inline status.
     expect(container.querySelector('.dock')).toBeNull();
     expect(container.querySelector('.inline-status')).toBeNull();
     // The composer textarea is present as the single input box.
     expect(container.querySelector('.composer textarea')).not.toBeNull();
+    // The send button is a plain send (not stop) when idle.
+    const sendBtn = container.querySelector('.send-btn');
+    expect(sendBtn).not.toBeNull();
+    expect(sendBtn.getAttribute('title')).toBe('Send');
   });
 
   it('shows at most two starter chips in the chat flow, not in the composer', async () => {

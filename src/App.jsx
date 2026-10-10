@@ -141,11 +141,6 @@ function useNow(intervalMs, enabled = true) {
   return now;
 }
 
-function Elapsed({ job }) {
-  const now = useNow(1000, !job.endedAt);
-  return <span className="elapsed">{Math.max(0, Math.round(((job.endedAt || now) - job.startedAt) / 1000))}s</span>;
-}
-
 function TimeAgo({ at }) {
   const minutes = Math.floor((useNow(30000) - at) / 60000);
   if (minutes < 1) return 'just now';
@@ -159,18 +154,12 @@ export const jobStatusText = (job) => (
   job.status === 'done' && !job.producedFile ? 'Done — no edit was made' : JOB_STATUS_TEXT[job.status]
 );
 
-// What the inline status shows while a tool runs: lookups are not edits, so they are not "processing".
+// Stage text for the running tool: lookups are not edits, so they are not "processing".
 export const toolStageText = (toolName, args) => {
   if (toolName === 'get_video_dimensions') return 'Reading video details…';
   if (toolName === 'ffmpeg_cli' && args?.action !== 'run') return 'Working out the ffmpeg command…';
   return 'Processing with ffmpeg…';
 };
-// "about 1 min 20 s left" for the running edit; nothing until FFmpeg has reported enough to estimate.
-export const timeLeftText = (seconds) => {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '';
-  return seconds >= 60 ? `about ${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s left` : `about ${Math.max(1, Math.round(seconds))} s left`;
-};
-
 // What an upload to the server would send, for the consent prompt.
 const UPLOAD_NOUN = { video: 'your video', photo: 'your photo', audio: 'the audio of your clip (not the video)' };
 const JOB_ICONS = { done: '✅', error: '⚠️', cancelled: '🚫' };
@@ -224,17 +213,16 @@ export default function App() {
   const [view, setView] = useState('editor'); // 'editor' | 'captions' | 'library'
   const [health, setHealth] = useState(null); // null while checking, then { ok, ffmpegVersion }
   const [jobs, setJobs] = useState([]); // One per sent prompt, newest first
-  const [statusOpen, setStatusOpen] = useState(false);
   const [compareIds, setCompareIds] = useState(() => new Set());
   const [toastText, setToastText] = useState('');
   const toastTimerRef = useRef(null);
   const jobIdCounterRef = useRef(1);
-  const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
+  const [, setToolStage] = useState(null); // what the running job's current tool is doing
   const [engineMode, setEngineModeState] = useState(ENGINE_SERVER); // 'client' once the feature flag says so
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
   const [cloudCaptionsAvailable, setCloudCaptionsAvailable] = useState(false);
   const [cloudCaptions, setCloudCaptionsState] = useState(() => getCloudCaptions());
-  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
+  const [, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
   const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
   // Which clip the next edit applies to. Bytes are kept per media message so any
@@ -637,7 +625,6 @@ export default function App() {
     setToolStage(null);
     setFetchAbortSignal(controller.signal);
     setJobs(prev => [job, ...prev]);
-    setStatusOpen(true);
 
     let status;
     try {
@@ -655,12 +642,8 @@ export default function App() {
     if (status === 'cancelled') toast(`Cancelled: “${text}”`);
   };
 
-  const cancelJob = (job) => {
-    if (currentJobRef.current?.id === job.id) currentJobRef.current.controller.abort();
-  };
-
-  const dismissJob = (job) => {
-    setJobs(prev => prev.filter(j => j.id !== job.id));
+  const cancelRunning = () => {
+    currentJobRef.current?.controller.abort();
   };
 
   const handleSampleClick = (sampleText) => {
@@ -964,14 +947,11 @@ export default function App() {
   }
 
   const visibleMessages = messages.slice(1).filter(isVisibleMessage);
-  const runningJobs = jobs.filter(job => job.status === 'running');
   const finishedJobs = jobs.filter(job => job.status !== 'running');
   const originals = media.filter(item => item.kind === 'original');
   const captionFiles = messages.filter(msg => msg.videoUrl && (msg.videoType === 'subtitle-srt' || msg.vttUrl));
   const showTyping = isCallingAPI && !processing && !messages[messages.length - 1]?.streaming;
   const onDevice = engineMode === ENGINE_CLIENT;
-  const hasProgress = typeof turnStatus?.progress === 'number';
-  const runningStage = turnStatus?.text || (processing ? (toolStage || 'Processing with ffmpeg…') : 'Planning the edit…');
   const statusText = health === null
     ? 'checking server…'
     : health.ok
@@ -1098,7 +1078,7 @@ export default function App() {
           <button className="add-btn" onClick={openFilePicker} disabled={isCallingAPI}>+ Add media</button>
           <h3 className="spaced">Recent jobs</h3>
           {finishedJobs.length === 0 && <p className="rail-empty">Finished edits show up here.</p>}
-          {finishedJobs.map(job => (
+          {finishedJobs.slice(0, 10).map(job => (
             <button
               type="button"
               key={job.id}
@@ -1203,49 +1183,6 @@ export default function App() {
           )}
 
           <div className="composer-zone">
-            {/* Inline processing status: in the page flow above the composer, never covering it */}
-            {jobs.length > 0 && (
-              <div className={`inline-status${statusOpen ? '' : ' collapsed'}`}>
-                <button type="button" className="is-head" onClick={() => setStatusOpen(open => !open)}>
-                  <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
-                  <span className="is-title">Processing</span>
-                  <span className="count">
-                    {runningJobs.length > 0 ? `${runningJobs.length} running` : `${jobs.length} done`}
-                  </span>
-                  <span className="chev">▲</span>
-                </button>
-                <div className="is-body">
-                  {jobs.map(job => (
-                    <div key={job.id} className={`job ${job.status}`}>
-                      <div className="jthumb">🎬</div>
-                      <div className="jmain">
-                        <div className="jtitle" title={job.prompt}>{job.prompt}</div>
-                        <div className="jstage">
-                          {job.status === 'running' ? runningStage : jobStatusText(job)}
-                          {job.status === 'running' && hasProgress && ` ${Math.round(turnStatus.progress * 100)}%`}
-                          {job.status === 'running' && hasProgress && timeLeftText(turnStatus.etaSeconds) && ` · ${timeLeftText(turnStatus.etaSeconds)}`}
-                        </div>
-                        <div className={`pbar${job.status === 'running' && hasProgress ? ' determinate' : ''}`}>
-                          <i style={job.status === 'running' && hasProgress ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined}></i>
-                        </div>
-                        <div className="jfoot">
-                          <Elapsed job={job} />
-                          {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
-                          {job.status !== 'running' && job.resultMessageId !== null && (
-                            <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
-                          )}
-                          {job.status === 'error' && <button className="jbtn open" disabled={isCallingAPI} onClick={() => handleSend(job.prompt)}>Retry</button>}
-                          {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className={`is-bar${hasProgress && runningJobs.length > 0 ? ' determinate' : ''}`}>
-                  <i style={hasProgress && runningJobs.length > 0 ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined} />
-                </div>
-              </div>
-            )}
             <div className="composer">
               <div className="attachments">
                 {originals.map(item => (
@@ -1279,8 +1216,8 @@ export default function App() {
                   }}
                   placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
                 />
-                <button className="send-btn" title={isCallingAPI ? 'Working…' : 'Send'} onClick={() => handleSend()} disabled={isCallingAPI || !chatInput.trim()}>
-                  {isCallingAPI ? <span className="spin"></span> : '↑'}
+                <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onClick={() => isCallingAPI ? cancelRunning() : handleSend()} disabled={!isCallingAPI && !chatInput.trim()}>
+                  {isCallingAPI ? '■' : '↑'}
                 </button>
               </div>
               <div className="composer-foot">
