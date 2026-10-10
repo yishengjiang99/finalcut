@@ -128,7 +128,8 @@ export function useCallAPI({
           'Content-Type': 'application/json',
           ...authHeaders
         },
-        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData)))
+        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData))),
+        ...(options.signal ? { signal: options.signal } : {})
       });
 
       if (!response.ok) {
@@ -263,6 +264,8 @@ export function useCallAPI({
           };
 
           for (const call of toolCallsArray) {
+            // A cancelled job must not start its remaining tool calls.
+            if (options.signal?.aborted) throw new Error('Job cancelled');
             const funcName = call.function.name;
             const toolFunction = toolFunctions[funcName];
             if (typeof toolFunction !== 'function') {
@@ -305,10 +308,13 @@ export function useCallAPI({
           if (followUpRound >= MAX_TOOL_FOLLOW_UPS) {
             throw new Error('The FFmpeg fallback did not finish within the allowed number of steps');
           }
-          await runTurn(currentMessages, { ...options, followUpRound: followUpRound + 1, videoFileData: workingVideoFileData });
+          return await runTurn(currentMessages, { ...options, followUpRound: followUpRound + 1, videoFileData: workingVideoFileData });
         }
       }
+      return 'done';
     } catch (error) {
+      // Cancelling aborts the in-flight request; that is not an error to report.
+      if (options.signal?.aborted) return 'cancelled';
       await reportChatError(error, {
         authHeaders,
         messageCount: currentMessages.length,
@@ -320,6 +326,7 @@ export function useCallAPI({
         }
       });
       addMessage({ text: 'Error communicating with xAI API: ' + error.message });
+      return 'error';
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
     }

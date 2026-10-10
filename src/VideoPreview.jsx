@@ -387,11 +387,10 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
 
   return (
     <div style={{ 
-      backgroundColor: '#21262d', 
+      backgroundColor: '#151b25', 
       padding: '12px', 
       borderRadius: '8px',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-      maxWidth: '100%',
+            maxWidth: '100%',
       boxSizing: 'border-box'
     }}>
       <div style={{ 
@@ -400,15 +399,15 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         alignItems: 'center',
         marginBottom: isCollapsed ? '0' : '8px'
       }}>
-        <p style={{ margin: '0', fontSize: '14px', fontWeight: 'bold', color: '#c9d1d9' }}>{title}</p>
+        <p style={{ margin: '0', fontSize: '14px', fontWeight: 'bold', color: '#e8edf4' }}>{title}</p>
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
           style={{
             padding: '4px 12px',
             fontSize: '12px',
-            backgroundColor: '#2a2f3a',
-            color: '#d8dee9',
-            border: '1px solid #3a4250',
+            backgroundColor: '#10141b',
+            color: '#e8edf4',
+            border: '1px solid #232c3a',
             borderRadius: '4px',
             cursor: 'pointer',
             WebkitTapHighlightColor: 'transparent'
@@ -487,7 +486,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           style={{
             width: '100%',
             cursor: 'pointer',
-            accentColor: '#8b949e'
+            accentColor: '#7c6cf6'
           }}
         />
       </div>
@@ -498,7 +497,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         justifyContent: 'space-between', 
         fontSize: '12px', 
         marginBottom: '12px',
-        color: '#8b949e'
+        color: '#9aa7bb'
       }}>
         <span>Time: {formatTime(currentTime)}</span>
         {!isAudio && <span>Frame: {getCurrentFrame()} / {getTotalFrames()}</span>}
@@ -506,7 +505,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       
       {/* FPS selector - only for video */}
       {!isAudio && (
-        <div style={{ marginBottom: '12px', fontSize: '12px', color: '#c9d1d9' }}>
+        <div style={{ marginBottom: '12px', fontSize: '12px', color: '#e8edf4' }}>
           <label style={{ marginRight: '8px' }}>FPS:</label>
           <select 
             value={fps} 
@@ -514,10 +513,10 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             style={{
               padding: '4px 8px',
               borderRadius: '4px',
-              border: '1px solid #30363d',
+              border: '1px solid #232c3a',
               fontSize: '12px',
-              backgroundColor: '#0d1117',
-              color: '#c9d1d9'
+              backgroundColor: '#0b0e13',
+              color: '#e8edf4'
             }}
           >
             <option value={24}>24</option>
@@ -542,9 +541,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             style={{
               padding: '8px 12px',
               fontSize: '14px',
-              backgroundColor: currentTime <= 0 ? '#21262d' : '#2f3644',
-              color: currentTime <= 0 ? '#6e7681' : '#e6edf3',
-              border: '1px solid #424a59',
+              backgroundColor: currentTime <= 0 ? '#151b25' : '#1a2230',
+              color: currentTime <= 0 ? '#5f6b80' : '#e8edf4',
+              border: '1px solid #232c3a',
               borderRadius: '4px',
               cursor: currentTime <= 0 ? 'not-allowed' : 'pointer',
               WebkitTapHighlightColor: 'transparent'
@@ -559,9 +558,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           style={{
             padding: '8px 16px',
             fontSize: '14px',
-            backgroundColor: '#2a2f3a',
-            color: '#e6edf3',
-            border: '1px solid #3a4250',
+            backgroundColor: '#10141b',
+            color: '#e8edf4',
+            border: '1px solid #232c3a',
             borderRadius: '4px',
             cursor: 'pointer',
             WebkitTapHighlightColor: 'transparent'
@@ -576,9 +575,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           style={{
             padding: '8px 16px',
             fontSize: '14px',
-            backgroundColor: (!isAudio && !!vttUrl && !downloadUrl) ? '#21262d' : '#2a2f3a',
-            color: (!isAudio && !!vttUrl && !downloadUrl) ? '#6e7681' : '#e6edf3',
-            border: '1px solid #3a4250',
+            backgroundColor: (!isAudio && !!vttUrl && !downloadUrl) ? '#151b25' : '#10141b',
+            color: (!isAudio && !!vttUrl && !downloadUrl) ? '#5f6b80' : '#e8edf4',
+            border: '1px solid #232c3a',
             borderRadius: '4px',
             cursor: (!isAudio && !!vttUrl && !downloadUrl) ? 'not-allowed' : 'pointer',
             WebkitTapHighlightColor: 'transparent'
@@ -594,9 +593,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             style={{
               padding: '8px 12px',
               fontSize: '14px',
-              backgroundColor: currentTime >= duration ? '#21262d' : '#2f3644',
-              color: currentTime >= duration ? '#6e7681' : '#e6edf3',
-              border: '1px solid #424a59',
+              backgroundColor: currentTime >= duration ? '#151b25' : '#1a2230',
+              color: currentTime >= duration ? '#5f6b80' : '#e8edf4',
+              border: '1px solid #232c3a',
               borderRadius: '4px',
               cursor: currentTime >= duration ? 'not-allowed' : 'pointer',
               WebkitTapHighlightColor: 'transparent'

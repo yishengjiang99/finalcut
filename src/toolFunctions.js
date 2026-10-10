@@ -3,6 +3,7 @@
 
 import { captionSourceFor, recordCaptionBurn } from './captionLineage.js';
 import { runLyricCaptionsWeb, describeSong } from './lyricCaptionsClient.js';
+import { abortableFetch as fetch } from './abortableFetch.js';
 
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {

@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinalCap — Site Redesign Mockup</title>
+    <!--
+  MOCKUP ONLY — not wired to any backend.
+  Send a prompt to see the fixed processing dock animate a job.
+-->
+    <style>
+        :root {
+            --bg: #0b0e13;
+            --bg-2: #10141b;
+            --bg-3: #151b25;
+            --line: #232c3a;
+            --line-soft: #1a2230;
+            --text: #e8edf4;
+            --text-dim: #9aa7bb;
+            --text-faint: #5f6b80;
+            --accent: #7c6cf6;
+            --accent-2: #4fd1c5;
+            --accent-grad: linear-gradient(135deg, #7c6cf6 0%, #4fd1c5 100%);
+            --danger: #f0667a;
+            --ok: #3fd68c;
+            --warn: #f5b14c;
+            --radius: 14px;
+            --shadow: 0 12px 40px rgba(0, 0, 0, .45);
+            --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---------- top bar ---------- */
+        .topbar {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 0 20px;
+            background: rgba(16, 20, 27, .92);
+            border-bottom: 1px solid var(--line);
+            backdrop-filter: blur(12px);
+            position: relative;
+            z-index: 40;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: .2px;
+        }
+
+        .brand img {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+
+        .brand .logo-fallback {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: var(--accent-grad);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 800;
+            color: #0b0e13;
+        }
+
+        .brand small {
+            color: var(--text-faint);
+            font-weight: 500;
+            font-size: 12px;
+            margin-left: 2px;
+        }
+
+        .nav {
+            display: flex;
+            gap: 4px;
+            margin-left: 12px;
+        }
+
+        .nav button {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 14px;
+            border-radius: 9px;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .nav button:hover {
+            color: var(--text);
+            background: var(--bg-3);
+        }
+
+        .nav button.active {
+            color: var(--text);
+            background: var(--bg-3);
+            box-shadow: inset 0 0 0 1px var(--line);
+        }
+
+        .topbar .spacer {
+            flex: 1;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-dim);
+            background: var(--bg-3);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 7px 14px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--ok);
+            box-shadow: 0 0 8px var(--ok);
+        }
+
+        .btn-export {
+            background: var(--accent-grad);
+            border: none;
+            color: #0b0e13;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 9px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform .12s, box-shadow .12s;
+        }
+
+        .btn-export:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(124, 108, 246, .35);
+        }
+
+        /* ---------- layout ---------- */
+        .layout {
+            display: flex;
+            height: calc(100vh - 60px);
+        }
+
+        /* library rail */
+        .rail {
+            width: 240px;
+            background: var(--bg-2);
+            border-right: 1px solid var(--line-soft);
+            padding: 16px 12px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .rail h3 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-faint);
+            margin: 6px 8px 10px;
+        }
+
+        .clip {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 8px;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all .15s;
+            margin-bottom: 6px;
+        }
+
+        .clip:hover {
+            background: var(--bg-3);
+        }
+
+        .clip.active {
+            background: var(--bg-3);
+            border-color: var(--accent);
+        }
+
+        .clip .thumb {
+            width: 64px;
+            height: 40px;
+            border-radius: 7px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #1d2635, #2b3a52);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .clip .thumb .dur {
+            position: absolute;
+            bottom: 3px;
+            right: 5px;
+            font-size: 9px;
+            color: #fff;
+            background: rgba(0, 0, 0, .55);
+            padding: 1px 5px;
+            border-radius: 4px;
+        }
+
+        .clip .meta {
+            min-width: 0;
+        }
+
+        .clip .meta .name {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .clip .meta .sub {
+            font-size: 11px;
+            color: var(--text-faint);
+            margin-top: 2px;
+        }
+
+        .rail .add-btn {
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px dashed var(--line);
+            background: none;
+            color: var(--text-dim);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .rail .add-btn:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        /* main column */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background:
+                radial-gradient(1200px 500px at 70% -10%, rgba(124, 108, 246, .07), transparent 60%),
+                var(--bg);
+        }
+
+        .chat {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px 32px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .msg {
+            max-width: 720px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .msg.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .msg.assistant {
+            align-self: flex-start;
+        }
+
+        .bubble {
+            padding: 13px 17px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.55;
+            animation: rise .25s ease-out;
+        }
+
+        @keyframes rise {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        .msg.user .bubble {
+            background: var(--accent-grad);
+            color: #0b0e13;
+            font-weight: 500;
+            border-bottom-right-radius: 5px;
+        }
+
+        .msg.assistant .bubble {
+            background: var(--bg-3);
+            border: 1px solid var(--line-soft);
+            border-bottom-left-radius: 5px;
+            color: var(--text);
+        }
+
+        .result-card {
+            background: var(--bg-3);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            overflow: hidden;
+            width: 100%;
+            max-width: 560px;
+            animation: rise .3s ease-out;
+            box-shadow: var(--shadow);
+        }
+
+        .result-card video {
+            width: 100%;
+            display: block;
+            background: #000;
+            max-height: 320px;
+        }
+
+        .result-card .vthumb {
+            width: 100%;
+            height: 220px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #141b29 0%, #232c42 50%, #17251f 100%);
+            font-size: 44px;
+            position: relative;
+        }
+
+        .result-card .vthumb::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+            font-size: 11px;
+            color: var(--text-dim);
+            background: rgba(0, 0, 0, .5);
+            padding: 3px 9px;
+            border-radius: 6px;
+        }
+
+        .result-card .rc-body {
+            padding: 14px 16px;
+        }
+
+        .result-card .rc-title {
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .result-card .rc-sub {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+        }
+
+        .rc-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chip-btn {
+            border: 1px solid var(--line);
+            background: var(--bg-2);
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 9px;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .chip-btn:hover {
+            border-color: var(--accent);
+        }
+
+        .chip-btn.primary {
+            background: var(--accent-grad);
+            border: none;
+            color: #0b0e13;
+        }
+
+        .typing {
+            display: flex;
+            gap: 5px;
+            padding: 14px 18px;
+        }
+
+        .typing span {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--text-faint);
+            animation: blink 1.2s infinite;
+        }
+
+        .typing span:nth-child(2) {
+            animation-delay: .2s;
+        }
+
+        .typing span:nth-child(3) {
+            animation-delay: .4s;
+        }
+
+        @keyframes blink {
+
+            0%,
+            80%,
+            100% {
+                opacity: .25;
+            }
+
+            40% {
+                opacity: 1;
+            }
+        }
+
+        /* ---------- composer ---------- */
+        .composer-zone {
+            padding: 8px 32px 18px;
+            position: relative;
+            z-index: 30;
+        }
+
+        .composer {
+            background: rgba(21, 27, 37, .96);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(14px);
+            transition: border-color .18s, box-shadow .18s;
+        }
+
+        .composer:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(124, 108, 246, .16), var(--shadow);
+        }
+
+        .prompt-chips {
+            display: flex;
+            gap: 8px;
+            padding: 12px 14px 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .prompt-chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .pchip {
+            flex-shrink: 0;
+            border: 1px solid var(--line);
+            background: var(--bg-2);
+            color: var(--text-dim);
+            font-size: 12.5px;
+            font-weight: 500;
+            padding: 7px 13px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all .15s;
+            white-space: nowrap;
+        }
+
+        .pchip:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+
+        .attachments {
+            display: flex;
+            gap: 8px;
+            padding: 12px 14px 0;
+            flex-wrap: wrap;
+        }
+
+        .attach {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 6px 8px 6px 6px;
+            font-size: 12px;
+            animation: rise .2s ease-out;
+        }
+
+        .attach .athumb {
+            width: 44px;
+            height: 30px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #1d2635, #2b3a52);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .attach .aname {
+            max-width: 130px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-dim);
+        }
+
+        .attach .ax {
+            background: none;
+            border: none;
+            color: var(--text-faint);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 4px;
+            border-radius: 5px;
+        }
+
+        .attach .ax:hover {
+            color: var(--danger);
+            background: rgba(240, 102, 122, .12);
+        }
+
+        .composer-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            padding: 12px 14px;
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: var(--bg-2);
+            color: var(--text-dim);
+            font-size: 18px;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all .15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-btn:hover {
+            color: var(--text);
+            border-color: var(--accent);
+        }
+
+        .composer textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            resize: none;
+            color: var(--text);
+            font-family: var(--font);
+            font-size: 17px;
+            line-height: 1.55;
+            max-height: 200px;
+            padding: 12px 4px;
+            min-height: 76px;
+        }
+
+        .composer textarea::placeholder {
+            color: var(--text-faint);
+        }
+
+        .send-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 13px;
+            border: none;
+            cursor: pointer;
+            flex-shrink: 0;
+            background: var(--accent-grad);
+            color: #0b0e13;
+            font-size: 19px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .12s, box-shadow .12s, opacity .15s;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(124, 108, 246, .4);
+        }
+
+        .send-btn:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+        }
+
+        .composer-foot {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 16px 12px;
+            font-size: 12px;
+            color: var(--text-faint);
+        }
+
+        .composer-foot kbd {
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-bottom-width: 2px;
+            border-radius: 5px;
+            padding: 1px 6px;
+            font-family: var(--font);
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .target-select {
+            margin-left: auto;
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            color: var(--text-dim);
+            font-size: 12px;
+            border-radius: 8px;
+            padding: 5px 9px;
+            cursor: pointer;
+            outline: none;
+            font-family: var(--font);
+        }
+
+        /* ---------- fixed processing dock ---------- */
+        .dock {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            width: 372px;
+            z-index: 100;
+            background: rgba(18, 23, 32, .97);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+            backdrop-filter: blur(16px);
+            overflow: hidden;
+            animation: dockIn .35s cubic-bezier(.2, .9, .3, 1.2);
+        }
+
+        @keyframes dockIn {
+            from {
+                opacity: 0;
+                transform: translateY(24px) scale(.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        .dock-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--line-soft);
+            user-select: none;
+        }
+
+        .dock-head .dot-pulse {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 1.4s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(124, 108, 246, .5);
+            }
+
+            50% {
+                box-shadow: 0 0 0 7px rgba(124, 108, 246, 0);
+            }
+        }
+
+        .dock-head .title {
+            font-size: 13.5px;
+            font-weight: 700;
+        }
+
+        .dock-head .count {
+            font-size: 11.5px;
+            color: var(--text-dim);
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            padding: 2px 9px;
+            border-radius: 999px;
+        }
+
+        .dock-head .chev {
+            margin-left: auto;
+            color: var(--text-faint);
+            font-size: 13px;
+            transition: transform .2s;
+        }
+
+        .dock.collapsed .dock-head .chev {
+            transform: rotate(180deg);
+        }
+
+        .dock-body {
+            max-height: 380px;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .dock.collapsed .dock-body {
+            display: none;
+        }
+
+        .job {
+            background: var(--bg-2);
+            border: 1px solid var(--line-soft);
+            border-radius: 13px;
+            padding: 11px 12px;
+            display: flex;
+            gap: 11px;
+            animation: rise .25s ease-out;
+        }
+
+        .job .jthumb {
+            width: 58px;
+            height: 38px;
+            border-radius: 8px;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1d2635, #33415c);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .job.done .jthumb::after {
+            content: "✓";
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 30, 24, .55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ok);
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .job .jmain {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .job .jtitle {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .job .jstage {
+            font-size: 11.5px;
+            color: var(--text-dim);
+            margin: 3px 0 7px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .job .jstage .pct {
+            color: var(--text);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pbar {
+            height: 6px;
+            background: #202836;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .pbar i {
+            display: block;
+            height: 100%;
+            width: 0%;
+            background: var(--accent-grad);
+            border-radius: 4px;
+            transition: width .4s ease;
+        }
+
+        .job.done .pbar i {
+            background: var(--ok);
+        }
+
+        .job .jfoot {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .job .elapsed {
+            font-size: 11px;
+            color: var(--text-faint);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .job .jbtn {
+            margin-left: auto;
+            background: none;
+            border: 1px solid var(--line);
+            color: var(--text-dim);
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 5px 11px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .job .jbtn:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .job .jbtn.open {
+            color: #0b0e13;
+            background: var(--accent-grad);
+            border: none;
+        }
+
+        .job .jbtn.open:hover {
+            color: #0b0e13;
+        }
+
+        .dock-empty {
+            padding: 18px;
+            text-align: center;
+            color: var(--text-faint);
+            font-size: 13px;
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 28px;
+            transform: translateX(-50%) translateY(20px);
+            z-index: 200;
+            background: var(--bg-3);
+            border: 1px solid var(--line);
+            color: var(--text);
+            font-size: 13.5px;
+            font-weight: 500;
+            padding: 11px 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            pointer-events: none;
+            transition: all .3s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        ::-webkit-scrollbar {
+            width: 9px;
+            height: 9px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2a3446;
+            border-radius: 6px;
+            border: 2px solid var(--bg);
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        @media (max-width: 900px) {
+            .rail {
+                display: none;
+            }
+
+            .chat {
+                padding: 20px 16px;
+            }
+
+            .composer-zone {
+                padding: 8px 12px 14px;
+            }
+
+            .dock {
+                left: 12px;
+                right: 12px;
+                bottom: 12px;
+                width: auto;
+            }
+
+            .nav {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="topbar">
+        <div class="brand">
+            <img src="../logo.png" alt="FinalCap"
+                onerror="this.outerHTML='<div class=&quot;logo-fallback&quot;>✂</div>'">
+            FinalCap <small>AI Video Editor</small>
+        </div>
+        <nav class="nav">
+            <button class="active">Editor</button>
+            <button>Captions</button>
+            <button>Library</button>
+        </nav>
+        <div class="spacer"></div>
+        <div class="status-pill"><span class="status-dot"></span> ffmpeg 8.1.2 · server ready</div>
+        <button class="btn-export" onclick="toast('Export is not wired in this mockup')">Export</button>
+    </header>
+
+    <div class="layout">
+        <aside class="rail">
+            <h3>Project media</h3>
+            <div class="clip active">
+                <div class="thumb">🎬<span class="dur">0:10</span></div>
+                <div class="meta">
+                    <div class="name">BigBuckBunny.mp4</div>
+                    <div class="sub">1920×1080 · original</div>
+                </div>
+            </div>
+            <div class="clip">
+                <div class="thumb">🎵<span class="dur">2:31</span></div>
+                <div class="meta">
+                    <div class="name">sampaudio.mp3</div>
+                    <div class="sub">audio · original</div>
+                </div>
+            </div>
+            <div class="clip">
+                <div class="thumb">✂️<span class="dur">0:10</span></div>
+                <div class="meta">
+                    <div class="name">bbb_trim_5-15.mp4</div>
+                    <div class="sub">1280×720 · result</div>
+                </div>
+            </div>
+            <button class="add-btn" onclick="toast('Upload is not wired in this mockup')">+ Add media</button>
+            <h3 style="margin-top:18px">Recent jobs</h3>
+            <div class="clip">
+                <div class="thumb">💬</div>
+                <div class="meta">
+                    <div class="name">captions_en.srt</div>
+                    <div class="sub">completed · 2m ago</div>
+                </div>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="chat" id="chat">
+                <div class="msg assistant">
+                    <div class="bubble">Welcome back. <b>BigBuckBunny.mp4</b> is loaded and ready — tell me what to do
+                        with it, or pick a starting point below.</div>
+                </div>
+            </div>
+
+            <div class="composer-zone">
+                <div class="composer">
+                    <div class="prompt-chips" id="chips"></div>
+                    <div class="attachments" id="attachments"></div>
+                    <div class="composer-row">
+                        <button class="icon-btn" id="attachBtn" title="Attach video or audio">📎</button>
+                        <textarea id="input" rows="2"
+                            placeholder="Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”"></textarea>
+                        <button class="send-btn" id="sendBtn" title="Send">↑</button>
+                    </div>
+                    <div class="composer-foot">
+                        <span><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
+                        <select class="target-select" title="Which video this edit applies to">
+                            <option>Apply to: original</option>
+                            <option>Apply to: latest result</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- fixed processing dock -->
+    <div class="dock collapsed" id="dock">
+        <div class="dock-head" id="dockHead">
+            <span class="dot-pulse" id="dockDot"></span>
+            <span class="title">Processing</span>
+            <span class="count" id="dockCount">0 running</span>
+            <span class="chev">▲</span>
+        </div>
+        <div class="dock-body" id="dockBody">
+            <div class="dock-empty">Nothing processing right now.<br>Send an edit and watch it run here — the chat stays
+                usable.</div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        (function () {
+            const $ = id => document.getElementById(id);
+            const chat = $('chat'), input = $('input'), sendBtn = $('sendBtn'),
+                chipsEl = $('chips'), attachEl = $('attachments'),
+                dock = $('dock'), dockBody = $('dockBody'), dockCount = $('dockCount'),
+                dockDot = $('dockDot'), toastEl = $('toast');
+
+            window.toast = function (msg) {
+                toastEl.textContent = msg; toastEl.classList.add('show');
+                clearTimeout(toastEl._t); toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 2200);
+            };
+
+            const suggestions = [
+                ['✂️', 'Trim to seconds 5–15'],
+                ['💬', 'Generate burned-in captions'],
+                ['📐', 'Resize to 1280×720'],
+                ['⚡', 'Speed up 2×'],
+                ['🎨', 'Boost saturation 1.4×'],
+                ['📱', 'Convert to 9:16 for Reels'],
+                ['🔊', 'Normalize audio to −14 LUFS'],
+                ['🖼️', 'Extract a thumbnail at 0:03'],
+            ];
+            suggestions.forEach(([icon, text]) => {
+                const b = document.createElement('button');
+                b.className = 'pchip'; b.textContent = icon + ' ' + text;
+                b.onclick = () => { input.value = text; input.focus(); autoGrow(); };
+                chipsEl.appendChild(b);
+            });
+
+            function autoGrow() {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+            }
+            input.addEventListener('input', autoGrow);
+
+            const sampleFiles = [
+                ['🎬', 'BigBuckBunny.mp4'], ['🎵', 'sampaudio.mp3'], ['🎬', 'bbb_trim_5-15.mp4']
+            ];
+            let attachIdx = 0;
+            $('attachBtn').onclick = () => {
+                const [icon, name] = sampleFiles[attachIdx++ % sampleFiles.length];
+                const el = document.createElement('div');
+                el.className = 'attach';
+                el.innerHTML = '<div class="athumb">' + icon + '</div><div class="aname">' + name + '</div>';
+                const x = document.createElement('button');
+                x.className = 'ax'; x.textContent = '×'; x.title = 'Remove';
+                x.onclick = () => el.remove();
+                el.appendChild(x);
+                attachEl.appendChild(el);
+            };
+
+            /* ---------- job dock ---------- */
+            const jobs = new Map(); let jobSeq = 0;
+            const stages = ['Queued', 'Analyzing media', 'Transcoding 1080p', 'Applying filters', 'Finalizing'];
+            $('dockHead').onclick = () => dock.classList.toggle('collapsed');
+
+            function refreshDock() {
+                const running = [...jobs.values()].filter(j => !j.done && !j.cancelled).length;
+                const total = jobs.size;
+                dockCount.textContent = running > 0 ? running + ' running' : (total ? total + ' done' : '0 running');
+                dockDot.style.background = running > 0 ? 'var(--accent)' : 'var(--ok)';
+                dockDot.style.animation = running > 0 ? '' : 'none';
+                dockDot.style.boxShadow = running > 0 ? '' : '0 0 8px var(--ok)';
+                if (total === 0) {
+                    dockBody.innerHTML = '<div class="dock-empty">Nothing processing right now.<br>Send an edit and watch it run here — the chat stays usable.</div>';
+                }
+            }
+
+            function addJob(prompt) {
+                const id = ++jobSeq;
+                const el = document.createElement('div');
+                el.className = 'job';
+                el.innerHTML =
+                    '<div class="jthumb">🎬</div>' +
+                    '<div class="jmain">' +
+                    '<div class="jtitle"></div>' +
+                    '<div class="jstage"><span class="stage">Queued</span><span class="pct">0%</span></div>' +
+                    '<div class="pbar"><i></i></div>' +
+                    '<div class="jfoot"><span class="elapsed">0s</span><button class="jbtn">Cancel</button></div>' +
+                    '</div>';
+                el.querySelector('.jtitle').textContent = prompt.length > 42 ? prompt.slice(0, 42) + '…' : prompt;
+                const bar = el.querySelector('.pbar i'), stageEl = el.querySelector('.stage'),
+                    pctEl = el.querySelector('.pct'), elapsedEl = el.querySelector('.elapsed'),
+                    btn = el.querySelector('.jbtn');
+                const empty = dockBody.querySelector('.dock-empty');
+                if (empty) empty.remove();
+                dockBody.prepend(el);
+                dock.classList.remove('collapsed');
+
+                const job = { id, el, done: false, cancelled: false, pct: 0, secs: 0, prompt };
+                jobs.set(id, job);
+                btn.onclick = () => {
+                    if (job.done) { el.style.opacity = '0'; setTimeout(() => { el.remove(); jobs.delete(id); refreshDock(); }, 250); }
+                    else {
+                        job.cancelled = true; clearInterval(job.timer); stageEl.textContent = 'Cancelled'; btn.textContent = 'Dismiss';
+                        btn.onclick = () => { el.remove(); jobs.delete(id); refreshDock(); }; refreshDock();
+                        addMsg('assistant', 'Job cancelled: “' + job.prompt + '”. Nothing was changed.');
+                    }
+                };
+                job.timer = setInterval(() => {
+                    if (job.cancelled) return;
+                    job.secs++;
+                    elapsedEl.textContent = job.secs + 's';
+                    job.pct = Math.min(100, job.pct + 4 + Math.random() * 7);
+                    const stageIdx = Math.min(stages.length - 1, Math.floor(job.pct / 100 * stages.length));
+                    stageEl.textContent = stages[stageIdx] + '…';
+                    pctEl.textContent = Math.floor(job.pct) + '%';
+                    bar.style.width = job.pct + '%';
+                    if (job.pct >= 100) {
+                        clearInterval(job.timer); job.done = true; el.classList.add('done');
+                        stageEl.textContent = 'Done'; pctEl.textContent = '100%';
+                        btn.textContent = 'Open result'; btn.classList.add('open');
+                        btn.onclick = () => {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            addMsg('assistant', 'Result for “' + job.prompt + '” is ready — see the card above.');
+                        };
+                        finishJob(job);
+                    }
+                    refreshDock();
+                }, 450);
+                refreshDock();
+                return job;
+            }
+
+            function addMsg(role, html, isHTML) {
+                const m = document.createElement('div');
+                m.className = 'msg ' + role;
+                const b = document.createElement('div');
+                b.className = 'bubble';
+                if (isHTML) b.innerHTML = html; else b.textContent = html;
+                m.appendChild(b);
+                chat.appendChild(m);
+                chat.scrollTop = chat.scrollHeight;
+                return m;
+            }
+
+            function addTyping() {
+                const m = document.createElement('div');
+                m.className = 'msg assistant';
+                m.innerHTML = '<div class="bubble typing"><span></span><span></span><span></span></div>';
+                chat.appendChild(m); chat.scrollTop = chat.scrollHeight;
+                return m;
+            }
+
+            function finishJob(job) {
+                setTimeout(() => {
+                    const card = document.createElement('div');
+                    card.className = 'result-card';
+                    card.innerHTML =
+                        '<div class="vthumb" data-label="result_preview.mp4 · 1280×720">🎞️</div>' +
+                        '<div class="rc-body">' +
+                        '<div class="rc-title">✓ Edit complete</div>' +
+                        '<div class="rc-sub"></div>' +
+                        '<div class="rc-actions">' +
+                        '<button class="chip-btn primary" onclick="toast(\'Download is not wired in this mockup\')">⬇ Download MP4</button>' +
+                        '<button class="chip-btn" onclick="toast(\'Undo is not wired in this mockup\')">↩ Undo</button>' +
+                        '<button class="chip-btn" onclick="toast(\'Compare is not wired in this mockup\')">⇄ Compare</button>' +
+                        '</div>' +
+                        '</div>';
+                    card.querySelector('.rc-sub').textContent = '“' + job.prompt + '” applied to BigBuckBunny.mp4 in ' + job.secs + 's.';
+                    const m = document.createElement('div');
+                    m.className = 'msg assistant'; m.appendChild(card);
+                    chat.appendChild(m); chat.scrollTop = chat.scrollHeight;
+                }, 600);
+            }
+
+            function send() {
+                const text = input.value.trim();
+                if (!text) { input.focus(); return; }
+                addMsg('user', text);
+                input.value = ''; autoGrow();
+                const typing = addTyping();
+                const job = addJob(text);
+                setTimeout(() => {
+                    typing.remove();
+                    addMsg('assistant', 'On it — running <b>“' + text.replace(/</g, '&lt;') + '”</b> with ffmpeg in the background. You can keep chatting; progress is in the dock, bottom-right.', true);
+                }, 900);
+            }
+            sendBtn.onclick = send;
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+            });
+
+            refreshDock();
+            autoGrow();
+            /* demo: start one job shortly after load so the dock shows its real state */
+            setTimeout(() => { addJob('Resize to 1280×720'); }, 900);
+        })();
+    </script>
+</body>
+
+</html>

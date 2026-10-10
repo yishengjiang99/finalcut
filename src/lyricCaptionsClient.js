@@ -3,6 +3,8 @@
 // then burn. The web app has no client-side ffmpeg (all edits run on the server), so the burn uses
 // the server fallback POST /api/lyric-captions/:jobId/burn. See docs/api/LYRIC_CAPTIONS.md.
 
+import { abortableFetch as fetch } from './abortableFetch.js';
+
 export const TARGET_SAMPLE_RATE = 16000;
 export const MAX_AUDIO_SECONDS = 600;
 
