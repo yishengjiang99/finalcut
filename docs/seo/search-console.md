@@ -34,6 +34,21 @@ Covers `https://grepawk.com/` only. Use this if DNS is hard to change.
 3. Status should become **Success** within minutes to a day. "Couldn't fetch" right after submitting is normal; check again later.
 4. Optional: **URL inspection**, paste `https://grepawk.com/`, then **Request indexing**.
 
+## 2b. Subdomains: photo.grepawk.com and music.grepawk.com
+The **Domain property** from Option A covers every subdomain, so no extra verification is needed.
+In that same property, submit each subdomain's own sitemap under **Indexing > Sitemaps**
+(enter the full URL, since it is on another host):
+
+| Site | Sitemap | Source repo / deploy |
+| --- | --- | --- |
+| https://photo.grepawk.com/ (ProTune AI Camera) | `https://photo.grepawk.com/sitemap.xml` | yishengjiang99/photo-recipes, "Deploy photo.grepawk.com" |
+| https://music.grepawk.com/ (AI Music Radar) | `https://music.grepawk.com/sitemap.xml` | yishengjiang99/earsheet, "Deploy music.grepawk.com" |
+
+grepawk.com's own `sitemap.xml` deliberately lists only grepawk.com URLs. The landing page links to both
+subdomains ("More apps by the same developer" section and footer), and each subdomain links back here.
+If you used Option B (URL prefix) instead, add `https://photo.grepawk.com/` and `https://music.grepawk.com/`
+as separate URL-prefix properties first.
+
 ## 3. Bing Webmaster Tools (also feeds DuckDuckGo, Yahoo, ChatGPT search)
 1. Open https://www.bing.com/webmasters and sign in.
 2. Choose **Import from Google Search Console** and authorize. It imports the verified site and its sitemap. Nothing else is needed.

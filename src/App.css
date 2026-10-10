@@ -1857,3 +1857,32 @@ body {
   flex-wrap: wrap;
   gap: 10px;
 }
+
+/* ---------- more apps by the same developer ---------- */
+.landing .more-apps-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.landing a.more-app {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.landing footer .footer-more {
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding-top: 0;
+}
+
+@media (max-width: 960px) {
+  .landing .more-apps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing footer .wrap {
+    flex-wrap: wrap;
+  }
+}

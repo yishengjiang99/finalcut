@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { track } from './telemetry.js';
 import logoUrl from './brand/logo-96.webp';
 import posterUrl from './brand/explainer-poster.webp';
 import explainerVideoUrl from '../docs/finalcap-explainer.mp4';
@@ -60,6 +61,26 @@ function useDeferredAutoplay(ref) {
     };
   }, [ref]);
 }
+
+// Other apps by the same developer (cross-links only; these hosts have their own sitemaps).
+const sisterApps = [
+  {
+    href: 'https://photo.grepawk.com/',
+    cta: 'sister_photo',
+    icon: '📷',
+    name: 'ProTune AI Camera for iPhone',
+    description: 'An AI camera that sets shutter, ISO, exposure, white balance and focus for the scene when you tap Auto Optimize. Real camera settings, not filters.',
+    status: 'On the App Store',
+  },
+  {
+    href: 'https://music.grepawk.com/',
+    cta: 'sister_music',
+    icon: '🎼',
+    name: 'AI Music Radar: audio to sheet music',
+    description: 'Play, sing or hum and AI Music Radar writes the notes live on your iPhone, then exports MIDI, MusicXML and PDF. Try the web demo today.',
+    status: 'iPhone app coming soon',
+  },
+];
 
 export default function Landing({ onGetStarted, onLoadSample, authError }) {
   const videoRef = useRef(null);
@@ -216,6 +237,23 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
         </div>
       </section>
 
+      <section className="block alt" id="more-apps" aria-labelledby="more-apps-title">
+        <div className="wrap">
+          <div className="kicker reveal">More apps</div>
+          <h2 className="sec reveal" id="more-apps-title">More apps by the same developer</h2>
+          <div className="feat-grid more-apps-grid">
+            {sisterApps.map(({ href, cta, icon, name, description, status }) => (
+              <a className="feat reveal more-app" key={href} href={href} onClick={() => track('cta_click', { cta, placement: 'more_apps' })}>
+                <div className="fic" aria-hidden="true">{icon}</div>
+                <h3>{name}</h3>
+                <p>{description}</p>
+                <span className="try">{status} →</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <div className="wrap">
         <div className="cta-band reveal">
           <h2>Your next edit is one sentence away.</h2>
@@ -236,6 +274,11 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <a href="/legal/licenses.html">Open-source licenses</a>
           <a href="/legal/support.html">Support</a>
         </div>
+        <nav className="wrap footer-more" aria-label="More apps by the same developer">
+          <span>More apps:</span>
+          <a href="https://photo.grepawk.com/" onClick={() => track('cta_click', { cta: 'sister_photo', placement: 'footer' })}>ProTune AI Camera: auto shutter, ISO and focus for iPhone</a>
+          <a href="https://music.grepawk.com/" onClick={() => track('cta_click', { cta: 'sister_music', placement: 'footer' })}>AI Music Radar: turn what you hear into sheet music</a>
+        </nav>
       </footer>
     </div>
   );
