@@ -1,0 +1,44 @@
+# Throwaway nginx used only by CI (docker, port 8080) to validate the /v2 snippet with real nginx.
+# Mirrors the static-serving parts of the repo's nginx.conf (server-level headers, /, /legal,
+# regex static location). __V2_INCLUDE__ is replaced with the include line, or removed for the
+# baseline run, so the test can prove the existing routes' headers are identical with and without it.
+worker_processes 1;
+error_log /dev/stderr warn;
+pid /tmp/nginx.pid;
+events { worker_connections 64; }
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log off;
+    server {
+        listen 8080;
+        server_name localhost;
+        root /srv/dist;
+        index index.html;
+
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+
+        location ^~ /legal/ {
+            try_files $uri =404;
+            default_type text/html;
+            charset utf-8;
+            add_header Cache-Control "public, max-age=3600" always;
+        }
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+        location /api {
+            return 200 '{"stub":"api"}';
+        }
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
+        __V2_INCLUDE__
+    }
+}
