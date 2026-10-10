@@ -186,8 +186,8 @@
   .icon-btn:hover { color: var(--text); border-color: var(--accent); }
   .composer textarea {
     flex: 1; background: transparent; border: none; outline: none; resize: none;
-    color: var(--text); font-family: var(--font); font-size: 15.5px; line-height: 1.5;
-    max-height: 140px; padding: 8px 2px; min-height: 26px;
+    color: var(--text); font-family: var(--font); font-size: 17px; line-height: 1.55;
+    max-height: 200px; padding: 12px 4px; min-height: 76px;
   }
   .composer textarea::placeholder { color: var(--text-faint); }
   .send-btn {
@@ -334,7 +334,7 @@
         <div class="attachments" id="attachments"></div>
         <div class="composer-row">
           <button class="icon-btn" id="attachBtn" title="Attach video or audio">📎</button>
-          <textarea id="input" rows="1" placeholder="Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”"></textarea>
+          <textarea id="input" rows="2" placeholder="Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”"></textarea>
           <button class="send-btn" id="sendBtn" title="Send">↑</button>
         </div>
         <div class="composer-foot">
@@ -396,7 +396,7 @@
 
   function autoGrow(){
     input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    input.style.height = Math.min(input.scrollHeight, 200) + 'px';
   }
   input.addEventListener('input', autoGrow);
 
