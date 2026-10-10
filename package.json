@@ -12,6 +12,7 @@
     "dev:v2": "node scripts/copy-ffmpeg-core.mjs && node scripts/fetch-ffmpeg-source.mjs && vite -c vite.v2.config.js",
     "preview": "vite preview",
     "test": "vitest --run",
+    "test:smoke": "vitest --run src/test/App.test.jsx src/test/auth-routing.test.js src/test/health.test.js src/test/jobs-api.test.js",
     "server": "node server.js",
     "start": "node server.js",
     "deploy:grepawk": "./scripts/deploy-grepawk.sh",

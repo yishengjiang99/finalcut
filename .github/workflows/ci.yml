@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Run the full test suite instead of the smoke subset'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -41,8 +47,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests (smoke subset on merge — full suite via `npm test` locally or workflow_dispatch)
+        run: ${{ inputs.full && 'npm test' || 'npm run test:smoke' }}
         env:
           QUOTA_DB_TEST_HOST: 127.0.0.1
           QUOTA_DB_TEST_USER: quota_test

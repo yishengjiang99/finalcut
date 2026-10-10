@@ -116,6 +116,32 @@ describe('App Component', () => {
     expect(container.querySelector('.composer textarea')).not.toBeNull();
   });
 
+  it('shows at most two starter chips in the chat flow, not in the composer', async () => {
+    delete window.location;
+    window.location = {
+      pathname: '/success',
+      search: '?session_id=cs_test_123',
+      origin: 'http://localhost:3000',
+      href: 'http://localhost:3000/success?session_id=cs_test_123'
+    };
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ verified: true, paymentStatus: 'paid', customerEmail: 'test@example.com' })
+      });
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByText('Get started free')).not.toBeInTheDocument();
+    });
+    // Chips live in the chat panel (scroll-past), max two — never pinned in the composer.
+    const inChat = container.querySelectorAll('.chat .chat-suggestions .pchip');
+    expect(inChat.length).toBeGreaterThan(0);
+    expect(inChat.length).toBeLessThanOrEqual(2);
+    expect(container.querySelector('.composer .pchip')).toBeNull();
+    expect(container.querySelector('.composer .chat-suggestions')).toBeNull();
+  });
+
   it('does not expose token in client-side code', () => {
     const { container } = render(<App />);
     const html = container.innerHTML;

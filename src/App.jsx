@@ -1121,11 +1121,20 @@ export default function App() {
         <div className="main">
           {view === 'editor' && (
             <div className="chat" ref={chatWindowRef}>
-              {visibleMessages.map((msg) => (
-                <div key={msg.id} className={`msg ${msg.role === 'user' ? 'user' : 'assistant'}`} data-message-id={msg.id}>
-                  {msg.content && <div className="bubble">{msg.content}</div>}
-                  {msg.videoUrl && renderAttachment(msg)}
-                </div>
+              {visibleMessages.map((msg, i) => (
+                <React.Fragment key={msg.id}>
+                  <div className={`msg ${msg.role === 'user' ? 'user' : 'assistant'}`} data-message-id={msg.id}>
+                    {msg.content && <div className="bubble">{msg.content}</div>}
+                    {msg.videoUrl && renderAttachment(msg)}
+                  </div>
+                  {i === 0 && (
+                    <div className="chat-suggestions">
+                      {sampleCommands.slice(0, 2).map((cmd) => (
+                        <button key={cmd.text} className="pchip" onClick={() => handleSampleClick(cmd.text)}>{cmd.icon} {cmd.text}</button>
+                      ))}
+                    </div>
+                  )}
+                </React.Fragment>
               ))}
               {showTyping && (
                 <div className="msg assistant">
@@ -1238,11 +1247,6 @@ export default function App() {
               </div>
             )}
             <div className="composer">
-              <div className="prompt-chips">
-                {sampleCommands.map((cmd) => (
-                  <button key={cmd.text} className="pchip" onClick={() => handleSampleClick(cmd.text)}>{cmd.icon} {cmd.text}</button>
-                ))}
-              </div>
               <div className="attachments">
                 {originals.map(item => (
                   <div key={item.id} className={`attach${item.id === activeMediaId ? ' active' : ''}`}>

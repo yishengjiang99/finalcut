@@ -669,16 +669,14 @@ body {
   box-shadow: 0 0 0 3px rgba(124, 108, 246, .16), var(--shadow);
 }
 
-.prompt-chips {
+/* Starter suggestions live in the chat flow (not the composer) so they scroll past. */
+.chat-suggestions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 14px 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.prompt-chips::-webkit-scrollbar {
-  display: none;
+  max-width: min(720px, 100%);
+  align-self: flex-start;
+  animation: rise .25s ease-out;
 }
 
 .pchip {
@@ -1969,11 +1967,6 @@ body {
 
   .composer-zone {
     padding: 6px 10px calc(10px + env(safe-area-inset-bottom));
-  }
-
-  .prompt-chips {
-    flex-wrap: wrap;
-    overflow-x: visible;
   }
 
   .pchip {

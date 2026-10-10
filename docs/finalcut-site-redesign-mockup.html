@@ -158,8 +158,8 @@
   }
   .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,108,246,.16), var(--shadow); }
 
-  .prompt-chips { display: flex; gap: 8px; padding: 12px 14px 0; overflow-x: auto; scrollbar-width: none; }
-  .prompt-chips::-webkit-scrollbar { display: none; }
+  /* starter suggestions live in the chat flow so they scroll past */
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; max-width: min(720px, 100%); align-self: flex-start; animation: rise .25s ease-out; }
   .pchip {
     flex-shrink: 0; border: 1px solid var(--line); background: var(--bg-2); color: var(--text-dim);
     font-size: 12.5px; font-weight: 500; padding: 7px 13px; border-radius: 999px; cursor: pointer; transition: all .15s;
@@ -332,7 +332,6 @@
     /* composer: one slim column, nothing stacked */
     .composer-zone { padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
     .composer { border-radius: 16px; }
-    .prompt-chips { padding: 10px 10px 0; gap: 6px; flex-wrap: wrap; overflow-x: visible; }
     .pchip { font-size: 11.5px; padding: 6px 11px; }
     .attachments { padding: 8px 10px 0; gap: 6px; }
     .attach { font-size: 11px; padding: 5px 6px 5px 5px; }
@@ -398,6 +397,8 @@
       <div class="msg assistant">
         <div class="bubble">Welcome back. <b>BigBuckBunny.mp4</b> is loaded and ready — tell me what to do with it, or pick a starting point below.</div>
       </div>
+      <div class="chat-suggestions" id="chips">
+      </div>
     </div>
 
     <div class="composer-zone">
@@ -413,7 +414,6 @@
         <div class="is-bar"><i id="isBarFill"></i></div>
       </div>
       <div class="composer">
-        <div class="prompt-chips" id="chips"></div>
         <div class="attachments" id="attachments"></div>
         <div class="composer-row">
           <button class="icon-btn" id="attachBtn" title="Attach video or audio">📎</button>
@@ -519,7 +519,7 @@
     ['🔊','Normalize audio to −14 LUFS'],
     ['🖼️','Extract a thumbnail at 0:03'],
   ];
-  suggestions.forEach(([icon, text])=>{
+  suggestions.slice(0, 2).forEach(([icon, text])=>{
     const b = document.createElement('button');
     b.className = 'pchip'; b.textContent = icon + ' ' + text;
     b.onclick = ()=>{ input.value = text; input.focus(); autoGrow(); };
