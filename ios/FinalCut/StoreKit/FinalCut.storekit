@@ -1,5 +1,5 @@
 {
-  "identifier" : "FinalCut",
+  "identifier" : "FinalCap",
   "nonRenewingSubscriptions" : [
 
   ],
@@ -18,9 +18,13 @@
     {
       "id" : "21400001",
       "localizations" : [
-
+        {
+          "description" : "",
+          "displayName" : "FinalCap Pro",
+          "locale" : "en_US"
+        }
       ],
-      "name" : "FinalCut Pro",
+      "name" : "FinalCap Pro",
       "subscriptions" : [
         {
           "adHocOffers" : [
@@ -36,14 +40,15 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Pro editing, captions, and export on FinalCut.",
-              "displayName" : "FinalCut Pro Monthly",
+              "description" : "Unlimited AI edits, captions and translations",
+              "displayName" : "FinalCap Pro Monthly",
               "locale" : "en_US"
             }
           ],
           "productID" : "com.ragnus.w2.subscription.monthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Pro Monthly",
+          "referenceName" : "FinalCap Pro Monthly",
+          "subscriptionGroupID" : "21400001",
           "type" : "RecurringSubscription"
         }
       ]
