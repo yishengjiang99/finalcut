@@ -1,0 +1,61 @@
+name: ASC submit version + first subscription (FinalCap)
+
+# One reviewSubmission: version 1.0 + new build + 'FinalCap Pro' group + monthly subscription.
+# mode=status is read-only. mode=cancel pulls ONE given submission from review.
+# mode=submit SUBMITS FOR APP REVIEW (also clears export compliance, attaches the build, writes review notes);
+# run only when the owner asks.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: status (read-only), cancel or submit
+        type: choice
+        options: [status, submit, cancel]
+        default: status
+      version_string:
+        description: App Store versionString
+        default: "1.0"
+      build_number:
+        description: CFBundleVersion
+        default: ""
+      cancel_submission_id:
+        description: reviewSubmission id to pull from review (mode=cancel)
+        default: ""
+
+concurrency:
+  group: asc-submit
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+      BUNDLE_ID: com.ragnus.w2
+      VERSION_STRING: ${{ inputs.version_string }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q PyJWT cryptography requests
+      - name: Wait for build VALID
+        if: ${{ inputs.mode == 'submit' }}
+        env: { MODE: wait_build }
+        run: python3 scripts/asc/submit_version_with_subscriptions.py
+      - name: Submit version + subscription group + subscription
+        if: ${{ inputs.mode == 'submit' }}
+        env: { MODE: submit }
+        run: python3 scripts/asc/submit_version_with_subscriptions.py
+      - name: Status (read-only)
+        if: ${{ inputs.mode == 'status' }}
+        env: { MODE: status }
+        run: python3 scripts/asc/submit_version_with_subscriptions.py
+      - name: Cancel review submission (pull from review)
+        if: ${{ inputs.mode == 'cancel' }}
+        env:
+          MODE: cancel
+          CANCEL_SUBMISSION_ID: ${{ inputs.cancel_submission_id }}
+        run: python3 scripts/asc/submit_version_with_subscriptions.py
