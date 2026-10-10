@@ -168,7 +168,7 @@ final class PaywallStore: ObservableObject {
     /// - Parameters:
     ///   - loader: product fetch (StoreKit by default; injectable for tests).
     ///   - retryDelaysNanos: automatic retries after an empty result before showing the unavailable state.
-    init(loader: @escaping () async -> [Product] = StoreKitPurchaseStub.loadProducts,
+    nonisolated init(loader: @escaping () async -> [Product] = StoreKitPurchaseStub.loadProducts,
          retryDelaysNanos: [UInt64] = [1_000_000_000, 2_000_000_000]) {
         self.loader = loader
         self.retryDelays = retryDelaysNanos
