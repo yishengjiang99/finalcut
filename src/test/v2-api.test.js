@@ -137,6 +137,7 @@ describe('FFmpeg help lookup', () => {
     '-h': ['Per-file main options:', '-map [-]input_file_id[:stream_specifier]  set input stream mapping', '-disposition        disposition', '-frames number      set the number of frames to output'].join('\n'),
     '-h full': ['-disposition        disposition', 'AVOptions:', '  default      <flags> E..V..A.S...', '  attached_pic <flags> E..V.....S...', '  captions     <flags> E..V..A.S...', 'gif encoder AVOptions:'].join('\n'),
     '-h filter=gblur': 'Filter gblur\n  Apply Gaussian Blur filter.\n  sigma <float> ..FV.....T. set sigma (from 0 to 1024) (default 0.5)',
+    '-version': 'ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers',
   };
   const calls = [];
   const run = async (bin, args) => { calls.push(args); return { stdout: HELP[args.slice(1).join(' ')] || '', stderr: 'Unknown filter', code: 0 }; };
@@ -144,8 +145,8 @@ describe('FFmpeg help lookup', () => {
 
   it('greps the help of the server FFmpeg, case-insensitively, and echoes the command', async () => {
     const found = await search({ help: 'ffmpeg -h', pattern: 'THUMB|cover|dispos' });
-    expect(calls.at(-1)).toEqual(['-hide_banner', '-h']);
-    expect(found).toMatchObject({ ok: true, matches: 1, output: '-disposition        disposition', command: "ffmpeg -h | grep -i -E 'THUMB|cover|dispos'" });
+    expect(calls).toContainEqual(['-hide_banner', '-h']);
+    expect(found).toMatchObject({ ok: true, matches: 1, output: '-disposition        disposition', command: "ffmpeg -h | grep -i -E 'THUMB|cover|dispos'", ffmpegVersion: '4.4.2-0ubuntu0.22.04.1' });
   });
 
   it('prints context lines like grep -A/-B and reads -h full by default', async () => {
@@ -218,7 +219,8 @@ describe('POST /api/v2/chat', () => {
     const lookupResult = xaiCalls[1].messages.find(m => m.role === 'tool' && m.tool_call_id === 's1');
     expect(JSON.parse(lookupResult.content)).toMatchObject({ ok: true, matches: 1, command: "ffmpeg -encoders | grep -i -E 'gif'" });
     expect(JSON.parse(lookupResult.content).output).toMatch(/Graphics Interchange Format/);
-    expect(helpRuns).toEqual([['-hide_banner', '-encoders']]);
+    expect(helpRuns).toContainEqual(['-hide_banner', '-encoders']);
+    expect(helpRuns).toContainEqual(['-hide_banner', '-version']);
     // The conversation handed back includes the lookup exchange, so the next round is consistent.
     expect(body.messages.map(m => m.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
   });

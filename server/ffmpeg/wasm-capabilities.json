@@ -1,0 +1,6536 @@
+{
+  "generated": "2026-10-10T05:22:55.141Z",
+  "ffmpeg": "5.1.4",
+  "core": "0.12.10",
+  "mode": "mt",
+  "filters": [
+    {
+      "name": "abench",
+      "description": "Benchmark part of a filtergraph."
+    },
+    {
+      "name": "acompressor",
+      "description": "Audio compressor."
+    },
+    {
+      "name": "acontrast",
+      "description": "Simple audio dynamic range compression/expansion filter."
+    },
+    {
+      "name": "acopy",
+      "description": "Copy the input audio unchanged to the output."
+    },
+    {
+      "name": "acue",
+      "description": "Delay filtering to match a cue."
+    },
+    {
+      "name": "acrossfade",
+      "description": "Cross fade two input audio streams."
+    },
+    {
+      "name": "acrossover",
+      "description": "Split audio into per-bands streams."
+    },
+    {
+      "name": "acrusher",
+      "description": "Reduce audio bit resolution."
+    },
+    {
+      "name": "adeclick",
+      "description": "Remove impulsive noise from input audio."
+    },
+    {
+      "name": "adeclip",
+      "description": "Remove clipping from input audio."
+    },
+    {
+      "name": "adecorrelate",
+      "description": "Apply decorrelation to input audio."
+    },
+    {
+      "name": "adelay",
+      "description": "Delay one or more audio channels."
+    },
+    {
+      "name": "adenorm",
+      "description": "Remedy denormals by adding extremely low-level noise."
+    },
+    {
+      "name": "aderivative",
+      "description": "Compute derivative of input audio."
+    },
+    {
+      "name": "adynamicequalizer",
+      "description": "Apply Dynamic Equalization of input audio."
+    },
+    {
+      "name": "adynamicsmooth",
+      "description": "Apply Dynamic Smoothing of input audio."
+    },
+    {
+      "name": "aecho",
+      "description": "Add echoing to the audio."
+    },
+    {
+      "name": "aemphasis",
+      "description": "Audio emphasis."
+    },
+    {
+      "name": "aeval",
+      "description": "Filter audio signal according to a specified expression."
+    },
+    {
+      "name": "aexciter",
+      "description": "Enhance high frequency part of audio."
+    },
+    {
+      "name": "afade",
+      "description": "Fade in/out input audio."
+    },
+    {
+      "name": "afftdn",
+      "description": "Denoise audio samples using FFT."
+    },
+    {
+      "name": "afftfilt",
+      "description": "Apply arbitrary expressions to samples in frequency domain."
+    },
+    {
+      "name": "afir",
+      "description": "Apply Finite Impulse Response filter with supplied coefficients in additional stream(s)."
+    },
+    {
+      "name": "aformat",
+      "description": "Convert the input audio to one of the specified formats."
+    },
+    {
+      "name": "afreqshift",
+      "description": "Apply frequency shifting to input audio."
+    },
+    {
+      "name": "afwtdn",
+      "description": "Denoise audio stream using Wavelets."
+    },
+    {
+      "name": "agate",
+      "description": "Audio gate."
+    },
+    {
+      "name": "aiir",
+      "description": "Apply Infinite Impulse Response filter with supplied coefficients."
+    },
+    {
+      "name": "aintegral",
+      "description": "Compute integral of input audio."
+    },
+    {
+      "name": "ainterleave",
+      "description": "Temporally interleave audio inputs."
+    },
+    {
+      "name": "alatency",
+      "description": "Report audio filtering latency."
+    },
+    {
+      "name": "alimiter",
+      "description": "Audio lookahead limiter."
+    },
+    {
+      "name": "allpass",
+      "description": "Apply a two-pole all-pass filter."
+    },
+    {
+      "name": "aloop",
+      "description": "Loop audio samples."
+    },
+    {
+      "name": "amerge",
+      "description": "Merge two or more audio streams into a single multi-channel stream."
+    },
+    {
+      "name": "ametadata",
+      "description": "Manipulate audio frame metadata."
+    },
+    {
+      "name": "amix",
+      "description": "Audio mixing."
+    },
+    {
+      "name": "amultiply",
+      "description": "Multiply two audio streams."
+    },
+    {
+      "name": "anequalizer",
+      "description": "Apply high-order audio parametric multi band equalizer."
+    },
+    {
+      "name": "anlmdn",
+      "description": "Reduce broadband noise from stream using Non-Local Means."
+    },
+    {
+      "name": "anlmf",
+      "description": "Apply Normalized Least-Mean-Fourth algorithm to first audio stream."
+    },
+    {
+      "name": "anlms",
+      "description": "Apply Normalized Least-Mean-Squares algorithm to first audio stream."
+    },
+    {
+      "name": "anull",
+      "description": "Pass the source unchanged to the output."
+    },
+    {
+      "name": "apad",
+      "description": "Pad audio with silence."
+    },
+    {
+      "name": "aperms",
+      "description": "Set permissions for the output audio frame."
+    },
+    {
+      "name": "aphaser",
+      "description": "Add a phasing effect to the audio."
+    },
+    {
+      "name": "aphaseshift",
+      "description": "Apply phase shifting to input audio."
+    },
+    {
+      "name": "apsyclip",
+      "description": "Audio Psychoacoustic Clipper."
+    },
+    {
+      "name": "apulsator",
+      "description": "Audio pulsator."
+    },
+    {
+      "name": "arealtime",
+      "description": "Slow down filtering to match realtime."
+    },
+    {
+      "name": "aresample",
+      "description": "Resample audio data."
+    },
+    {
+      "name": "areverse",
+      "description": "Reverse an audio clip."
+    },
+    {
+      "name": "arnndn",
+      "description": "Reduce noise from speech using Recurrent Neural Networks."
+    },
+    {
+      "name": "asdr",
+      "description": "Measure Audio Signal-to-Distortion Ratio."
+    },
+    {
+      "name": "asegment",
+      "description": "Segment audio stream."
+    },
+    {
+      "name": "aselect",
+      "description": "Select audio frames to pass in output."
+    },
+    {
+      "name": "asendcmd",
+      "description": "Send commands to filters."
+    },
+    {
+      "name": "asetnsamples",
+      "description": "Set the number of samples for each output audio frames."
+    },
+    {
+      "name": "asetpts",
+      "description": "Set PTS for the output audio frame."
+    },
+    {
+      "name": "asetrate",
+      "description": "Change the sample rate without altering the data."
+    },
+    {
+      "name": "asettb",
+      "description": "Set timebase for the audio output link."
+    },
+    {
+      "name": "ashowinfo",
+      "description": "Show textual information for each audio frame."
+    },
+    {
+      "name": "asidedata",
+      "description": "Manipulate audio frame side data."
+    },
+    {
+      "name": "asoftclip",
+      "description": "Audio Soft Clipper."
+    },
+    {
+      "name": "aspectralstats",
+      "description": "Show frequency domain statistics about audio frames."
+    },
+    {
+      "name": "asplit",
+      "description": "Pass on the audio input to N audio outputs."
+    },
+    {
+      "name": "astats",
+      "description": "Show time domain statistics about audio frames."
+    },
+    {
+      "name": "astreamselect",
+      "description": "Select audio streams"
+    },
+    {
+      "name": "asubboost",
+      "description": "Boost subwoofer frequencies."
+    },
+    {
+      "name": "asubcut",
+      "description": "Cut subwoofer frequencies."
+    },
+    {
+      "name": "asupercut",
+      "description": "Cut super frequencies."
+    },
+    {
+      "name": "asuperpass",
+      "description": "Apply high order Butterworth band-pass filter."
+    },
+    {
+      "name": "asuperstop",
+      "description": "Apply high order Butterworth band-stop filter."
+    },
+    {
+      "name": "atempo",
+      "description": "Adjust audio tempo."
+    },
+    {
+      "name": "atilt",
+      "description": "Apply spectral tilt to audio."
+    },
+    {
+      "name": "atrim",
+      "description": "Pick one continuous section from the input, drop the rest."
+    },
+    {
+      "name": "axcorrelate",
+      "description": "Cross-correlate two audio streams."
+    },
+    {
+      "name": "bandpass",
+      "description": "Apply a two-pole Butterworth band-pass filter."
+    },
+    {
+      "name": "bandreject",
+      "description": "Apply a two-pole Butterworth band-reject filter."
+    },
+    {
+      "name": "bass",
+      "description": "Boost or cut lower frequencies."
+    },
+    {
+      "name": "biquad",
+      "description": "Apply a biquad IIR filter with the given coefficients."
+    },
+    {
+      "name": "channelmap",
+      "description": "Remap audio channels."
+    },
+    {
+      "name": "channelsplit",
+      "description": "Split audio into per-channel streams."
+    },
+    {
+      "name": "chorus",
+      "description": "Add a chorus effect to the audio."
+    },
+    {
+      "name": "compand",
+      "description": "Compress or expand audio dynamic range."
+    },
+    {
+      "name": "compensationdelay",
+      "description": "Audio Compensation Delay Line."
+    },
+    {
+      "name": "crossfeed",
+      "description": "Apply headphone crossfeed filter."
+    },
+    {
+      "name": "crystalizer",
+      "description": "Simple audio noise sharpening filter."
+    },
+    {
+      "name": "dcshift",
+      "description": "Apply a DC shift to the audio."
+    },
+    {
+      "name": "deesser",
+      "description": "Apply de-essing to the audio."
+    },
+    {
+      "name": "dialoguenhance",
+      "description": "Audio Dialogue Enhancement."
+    },
+    {
+      "name": "drmeter",
+      "description": "Measure audio dynamic range."
+    },
+    {
+      "name": "dynaudnorm",
+      "description": "Dynamic Audio Normalizer."
+    },
+    {
+      "name": "earwax",
+      "description": "Widen the stereo image."
+    },
+    {
+      "name": "ebur128",
+      "description": "EBU R128 scanner."
+    },
+    {
+      "name": "equalizer",
+      "description": "Apply two-pole peaking equalization (EQ) filter."
+    },
+    {
+      "name": "extrastereo",
+      "description": "Increase difference between stereo audio channels."
+    },
+    {
+      "name": "firequalizer",
+      "description": "Finite Impulse Response Equalizer."
+    },
+    {
+      "name": "flanger",
+      "description": "Apply a flanging effect to the audio."
+    },
+    {
+      "name": "haas",
+      "description": "Apply Haas Stereo Enhancer."
+    },
+    {
+      "name": "hdcd",
+      "description": "Apply High Definition Compatible Digital (HDCD) decoding."
+    },
+    {
+      "name": "headphone",
+      "description": "Apply headphone binaural spatialization with HRTFs in additional streams."
+    },
+    {
+      "name": "highpass",
+      "description": "Apply a high-pass filter with 3dB point frequency."
+    },
+    {
+      "name": "highshelf",
+      "description": "Apply a high shelf filter."
+    },
+    {
+      "name": "join",
+      "description": "Join multiple audio streams into multi-channel output."
+    },
+    {
+      "name": "loudnorm",
+      "description": "EBU R128 loudness normalization"
+    },
+    {
+      "name": "lowpass",
+      "description": "Apply a low-pass filter with 3dB point frequency."
+    },
+    {
+      "name": "lowshelf",
+      "description": "Apply a low shelf filter."
+    },
+    {
+      "name": "mcompand",
+      "description": "Multiband Compress or expand audio dynamic range."
+    },
+    {
+      "name": "pan",
+      "description": "Remix channels with coefficients (panning)."
+    },
+    {
+      "name": "replaygain",
+      "description": "ReplayGain scanner."
+    },
+    {
+      "name": "sidechaincompress",
+      "description": "Sidechain compressor."
+    },
+    {
+      "name": "sidechaingate",
+      "description": "Audio sidechain gate."
+    },
+    {
+      "name": "silencedetect",
+      "description": "Detect silence."
+    },
+    {
+      "name": "silenceremove",
+      "description": "Remove silence."
+    },
+    {
+      "name": "speechnorm",
+      "description": "Speech Normalizer."
+    },
+    {
+      "name": "stereotools",
+      "description": "Apply various stereo tools."
+    },
+    {
+      "name": "stereowiden",
+      "description": "Apply stereo widening effect."
+    },
+    {
+      "name": "superequalizer",
+      "description": "Apply 18 band equalization filter."
+    },
+    {
+      "name": "surround",
+      "description": "Apply audio surround upmix filter."
+    },
+    {
+      "name": "tiltshelf",
+      "description": "Apply a tilt shelf filter."
+    },
+    {
+      "name": "treble",
+      "description": "Boost or cut upper frequencies."
+    },
+    {
+      "name": "tremolo",
+      "description": "Apply tremolo effect."
+    },
+    {
+      "name": "vibrato",
+      "description": "Apply vibrato effect."
+    },
+    {
+      "name": "virtualbass",
+      "description": "Audio Virtual Bass."
+    },
+    {
+      "name": "volume",
+      "description": "Change input volume."
+    },
+    {
+      "name": "volumedetect",
+      "description": "Detect audio volume."
+    },
+    {
+      "name": "aevalsrc",
+      "description": "Generate an audio signal generated by an expression."
+    },
+    {
+      "name": "afirsrc",
+      "description": "Generate a FIR coefficients audio stream."
+    },
+    {
+      "name": "anoisesrc",
+      "description": "Generate a noise audio signal."
+    },
+    {
+      "name": "anullsrc",
+      "description": "Null audio source, return empty audio frames."
+    },
+    {
+      "name": "hilbert",
+      "description": "Generate a Hilbert transform FIR coefficients."
+    },
+    {
+      "name": "sinc",
+      "description": "Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, or band-reject FIR coefficients."
+    },
+    {
+      "name": "sine",
+      "description": "Generate sine wave audio signal."
+    },
+    {
+      "name": "anullsink",
+      "description": "Do absolutely nothing with the input audio."
+    },
+    {
+      "name": "addroi",
+      "description": "Add region of interest to frame."
+    },
+    {
+      "name": "alphaextract",
+      "description": "Extract an alpha channel as a grayscale image component."
+    },
+    {
+      "name": "alphamerge",
+      "description": "Copy the luma value of the second input into the alpha channel of the first input."
+    },
+    {
+      "name": "amplify",
+      "description": "Amplify changes between successive video frames."
+    },
+    {
+      "name": "ass",
+      "description": "Render ASS subtitles onto input video using the libass library."
+    },
+    {
+      "name": "atadenoise",
+      "description": "Apply an Adaptive Temporal Averaging Denoiser."
+    },
+    {
+      "name": "avgblur",
+      "description": "Apply Average Blur filter."
+    },
+    {
+      "name": "bbox",
+      "description": "Compute bounding box for each frame."
+    },
+    {
+      "name": "bench",
+      "description": "Benchmark part of a filtergraph."
+    },
+    {
+      "name": "bilateral",
+      "description": "Apply Bilateral filter."
+    },
+    {
+      "name": "bitplanenoise",
+      "description": "Measure bit plane noise."
+    },
+    {
+      "name": "blackdetect",
+      "description": "Detect video intervals that are (almost) black."
+    },
+    {
+      "name": "blackframe",
+      "description": "Detect frames that are (almost) black."
+    },
+    {
+      "name": "blend",
+      "description": "Blend two video frames into each other."
+    },
+    {
+      "name": "blockdetect",
+      "description": "Blockdetect filter."
+    },
+    {
+      "name": "blurdetect",
+      "description": "Blurdetect filter."
+    },
+    {
+      "name": "bm3d",
+      "description": "Block-Matching 3D denoiser."
+    },
+    {
+      "name": "boxblur",
+      "description": "Blur the input."
+    },
+    {
+      "name": "bwdif",
+      "description": "Deinterlace the input image."
+    },
+    {
+      "name": "cas",
+      "description": "Contrast Adaptive Sharpen."
+    },
+    {
+      "name": "chromahold",
+      "description": "Turns a certain color range into gray."
+    },
+    {
+      "name": "chromakey",
+      "description": "Turns a certain color into transparency. Operates on YUV colors."
+    },
+    {
+      "name": "chromanr",
+      "description": "Reduce chrominance noise."
+    },
+    {
+      "name": "chromashift",
+      "description": "Shift chroma."
+    },
+    {
+      "name": "ciescope",
+      "description": "Video CIE scope."
+    },
+    {
+      "name": "codecview",
+      "description": "Visualize information about some codecs."
+    },
+    {
+      "name": "colorbalance",
+      "description": "Adjust the color balance."
+    },
+    {
+      "name": "colorchannelmixer",
+      "description": "Adjust colors by mixing color channels."
+    },
+    {
+      "name": "colorcontrast",
+      "description": "Adjust color contrast between RGB components."
+    },
+    {
+      "name": "colorcorrect",
+      "description": "Adjust color white balance selectively for blacks and whites."
+    },
+    {
+      "name": "colorize",
+      "description": "Overlay a solid color on the video stream."
+    },
+    {
+      "name": "colorkey",
+      "description": "Turns a certain color into transparency. Operates on RGB colors."
+    },
+    {
+      "name": "colorhold",
+      "description": "Turns a certain color range into gray. Operates on RGB colors."
+    },
+    {
+      "name": "colorlevels",
+      "description": "Adjust the color levels."
+    },
+    {
+      "name": "colormap",
+      "description": "Apply custom Color Maps to video stream."
+    },
+    {
+      "name": "colormatrix",
+      "description": "Convert color matrix."
+    },
+    {
+      "name": "colorspace",
+      "description": "Convert between colorspaces."
+    },
+    {
+      "name": "colortemperature",
+      "description": "Adjust color temperature of video."
+    },
+    {
+      "name": "convolution",
+      "description": "Apply convolution filter."
+    },
+    {
+      "name": "convolve",
+      "description": "Convolve first video stream with second video stream."
+    },
+    {
+      "name": "copy",
+      "description": "Copy the input video unchanged to the output."
+    },
+    {
+      "name": "cover_rect",
+      "description": "Find and cover a user specified object."
+    },
+    {
+      "name": "crop",
+      "description": "Crop the input video."
+    },
+    {
+      "name": "cropdetect",
+      "description": "Auto-detect crop size."
+    },
+    {
+      "name": "cue",
+      "description": "Delay filtering to match a cue."
+    },
+    {
+      "name": "curves",
+      "description": "Adjust components curves."
+    },
+    {
+      "name": "datascope",
+      "description": "Video data analysis."
+    },
+    {
+      "name": "dblur",
+      "description": "Apply Directional Blur filter."
+    },
+    {
+      "name": "dctdnoiz",
+      "description": "Denoise frames using 2D DCT."
+    },
+    {
+      "name": "deband",
+      "description": "Debands video."
+    },
+    {
+      "name": "deblock",
+      "description": "Deblock video."
+    },
+    {
+      "name": "decimate",
+      "description": "Decimate frames (post field matching filter)."
+    },
+    {
+      "name": "deconvolve",
+      "description": "Deconvolve first video stream with second video stream."
+    },
+    {
+      "name": "dedot",
+      "description": "Reduce cross-luminance and cross-color."
+    },
+    {
+      "name": "deflate",
+      "description": "Apply deflate effect."
+    },
+    {
+      "name": "deflicker",
+      "description": "Remove temporal frame luminance variations."
+    },
+    {
+      "name": "dejudder",
+      "description": "Remove judder produced by pullup."
+    },
+    {
+      "name": "delogo",
+      "description": "Remove logo from input video."
+    },
+    {
+      "name": "derain",
+      "description": "Apply derain filter to the input."
+    },
+    {
+      "name": "deshake",
+      "description": "Stabilize shaky video."
+    },
+    {
+      "name": "despill",
+      "description": "Despill video."
+    },
+    {
+      "name": "detelecine",
+      "description": "Apply an inverse telecine pattern."
+    },
+    {
+      "name": "dilation",
+      "description": "Apply dilation effect."
+    },
+    {
+      "name": "displace",
+      "description": "Displace pixels."
+    },
+    {
+      "name": "dnn_classify",
+      "description": "Apply DNN classify filter to the input."
+    },
+    {
+      "name": "dnn_detect",
+      "description": "Apply DNN detect filter to the input."
+    },
+    {
+      "name": "dnn_processing",
+      "description": "Apply DNN processing filter to the input."
+    },
+    {
+      "name": "doubleweave",
+      "description": "Weave input video fields into double number of frames."
+    },
+    {
+      "name": "drawbox",
+      "description": "Draw a colored box on the input video."
+    },
+    {
+      "name": "drawgraph",
+      "description": "Draw a graph using input video metadata."
+    },
+    {
+      "name": "drawgrid",
+      "description": "Draw a colored grid on the input video."
+    },
+    {
+      "name": "drawtext",
+      "description": "Draw text on top of video frames using libfreetype library."
+    },
+    {
+      "name": "edgedetect",
+      "description": "Detect and draw edge."
+    },
+    {
+      "name": "elbg",
+      "description": "Apply posterize effect, using the ELBG algorithm."
+    },
+    {
+      "name": "entropy",
+      "description": "Measure video frames entropy."
+    },
+    {
+      "name": "epx",
+      "description": "Scale the input using EPX algorithm."
+    },
+    {
+      "name": "eq",
+      "description": "Adjust brightness, contrast, gamma, and saturation."
+    },
+    {
+      "name": "erosion",
+      "description": "Apply erosion effect."
+    },
+    {
+      "name": "estdif",
+      "description": "Apply Edge Slope Tracing deinterlace."
+    },
+    {
+      "name": "exposure",
+      "description": "Adjust exposure of the video stream."
+    },
+    {
+      "name": "extractplanes",
+      "description": "Extract planes as grayscale frames."
+    },
+    {
+      "name": "fade",
+      "description": "Fade in/out input video."
+    },
+    {
+      "name": "feedback",
+      "description": "Apply feedback video filter."
+    },
+    {
+      "name": "fftdnoiz",
+      "description": "Denoise frames using 3D FFT."
+    },
+    {
+      "name": "fftfilt",
+      "description": "Apply arbitrary expressions to pixels in frequency domain."
+    },
+    {
+      "name": "field",
+      "description": "Extract a field from the input video."
+    },
+    {
+      "name": "fieldhint",
+      "description": "Field matching using hints."
+    },
+    {
+      "name": "fieldmatch",
+      "description": "Field matching for inverse telecine."
+    },
+    {
+      "name": "fieldorder",
+      "description": "Set the field order."
+    },
+    {
+      "name": "fillborders",
+      "description": "Fill borders of the input video."
+    },
+    {
+      "name": "find_rect",
+      "description": "Find a user specified object."
+    },
+    {
+      "name": "floodfill",
+      "description": "Fill area with same color with another color."
+    },
+    {
+      "name": "format",
+      "description": "Convert the input video to one of the specified pixel formats."
+    },
+    {
+      "name": "fps",
+      "description": "Force constant framerate."
+    },
+    {
+      "name": "framepack",
+      "description": "Generate a frame packed stereoscopic video."
+    },
+    {
+      "name": "framerate",
+      "description": "Upsamples or downsamples progressive source between specified frame rates."
+    },
+    {
+      "name": "framestep",
+      "description": "Select one frame every N frames."
+    },
+    {
+      "name": "freezedetect",
+      "description": "Detects frozen video input."
+    },
+    {
+      "name": "freezeframes",
+      "description": "Freeze video frames."
+    },
+    {
+      "name": "fspp",
+      "description": "Apply Fast Simple Post-processing filter."
+    },
+    {
+      "name": "gblur",
+      "description": "Apply Gaussian Blur filter."
+    },
+    {
+      "name": "geq",
+      "description": "Apply generic equation to each pixel."
+    },
+    {
+      "name": "gradfun",
+      "description": "Debands video quickly using gradients."
+    },
+    {
+      "name": "graphmonitor",
+      "description": "Show various filtergraph stats."
+    },
+    {
+      "name": "grayworld",
+      "description": "Adjust white balance using LAB gray world algorithm"
+    },
+    {
+      "name": "greyedge",
+      "description": "Estimates scene illumination by grey edge assumption."
+    },
+    {
+      "name": "guided",
+      "description": "Apply Guided filter."
+    },
+    {
+      "name": "haldclut",
+      "description": "Adjust colors using a Hald CLUT."
+    },
+    {
+      "name": "hflip",
+      "description": "Horizontally flip the input video."
+    },
+    {
+      "name": "histeq",
+      "description": "Apply global color histogram equalization."
+    },
+    {
+      "name": "histogram",
+      "description": "Compute and draw a histogram."
+    },
+    {
+      "name": "hqdn3d",
+      "description": "Apply a High Quality 3D Denoiser."
+    },
+    {
+      "name": "hqx",
+      "description": "Scale the input by 2, 3 or 4 using the hq*x magnification algorithm."
+    },
+    {
+      "name": "hstack",
+      "description": "Stack video inputs horizontally."
+    },
+    {
+      "name": "hsvhold",
+      "description": "Turns a certain HSV range into gray."
+    },
+    {
+      "name": "hsvkey",
+      "description": "Turns a certain HSV range into transparency. Operates on YUV colors."
+    },
+    {
+      "name": "hue",
+      "description": "Adjust the hue and saturation of the input video."
+    },
+    {
+      "name": "huesaturation",
+      "description": "Apply hue-saturation-intensity adjustments."
+    },
+    {
+      "name": "hwdownload",
+      "description": "Download a hardware frame to a normal frame"
+    },
+    {
+      "name": "hwmap",
+      "description": "Map hardware frames"
+    },
+    {
+      "name": "hwupload",
+      "description": "Upload a normal frame to a hardware frame"
+    },
+    {
+      "name": "hysteresis",
+      "description": "Grow first stream into second stream by connecting components."
+    },
+    {
+      "name": "identity",
+      "description": "Calculate the Identity between two video streams."
+    },
+    {
+      "name": "idet",
+      "description": "Interlace detect Filter."
+    },
+    {
+      "name": "il",
+      "description": "Deinterleave or interleave fields."
+    },
+    {
+      "name": "inflate",
+      "description": "Apply inflate effect."
+    },
+    {
+      "name": "interlace",
+      "description": "Convert progressive video into interlaced."
+    },
+    {
+      "name": "interleave",
+      "description": "Temporally interleave video inputs."
+    },
+    {
+      "name": "kerndeint",
+      "description": "Apply kernel deinterlacing to the input."
+    },
+    {
+      "name": "kirsch",
+      "description": "Apply kirsch operator."
+    },
+    {
+      "name": "lagfun",
+      "description": "Slowly update darker pixels."
+    },
+    {
+      "name": "latency",
+      "description": "Report video filtering latency."
+    },
+    {
+      "name": "lenscorrection",
+      "description": "Rectify the image by correcting for lens distortion."
+    },
+    {
+      "name": "limitdiff",
+      "description": "Apply filtering with limiting difference."
+    },
+    {
+      "name": "limiter",
+      "description": "Limit pixels components to the specified range."
+    },
+    {
+      "name": "loop",
+      "description": "Loop video frames."
+    },
+    {
+      "name": "lumakey",
+      "description": "Turns a certain luma into transparency."
+    },
+    {
+      "name": "lut",
+      "description": "Compute and apply a lookup table to the RGB/YUV input video."
+    },
+    {
+      "name": "lut1d",
+      "description": "Adjust colors using a 1D LUT."
+    },
+    {
+      "name": "lut2",
+      "description": "Compute and apply a lookup table from two video inputs."
+    },
+    {
+      "name": "lut3d",
+      "description": "Adjust colors using a 3D LUT."
+    },
+    {
+      "name": "lutrgb",
+      "description": "Compute and apply a lookup table to the RGB input video."
+    },
+    {
+      "name": "lutyuv",
+      "description": "Compute and apply a lookup table to the YUV input video."
+    },
+    {
+      "name": "maskedclamp",
+      "description": "Clamp first stream with second stream and third stream."
+    },
+    {
+      "name": "maskedmax",
+      "description": "Apply filtering with maximum difference of two streams."
+    },
+    {
+      "name": "maskedmerge",
+      "description": "Merge first stream with second stream using third stream as mask."
+    },
+    {
+      "name": "maskedmin",
+      "description": "Apply filtering with minimum difference of two streams."
+    },
+    {
+      "name": "maskedthreshold",
+      "description": "Pick pixels comparing absolute difference of two streams with threshold."
+    },
+    {
+      "name": "maskfun",
+      "description": "Create Mask."
+    },
+    {
+      "name": "median",
+      "description": "Apply Median filter."
+    },
+    {
+      "name": "mergeplanes",
+      "description": "Merge planes."
+    },
+    {
+      "name": "mestimate",
+      "description": "Generate motion vectors."
+    },
+    {
+      "name": "metadata",
+      "description": "Manipulate video frame metadata."
+    },
+    {
+      "name": "midequalizer",
+      "description": "Apply Midway Equalization."
+    },
+    {
+      "name": "minterpolate",
+      "description": "Frame rate conversion using Motion Interpolation."
+    },
+    {
+      "name": "mix",
+      "description": "Mix video inputs."
+    },
+    {
+      "name": "monochrome",
+      "description": "Convert video to gray using custom color filter."
+    },
+    {
+      "name": "morpho",
+      "description": "Apply Morphological filter."
+    },
+    {
+      "name": "mpdecimate",
+      "description": "Remove near-duplicate frames."
+    },
+    {
+      "name": "msad",
+      "description": "Calculate the MSAD between two video streams."
+    },
+    {
+      "name": "multiply",
+      "description": "Multiply first video stream with second video stream."
+    },
+    {
+      "name": "negate",
+      "description": "Negate input video."
+    },
+    {
+      "name": "nlmeans",
+      "description": "Non-local means denoiser."
+    },
+    {
+      "name": "nnedi",
+      "description": "Apply neural network edge directed interpolation intra-only deinterlacer."
+    },
+    {
+      "name": "noformat",
+      "description": "Force libavfilter not to use any of the specified pixel formats for the input to the next filter."
+    },
+    {
+      "name": "noise",
+      "description": "Add noise."
+    },
+    {
+      "name": "normalize",
+      "description": "Normalize RGB video."
+    },
+    {
+      "name": "null",
+      "description": "Pass the source unchanged to the output."
+    },
+    {
+      "name": "oscilloscope",
+      "description": "2D Video Oscilloscope."
+    },
+    {
+      "name": "overlay",
+      "description": "Overlay a video source on top of the input."
+    },
+    {
+      "name": "owdenoise",
+      "description": "Denoise using wavelets."
+    },
+    {
+      "name": "pad",
+      "description": "Pad the input video."
+    },
+    {
+      "name": "palettegen",
+      "description": "Find the optimal palette for a given stream."
+    },
+    {
+      "name": "paletteuse",
+      "description": "Use a palette to downsample an input video stream."
+    },
+    {
+      "name": "perms",
+      "description": "Set permissions for the output video frame."
+    },
+    {
+      "name": "perspective",
+      "description": "Correct the perspective of video."
+    },
+    {
+      "name": "phase",
+      "description": "Phase shift fields."
+    },
+    {
+      "name": "photosensitivity",
+      "description": "Filter out photosensitive epilepsy seizure-inducing flashes."
+    },
+    {
+      "name": "pixdesctest",
+      "description": "Test pixel format definitions."
+    },
+    {
+      "name": "pixelize",
+      "description": "Pixelize video."
+    },
+    {
+      "name": "pixscope",
+      "description": "Pixel data analysis."
+    },
+    {
+      "name": "pp",
+      "description": "Filter video using libpostproc."
+    },
+    {
+      "name": "pp7",
+      "description": "Apply Postprocessing 7 filter."
+    },
+    {
+      "name": "premultiply",
+      "description": "PreMultiply first stream with first plane of second stream."
+    },
+    {
+      "name": "prewitt",
+      "description": "Apply prewitt operator."
+    },
+    {
+      "name": "pseudocolor",
+      "description": "Make pseudocolored video frames."
+    },
+    {
+      "name": "psnr",
+      "description": "Calculate the PSNR between two video streams."
+    },
+    {
+      "name": "pullup",
+      "description": "Pullup from field sequence to frames."
+    },
+    {
+      "name": "qp",
+      "description": "Change video quantization parameters."
+    },
+    {
+      "name": "random",
+      "description": "Return random frames."
+    },
+    {
+      "name": "readeia608",
+      "description": "Read EIA-608 Closed Caption codes from input video and write them to frame metadata."
+    },
+    {
+      "name": "readvitc",
+      "description": "Read vertical interval timecode and write it to frame metadata."
+    },
+    {
+      "name": "realtime",
+      "description": "Slow down filtering to match realtime."
+    },
+    {
+      "name": "remap",
+      "description": "Remap pixels."
+    },
+    {
+      "name": "removegrain",
+      "description": "Remove grain."
+    },
+    {
+      "name": "removelogo",
+      "description": "Remove a TV logo based on a mask image."
+    },
+    {
+      "name": "repeatfields",
+      "description": "Hard repeat fields based on MPEG repeat field flag."
+    },
+    {
+      "name": "reverse",
+      "description": "Reverse a clip."
+    },
+    {
+      "name": "rgbashift",
+      "description": "Shift RGBA."
+    },
+    {
+      "name": "roberts",
+      "description": "Apply roberts cross operator."
+    },
+    {
+      "name": "rotate",
+      "description": "Rotate the input image."
+    },
+    {
+      "name": "sab",
+      "description": "Apply shape adaptive blur."
+    },
+    {
+      "name": "scale",
+      "description": "Scale the input video size and/or convert the image format."
+    },
+    {
+      "name": "scale2ref",
+      "description": "Scale the input video size and/or convert the image format to the given reference."
+    },
+    {
+      "name": "scdet",
+      "description": "Detect video scene change"
+    },
+    {
+      "name": "scharr",
+      "description": "Apply scharr operator."
+    },
+    {
+      "name": "scroll",
+      "description": "Scroll input video."
+    },
+    {
+      "name": "segment",
+      "description": "Segment video stream."
+    },
+    {
+      "name": "select",
+      "description": "Select video frames to pass in output."
+    },
+    {
+      "name": "selectivecolor",
+      "description": "Apply CMYK adjustments to specific color ranges."
+    },
+    {
+      "name": "sendcmd",
+      "description": "Send commands to filters."
+    },
+    {
+      "name": "separatefields",
+      "description": "Split input video frames into fields."
+    },
+    {
+      "name": "setdar",
+      "description": "Set the frame display aspect ratio."
+    },
+    {
+      "name": "setfield",
+      "description": "Force field for the output video frame."
+    },
+    {
+      "name": "setparams",
+      "description": "Force field, or color property for the output video frame."
+    },
+    {
+      "name": "setpts",
+      "description": "Set PTS for the output video frame."
+    },
+    {
+      "name": "setrange",
+      "description": "Force color range for the output video frame."
+    },
+    {
+      "name": "setsar",
+      "description": "Set the pixel sample aspect ratio."
+    },
+    {
+      "name": "settb",
+      "description": "Set timebase for the video output link."
+    },
+    {
+      "name": "shear",
+      "description": "Shear transform the input image."
+    },
+    {
+      "name": "showinfo",
+      "description": "Show textual information for each video frame."
+    },
+    {
+      "name": "showpalette",
+      "description": "Display frame palette."
+    },
+    {
+      "name": "shuffleframes",
+      "description": "Shuffle video frames."
+    },
+    {
+      "name": "shufflepixels",
+      "description": "Shuffle video pixels."
+    },
+    {
+      "name": "shuffleplanes",
+      "description": "Shuffle video planes."
+    },
+    {
+      "name": "sidedata",
+      "description": "Manipulate video frame side data."
+    },
+    {
+      "name": "signalstats",
+      "description": "Generate statistics from video analysis."
+    },
+    {
+      "name": "signature",
+      "description": "Calculate the MPEG-7 video signature"
+    },
+    {
+      "name": "siti",
+      "description": "Calculate spatial information (SI) and temporal information (TI)."
+    },
+    {
+      "name": "smartblur",
+      "description": "Blur the input video without impacting the outlines."
+    },
+    {
+      "name": "sobel",
+      "description": "Apply sobel operator."
+    },
+    {
+      "name": "split",
+      "description": "Pass on the input to N video outputs."
+    },
+    {
+      "name": "spp",
+      "description": "Apply a simple post processing filter."
+    },
+    {
+      "name": "sr",
+      "description": "Apply DNN-based image super resolution to the input."
+    },
+    {
+      "name": "ssim",
+      "description": "Calculate the SSIM between two video streams."
+    },
+    {
+      "name": "stereo3d",
+      "description": "Convert video stereoscopic 3D view."
+    },
+    {
+      "name": "streamselect",
+      "description": "Select video streams"
+    },
+    {
+      "name": "subtitles",
+      "description": "Render text subtitles onto input video using the libass library."
+    },
+    {
+      "name": "super2xsai",
+      "description": "Scale the input by 2x using the Super2xSaI pixel art algorithm."
+    },
+    {
+      "name": "swaprect",
+      "description": "Swap 2 rectangular objects in video."
+    },
+    {
+      "name": "swapuv",
+      "description": "Swap U and V components."
+    },
+    {
+      "name": "tblend",
+      "description": "Blend successive frames."
+    },
+    {
+      "name": "telecine",
+      "description": "Apply a telecine pattern."
+    },
+    {
+      "name": "thistogram",
+      "description": "Compute and draw a temporal histogram."
+    },
+    {
+      "name": "threshold",
+      "description": "Threshold first video stream using other video streams."
+    },
+    {
+      "name": "thumbnail",
+      "description": "Select the most representative frame in a given sequence of consecutive frames."
+    },
+    {
+      "name": "tile",
+      "description": "Tile several successive frames together."
+    },
+    {
+      "name": "tinterlace",
+      "description": "Perform temporal field interlacing."
+    },
+    {
+      "name": "tlut2",
+      "description": "Compute and apply a lookup table from two successive frames."
+    },
+    {
+      "name": "tmedian",
+      "description": "Pick median pixels from successive frames."
+    },
+    {
+      "name": "tmidequalizer",
+      "description": "Apply Temporal Midway Equalization."
+    },
+    {
+      "name": "tmix",
+      "description": "Mix successive video frames."
+    },
+    {
+      "name": "tonemap",
+      "description": "Conversion to/from different dynamic ranges."
+    },
+    {
+      "name": "tpad",
+      "description": "Temporarily pad video frames."
+    },
+    {
+      "name": "transpose",
+      "description": "Transpose input video."
+    },
+    {
+      "name": "trim",
+      "description": "Pick one continuous section from the input, drop the rest."
+    },
+    {
+      "name": "unpremultiply",
+      "description": "UnPreMultiply first stream with first plane of second stream."
+    },
+    {
+      "name": "unsharp",
+      "description": "Sharpen or blur the input video."
+    },
+    {
+      "name": "untile",
+      "description": "Untile a frame into a sequence of frames."
+    },
+    {
+      "name": "v360",
+      "description": "Convert 360 projection of video."
+    },
+    {
+      "name": "vaguedenoiser",
+      "description": "Apply a Wavelet based Denoiser."
+    },
+    {
+      "name": "varblur",
+      "description": "Apply Variable Blur filter."
+    },
+    {
+      "name": "vectorscope",
+      "description": "Video vectorscope."
+    },
+    {
+      "name": "vflip",
+      "description": "Flip the input video vertically."
+    },
+    {
+      "name": "vfrdet",
+      "description": "Variable frame rate detect filter."
+    },
+    {
+      "name": "vibrance",
+      "description": "Boost or alter saturation."
+    },
+    {
+      "name": "vif",
+      "description": "Calculate the VIF between two video streams."
+    },
+    {
+      "name": "vignette",
+      "description": "Make or reverse a vignette effect."
+    },
+    {
+      "name": "vmafmotion",
+      "description": "Calculate the VMAF Motion score."
+    },
+    {
+      "name": "vstack",
+      "description": "Stack video inputs vertically."
+    },
+    {
+      "name": "w3fdif",
+      "description": "Apply Martin Weston three field deinterlace."
+    },
+    {
+      "name": "waveform",
+      "description": "Video waveform monitor."
+    },
+    {
+      "name": "weave",
+      "description": "Weave input video fields into frames."
+    },
+    {
+      "name": "xbr",
+      "description": "Scale the input using xBR algorithm."
+    },
+    {
+      "name": "xcorrelate",
+      "description": "Cross-correlate first video stream with second video stream."
+    },
+    {
+      "name": "xfade",
+      "description": "Cross fade one video with another video."
+    },
+    {
+      "name": "xmedian",
+      "description": "Pick median pixels from several video inputs."
+    },
+    {
+      "name": "xstack",
+      "description": "Stack video inputs into custom layout."
+    },
+    {
+      "name": "yadif",
+      "description": "Deinterlace the input image."
+    },
+    {
+      "name": "yaepblur",
+      "description": "Yet another edge preserving blur filter."
+    },
+    {
+      "name": "zoompan",
+      "description": "Apply Zoom & Pan effect."
+    },
+    {
+      "name": "zscale",
+      "description": "Apply resizing, colorspace and bit depth conversion."
+    },
+    {
+      "name": "allrgb",
+      "description": "Generate all RGB colors."
+    },
+    {
+      "name": "allyuv",
+      "description": "Generate all yuv colors."
+    },
+    {
+      "name": "cellauto",
+      "description": "Create pattern generated by an elementary cellular automaton."
+    },
+    {
+      "name": "color",
+      "description": "Provide an uniformly colored input."
+    },
+    {
+      "name": "colorchart",
+      "description": "Generate color checker chart."
+    },
+    {
+      "name": "colorspectrum",
+      "description": "Generate colors spectrum."
+    },
+    {
+      "name": "gradients",
+      "description": "Draw a gradients."
+    },
+    {
+      "name": "haldclutsrc",
+      "description": "Provide an identity Hald CLUT."
+    },
+    {
+      "name": "life",
+      "description": "Create life."
+    },
+    {
+      "name": "mandelbrot",
+      "description": "Render a Mandelbrot fractal."
+    },
+    {
+      "name": "mptestsrc",
+      "description": "Generate various test pattern."
+    },
+    {
+      "name": "nullsrc",
+      "description": "Null video source, return unprocessed video frames."
+    },
+    {
+      "name": "pal75bars",
+      "description": "Generate PAL 75% color bars."
+    },
+    {
+      "name": "pal100bars",
+      "description": "Generate PAL 100% color bars."
+    },
+    {
+      "name": "rgbtestsrc",
+      "description": "Generate RGB test pattern."
+    },
+    {
+      "name": "sierpinski",
+      "description": "Render a Sierpinski fractal."
+    },
+    {
+      "name": "smptebars",
+      "description": "Generate SMPTE color bars."
+    },
+    {
+      "name": "smptehdbars",
+      "description": "Generate SMPTE HD color bars."
+    },
+    {
+      "name": "testsrc",
+      "description": "Generate test pattern."
+    },
+    {
+      "name": "testsrc2",
+      "description": "Generate another test pattern."
+    },
+    {
+      "name": "yuvtestsrc",
+      "description": "Generate YUV test pattern."
+    },
+    {
+      "name": "nullsink",
+      "description": "Do absolutely nothing with the input video."
+    },
+    {
+      "name": "abitscope",
+      "description": "Convert input audio to audio bit scope video output."
+    },
+    {
+      "name": "adrawgraph",
+      "description": "Draw a graph using input audio metadata."
+    },
+    {
+      "name": "agraphmonitor",
+      "description": "Show various filtergraph stats."
+    },
+    {
+      "name": "ahistogram",
+      "description": "Convert input audio to histogram video output."
+    },
+    {
+      "name": "aphasemeter",
+      "description": "Convert input audio to phase meter video output."
+    },
+    {
+      "name": "avectorscope",
+      "description": "Convert input audio to vectorscope video output."
+    },
+    {
+      "name": "concat",
+      "description": "Concatenate audio and video streams."
+    },
+    {
+      "name": "showcqt",
+      "description": "Convert input audio to a CQT (Constant/Clamped Q Transform) spectrum video output."
+    },
+    {
+      "name": "showfreqs",
+      "description": "Convert input audio to a frequencies video output."
+    },
+    {
+      "name": "showspatial",
+      "description": "Convert input audio to a spatial video output."
+    },
+    {
+      "name": "showspectrum",
+      "description": "Convert input audio to a spectrum video output."
+    },
+    {
+      "name": "showspectrumpic",
+      "description": "Convert input audio to a spectrum video output single picture."
+    },
+    {
+      "name": "showvolume",
+      "description": "Convert input audio volume to video output."
+    },
+    {
+      "name": "showwaves",
+      "description": "Convert input audio to a video output."
+    },
+    {
+      "name": "showwavespic",
+      "description": "Convert input audio to a video output single picture."
+    },
+    {
+      "name": "spectrumsynth",
+      "description": "Convert input spectrum videos to audio output."
+    },
+    {
+      "name": "avsynctest",
+      "description": "Generate an Audio Video Sync Test."
+    },
+    {
+      "name": "amovie",
+      "description": "Read audio from a movie source."
+    },
+    {
+      "name": "movie",
+      "description": "Read from a movie source."
+    },
+    {
+      "name": "afifo",
+      "description": "Buffer input frames and send them when they are requested."
+    },
+    {
+      "name": "fifo",
+      "description": "Buffer input images and send them when they are requested."
+    },
+    {
+      "name": "abuffer",
+      "description": "Buffer audio frames, and make them accessible to the filterchain."
+    },
+    {
+      "name": "buffer",
+      "description": "Buffer video frames, and make them accessible to the filterchain."
+    },
+    {
+      "name": "abuffersink",
+      "description": "Buffer audio frames, and make them available to the end of the filter graph."
+    },
+    {
+      "name": "buffersink",
+      "description": "Buffer video frames, and make them available to the end of the filter graph."
+    }
+  ],
+  "encoders": [
+    {
+      "name": "a64multi",
+      "description": "Multicolor charset for Commodore 64 (codec a64_multi)"
+    },
+    {
+      "name": "a64multi5",
+      "description": "Multicolor charset for Commodore 64, extended with 5th color (colram) (codec a64_multi5)"
+    },
+    {
+      "name": "alias_pix",
+      "description": "Alias/Wavefront PIX image"
+    },
+    {
+      "name": "amv",
+      "description": "AMV Video"
+    },
+    {
+      "name": "apng",
+      "description": "APNG (Animated Portable Network Graphics) image"
+    },
+    {
+      "name": "asv1",
+      "description": "ASUS V1"
+    },
+    {
+      "name": "asv2",
+      "description": "ASUS V2"
+    },
+    {
+      "name": "avrp",
+      "description": "Avid 1:1 10-bit RGB Packer"
+    },
+    {
+      "name": "avui",
+      "description": "Avid Meridien Uncompressed"
+    },
+    {
+      "name": "ayuv",
+      "description": "Uncompressed packed MS 4:4:4:4"
+    },
+    {
+      "name": "bitpacked",
+      "description": "Bitpacked"
+    },
+    {
+      "name": "bmp",
+      "description": "BMP (Windows and OS/2 bitmap)"
+    },
+    {
+      "name": "cfhd",
+      "description": "GoPro CineForm HD"
+    },
+    {
+      "name": "cinepak",
+      "description": "Cinepak"
+    },
+    {
+      "name": "cljr",
+      "description": "Cirrus Logic AccuPak"
+    },
+    {
+      "name": "vc2",
+      "description": "SMPTE VC-2 (codec dirac)"
+    },
+    {
+      "name": "dnxhd",
+      "description": "VC3/DNxHD"
+    },
+    {
+      "name": "dpx",
+      "description": "DPX (Digital Picture Exchange) image"
+    },
+    {
+      "name": "dvvideo",
+      "description": "DV (Digital Video)"
+    },
+    {
+      "name": "exr",
+      "description": "OpenEXR image"
+    },
+    {
+      "name": "ffv1",
+      "description": "FFmpeg video codec #1"
+    },
+    {
+      "name": "ffvhuff",
+      "description": "Huffyuv FFmpeg variant"
+    },
+    {
+      "name": "fits",
+      "description": "Flexible Image Transport System"
+    },
+    {
+      "name": "flashsv",
+      "description": "Flash Screen Video"
+    },
+    {
+      "name": "flashsv2",
+      "description": "Flash Screen Video Version 2"
+    },
+    {
+      "name": "flv",
+      "description": "FLV / Sorenson Spark / Sorenson H.263 (Flash Video) (codec flv1)"
+    },
+    {
+      "name": "gif",
+      "description": "GIF (Graphics Interchange Format)"
+    },
+    {
+      "name": "h261",
+      "description": "H.261"
+    },
+    {
+      "name": "h263",
+      "description": "H.263 / H.263-1996"
+    },
+    {
+      "name": "h263p",
+      "description": "H.263+ / H.263-1998 / H.263 version 2"
+    },
+    {
+      "name": "libx264",
+      "description": "libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)"
+    },
+    {
+      "name": "libx264rgb",
+      "description": "libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 RGB (codec h264)"
+    },
+    {
+      "name": "libx265",
+      "description": "libx265 H.265 / HEVC (codec hevc)"
+    },
+    {
+      "name": "huffyuv",
+      "description": "Huffyuv / HuffYUV"
+    },
+    {
+      "name": "jpeg2000",
+      "description": "JPEG 2000"
+    },
+    {
+      "name": "jpegls",
+      "description": "JPEG-LS"
+    },
+    {
+      "name": "ljpeg",
+      "description": "Lossless JPEG"
+    },
+    {
+      "name": "magicyuv",
+      "description": "MagicYUV video"
+    },
+    {
+      "name": "mjpeg",
+      "description": "MJPEG (Motion JPEG)"
+    },
+    {
+      "name": "mpeg1video",
+      "description": "MPEG-1 video"
+    },
+    {
+      "name": "mpeg2video",
+      "description": "MPEG-2 video"
+    },
+    {
+      "name": "mpeg4",
+      "description": "MPEG-4 part 2"
+    },
+    {
+      "name": "msmpeg4v2",
+      "description": "MPEG-4 part 2 Microsoft variant version 2"
+    },
+    {
+      "name": "msmpeg4",
+      "description": "MPEG-4 part 2 Microsoft variant version 3 (codec msmpeg4v3)"
+    },
+    {
+      "name": "msvideo1",
+      "description": "Microsoft Video-1"
+    },
+    {
+      "name": "pam",
+      "description": "PAM (Portable AnyMap) image"
+    },
+    {
+      "name": "pbm",
+      "description": "PBM (Portable BitMap) image"
+    },
+    {
+      "name": "pcx",
+      "description": "PC Paintbrush PCX image"
+    },
+    {
+      "name": "pfm",
+      "description": "PFM (Portable FloatMap) image"
+    },
+    {
+      "name": "pgm",
+      "description": "PGM (Portable GrayMap) image"
+    },
+    {
+      "name": "pgmyuv",
+      "description": "PGMYUV (Portable GrayMap YUV) image"
+    },
+    {
+      "name": "phm",
+      "description": "PHM (Portable HalfFloatMap) image"
+    },
+    {
+      "name": "png",
+      "description": "PNG (Portable Network Graphics) image"
+    },
+    {
+      "name": "ppm",
+      "description": "PPM (Portable PixelMap) image"
+    },
+    {
+      "name": "prores",
+      "description": "Apple ProRes"
+    },
+    {
+      "name": "prores_aw",
+      "description": "Apple ProRes (codec prores)"
+    },
+    {
+      "name": "prores_ks",
+      "description": "Apple ProRes (iCodec Pro) (codec prores)"
+    },
+    {
+      "name": "qoi",
+      "description": "QOI (Quite OK Image format) image"
+    },
+    {
+      "name": "qtrle",
+      "description": "QuickTime Animation (RLE) video"
+    },
+    {
+      "name": "r10k",
+      "description": "AJA Kona 10-bit RGB Codec"
+    },
+    {
+      "name": "r210",
+      "description": "Uncompressed RGB 10-bit"
+    },
+    {
+      "name": "rawvideo",
+      "description": "raw video"
+    },
+    {
+      "name": "roqvideo",
+      "description": "id RoQ video (codec roq)"
+    },
+    {
+      "name": "rpza",
+      "description": "QuickTime video (RPZA)"
+    },
+    {
+      "name": "rv10",
+      "description": "RealVideo 1.0"
+    },
+    {
+      "name": "rv20",
+      "description": "RealVideo 2.0"
+    },
+    {
+      "name": "sgi",
+      "description": "SGI image"
+    },
+    {
+      "name": "smc",
+      "description": "QuickTime Graphics (SMC)"
+    },
+    {
+      "name": "snow",
+      "description": "Snow"
+    },
+    {
+      "name": "speedhq",
+      "description": "NewTek SpeedHQ"
+    },
+    {
+      "name": "sunrast",
+      "description": "Sun Rasterfile image"
+    },
+    {
+      "name": "svq1",
+      "description": "Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1"
+    },
+    {
+      "name": "targa",
+      "description": "Truevision Targa image"
+    },
+    {
+      "name": "libtheora",
+      "description": "libtheora Theora (codec theora)"
+    },
+    {
+      "name": "tiff",
+      "description": "TIFF image"
+    },
+    {
+      "name": "utvideo",
+      "description": "Ut Video"
+    },
+    {
+      "name": "v210",
+      "description": "Uncompressed 4:2:2 10-bit"
+    },
+    {
+      "name": "v308",
+      "description": "Uncompressed packed 4:4:4"
+    },
+    {
+      "name": "v408",
+      "description": "Uncompressed packed QT 4:4:4:4"
+    },
+    {
+      "name": "v410",
+      "description": "Uncompressed 4:4:4 10-bit"
+    },
+    {
+      "name": "vbn",
+      "description": "Vizrt Binary Image"
+    },
+    {
+      "name": "libvpx",
+      "description": "libvpx VP8 (codec vp8)"
+    },
+    {
+      "name": "libwebp_anim",
+      "description": "libwebp WebP image (codec webp)"
+    },
+    {
+      "name": "libwebp",
+      "description": "libwebp WebP image (codec webp)"
+    },
+    {
+      "name": "wmv1",
+      "description": "Windows Media Video 7"
+    },
+    {
+      "name": "wmv2",
+      "description": "Windows Media Video 8"
+    },
+    {
+      "name": "wrapped_avframe",
+      "description": "AVFrame to AVPacket passthrough"
+    },
+    {
+      "name": "xbm",
+      "description": "XBM (X BitMap) image"
+    },
+    {
+      "name": "xface",
+      "description": "X-face image"
+    },
+    {
+      "name": "xwd",
+      "description": "XWD (X Window Dump) image"
+    },
+    {
+      "name": "y41p",
+      "description": "Uncompressed YUV 4:1:1 12-bit"
+    },
+    {
+      "name": "yuv4",
+      "description": "Uncompressed packed 4:2:0"
+    },
+    {
+      "name": "zlib",
+      "description": "LCL (LossLess Codec Library) ZLIB"
+    },
+    {
+      "name": "zmbv",
+      "description": "Zip Motion Blocks Video"
+    },
+    {
+      "name": "aac",
+      "description": "AAC (Advanced Audio Coding)"
+    },
+    {
+      "name": "ac3",
+      "description": "ATSC A/52A (AC-3)"
+    },
+    {
+      "name": "ac3_fixed",
+      "description": "ATSC A/52A (AC-3) (codec ac3)"
+    },
+    {
+      "name": "adpcm_adx",
+      "description": "SEGA CRI ADX ADPCM"
+    },
+    {
+      "name": "adpcm_argo",
+      "description": "ADPCM Argonaut Games"
+    },
+    {
+      "name": "g722",
+      "description": "G.722 ADPCM (codec adpcm_g722)"
+    },
+    {
+      "name": "g726",
+      "description": "G.726 ADPCM (codec adpcm_g726)"
+    },
+    {
+      "name": "g726le",
+      "description": "G.726 little endian ADPCM (\"right-justified\") (codec adpcm_g726le)"
+    },
+    {
+      "name": "adpcm_ima_alp",
+      "description": "ADPCM IMA High Voltage Software ALP"
+    },
+    {
+      "name": "adpcm_ima_amv",
+      "description": "ADPCM IMA AMV"
+    },
+    {
+      "name": "adpcm_ima_apm",
+      "description": "ADPCM IMA Ubisoft APM"
+    },
+    {
+      "name": "adpcm_ima_qt",
+      "description": "ADPCM IMA QuickTime"
+    },
+    {
+      "name": "adpcm_ima_ssi",
+      "description": "ADPCM IMA Simon & Schuster Interactive"
+    },
+    {
+      "name": "adpcm_ima_wav",
+      "description": "ADPCM IMA WAV"
+    },
+    {
+      "name": "adpcm_ima_ws",
+      "description": "ADPCM IMA Westwood"
+    },
+    {
+      "name": "adpcm_ms",
+      "description": "ADPCM Microsoft"
+    },
+    {
+      "name": "adpcm_swf",
+      "description": "ADPCM Shockwave Flash"
+    },
+    {
+      "name": "adpcm_yamaha",
+      "description": "ADPCM Yamaha"
+    },
+    {
+      "name": "alac",
+      "description": "ALAC (Apple Lossless Audio Codec)"
+    },
+    {
+      "name": "aptx",
+      "description": "aptX (Audio Processing Technology for Bluetooth)"
+    },
+    {
+      "name": "aptx_hd",
+      "description": "aptX HD (Audio Processing Technology for Bluetooth)"
+    },
+    {
+      "name": "comfortnoise",
+      "description": "RFC 3389 comfort noise generator"
+    },
+    {
+      "name": "dfpwm",
+      "description": "DFPWM1a audio"
+    },
+    {
+      "name": "dca",
+      "description": "DCA (DTS Coherent Acoustics) (codec dts)"
+    },
+    {
+      "name": "eac3",
+      "description": "ATSC A/52 E-AC-3"
+    },
+    {
+      "name": "flac",
+      "description": "FLAC (Free Lossless Audio Codec)"
+    },
+    {
+      "name": "g723_1",
+      "description": "G.723.1"
+    },
+    {
+      "name": "mlp",
+      "description": "MLP (Meridian Lossless Packing)"
+    },
+    {
+      "name": "mp2",
+      "description": "MP2 (MPEG audio layer 2)"
+    },
+    {
+      "name": "mp2fixed",
+      "description": "MP2 fixed point (MPEG audio layer 2) (codec mp2)"
+    },
+    {
+      "name": "libmp3lame",
+      "description": "libmp3lame MP3 (MPEG audio layer 3) (codec mp3)"
+    },
+    {
+      "name": "nellymoser",
+      "description": "Nellymoser Asao"
+    },
+    {
+      "name": "opus",
+      "description": "Opus"
+    },
+    {
+      "name": "libopus",
+      "description": "libopus Opus (codec opus)"
+    },
+    {
+      "name": "pcm_alaw",
+      "description": "PCM A-law / G.711 A-law"
+    },
+    {
+      "name": "pcm_bluray",
+      "description": "PCM signed 16|20|24-bit big-endian for Blu-ray media"
+    },
+    {
+      "name": "pcm_dvd",
+      "description": "PCM signed 16|20|24-bit big-endian for DVD media"
+    },
+    {
+      "name": "pcm_f32be",
+      "description": "PCM 32-bit floating point big-endian"
+    },
+    {
+      "name": "pcm_f32le",
+      "description": "PCM 32-bit floating point little-endian"
+    },
+    {
+      "name": "pcm_f64be",
+      "description": "PCM 64-bit floating point big-endian"
+    },
+    {
+      "name": "pcm_f64le",
+      "description": "PCM 64-bit floating point little-endian"
+    },
+    {
+      "name": "pcm_mulaw",
+      "description": "PCM mu-law / G.711 mu-law"
+    },
+    {
+      "name": "pcm_s16be",
+      "description": "PCM signed 16-bit big-endian"
+    },
+    {
+      "name": "pcm_s16be_planar",
+      "description": "PCM signed 16-bit big-endian planar"
+    },
+    {
+      "name": "pcm_s16le",
+      "description": "PCM signed 16-bit little-endian"
+    },
+    {
+      "name": "pcm_s16le_planar",
+      "description": "PCM signed 16-bit little-endian planar"
+    },
+    {
+      "name": "pcm_s24be",
+      "description": "PCM signed 24-bit big-endian"
+    },
+    {
+      "name": "pcm_s24daud",
+      "description": "PCM D-Cinema audio signed 24-bit"
+    },
+    {
+      "name": "pcm_s24le",
+      "description": "PCM signed 24-bit little-endian"
+    },
+    {
+      "name": "pcm_s24le_planar",
+      "description": "PCM signed 24-bit little-endian planar"
+    },
+    {
+      "name": "pcm_s32be",
+      "description": "PCM signed 32-bit big-endian"
+    },
+    {
+      "name": "pcm_s32le",
+      "description": "PCM signed 32-bit little-endian"
+    },
+    {
+      "name": "pcm_s32le_planar",
+      "description": "PCM signed 32-bit little-endian planar"
+    },
+    {
+      "name": "pcm_s64be",
+      "description": "PCM signed 64-bit big-endian"
+    },
+    {
+      "name": "pcm_s64le",
+      "description": "PCM signed 64-bit little-endian"
+    },
+    {
+      "name": "pcm_s8",
+      "description": "PCM signed 8-bit"
+    },
+    {
+      "name": "pcm_s8_planar",
+      "description": "PCM signed 8-bit planar"
+    },
+    {
+      "name": "pcm_u16be",
+      "description": "PCM unsigned 16-bit big-endian"
+    },
+    {
+      "name": "pcm_u16le",
+      "description": "PCM unsigned 16-bit little-endian"
+    },
+    {
+      "name": "pcm_u24be",
+      "description": "PCM unsigned 24-bit big-endian"
+    },
+    {
+      "name": "pcm_u24le",
+      "description": "PCM unsigned 24-bit little-endian"
+    },
+    {
+      "name": "pcm_u32be",
+      "description": "PCM unsigned 32-bit big-endian"
+    },
+    {
+      "name": "pcm_u32le",
+      "description": "PCM unsigned 32-bit little-endian"
+    },
+    {
+      "name": "pcm_u8",
+      "description": "PCM unsigned 8-bit"
+    },
+    {
+      "name": "pcm_vidc",
+      "description": "PCM Archimedes VIDC"
+    },
+    {
+      "name": "real_144",
+      "description": "RealAudio 1.0 (14.4K) (codec ra_144)"
+    },
+    {
+      "name": "roq_dpcm",
+      "description": "id RoQ DPCM"
+    },
+    {
+      "name": "s302m",
+      "description": "SMPTE 302M"
+    },
+    {
+      "name": "sbc",
+      "description": "SBC (low-complexity subband codec)"
+    },
+    {
+      "name": "sonic",
+      "description": "Sonic"
+    },
+    {
+      "name": "sonicls",
+      "description": "Sonic lossless"
+    },
+    {
+      "name": "truehd",
+      "description": "TrueHD"
+    },
+    {
+      "name": "tta",
+      "description": "TTA (True Audio)"
+    },
+    {
+      "name": "vorbis",
+      "description": "Vorbis"
+    },
+    {
+      "name": "libvorbis",
+      "description": "libvorbis (codec vorbis)"
+    },
+    {
+      "name": "wavpack",
+      "description": "WavPack"
+    },
+    {
+      "name": "wmav1",
+      "description": "Windows Media Audio 1"
+    },
+    {
+      "name": "wmav2",
+      "description": "Windows Media Audio 2"
+    },
+    {
+      "name": "ssa",
+      "description": "ASS (Advanced SubStation Alpha) subtitle (codec ass)"
+    },
+    {
+      "name": "ass",
+      "description": "ASS (Advanced SubStation Alpha) subtitle"
+    },
+    {
+      "name": "dvbsub",
+      "description": "DVB subtitles (codec dvb_subtitle)"
+    },
+    {
+      "name": "dvdsub",
+      "description": "DVD subtitles (codec dvd_subtitle)"
+    },
+    {
+      "name": "mov_text",
+      "description": "3GPP Timed Text subtitle"
+    },
+    {
+      "name": "srt",
+      "description": "SubRip subtitle (codec subrip)"
+    },
+    {
+      "name": "subrip",
+      "description": "SubRip subtitle"
+    },
+    {
+      "name": "text",
+      "description": "Raw text subtitle"
+    },
+    {
+      "name": "ttml",
+      "description": "TTML subtitle"
+    },
+    {
+      "name": "webvtt",
+      "description": "WebVTT subtitle"
+    },
+    {
+      "name": "xsub",
+      "description": "DivX subtitles (XSUB)"
+    }
+  ],
+  "decoders": [
+    {
+      "name": "012v",
+      "description": "Uncompressed 4:2:2 10-bit"
+    },
+    {
+      "name": "4xm",
+      "description": "4X Movie"
+    },
+    {
+      "name": "8bps",
+      "description": "QuickTime 8BPS video"
+    },
+    {
+      "name": "aasc",
+      "description": "Autodesk RLE"
+    },
+    {
+      "name": "agm",
+      "description": "Amuse Graphics Movie"
+    },
+    {
+      "name": "aic",
+      "description": "Apple Intermediate Codec"
+    },
+    {
+      "name": "alias_pix",
+      "description": "Alias/Wavefront PIX image"
+    },
+    {
+      "name": "amv",
+      "description": "AMV Video"
+    },
+    {
+      "name": "anm",
+      "description": "Deluxe Paint Animation"
+    },
+    {
+      "name": "ansi",
+      "description": "ASCII/ANSI art"
+    },
+    {
+      "name": "apng",
+      "description": "APNG (Animated Portable Network Graphics) image"
+    },
+    {
+      "name": "arbc",
+      "description": "Gryphon's Anim Compressor"
+    },
+    {
+      "name": "argo",
+      "description": "Argonaut Games Video"
+    },
+    {
+      "name": "asv1",
+      "description": "ASUS V1"
+    },
+    {
+      "name": "asv2",
+      "description": "ASUS V2"
+    },
+    {
+      "name": "aura",
+      "description": "Auravision AURA"
+    },
+    {
+      "name": "aura2",
+      "description": "Auravision Aura 2"
+    },
+    {
+      "name": "av1",
+      "description": "Alliance for Open Media AV1"
+    },
+    {
+      "name": "avrn",
+      "description": "Avid AVI Codec"
+    },
+    {
+      "name": "avrp",
+      "description": "Avid 1:1 10-bit RGB Packer"
+    },
+    {
+      "name": "avs",
+      "description": "AVS (Audio Video Standard) video"
+    },
+    {
+      "name": "avui",
+      "description": "Avid Meridien Uncompressed"
+    },
+    {
+      "name": "ayuv",
+      "description": "Uncompressed packed MS 4:4:4:4"
+    },
+    {
+      "name": "bethsoftvid",
+      "description": "Bethesda VID video"
+    },
+    {
+      "name": "bfi",
+      "description": "Brute Force & Ignorance"
+    },
+    {
+      "name": "binkvideo",
+      "description": "Bink video"
+    },
+    {
+      "name": "bintext",
+      "description": "Binary text"
+    },
+    {
+      "name": "bitpacked",
+      "description": "Bitpacked"
+    },
+    {
+      "name": "bmp",
+      "description": "BMP (Windows and OS/2 bitmap)"
+    },
+    {
+      "name": "bmv_video",
+      "description": "Discworld II BMV video"
+    },
+    {
+      "name": "brender_pix",
+      "description": "BRender PIX image"
+    },
+    {
+      "name": "c93",
+      "description": "Interplay C93"
+    },
+    {
+      "name": "cavs",
+      "description": "Chinese AVS (Audio Video Standard) (AVS1-P2, JiZhun profile)"
+    },
+    {
+      "name": "cdgraphics",
+      "description": "CD Graphics video"
+    },
+    {
+      "name": "cdtoons",
+      "description": "CDToons video"
+    },
+    {
+      "name": "cdxl",
+      "description": "Commodore CDXL video"
+    },
+    {
+      "name": "cfhd",
+      "description": "GoPro CineForm HD"
+    },
+    {
+      "name": "cinepak",
+      "description": "Cinepak"
+    },
+    {
+      "name": "clearvideo",
+      "description": "Iterated Systems ClearVideo"
+    },
+    {
+      "name": "cljr",
+      "description": "Cirrus Logic AccuPak"
+    },
+    {
+      "name": "cllc",
+      "description": "Canopus Lossless Codec"
+    },
+    {
+      "name": "eacmv",
+      "description": "Electronic Arts CMV video (codec cmv)"
+    },
+    {
+      "name": "cpia",
+      "description": "CPiA video format"
+    },
+    {
+      "name": "cri",
+      "description": "Cintel RAW"
+    },
+    {
+      "name": "camstudio",
+      "description": "CamStudio (codec cscd)"
+    },
+    {
+      "name": "cyuv",
+      "description": "Creative YUV (CYUV)"
+    },
+    {
+      "name": "dds",
+      "description": "DirectDraw Surface image decoder"
+    },
+    {
+      "name": "dfa",
+      "description": "Chronomaster DFA"
+    },
+    {
+      "name": "dirac",
+      "description": "BBC Dirac VC-2"
+    },
+    {
+      "name": "dnxhd",
+      "description": "VC3/DNxHD"
+    },
+    {
+      "name": "dpx",
+      "description": "DPX (Digital Picture Exchange) image"
+    },
+    {
+      "name": "dsicinvideo",
+      "description": "Delphine Software International CIN video"
+    },
+    {
+      "name": "dvvideo",
+      "description": "DV (Digital Video)"
+    },
+    {
+      "name": "dxa",
+      "description": "Feeble Files/ScummVM DXA"
+    },
+    {
+      "name": "dxtory",
+      "description": "Dxtory"
+    },
+    {
+      "name": "dxv",
+      "description": "Resolume DXV"
+    },
+    {
+      "name": "escape124",
+      "description": "Escape 124"
+    },
+    {
+      "name": "escape130",
+      "description": "Escape 130"
+    },
+    {
+      "name": "exr",
+      "description": "OpenEXR image"
+    },
+    {
+      "name": "ffv1",
+      "description": "FFmpeg video codec #1"
+    },
+    {
+      "name": "ffvhuff",
+      "description": "Huffyuv FFmpeg variant"
+    },
+    {
+      "name": "fic",
+      "description": "Mirillis FIC"
+    },
+    {
+      "name": "fits",
+      "description": "Flexible Image Transport System"
+    },
+    {
+      "name": "flashsv",
+      "description": "Flash Screen Video v1"
+    },
+    {
+      "name": "flashsv2",
+      "description": "Flash Screen Video v2"
+    },
+    {
+      "name": "flic",
+      "description": "Autodesk Animator Flic video"
+    },
+    {
+      "name": "flv",
+      "description": "FLV / Sorenson Spark / Sorenson H.263 (Flash Video) (codec flv1)"
+    },
+    {
+      "name": "fmvc",
+      "description": "FM Screen Capture Codec"
+    },
+    {
+      "name": "fraps",
+      "description": "Fraps"
+    },
+    {
+      "name": "frwu",
+      "description": "Forward Uncompressed"
+    },
+    {
+      "name": "g2m",
+      "description": "Go2Meeting"
+    },
+    {
+      "name": "gdv",
+      "description": "Gremlin Digital Video"
+    },
+    {
+      "name": "gem",
+      "description": "GEM Raster image"
+    },
+    {
+      "name": "gif",
+      "description": "GIF (Graphics Interchange Format)"
+    },
+    {
+      "name": "h261",
+      "description": "H.261"
+    },
+    {
+      "name": "h263",
+      "description": "H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"
+    },
+    {
+      "name": "h263i",
+      "description": "Intel H.263"
+    },
+    {
+      "name": "h263p",
+      "description": "H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"
+    },
+    {
+      "name": "h264",
+      "description": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"
+    },
+    {
+      "name": "hap",
+      "description": "Vidvox Hap"
+    },
+    {
+      "name": "hevc",
+      "description": "HEVC (High Efficiency Video Coding)"
+    },
+    {
+      "name": "hnm4video",
+      "description": "HNM 4 video"
+    },
+    {
+      "name": "hq_hqa",
+      "description": "Canopus HQ/HQA"
+    },
+    {
+      "name": "hqx",
+      "description": "Canopus HQX"
+    },
+    {
+      "name": "huffyuv",
+      "description": "Huffyuv / HuffYUV"
+    },
+    {
+      "name": "hymt",
+      "description": "HuffYUV MT"
+    },
+    {
+      "name": "idcinvideo",
+      "description": "id Quake II CIN video (codec idcin)"
+    },
+    {
+      "name": "idf",
+      "description": "iCEDraw text"
+    },
+    {
+      "name": "iff",
+      "description": "IFF ACBM/ANIM/DEEP/ILBM/PBM/RGB8/RGBN (codec iff_ilbm)"
+    },
+    {
+      "name": "imm4",
+      "description": "Infinity IMM4"
+    },
+    {
+      "name": "imm5",
+      "description": "Infinity IMM5"
+    },
+    {
+      "name": "indeo2",
+      "description": "Intel Indeo 2"
+    },
+    {
+      "name": "indeo3",
+      "description": "Intel Indeo 3"
+    },
+    {
+      "name": "indeo4",
+      "description": "Intel Indeo Video Interactive 4"
+    },
+    {
+      "name": "indeo5",
+      "description": "Intel Indeo Video Interactive 5"
+    },
+    {
+      "name": "interplayvideo",
+      "description": "Interplay MVE video"
+    },
+    {
+      "name": "ipu",
+      "description": "IPU Video"
+    },
+    {
+      "name": "jpeg2000",
+      "description": "JPEG 2000"
+    },
+    {
+      "name": "jpegls",
+      "description": "JPEG-LS"
+    },
+    {
+      "name": "jv",
+      "description": "Bitmap Brothers JV video"
+    },
+    {
+      "name": "kgv1",
+      "description": "Kega Game Video"
+    },
+    {
+      "name": "kmvc",
+      "description": "Karl Morton's video codec"
+    },
+    {
+      "name": "lagarith",
+      "description": "Lagarith lossless"
+    },
+    {
+      "name": "loco",
+      "description": "LOCO"
+    },
+    {
+      "name": "lscr",
+      "description": "LEAD Screen Capture"
+    },
+    {
+      "name": "m101",
+      "description": "Matrox Uncompressed SD"
+    },
+    {
+      "name": "eamad",
+      "description": "Electronic Arts Madcow Video (codec mad)"
+    },
+    {
+      "name": "magicyuv",
+      "description": "MagicYUV video"
+    },
+    {
+      "name": "mdec",
+      "description": "Sony PlayStation MDEC (Motion DECoder)"
+    },
+    {
+      "name": "mimic",
+      "description": "Mimic"
+    },
+    {
+      "name": "mjpeg",
+      "description": "MJPEG (Motion JPEG)"
+    },
+    {
+      "name": "mjpegb",
+      "description": "Apple MJPEG-B"
+    },
+    {
+      "name": "mmvideo",
+      "description": "American Laser Games MM Video"
+    },
+    {
+      "name": "mobiclip",
+      "description": "MobiClip Video"
+    },
+    {
+      "name": "motionpixels",
+      "description": "Motion Pixels video"
+    },
+    {
+      "name": "mpeg1video",
+      "description": "MPEG-1 video"
+    },
+    {
+      "name": "mpeg2video",
+      "description": "MPEG-2 video"
+    },
+    {
+      "name": "mpegvideo",
+      "description": "MPEG-1 video (codec mpeg2video)"
+    },
+    {
+      "name": "mpeg4",
+      "description": "MPEG-4 part 2"
+    },
+    {
+      "name": "msa1",
+      "description": "MS ATC Screen"
+    },
+    {
+      "name": "mscc",
+      "description": "Mandsoft Screen Capture Codec"
+    },
+    {
+      "name": "msmpeg4v1",
+      "description": "MPEG-4 part 2 Microsoft variant version 1"
+    },
+    {
+      "name": "msmpeg4v2",
+      "description": "MPEG-4 part 2 Microsoft variant version 2"
+    },
+    {
+      "name": "msmpeg4",
+      "description": "MPEG-4 part 2 Microsoft variant version 3 (codec msmpeg4v3)"
+    },
+    {
+      "name": "msp2",
+      "description": "Microsoft Paint (MSP) version 2"
+    },
+    {
+      "name": "msrle",
+      "description": "Microsoft RLE"
+    },
+    {
+      "name": "mss1",
+      "description": "MS Screen 1"
+    },
+    {
+      "name": "mss2",
+      "description": "MS Windows Media Video V9 Screen"
+    },
+    {
+      "name": "msvideo1",
+      "description": "Microsoft Video 1"
+    },
+    {
+      "name": "mszh",
+      "description": "LCL (LossLess Codec Library) MSZH"
+    },
+    {
+      "name": "mts2",
+      "description": "MS Expression Encoder Screen"
+    },
+    {
+      "name": "mv30",
+      "description": "MidiVid 3.0"
+    },
+    {
+      "name": "mvc1",
+      "description": "Silicon Graphics Motion Video Compressor 1"
+    },
+    {
+      "name": "mvc2",
+      "description": "Silicon Graphics Motion Video Compressor 2"
+    },
+    {
+      "name": "mvdv",
+      "description": "MidiVid VQ"
+    },
+    {
+      "name": "mvha",
+      "description": "MidiVid Archive Codec"
+    },
+    {
+      "name": "mwsc",
+      "description": "MatchWare Screen Capture Codec"
+    },
+    {
+      "name": "mxpeg",
+      "description": "Mobotix MxPEG video"
+    },
+    {
+      "name": "notchlc",
+      "description": "NotchLC"
+    },
+    {
+      "name": "nuv",
+      "description": "NuppelVideo/RTJPEG"
+    },
+    {
+      "name": "paf_video",
+      "description": "Amazing Studio Packed Animation File Video"
+    },
+    {
+      "name": "pam",
+      "description": "PAM (Portable AnyMap) image"
+    },
+    {
+      "name": "pbm",
+      "description": "PBM (Portable BitMap) image"
+    },
+    {
+      "name": "pcx",
+      "description": "PC Paintbrush PCX image"
+    },
+    {
+      "name": "pfm",
+      "description": "PFM (Portable FloatMap) image"
+    },
+    {
+      "name": "pgm",
+      "description": "PGM (Portable GrayMap) image"
+    },
+    {
+      "name": "pgmyuv",
+      "description": "PGMYUV (Portable GrayMap YUV) image"
+    },
+    {
+      "name": "pgx",
+      "description": "PGX (JPEG2000 Test Format)"
+    },
+    {
+      "name": "phm",
+      "description": "PHM (Portable HalfFloatMap) image"
+    },
+    {
+      "name": "photocd",
+      "description": "Kodak Photo CD"
+    },
+    {
+      "name": "pictor",
+      "description": "Pictor/PC Paint"
+    },
+    {
+      "name": "pixlet",
+      "description": "Apple Pixlet"
+    },
+    {
+      "name": "png",
+      "description": "PNG (Portable Network Graphics) image"
+    },
+    {
+      "name": "ppm",
+      "description": "PPM (Portable PixelMap) image"
+    },
+    {
+      "name": "prores",
+      "description": "Apple ProRes (iCodec Pro)"
+    },
+    {
+      "name": "prosumer",
+      "description": "Brooktree ProSumer Video"
+    },
+    {
+      "name": "psd",
+      "description": "Photoshop PSD file"
+    },
+    {
+      "name": "ptx",
+      "description": "V.Flash PTX image"
+    },
+    {
+      "name": "qdraw",
+      "description": "Apple QuickDraw"
+    },
+    {
+      "name": "qoi",
+      "description": "QOI (Quite OK Image format) image"
+    },
+    {
+      "name": "qpeg",
+      "description": "Q-team QPEG"
+    },
+    {
+      "name": "qtrle",
+      "description": "QuickTime Animation (RLE) video"
+    },
+    {
+      "name": "r10k",
+      "description": "AJA Kona 10-bit RGB Codec"
+    },
+    {
+      "name": "r210",
+      "description": "Uncompressed RGB 10-bit"
+    },
+    {
+      "name": "rasc",
+      "description": "RemotelyAnywhere Screen Capture"
+    },
+    {
+      "name": "rawvideo",
+      "description": "raw video"
+    },
+    {
+      "name": "rl2",
+      "description": "RL2 video"
+    },
+    {
+      "name": "roqvideo",
+      "description": "id RoQ video (codec roq)"
+    },
+    {
+      "name": "rpza",
+      "description": "QuickTime video (RPZA)"
+    },
+    {
+      "name": "rscc",
+      "description": "innoHeim/Rsupport Screen Capture Codec"
+    },
+    {
+      "name": "rv10",
+      "description": "RealVideo 1.0"
+    },
+    {
+      "name": "rv20",
+      "description": "RealVideo 2.0"
+    },
+    {
+      "name": "rv30",
+      "description": "RealVideo 3.0"
+    },
+    {
+      "name": "rv40",
+      "description": "RealVideo 4.0"
+    },
+    {
+      "name": "sanm",
+      "description": "LucasArts SANM/Smush video"
+    },
+    {
+      "name": "scpr",
+      "description": "ScreenPressor"
+    },
+    {
+      "name": "screenpresso",
+      "description": "Screenpresso"
+    },
+    {
+      "name": "sga",
+      "description": "Digital Pictures SGA Video"
+    },
+    {
+      "name": "sgi",
+      "description": "SGI image"
+    },
+    {
+      "name": "sgirle",
+      "description": "Silicon Graphics RLE 8-bit video"
+    },
+    {
+      "name": "sheervideo",
+      "description": "BitJazz SheerVideo"
+    },
+    {
+      "name": "simbiosis_imx",
+      "description": "Simbiosis Interactive IMX Video"
+    },
+    {
+      "name": "smackvid",
+      "description": "Smacker video (codec smackvideo)"
+    },
+    {
+      "name": "smc",
+      "description": "QuickTime Graphics (SMC)"
+    },
+    {
+      "name": "smvjpeg",
+      "description": "SMV JPEG"
+    },
+    {
+      "name": "snow",
+      "description": "Snow"
+    },
+    {
+      "name": "sp5x",
+      "description": "Sunplus JPEG (SP5X)"
+    },
+    {
+      "name": "speedhq",
+      "description": "NewTek SpeedHQ"
+    },
+    {
+      "name": "srgc",
+      "description": "Screen Recorder Gold Codec"
+    },
+    {
+      "name": "sunrast",
+      "description": "Sun Rasterfile image"
+    },
+    {
+      "name": "svq1",
+      "description": "Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1"
+    },
+    {
+      "name": "svq3",
+      "description": "Sorenson Vector Quantizer 3 / Sorenson Video 3 / SVQ3"
+    },
+    {
+      "name": "targa",
+      "description": "Truevision Targa image"
+    },
+    {
+      "name": "targa_y216",
+      "description": "Pinnacle TARGA CineWave YUV16"
+    },
+    {
+      "name": "tdsc",
+      "description": "TDSC"
+    },
+    {
+      "name": "eatgq",
+      "description": "Electronic Arts TGQ video (codec tgq)"
+    },
+    {
+      "name": "eatgv",
+      "description": "Electronic Arts TGV video (codec tgv)"
+    },
+    {
+      "name": "theora",
+      "description": "Theora"
+    },
+    {
+      "name": "thp",
+      "description": "Nintendo Gamecube THP video"
+    },
+    {
+      "name": "tiertexseqvideo",
+      "description": "Tiertex Limited SEQ video"
+    },
+    {
+      "name": "tiff",
+      "description": "TIFF image"
+    },
+    {
+      "name": "tmv",
+      "description": "8088flex TMV"
+    },
+    {
+      "name": "eatqi",
+      "description": "Electronic Arts TQI Video (codec tqi)"
+    },
+    {
+      "name": "truemotion1",
+      "description": "Duck TrueMotion 1.0"
+    },
+    {
+      "name": "truemotion2",
+      "description": "Duck TrueMotion 2.0"
+    },
+    {
+      "name": "truemotion2rt",
+      "description": "Duck TrueMotion 2.0 Real Time"
+    },
+    {
+      "name": "camtasia",
+      "description": "TechSmith Screen Capture Codec (codec tscc)"
+    },
+    {
+      "name": "tscc2",
+      "description": "TechSmith Screen Codec 2"
+    },
+    {
+      "name": "txd",
+      "description": "Renderware TXD (TeXture Dictionary) image"
+    },
+    {
+      "name": "ultimotion",
+      "description": "IBM UltiMotion (codec ulti)"
+    },
+    {
+      "name": "utvideo",
+      "description": "Ut Video"
+    },
+    {
+      "name": "v210",
+      "description": "Uncompressed 4:2:2 10-bit"
+    },
+    {
+      "name": "v210x",
+      "description": "Uncompressed 4:2:2 10-bit"
+    },
+    {
+      "name": "v308",
+      "description": "Uncompressed packed 4:4:4"
+    },
+    {
+      "name": "v408",
+      "description": "Uncompressed packed QT 4:4:4:4"
+    },
+    {
+      "name": "v410",
+      "description": "Uncompressed 4:4:4 10-bit"
+    },
+    {
+      "name": "vb",
+      "description": "Beam Software VB"
+    },
+    {
+      "name": "vble",
+      "description": "VBLE Lossless Codec"
+    },
+    {
+      "name": "vbn",
+      "description": "Vizrt Binary Image"
+    },
+    {
+      "name": "vc1",
+      "description": "SMPTE VC-1"
+    },
+    {
+      "name": "vc1image",
+      "description": "Windows Media Video 9 Image v2"
+    },
+    {
+      "name": "vcr1",
+      "description": "ATI VCR1"
+    },
+    {
+      "name": "xl",
+      "description": "Miro VideoXL (codec vixl)"
+    },
+    {
+      "name": "vmdvideo",
+      "description": "Sierra VMD video"
+    },
+    {
+      "name": "vmnc",
+      "description": "VMware Screen Codec / VMware Video"
+    },
+    {
+      "name": "vp3",
+      "description": "On2 VP3"
+    },
+    {
+      "name": "vp4",
+      "description": "On2 VP4"
+    },
+    {
+      "name": "vp5",
+      "description": "On2 VP5"
+    },
+    {
+      "name": "vp6",
+      "description": "On2 VP6"
+    },
+    {
+      "name": "vp6a",
+      "description": "On2 VP6 (Flash version, with alpha channel)"
+    },
+    {
+      "name": "vp6f",
+      "description": "On2 VP6 (Flash version)"
+    },
+    {
+      "name": "vp7",
+      "description": "On2 VP7"
+    },
+    {
+      "name": "vp8",
+      "description": "On2 VP8"
+    },
+    {
+      "name": "libvpx",
+      "description": "libvpx VP8 (codec vp8)"
+    },
+    {
+      "name": "vp9",
+      "description": "Google VP9"
+    },
+    {
+      "name": "wcmv",
+      "description": "WinCAM Motion Video"
+    },
+    {
+      "name": "webp",
+      "description": "WebP image"
+    },
+    {
+      "name": "wmv1",
+      "description": "Windows Media Video 7"
+    },
+    {
+      "name": "wmv2",
+      "description": "Windows Media Video 8"
+    },
+    {
+      "name": "wmv3",
+      "description": "Windows Media Video 9"
+    },
+    {
+      "name": "wmv3image",
+      "description": "Windows Media Video 9 Image"
+    },
+    {
+      "name": "wnv1",
+      "description": "Winnov WNV1"
+    },
+    {
+      "name": "wrapped_avframe",
+      "description": "AVPacket to AVFrame passthrough"
+    },
+    {
+      "name": "vqavideo",
+      "description": "Westwood Studios VQA (Vector Quantized Animation) video (codec ws_vqa)"
+    },
+    {
+      "name": "xan_wc3",
+      "description": "Wing Commander III / Xan"
+    },
+    {
+      "name": "xan_wc4",
+      "description": "Wing Commander IV / Xxan"
+    },
+    {
+      "name": "xbin",
+      "description": "eXtended BINary text"
+    },
+    {
+      "name": "xbm",
+      "description": "XBM (X BitMap) image"
+    },
+    {
+      "name": "xface",
+      "description": "X-face image"
+    },
+    {
+      "name": "xpm",
+      "description": "XPM (X PixMap) image"
+    },
+    {
+      "name": "xwd",
+      "description": "XWD (X Window Dump) image"
+    },
+    {
+      "name": "y41p",
+      "description": "Uncompressed YUV 4:1:1 12-bit"
+    },
+    {
+      "name": "ylc",
+      "description": "YUY2 Lossless Codec"
+    },
+    {
+      "name": "yop",
+      "description": "Psygnosis YOP Video"
+    },
+    {
+      "name": "yuv4",
+      "description": "Uncompressed packed 4:2:0"
+    },
+    {
+      "name": "zerocodec",
+      "description": "ZeroCodec Lossless Video"
+    },
+    {
+      "name": "zlib",
+      "description": "LCL (LossLess Codec Library) ZLIB"
+    },
+    {
+      "name": "zmbv",
+      "description": "Zip Motion Blocks Video"
+    },
+    {
+      "name": "8svx_exp",
+      "description": "8SVX exponential"
+    },
+    {
+      "name": "8svx_fib",
+      "description": "8SVX fibonacci"
+    },
+    {
+      "name": "aac",
+      "description": "AAC (Advanced Audio Coding)"
+    },
+    {
+      "name": "aac_fixed",
+      "description": "AAC (Advanced Audio Coding) (codec aac)"
+    },
+    {
+      "name": "aac_latm",
+      "description": "AAC LATM (Advanced Audio Coding LATM syntax)"
+    },
+    {
+      "name": "ac3",
+      "description": "ATSC A/52A (AC-3)"
+    },
+    {
+      "name": "ac3_fixed",
+      "description": "ATSC A/52A (AC-3) (codec ac3)"
+    },
+    {
+      "name": "adpcm_4xm",
+      "description": "ADPCM 4X Movie"
+    },
+    {
+      "name": "adpcm_adx",
+      "description": "SEGA CRI ADX ADPCM"
+    },
+    {
+      "name": "adpcm_afc",
+      "description": "ADPCM Nintendo Gamecube AFC"
+    },
+    {
+      "name": "adpcm_agm",
+      "description": "ADPCM AmuseGraphics Movie"
+    },
+    {
+      "name": "adpcm_aica",
+      "description": "ADPCM Yamaha AICA"
+    },
+    {
+      "name": "adpcm_argo",
+      "description": "ADPCM Argonaut Games"
+    },
+    {
+      "name": "adpcm_ct",
+      "description": "ADPCM Creative Technology"
+    },
+    {
+      "name": "adpcm_dtk",
+      "description": "ADPCM Nintendo Gamecube DTK"
+    },
+    {
+      "name": "adpcm_ea",
+      "description": "ADPCM Electronic Arts"
+    },
+    {
+      "name": "adpcm_ea_maxis_xa",
+      "description": "ADPCM Electronic Arts Maxis CDROM XA"
+    },
+    {
+      "name": "adpcm_ea_r1",
+      "description": "ADPCM Electronic Arts R1"
+    },
+    {
+      "name": "adpcm_ea_r2",
+      "description": "ADPCM Electronic Arts R2"
+    },
+    {
+      "name": "adpcm_ea_r3",
+      "description": "ADPCM Electronic Arts R3"
+    },
+    {
+      "name": "adpcm_ea_xas",
+      "description": "ADPCM Electronic Arts XAS"
+    },
+    {
+      "name": "g722",
+      "description": "G.722 ADPCM (codec adpcm_g722)"
+    },
+    {
+      "name": "g726",
+      "description": "G.726 ADPCM (codec adpcm_g726)"
+    },
+    {
+      "name": "g726le",
+      "description": "G.726 ADPCM little-endian (codec adpcm_g726le)"
+    },
+    {
+      "name": "adpcm_ima_acorn",
+      "description": "ADPCM IMA Acorn Replay"
+    },
+    {
+      "name": "adpcm_ima_alp",
+      "description": "ADPCM IMA High Voltage Software ALP"
+    },
+    {
+      "name": "adpcm_ima_amv",
+      "description": "ADPCM IMA AMV"
+    },
+    {
+      "name": "adpcm_ima_apc",
+      "description": "ADPCM IMA CRYO APC"
+    },
+    {
+      "name": "adpcm_ima_apm",
+      "description": "ADPCM IMA Ubisoft APM"
+    },
+    {
+      "name": "adpcm_ima_cunning",
+      "description": "ADPCM IMA Cunning Developments"
+    },
+    {
+      "name": "adpcm_ima_dat4",
+      "description": "ADPCM IMA Eurocom DAT4"
+    },
+    {
+      "name": "adpcm_ima_dk3",
+      "description": "ADPCM IMA Duck DK3"
+    },
+    {
+      "name": "adpcm_ima_dk4",
+      "description": "ADPCM IMA Duck DK4"
+    },
+    {
+      "name": "adpcm_ima_ea_eacs",
+      "description": "ADPCM IMA Electronic Arts EACS"
+    },
+    {
+      "name": "adpcm_ima_ea_sead",
+      "description": "ADPCM IMA Electronic Arts SEAD"
+    },
+    {
+      "name": "adpcm_ima_iss",
+      "description": "ADPCM IMA Funcom ISS"
+    },
+    {
+      "name": "adpcm_ima_moflex",
+      "description": "ADPCM IMA MobiClip MOFLEX"
+    },
+    {
+      "name": "adpcm_ima_mtf",
+      "description": "ADPCM IMA Capcom's MT Framework"
+    },
+    {
+      "name": "adpcm_ima_oki",
+      "description": "ADPCM IMA Dialogic OKI"
+    },
+    {
+      "name": "adpcm_ima_qt",
+      "description": "ADPCM IMA QuickTime"
+    },
+    {
+      "name": "adpcm_ima_rad",
+      "description": "ADPCM IMA Radical"
+    },
+    {
+      "name": "adpcm_ima_smjpeg",
+      "description": "ADPCM IMA Loki SDL MJPEG"
+    },
+    {
+      "name": "adpcm_ima_ssi",
+      "description": "ADPCM IMA Simon & Schuster Interactive"
+    },
+    {
+      "name": "adpcm_ima_wav",
+      "description": "ADPCM IMA WAV"
+    },
+    {
+      "name": "adpcm_ima_ws",
+      "description": "ADPCM IMA Westwood"
+    },
+    {
+      "name": "adpcm_ms",
+      "description": "ADPCM Microsoft"
+    },
+    {
+      "name": "adpcm_mtaf",
+      "description": "ADPCM MTAF"
+    },
+    {
+      "name": "adpcm_psx",
+      "description": "ADPCM Playstation"
+    },
+    {
+      "name": "adpcm_sbpro_2",
+      "description": "ADPCM Sound Blaster Pro 2-bit"
+    },
+    {
+      "name": "adpcm_sbpro_3",
+      "description": "ADPCM Sound Blaster Pro 2.6-bit"
+    },
+    {
+      "name": "adpcm_sbpro_4",
+      "description": "ADPCM Sound Blaster Pro 4-bit"
+    },
+    {
+      "name": "adpcm_swf",
+      "description": "ADPCM Shockwave Flash"
+    },
+    {
+      "name": "adpcm_thp",
+      "description": "ADPCM Nintendo THP"
+    },
+    {
+      "name": "adpcm_thp_le",
+      "description": "ADPCM Nintendo THP (little-endian)"
+    },
+    {
+      "name": "adpcm_vima",
+      "description": "LucasArts VIMA audio"
+    },
+    {
+      "name": "adpcm_xa",
+      "description": "ADPCM CDROM XA"
+    },
+    {
+      "name": "adpcm_yamaha",
+      "description": "ADPCM Yamaha"
+    },
+    {
+      "name": "adpcm_zork",
+      "description": "ADPCM Zork"
+    },
+    {
+      "name": "alac",
+      "description": "ALAC (Apple Lossless Audio Codec)"
+    },
+    {
+      "name": "amrnb",
+      "description": "AMR-NB (Adaptive Multi-Rate NarrowBand) (codec amr_nb)"
+    },
+    {
+      "name": "amrwb",
+      "description": "AMR-WB (Adaptive Multi-Rate WideBand) (codec amr_wb)"
+    },
+    {
+      "name": "ape",
+      "description": "Monkey's Audio"
+    },
+    {
+      "name": "aptx",
+      "description": "aptX (Audio Processing Technology for Bluetooth)"
+    },
+    {
+      "name": "aptx_hd",
+      "description": "aptX HD (Audio Processing Technology for Bluetooth)"
+    },
+    {
+      "name": "atrac1",
+      "description": "ATRAC1 (Adaptive TRansform Acoustic Coding)"
+    },
+    {
+      "name": "atrac3",
+      "description": "ATRAC3 (Adaptive TRansform Acoustic Coding 3)"
+    },
+    {
+      "name": "atrac3al",
+      "description": "ATRAC3 AL (Adaptive TRansform Acoustic Coding 3 Advanced Lossless)"
+    },
+    {
+      "name": "atrac3plus",
+      "description": "ATRAC3+ (Adaptive TRansform Acoustic Coding 3+) (codec atrac3p)"
+    },
+    {
+      "name": "atrac3plusal",
+      "description": "ATRAC3+ AL (Adaptive TRansform Acoustic Coding 3+ Advanced Lossless) (codec atrac3pal)"
+    },
+    {
+      "name": "atrac9",
+      "description": "ATRAC9 (Adaptive TRansform Acoustic Coding 9)"
+    },
+    {
+      "name": "on2avc",
+      "description": "On2 Audio for Video Codec (codec avc)"
+    },
+    {
+      "name": "binkaudio_dct",
+      "description": "Bink Audio (DCT)"
+    },
+    {
+      "name": "binkaudio_rdft",
+      "description": "Bink Audio (RDFT)"
+    },
+    {
+      "name": "bmv_audio",
+      "description": "Discworld II BMV audio"
+    },
+    {
+      "name": "comfortnoise",
+      "description": "RFC 3389 comfort noise generator"
+    },
+    {
+      "name": "cook",
+      "description": "Cook / Cooker / Gecko (RealAudio G2)"
+    },
+    {
+      "name": "derf_dpcm",
+      "description": "DPCM Xilam DERF"
+    },
+    {
+      "name": "dfpwm",
+      "description": "DFPWM1a audio"
+    },
+    {
+      "name": "dolby_e",
+      "description": "Dolby E"
+    },
+    {
+      "name": "dsd_lsbf",
+      "description": "DSD (Direct Stream Digital), least significant bit first"
+    },
+    {
+      "name": "dsd_lsbf_planar",
+      "description": "DSD (Direct Stream Digital), least significant bit first, planar"
+    },
+    {
+      "name": "dsd_msbf",
+      "description": "DSD (Direct Stream Digital), most significant bit first"
+    },
+    {
+      "name": "dsd_msbf_planar",
+      "description": "DSD (Direct Stream Digital), most significant bit first, planar"
+    },
+    {
+      "name": "dsicinaudio",
+      "description": "Delphine Software International CIN audio"
+    },
+    {
+      "name": "dss_sp",
+      "description": "Digital Speech Standard - Standard Play mode (DSS SP)"
+    },
+    {
+      "name": "dst",
+      "description": "DST (Digital Stream Transfer)"
+    },
+    {
+      "name": "dca",
+      "description": "DCA (DTS Coherent Acoustics) (codec dts)"
+    },
+    {
+      "name": "dvaudio",
+      "description": "Ulead DV Audio"
+    },
+    {
+      "name": "eac3",
+      "description": "ATSC A/52B (AC-3, E-AC-3)"
+    },
+    {
+      "name": "evrc",
+      "description": "EVRC (Enhanced Variable Rate Codec)"
+    },
+    {
+      "name": "fastaudio",
+      "description": "MobiClip FastAudio"
+    },
+    {
+      "name": "flac",
+      "description": "FLAC (Free Lossless Audio Codec)"
+    },
+    {
+      "name": "g723_1",
+      "description": "G.723.1"
+    },
+    {
+      "name": "g729",
+      "description": "G.729"
+    },
+    {
+      "name": "gremlin_dpcm",
+      "description": "DPCM Gremlin"
+    },
+    {
+      "name": "gsm",
+      "description": "GSM"
+    },
+    {
+      "name": "gsm_ms",
+      "description": "GSM Microsoft variant"
+    },
+    {
+      "name": "hca",
+      "description": "CRI HCA"
+    },
+    {
+      "name": "hcom",
+      "description": "HCOM Audio"
+    },
+    {
+      "name": "iac",
+      "description": "IAC (Indeo Audio Coder)"
+    },
+    {
+      "name": "ilbc",
+      "description": "iLBC (Internet Low Bitrate Codec)"
+    },
+    {
+      "name": "imc",
+      "description": "IMC (Intel Music Coder)"
+    },
+    {
+      "name": "interplay_dpcm",
+      "description": "DPCM Interplay"
+    },
+    {
+      "name": "interplayacm",
+      "description": "Interplay ACM"
+    },
+    {
+      "name": "mace3",
+      "description": "MACE (Macintosh Audio Compression/Expansion) 3:1"
+    },
+    {
+      "name": "mace6",
+      "description": "MACE (Macintosh Audio Compression/Expansion) 6:1"
+    },
+    {
+      "name": "metasound",
+      "description": "Voxware MetaSound"
+    },
+    {
+      "name": "mlp",
+      "description": "MLP (Meridian Lossless Packing)"
+    },
+    {
+      "name": "mp1",
+      "description": "MP1 (MPEG audio layer 1)"
+    },
+    {
+      "name": "mp1float",
+      "description": "MP1 (MPEG audio layer 1) (codec mp1)"
+    },
+    {
+      "name": "mp2",
+      "description": "MP2 (MPEG audio layer 2)"
+    },
+    {
+      "name": "mp2float",
+      "description": "MP2 (MPEG audio layer 2) (codec mp2)"
+    },
+    {
+      "name": "mp3float",
+      "description": "MP3 (MPEG audio layer 3) (codec mp3)"
+    },
+    {
+      "name": "mp3",
+      "description": "MP3 (MPEG audio layer 3)"
+    },
+    {
+      "name": "mp3adufloat",
+      "description": "ADU (Application Data Unit) MP3 (MPEG audio layer 3) (codec mp3adu)"
+    },
+    {
+      "name": "mp3adu",
+      "description": "ADU (Application Data Unit) MP3 (MPEG audio layer 3)"
+    },
+    {
+      "name": "mp3on4float",
+      "description": "MP3onMP4 (codec mp3on4)"
+    },
+    {
+      "name": "mp3on4",
+      "description": "MP3onMP4"
+    },
+    {
+      "name": "als",
+      "description": "MPEG-4 Audio Lossless Coding (ALS) (codec mp4als)"
+    },
+    {
+      "name": "msnsiren",
+      "description": "MSN Siren"
+    },
+    {
+      "name": "mpc7",
+      "description": "Musepack SV7 (codec musepack7)"
+    },
+    {
+      "name": "mpc8",
+      "description": "Musepack SV8 (codec musepack8)"
+    },
+    {
+      "name": "nellymoser",
+      "description": "Nellymoser Asao"
+    },
+    {
+      "name": "opus",
+      "description": "Opus"
+    },
+    {
+      "name": "libopus",
+      "description": "libopus Opus (codec opus)"
+    },
+    {
+      "name": "paf_audio",
+      "description": "Amazing Studio Packed Animation File Audio"
+    },
+    {
+      "name": "pcm_alaw",
+      "description": "PCM A-law / G.711 A-law"
+    },
+    {
+      "name": "pcm_bluray",
+      "description": "PCM signed 16|20|24-bit big-endian for Blu-ray media"
+    },
+    {
+      "name": "pcm_dvd",
+      "description": "PCM signed 16|20|24-bit big-endian for DVD media"
+    },
+    {
+      "name": "pcm_f16le",
+      "description": "PCM 16.8 floating point little-endian"
+    },
+    {
+      "name": "pcm_f24le",
+      "description": "PCM 24.0 floating point little-endian"
+    },
+    {
+      "name": "pcm_f32be",
+      "description": "PCM 32-bit floating point big-endian"
+    },
+    {
+      "name": "pcm_f32le",
+      "description": "PCM 32-bit floating point little-endian"
+    },
+    {
+      "name": "pcm_f64be",
+      "description": "PCM 64-bit floating point big-endian"
+    },
+    {
+      "name": "pcm_f64le",
+      "description": "PCM 64-bit floating point little-endian"
+    },
+    {
+      "name": "pcm_lxf",
+      "description": "PCM signed 20-bit little-endian planar"
+    },
+    {
+      "name": "pcm_mulaw",
+      "description": "PCM mu-law / G.711 mu-law"
+    },
+    {
+      "name": "pcm_s16be",
+      "description": "PCM signed 16-bit big-endian"
+    },
+    {
+      "name": "pcm_s16be_planar",
+      "description": "PCM signed 16-bit big-endian planar"
+    },
+    {
+      "name": "pcm_s16le",
+      "description": "PCM signed 16-bit little-endian"
+    },
+    {
+      "name": "pcm_s16le_planar",
+      "description": "PCM signed 16-bit little-endian planar"
+    },
+    {
+      "name": "pcm_s24be",
+      "description": "PCM signed 24-bit big-endian"
+    },
+    {
+      "name": "pcm_s24daud",
+      "description": "PCM D-Cinema audio signed 24-bit"
+    },
+    {
+      "name": "pcm_s24le",
+      "description": "PCM signed 24-bit little-endian"
+    },
+    {
+      "name": "pcm_s24le_planar",
+      "description": "PCM signed 24-bit little-endian planar"
+    },
+    {
+      "name": "pcm_s32be",
+      "description": "PCM signed 32-bit big-endian"
+    },
+    {
+      "name": "pcm_s32le",
+      "description": "PCM signed 32-bit little-endian"
+    },
+    {
+      "name": "pcm_s32le_planar",
+      "description": "PCM signed 32-bit little-endian planar"
+    },
+    {
+      "name": "pcm_s64be",
+      "description": "PCM signed 64-bit big-endian"
+    },
+    {
+      "name": "pcm_s64le",
+      "description": "PCM signed 64-bit little-endian"
+    },
+    {
+      "name": "pcm_s8",
+      "description": "PCM signed 8-bit"
+    },
+    {
+      "name": "pcm_s8_planar",
+      "description": "PCM signed 8-bit planar"
+    },
+    {
+      "name": "pcm_sga",
+      "description": "PCM SGA"
+    },
+    {
+      "name": "pcm_u16be",
+      "description": "PCM unsigned 16-bit big-endian"
+    },
+    {
+      "name": "pcm_u16le",
+      "description": "PCM unsigned 16-bit little-endian"
+    },
+    {
+      "name": "pcm_u24be",
+      "description": "PCM unsigned 24-bit big-endian"
+    },
+    {
+      "name": "pcm_u24le",
+      "description": "PCM unsigned 24-bit little-endian"
+    },
+    {
+      "name": "pcm_u32be",
+      "description": "PCM unsigned 32-bit big-endian"
+    },
+    {
+      "name": "pcm_u32le",
+      "description": "PCM unsigned 32-bit little-endian"
+    },
+    {
+      "name": "pcm_u8",
+      "description": "PCM unsigned 8-bit"
+    },
+    {
+      "name": "pcm_vidc",
+      "description": "PCM Archimedes VIDC"
+    },
+    {
+      "name": "qcelp",
+      "description": "QCELP / PureVoice"
+    },
+    {
+      "name": "qdm2",
+      "description": "QDesign Music Codec 2"
+    },
+    {
+      "name": "qdmc",
+      "description": "QDesign Music Codec 1"
+    },
+    {
+      "name": "real_144",
+      "description": "RealAudio 1.0 (14.4K) (codec ra_144)"
+    },
+    {
+      "name": "real_288",
+      "description": "RealAudio 2.0 (28.8K) (codec ra_288)"
+    },
+    {
+      "name": "ralf",
+      "description": "RealAudio Lossless"
+    },
+    {
+      "name": "roq_dpcm",
+      "description": "DPCM id RoQ"
+    },
+    {
+      "name": "s302m",
+      "description": "SMPTE 302M"
+    },
+    {
+      "name": "sbc",
+      "description": "SBC (low-complexity subband codec)"
+    },
+    {
+      "name": "sdx2_dpcm",
+      "description": "DPCM Squareroot-Delta-Exact"
+    },
+    {
+      "name": "shorten",
+      "description": "Shorten"
+    },
+    {
+      "name": "sipr",
+      "description": "RealAudio SIPR / ACELP.NET"
+    },
+    {
+      "name": "siren",
+      "description": "Siren"
+    },
+    {
+      "name": "smackaud",
+      "description": "Smacker audio (codec smackaudio)"
+    },
+    {
+      "name": "sol_dpcm",
+      "description": "DPCM Sol"
+    },
+    {
+      "name": "sonic",
+      "description": "Sonic"
+    },
+    {
+      "name": "speex",
+      "description": "Speex"
+    },
+    {
+      "name": "tak",
+      "description": "TAK (Tom's lossless Audio Kompressor)"
+    },
+    {
+      "name": "truehd",
+      "description": "TrueHD"
+    },
+    {
+      "name": "truespeech",
+      "description": "DSP Group TrueSpeech"
+    },
+    {
+      "name": "tta",
+      "description": "TTA (True Audio)"
+    },
+    {
+      "name": "twinvq",
+      "description": "VQF TwinVQ"
+    },
+    {
+      "name": "vmdaudio",
+      "description": "Sierra VMD audio"
+    },
+    {
+      "name": "vorbis",
+      "description": "Vorbis"
+    },
+    {
+      "name": "libvorbis",
+      "description": "libvorbis (codec vorbis)"
+    },
+    {
+      "name": "wavesynth",
+      "description": "Wave synthesis pseudo-codec"
+    },
+    {
+      "name": "wavpack",
+      "description": "WavPack"
+    },
+    {
+      "name": "ws_snd1",
+      "description": "Westwood Audio (SND1) (codec westwood_snd1)"
+    },
+    {
+      "name": "wmalossless",
+      "description": "Windows Media Audio Lossless"
+    },
+    {
+      "name": "wmapro",
+      "description": "Windows Media Audio 9 Professional"
+    },
+    {
+      "name": "wmav1",
+      "description": "Windows Media Audio 1"
+    },
+    {
+      "name": "wmav2",
+      "description": "Windows Media Audio 2"
+    },
+    {
+      "name": "wmavoice",
+      "description": "Windows Media Audio Voice"
+    },
+    {
+      "name": "xan_dpcm",
+      "description": "DPCM Xan"
+    },
+    {
+      "name": "xma1",
+      "description": "Xbox Media Audio 1"
+    },
+    {
+      "name": "xma2",
+      "description": "Xbox Media Audio 2"
+    },
+    {
+      "name": "ssa",
+      "description": "ASS (Advanced SubStation Alpha) subtitle (codec ass)"
+    },
+    {
+      "name": "ass",
+      "description": "ASS (Advanced SubStation Alpha) subtitle"
+    },
+    {
+      "name": "dvbsub",
+      "description": "DVB subtitles (codec dvb_subtitle)"
+    },
+    {
+      "name": "dvdsub",
+      "description": "DVD subtitles (codec dvd_subtitle)"
+    },
+    {
+      "name": "cc_dec",
+      "description": "Closed Caption (EIA-608 / CEA-708) (codec eia_608)"
+    },
+    {
+      "name": "pgssub",
+      "description": "HDMV Presentation Graphic Stream subtitles (codec hdmv_pgs_subtitle)"
+    },
+    {
+      "name": "jacosub",
+      "description": "JACOsub subtitle"
+    },
+    {
+      "name": "microdvd",
+      "description": "MicroDVD subtitle"
+    },
+    {
+      "name": "mov_text",
+      "description": "3GPP Timed Text subtitle"
+    },
+    {
+      "name": "mpl2",
+      "description": "MPL2 subtitle"
+    },
+    {
+      "name": "pjs",
+      "description": "PJS subtitle"
+    },
+    {
+      "name": "realtext",
+      "description": "RealText subtitle"
+    },
+    {
+      "name": "sami",
+      "description": "SAMI subtitle"
+    },
+    {
+      "name": "stl",
+      "description": "Spruce subtitle format"
+    },
+    {
+      "name": "srt",
+      "description": "SubRip subtitle (codec subrip)"
+    },
+    {
+      "name": "subrip",
+      "description": "SubRip subtitle"
+    },
+    {
+      "name": "subviewer",
+      "description": "SubViewer subtitle"
+    },
+    {
+      "name": "subviewer1",
+      "description": "SubViewer1 subtitle"
+    },
+    {
+      "name": "text",
+      "description": "Raw text subtitle"
+    },
+    {
+      "name": "vplayer",
+      "description": "VPlayer subtitle"
+    },
+    {
+      "name": "webvtt",
+      "description": "WebVTT subtitle"
+    },
+    {
+      "name": "xsub",
+      "description": "XSUB"
+    }
+  ],
+  "muxers": [
+    {
+      "name": "3g2",
+      "description": "3GP2 (3GPP2 file format)"
+    },
+    {
+      "name": "3gp",
+      "description": "3GP (3GPP file format)"
+    },
+    {
+      "name": "a64",
+      "description": "a64 - video for Commodore 64"
+    },
+    {
+      "name": "ac3",
+      "description": "raw AC-3"
+    },
+    {
+      "name": "adts",
+      "description": "ADTS AAC (Advanced Audio Coding)"
+    },
+    {
+      "name": "adx",
+      "description": "CRI ADX"
+    },
+    {
+      "name": "aiff",
+      "description": "Audio IFF"
+    },
+    {
+      "name": "alaw",
+      "description": "PCM A-law"
+    },
+    {
+      "name": "alp",
+      "description": "LEGO Racers ALP"
+    },
+    {
+      "name": "amr",
+      "description": "3GPP AMR"
+    },
+    {
+      "name": "amv",
+      "description": "AMV"
+    },
+    {
+      "name": "apm",
+      "description": "Ubisoft Rayman 2 APM"
+    },
+    {
+      "name": "apng",
+      "description": "Animated Portable Network Graphics"
+    },
+    {
+      "name": "aptx",
+      "description": "raw aptX (Audio Processing Technology for Bluetooth)"
+    },
+    {
+      "name": "aptx_hd",
+      "description": "raw aptX HD (Audio Processing Technology for Bluetooth)"
+    },
+    {
+      "name": "argo_asf",
+      "description": "Argonaut Games ASF"
+    },
+    {
+      "name": "argo_cvg",
+      "description": "Argonaut Games CVG"
+    },
+    {
+      "name": "asf",
+      "description": "ASF (Advanced / Active Streaming Format)"
+    },
+    {
+      "name": "asf_stream",
+      "description": "ASF (Advanced / Active Streaming Format)"
+    },
+    {
+      "name": "ass",
+      "description": "SSA (SubStation Alpha) subtitle"
+    },
+    {
+      "name": "ast",
+      "description": "AST (Audio Stream)"
+    },
+    {
+      "name": "au",
+      "description": "Sun AU"
+    },
+    {
+      "name": "avi",
+      "description": "AVI (Audio Video Interleaved)"
+    },
+    {
+      "name": "avif",
+      "description": "AVIF"
+    },
+    {
+      "name": "avm2",
+      "description": "SWF (ShockWave Flash) (AVM2)"
+    },
+    {
+      "name": "avs2",
+      "description": "raw AVS2-P2/IEEE1857.4 video"
+    },
+    {
+      "name": "avs3",
+      "description": "AVS3-P2/IEEE1857.10"
+    },
+    {
+      "name": "bit",
+      "description": "G.729 BIT file format"
+    },
+    {
+      "name": "caf",
+      "description": "Apple CAF (Core Audio Format)"
+    },
+    {
+      "name": "cavsvideo",
+      "description": "raw Chinese AVS (Audio Video Standard) video"
+    },
+    {
+      "name": "codec2",
+      "description": "codec2 .c2 muxer"
+    },
+    {
+      "name": "codec2raw",
+      "description": "raw codec2 muxer"
+    },
+    {
+      "name": "crc",
+      "description": "CRC testing"
+    },
+    {
+      "name": "dash",
+      "description": "DASH Muxer"
+    },
+    {
+      "name": "data",
+      "description": "raw data"
+    },
+    {
+      "name": "daud",
+      "description": "D-Cinema audio"
+    },
+    {
+      "name": "dfpwm",
+      "description": "raw DFPWM1a"
+    },
+    {
+      "name": "dirac",
+      "description": "raw Dirac"
+    },
+    {
+      "name": "dnxhd",
+      "description": "raw DNxHD (SMPTE VC-3)"
+    },
+    {
+      "name": "dts",
+      "description": "raw DTS"
+    },
+    {
+      "name": "dv",
+      "description": "DV (Digital Video)"
+    },
+    {
+      "name": "dvd",
+      "description": "MPEG-2 PS (DVD VOB)"
+    },
+    {
+      "name": "eac3",
+      "description": "raw E-AC-3"
+    },
+    {
+      "name": "f32be",
+      "description": "PCM 32-bit floating-point big-endian"
+    },
+    {
+      "name": "f32le",
+      "description": "PCM 32-bit floating-point little-endian"
+    },
+    {
+      "name": "f4v",
+      "description": "F4V Adobe Flash Video"
+    },
+    {
+      "name": "f64be",
+      "description": "PCM 64-bit floating-point big-endian"
+    },
+    {
+      "name": "f64le",
+      "description": "PCM 64-bit floating-point little-endian"
+    },
+    {
+      "name": "ffmetadata",
+      "description": "FFmpeg metadata in text"
+    },
+    {
+      "name": "fifo",
+      "description": "FIFO queue pseudo-muxer"
+    },
+    {
+      "name": "fifo_test",
+      "description": "Fifo test muxer"
+    },
+    {
+      "name": "film_cpk",
+      "description": "Sega FILM / CPK"
+    },
+    {
+      "name": "filmstrip",
+      "description": "Adobe Filmstrip"
+    },
+    {
+      "name": "fits",
+      "description": "Flexible Image Transport System"
+    },
+    {
+      "name": "flac",
+      "description": "raw FLAC"
+    },
+    {
+      "name": "flv",
+      "description": "FLV (Flash Video)"
+    },
+    {
+      "name": "framecrc",
+      "description": "framecrc testing"
+    },
+    {
+      "name": "framehash",
+      "description": "Per-frame hash testing"
+    },
+    {
+      "name": "framemd5",
+      "description": "Per-frame MD5 testing"
+    },
+    {
+      "name": "g722",
+      "description": "raw G.722"
+    },
+    {
+      "name": "g723_1",
+      "description": "raw G.723.1"
+    },
+    {
+      "name": "g726",
+      "description": "raw big-endian G.726 (\"left-justified\")"
+    },
+    {
+      "name": "g726le",
+      "description": "raw little-endian G.726 (\"right-justified\")"
+    },
+    {
+      "name": "gif",
+      "description": "CompuServe Graphics Interchange Format (GIF)"
+    },
+    {
+      "name": "gsm",
+      "description": "raw GSM"
+    },
+    {
+      "name": "gxf",
+      "description": "GXF (General eXchange Format)"
+    },
+    {
+      "name": "h261",
+      "description": "raw H.261"
+    },
+    {
+      "name": "h263",
+      "description": "raw H.263"
+    },
+    {
+      "name": "h264",
+      "description": "raw H.264 video"
+    },
+    {
+      "name": "hash",
+      "description": "Hash testing"
+    },
+    {
+      "name": "hds",
+      "description": "HDS Muxer"
+    },
+    {
+      "name": "hevc",
+      "description": "raw HEVC video"
+    },
+    {
+      "name": "hls",
+      "description": "Apple HTTP Live Streaming"
+    },
+    {
+      "name": "ico",
+      "description": "Microsoft Windows ICO"
+    },
+    {
+      "name": "ilbc",
+      "description": "iLBC storage"
+    },
+    {
+      "name": "image2",
+      "description": "image2 sequence"
+    },
+    {
+      "name": "image2pipe",
+      "description": "piped image2 sequence"
+    },
+    {
+      "name": "ipod",
+      "description": "iPod H.264 MP4 (MPEG-4 Part 14)"
+    },
+    {
+      "name": "ircam",
+      "description": "Berkeley/IRCAM/CARL Sound Format"
+    },
+    {
+      "name": "ismv",
+      "description": "ISMV/ISMA (Smooth Streaming)"
+    },
+    {
+      "name": "ivf",
+      "description": "On2 IVF"
+    },
+    {
+      "name": "jacosub",
+      "description": "JACOsub subtitle format"
+    },
+    {
+      "name": "kvag",
+      "description": "Simon & Schuster Interactive VAG"
+    },
+    {
+      "name": "latm",
+      "description": "LOAS/LATM"
+    },
+    {
+      "name": "lrc",
+      "description": "LRC lyrics"
+    },
+    {
+      "name": "m4v",
+      "description": "raw MPEG-4 video"
+    },
+    {
+      "name": "matroska",
+      "description": "Matroska"
+    },
+    {
+      "name": "md5",
+      "description": "MD5 testing"
+    },
+    {
+      "name": "microdvd",
+      "description": "MicroDVD subtitle format"
+    },
+    {
+      "name": "mjpeg",
+      "description": "raw MJPEG video"
+    },
+    {
+      "name": "mkvtimestamp_v2",
+      "description": "extract pts as timecode v2 format, as defined by mkvtoolnix"
+    },
+    {
+      "name": "mlp",
+      "description": "raw MLP"
+    },
+    {
+      "name": "mmf",
+      "description": "Yamaha SMAF"
+    },
+    {
+      "name": "mov",
+      "description": "QuickTime / MOV"
+    },
+    {
+      "name": "mp2",
+      "description": "MP2 (MPEG audio layer 2)"
+    },
+    {
+      "name": "mp3",
+      "description": "MP3 (MPEG audio layer 3)"
+    },
+    {
+      "name": "mp4",
+      "description": "MP4 (MPEG-4 Part 14)"
+    },
+    {
+      "name": "mpeg",
+      "description": "MPEG-1 Systems / MPEG program stream"
+    },
+    {
+      "name": "mpeg1video",
+      "description": "raw MPEG-1 video"
+    },
+    {
+      "name": "mpeg2video",
+      "description": "raw MPEG-2 video"
+    },
+    {
+      "name": "mpegts",
+      "description": "MPEG-TS (MPEG-2 Transport Stream)"
+    },
+    {
+      "name": "mpjpeg",
+      "description": "MIME multipart JPEG"
+    },
+    {
+      "name": "mulaw",
+      "description": "PCM mu-law"
+    },
+    {
+      "name": "mxf",
+      "description": "MXF (Material eXchange Format)"
+    },
+    {
+      "name": "mxf_d10",
+      "description": "MXF (Material eXchange Format) D-10 Mapping"
+    },
+    {
+      "name": "mxf_opatom",
+      "description": "MXF (Material eXchange Format) Operational Pattern Atom"
+    },
+    {
+      "name": "null",
+      "description": "raw null video"
+    },
+    {
+      "name": "nut",
+      "description": "NUT"
+    },
+    {
+      "name": "obu",
+      "description": "AV1 low overhead OBU"
+    },
+    {
+      "name": "oga",
+      "description": "Ogg Audio"
+    },
+    {
+      "name": "ogg",
+      "description": "Ogg"
+    },
+    {
+      "name": "ogv",
+      "description": "Ogg Video"
+    },
+    {
+      "name": "oma",
+      "description": "Sony OpenMG audio"
+    },
+    {
+      "name": "opus",
+      "description": "Ogg Opus"
+    },
+    {
+      "name": "psp",
+      "description": "PSP MP4 (MPEG-4 Part 14)"
+    },
+    {
+      "name": "rawvideo",
+      "description": "raw video"
+    },
+    {
+      "name": "rm",
+      "description": "RealMedia"
+    },
+    {
+      "name": "roq",
+      "description": "raw id RoQ"
+    },
+    {
+      "name": "rso",
+      "description": "Lego Mindstorms RSO"
+    },
+    {
+      "name": "rtp",
+      "description": "RTP output"
+    },
+    {
+      "name": "rtp_mpegts",
+      "description": "RTP/mpegts output format"
+    },
+    {
+      "name": "rtsp",
+      "description": "RTSP output"
+    },
+    {
+      "name": "s16be",
+      "description": "PCM signed 16-bit big-endian"
+    },
+    {
+      "name": "s16le",
+      "description": "PCM signed 16-bit little-endian"
+    },
+    {
+      "name": "s24be",
+      "description": "PCM signed 24-bit big-endian"
+    },
+    {
+      "name": "s24le",
+      "description": "PCM signed 24-bit little-endian"
+    },
+    {
+      "name": "s32be",
+      "description": "PCM signed 32-bit big-endian"
+    },
+    {
+      "name": "s32le",
+      "description": "PCM signed 32-bit little-endian"
+    },
+    {
+      "name": "s8",
+      "description": "PCM signed 8-bit"
+    },
+    {
+      "name": "sap",
+      "description": "SAP output"
+    },
+    {
+      "name": "sbc",
+      "description": "raw SBC"
+    },
+    {
+      "name": "scc",
+      "description": "Scenarist Closed Captions"
+    },
+    {
+      "name": "segment",
+      "description": "segment"
+    },
+    {
+      "name": "smjpeg",
+      "description": "Loki SDL MJPEG"
+    },
+    {
+      "name": "smoothstreaming",
+      "description": "Smooth Streaming Muxer"
+    },
+    {
+      "name": "sox",
+      "description": "SoX native"
+    },
+    {
+      "name": "spdif",
+      "description": "IEC 61937 (used on S/PDIF - IEC958)"
+    },
+    {
+      "name": "spx",
+      "description": "Ogg Speex"
+    },
+    {
+      "name": "srt",
+      "description": "SubRip subtitle"
+    },
+    {
+      "name": "streamhash",
+      "description": "Per-stream hash testing"
+    },
+    {
+      "name": "sup",
+      "description": "raw HDMV Presentation Graphic Stream subtitles"
+    },
+    {
+      "name": "svcd",
+      "description": "MPEG-2 PS (SVCD)"
+    },
+    {
+      "name": "swf",
+      "description": "SWF (ShockWave Flash)"
+    },
+    {
+      "name": "tee",
+      "description": "Multiple muxer tee"
+    },
+    {
+      "name": "truehd",
+      "description": "raw TrueHD"
+    },
+    {
+      "name": "tta",
+      "description": "TTA (True Audio)"
+    },
+    {
+      "name": "ttml",
+      "description": "TTML subtitle"
+    },
+    {
+      "name": "u16be",
+      "description": "PCM unsigned 16-bit big-endian"
+    },
+    {
+      "name": "u16le",
+      "description": "PCM unsigned 16-bit little-endian"
+    },
+    {
+      "name": "u24be",
+      "description": "PCM unsigned 24-bit big-endian"
+    },
+    {
+      "name": "u24le",
+      "description": "PCM unsigned 24-bit little-endian"
+    },
+    {
+      "name": "u32be",
+      "description": "PCM unsigned 32-bit big-endian"
+    },
+    {
+      "name": "u32le",
+      "description": "PCM unsigned 32-bit little-endian"
+    },
+    {
+      "name": "u8",
+      "description": "PCM unsigned 8-bit"
+    },
+    {
+      "name": "uncodedframecrc",
+      "description": "uncoded framecrc testing"
+    },
+    {
+      "name": "vc1",
+      "description": "raw VC-1 video"
+    },
+    {
+      "name": "vc1test",
+      "description": "VC-1 test bitstream"
+    },
+    {
+      "name": "vcd",
+      "description": "MPEG-1 Systems / MPEG program stream (VCD)"
+    },
+    {
+      "name": "vidc",
+      "description": "PCM Archimedes VIDC"
+    },
+    {
+      "name": "vob",
+      "description": "MPEG-2 PS (VOB)"
+    },
+    {
+      "name": "voc",
+      "description": "Creative Voice"
+    },
+    {
+      "name": "w64",
+      "description": "Sony Wave64"
+    },
+    {
+      "name": "wav",
+      "description": "WAV / WAVE (Waveform Audio)"
+    },
+    {
+      "name": "webm",
+      "description": "WebM"
+    },
+    {
+      "name": "webm_chunk",
+      "description": "WebM Chunk Muxer"
+    },
+    {
+      "name": "webm_dash_manifest",
+      "description": "WebM DASH Manifest"
+    },
+    {
+      "name": "webp",
+      "description": "WebP"
+    },
+    {
+      "name": "webvtt",
+      "description": "WebVTT subtitle"
+    },
+    {
+      "name": "wsaud",
+      "description": "Westwood Studios audio"
+    },
+    {
+      "name": "wtv",
+      "description": "Windows Television (WTV)"
+    },
+    {
+      "name": "wv",
+      "description": "raw WavPack"
+    },
+    {
+      "name": "yuv4mpegpipe",
+      "description": "YUV4MPEG pipe"
+    }
+  ],
+  "demuxers": [
+    {
+      "name": "3dostr",
+      "description": "3DO STR"
+    },
+    {
+      "name": "4xm",
+      "description": "4X Technologies"
+    },
+    {
+      "name": "aa",
+      "description": "Audible AA format files"
+    },
+    {
+      "name": "aac",
+      "description": "raw ADTS AAC (Advanced Audio Coding)"
+    },
+    {
+      "name": "aax",
+      "description": "CRI AAX"
+    },
+    {
+      "name": "ac3",
+      "description": "raw AC-3"
+    },
+    {
+      "name": "ace",
+      "description": "tri-Ace Audio Container"
+    },
+    {
+      "name": "acm",
+      "description": "Interplay ACM"
+    },
+    {
+      "name": "act",
+      "description": "ACT Voice file format"
+    },
+    {
+      "name": "adf",
+      "description": "Artworx Data Format"
+    },
+    {
+      "name": "adp",
+      "description": "ADP"
+    },
+    {
+      "name": "ads",
+      "description": "Sony PS2 ADS"
+    },
+    {
+      "name": "adx",
+      "description": "CRI ADX"
+    },
+    {
+      "name": "aea",
+      "description": "MD STUDIO audio"
+    },
+    {
+      "name": "afc",
+      "description": "AFC"
+    },
+    {
+      "name": "aiff",
+      "description": "Audio IFF"
+    },
+    {
+      "name": "aix",
+      "description": "CRI AIX"
+    },
+    {
+      "name": "alaw",
+      "description": "PCM A-law"
+    },
+    {
+      "name": "alias_pix",
+      "description": "Alias/Wavefront PIX image"
+    },
+    {
+      "name": "alp",
+      "description": "LEGO Racers ALP"
+    },
+    {
+      "name": "amr",
+      "description": "3GPP AMR"
+    },
+    {
+      "name": "amrnb",
+      "description": "raw AMR-NB"
+    },
+    {
+      "name": "amrwb",
+      "description": "raw AMR-WB"
+    },
+    {
+      "name": "anm",
+      "description": "Deluxe Paint Animation"
+    },
+    {
+      "name": "apc",
+      "description": "CRYO APC"
+    },
+    {
+      "name": "ape",
+      "description": "Monkey's Audio"
+    },
+    {
+      "name": "apm",
+      "description": "Ubisoft Rayman 2 APM"
+    },
+    {
+      "name": "apng",
+      "description": "Animated Portable Network Graphics"
+    },
+    {
+      "name": "aptx",
+      "description": "raw aptX"
+    },
+    {
+      "name": "aptx_hd",
+      "description": "raw aptX HD"
+    },
+    {
+      "name": "aqtitle",
+      "description": "AQTitle subtitles"
+    },
+    {
+      "name": "argo_asf",
+      "description": "Argonaut Games ASF"
+    },
+    {
+      "name": "argo_brp",
+      "description": "Argonaut Games BRP"
+    },
+    {
+      "name": "argo_cvg",
+      "description": "Argonaut Games CVG"
+    },
+    {
+      "name": "asf",
+      "description": "ASF (Advanced / Active Streaming Format)"
+    },
+    {
+      "name": "asf_o",
+      "description": "ASF (Advanced / Active Streaming Format)"
+    },
+    {
+      "name": "ass",
+      "description": "SSA (SubStation Alpha) subtitle"
+    },
+    {
+      "name": "ast",
+      "description": "AST (Audio Stream)"
+    },
+    {
+      "name": "au",
+      "description": "Sun AU"
+    },
+    {
+      "name": "av1",
+      "description": "AV1 Annex B"
+    },
+    {
+      "name": "avi",
+      "description": "AVI (Audio Video Interleaved)"
+    },
+    {
+      "name": "avr",
+      "description": "AVR (Audio Visual Research)"
+    },
+    {
+      "name": "avs",
+      "description": "Argonaut Games Creature Shock"
+    },
+    {
+      "name": "avs2",
+      "description": "raw AVS2-P2/IEEE1857.4"
+    },
+    {
+      "name": "avs3",
+      "description": "raw AVS3-P2/IEEE1857.10"
+    },
+    {
+      "name": "bethsoftvid",
+      "description": "Bethesda Softworks VID"
+    },
+    {
+      "name": "bfi",
+      "description": "Brute Force & Ignorance"
+    },
+    {
+      "name": "bfstm",
+      "description": "BFSTM (Binary Cafe Stream)"
+    },
+    {
+      "name": "bin",
+      "description": "Binary text"
+    },
+    {
+      "name": "bink",
+      "description": "Bink"
+    },
+    {
+      "name": "binka",
+      "description": "Bink Audio"
+    },
+    {
+      "name": "bit",
+      "description": "G.729 BIT file format"
+    },
+    {
+      "name": "bitpacked",
+      "description": "Bitpacked"
+    },
+    {
+      "name": "bmp_pipe",
+      "description": "piped bmp sequence"
+    },
+    {
+      "name": "bmv",
+      "description": "Discworld II BMV"
+    },
+    {
+      "name": "boa",
+      "description": "Black Ops Audio"
+    },
+    {
+      "name": "brender_pix",
+      "description": "BRender PIX image"
+    },
+    {
+      "name": "brstm",
+      "description": "BRSTM (Binary Revolution Stream)"
+    },
+    {
+      "name": "c93",
+      "description": "Interplay C93"
+    },
+    {
+      "name": "caf",
+      "description": "Apple CAF (Core Audio Format)"
+    },
+    {
+      "name": "cavsvideo",
+      "description": "raw Chinese AVS (Audio Video Standard)"
+    },
+    {
+      "name": "cdg",
+      "description": "CD Graphics"
+    },
+    {
+      "name": "cdxl",
+      "description": "Commodore CDXL video"
+    },
+    {
+      "name": "cine",
+      "description": "Phantom Cine"
+    },
+    {
+      "name": "codec2",
+      "description": "codec2 .c2 demuxer"
+    },
+    {
+      "name": "codec2raw",
+      "description": "raw codec2 demuxer"
+    },
+    {
+      "name": "concat",
+      "description": "Virtual concatenation script"
+    },
+    {
+      "name": "cri_pipe",
+      "description": "piped cri sequence"
+    },
+    {
+      "name": "data",
+      "description": "raw data"
+    },
+    {
+      "name": "daud",
+      "description": "D-Cinema audio"
+    },
+    {
+      "name": "dcstr",
+      "description": "Sega DC STR"
+    },
+    {
+      "name": "dds_pipe",
+      "description": "piped dds sequence"
+    },
+    {
+      "name": "derf",
+      "description": "Xilam DERF"
+    },
+    {
+      "name": "dfa",
+      "description": "Chronomaster DFA"
+    },
+    {
+      "name": "dfpwm",
+      "description": "raw DFPWM1a"
+    },
+    {
+      "name": "dhav",
+      "description": "Video DAV"
+    },
+    {
+      "name": "dirac",
+      "description": "raw Dirac"
+    },
+    {
+      "name": "dnxhd",
+      "description": "raw DNxHD (SMPTE VC-3)"
+    },
+    {
+      "name": "dpx_pipe",
+      "description": "piped dpx sequence"
+    },
+    {
+      "name": "dsf",
+      "description": "DSD Stream File (DSF)"
+    },
+    {
+      "name": "dsicin",
+      "description": "Delphine Software International CIN"
+    },
+    {
+      "name": "dss",
+      "description": "Digital Speech Standard (DSS)"
+    },
+    {
+      "name": "dts",
+      "description": "raw DTS"
+    },
+    {
+      "name": "dtshd",
+      "description": "raw DTS-HD"
+    },
+    {
+      "name": "dv",
+      "description": "DV (Digital Video)"
+    },
+    {
+      "name": "dvbsub",
+      "description": "raw dvbsub"
+    },
+    {
+      "name": "dvbtxt",
+      "description": "dvbtxt"
+    },
+    {
+      "name": "dxa",
+      "description": "DXA"
+    },
+    {
+      "name": "ea",
+      "description": "Electronic Arts Multimedia"
+    },
+    {
+      "name": "ea_cdata",
+      "description": "Electronic Arts cdata"
+    },
+    {
+      "name": "eac3",
+      "description": "raw E-AC-3"
+    },
+    {
+      "name": "epaf",
+      "description": "Ensoniq Paris Audio File"
+    },
+    {
+      "name": "exr_pipe",
+      "description": "piped exr sequence"
+    },
+    {
+      "name": "f32be",
+      "description": "PCM 32-bit floating-point big-endian"
+    },
+    {
+      "name": "f32le",
+      "description": "PCM 32-bit floating-point little-endian"
+    },
+    {
+      "name": "f64be",
+      "description": "PCM 64-bit floating-point big-endian"
+    },
+    {
+      "name": "f64le",
+      "description": "PCM 64-bit floating-point little-endian"
+    },
+    {
+      "name": "ffmetadata",
+      "description": "FFmpeg metadata in text"
+    },
+    {
+      "name": "film_cpk",
+      "description": "Sega FILM / CPK"
+    },
+    {
+      "name": "filmstrip",
+      "description": "Adobe Filmstrip"
+    },
+    {
+      "name": "fits",
+      "description": "Flexible Image Transport System"
+    },
+    {
+      "name": "flac",
+      "description": "raw FLAC"
+    },
+    {
+      "name": "flic",
+      "description": "FLI/FLC/FLX animation"
+    },
+    {
+      "name": "flv",
+      "description": "FLV (Flash Video)"
+    },
+    {
+      "name": "frm",
+      "description": "Megalux Frame"
+    },
+    {
+      "name": "fsb",
+      "description": "FMOD Sample Bank"
+    },
+    {
+      "name": "fwse",
+      "description": "Capcom's MT Framework sound"
+    },
+    {
+      "name": "g722",
+      "description": "raw G.722"
+    },
+    {
+      "name": "g723_1",
+      "description": "G.723.1"
+    },
+    {
+      "name": "g726",
+      "description": "raw big-endian G.726 (\"left aligned\")"
+    },
+    {
+      "name": "g726le",
+      "description": "raw little-endian G.726 (\"right aligned\")"
+    },
+    {
+      "name": "g729",
+      "description": "G.729 raw format demuxer"
+    },
+    {
+      "name": "gdv",
+      "description": "Gremlin Digital Video"
+    },
+    {
+      "name": "gem_pipe",
+      "description": "piped gem sequence"
+    },
+    {
+      "name": "genh",
+      "description": "GENeric Header"
+    },
+    {
+      "name": "gif",
+      "description": "CompuServe Graphics Interchange Format (GIF)"
+    },
+    {
+      "name": "gif_pipe",
+      "description": "piped gif sequence"
+    },
+    {
+      "name": "gsm",
+      "description": "raw GSM"
+    },
+    {
+      "name": "gxf",
+      "description": "GXF (General eXchange Format)"
+    },
+    {
+      "name": "h261",
+      "description": "raw H.261"
+    },
+    {
+      "name": "h263",
+      "description": "raw H.263"
+    },
+    {
+      "name": "h264",
+      "description": "raw H.264 video"
+    },
+    {
+      "name": "hca",
+      "description": "CRI HCA"
+    },
+    {
+      "name": "hcom",
+      "description": "Macintosh HCOM"
+    },
+    {
+      "name": "hevc",
+      "description": "raw HEVC video"
+    },
+    {
+      "name": "hls",
+      "description": "Apple HTTP Live Streaming"
+    },
+    {
+      "name": "hnm",
+      "description": "Cryo HNM v4"
+    },
+    {
+      "name": "ico",
+      "description": "Microsoft Windows ICO"
+    },
+    {
+      "name": "idcin",
+      "description": "id Cinematic"
+    },
+    {
+      "name": "idf",
+      "description": "iCE Draw File"
+    },
+    {
+      "name": "iff",
+      "description": "IFF (Interchange File Format)"
+    },
+    {
+      "name": "ifv",
+      "description": "IFV CCTV DVR"
+    },
+    {
+      "name": "ilbc",
+      "description": "iLBC storage"
+    },
+    {
+      "name": "image2",
+      "description": "image2 sequence"
+    },
+    {
+      "name": "image2pipe",
+      "description": "piped image2 sequence"
+    },
+    {
+      "name": "ingenient",
+      "description": "raw Ingenient MJPEG"
+    },
+    {
+      "name": "ipmovie",
+      "description": "Interplay MVE"
+    },
+    {
+      "name": "ipu",
+      "description": "raw IPU Video"
+    },
+    {
+      "name": "ircam",
+      "description": "Berkeley/IRCAM/CARL Sound Format"
+    },
+    {
+      "name": "iss",
+      "description": "Funcom ISS"
+    },
+    {
+      "name": "iv8",
+      "description": "IndigoVision 8000 video"
+    },
+    {
+      "name": "ivf",
+      "description": "On2 IVF"
+    },
+    {
+      "name": "ivr",
+      "description": "IVR (Internet Video Recording)"
+    },
+    {
+      "name": "j2k_pipe",
+      "description": "piped j2k sequence"
+    },
+    {
+      "name": "jacosub",
+      "description": "JACOsub subtitle format"
+    },
+    {
+      "name": "jpeg_pipe",
+      "description": "piped jpeg sequence"
+    },
+    {
+      "name": "jpegls_pipe",
+      "description": "piped jpegls sequence"
+    },
+    {
+      "name": "jpegxl_pipe",
+      "description": "piped jpegxl sequence"
+    },
+    {
+      "name": "jv",
+      "description": "Bitmap Brothers JV"
+    },
+    {
+      "name": "kux",
+      "description": "KUX (YouKu)"
+    },
+    {
+      "name": "kvag",
+      "description": "Simon & Schuster Interactive VAG"
+    },
+    {
+      "name": "lavfi",
+      "description": "Libavfilter virtual input device"
+    },
+    {
+      "name": "live_flv",
+      "description": "live RTMP FLV (Flash Video)"
+    },
+    {
+      "name": "lmlm4",
+      "description": "raw lmlm4"
+    },
+    {
+      "name": "loas",
+      "description": "LOAS AudioSyncStream"
+    },
+    {
+      "name": "lrc",
+      "description": "LRC lyrics"
+    },
+    {
+      "name": "luodat",
+      "description": "Video CCTV DAT"
+    },
+    {
+      "name": "lvf",
+      "description": "LVF"
+    },
+    {
+      "name": "lxf",
+      "description": "VR native stream (LXF)"
+    },
+    {
+      "name": "m4v",
+      "description": "raw MPEG-4 video"
+    },
+    {
+      "name": "mca",
+      "description": "MCA Audio Format"
+    },
+    {
+      "name": "mcc",
+      "description": "MacCaption"
+    },
+    {
+      "name": "mgsts",
+      "description": "Metal Gear Solid: The Twin Snakes"
+    },
+    {
+      "name": "microdvd",
+      "description": "MicroDVD subtitle format"
+    },
+    {
+      "name": "mjpeg",
+      "description": "raw MJPEG video"
+    },
+    {
+      "name": "mjpeg_2000",
+      "description": "raw MJPEG 2000 video"
+    },
+    {
+      "name": "mlp",
+      "description": "raw MLP"
+    },
+    {
+      "name": "mlv",
+      "description": "Magic Lantern Video (MLV)"
+    },
+    {
+      "name": "mm",
+      "description": "American Laser Games MM"
+    },
+    {
+      "name": "mmf",
+      "description": "Yamaha SMAF"
+    },
+    {
+      "name": "mods",
+      "description": "MobiClip MODS"
+    },
+    {
+      "name": "moflex",
+      "description": "MobiClip MOFLEX"
+    },
+    {
+      "name": "mp3",
+      "description": "MP2/3 (MPEG audio layer 2/3)"
+    },
+    {
+      "name": "mpc",
+      "description": "Musepack"
+    },
+    {
+      "name": "mpc8",
+      "description": "Musepack SV8"
+    },
+    {
+      "name": "mpeg",
+      "description": "MPEG-PS (MPEG-2 Program Stream)"
+    },
+    {
+      "name": "mpegts",
+      "description": "MPEG-TS (MPEG-2 Transport Stream)"
+    },
+    {
+      "name": "mpegtsraw",
+      "description": "raw MPEG-TS (MPEG-2 Transport Stream)"
+    },
+    {
+      "name": "mpegvideo",
+      "description": "raw MPEG video"
+    },
+    {
+      "name": "mpjpeg",
+      "description": "MIME multipart JPEG"
+    },
+    {
+      "name": "mpl2",
+      "description": "MPL2 subtitles"
+    },
+    {
+      "name": "mpsub",
+      "description": "MPlayer subtitles"
+    },
+    {
+      "name": "msf",
+      "description": "Sony PS3 MSF"
+    },
+    {
+      "name": "msnwctcp",
+      "description": "MSN TCP Webcam stream"
+    },
+    {
+      "name": "msp",
+      "description": "Microsoft Paint (MSP))"
+    },
+    {
+      "name": "mtaf",
+      "description": "Konami PS2 MTAF"
+    },
+    {
+      "name": "mtv",
+      "description": "MTV"
+    },
+    {
+      "name": "mulaw",
+      "description": "PCM mu-law"
+    },
+    {
+      "name": "musx",
+      "description": "Eurocom MUSX"
+    },
+    {
+      "name": "mv",
+      "description": "Silicon Graphics Movie"
+    },
+    {
+      "name": "mvi",
+      "description": "Motion Pixels MVI"
+    },
+    {
+      "name": "mxf",
+      "description": "MXF (Material eXchange Format)"
+    },
+    {
+      "name": "mxg",
+      "description": "MxPEG clip"
+    },
+    {
+      "name": "nc",
+      "description": "NC camera feed"
+    },
+    {
+      "name": "nistsphere",
+      "description": "NIST SPeech HEader REsources"
+    },
+    {
+      "name": "nsp",
+      "description": "Computerized Speech Lab NSP"
+    },
+    {
+      "name": "nsv",
+      "description": "Nullsoft Streaming Video"
+    },
+    {
+      "name": "nut",
+      "description": "NUT"
+    },
+    {
+      "name": "nuv",
+      "description": "NuppelVideo"
+    },
+    {
+      "name": "obu",
+      "description": "AV1 low overhead OBU"
+    },
+    {
+      "name": "ogg",
+      "description": "Ogg"
+    },
+    {
+      "name": "oma",
+      "description": "Sony OpenMG audio"
+    },
+    {
+      "name": "paf",
+      "description": "Amazing Studio Packed Animation File"
+    },
+    {
+      "name": "pam_pipe",
+      "description": "piped pam sequence"
+    },
+    {
+      "name": "pbm_pipe",
+      "description": "piped pbm sequence"
+    },
+    {
+      "name": "pcx_pipe",
+      "description": "piped pcx sequence"
+    },
+    {
+      "name": "pfm_pipe",
+      "description": "piped pfm sequence"
+    },
+    {
+      "name": "pgm_pipe",
+      "description": "piped pgm sequence"
+    },
+    {
+      "name": "pgmyuv_pipe",
+      "description": "piped pgmyuv sequence"
+    },
+    {
+      "name": "pgx_pipe",
+      "description": "piped pgx sequence"
+    },
+    {
+      "name": "phm_pipe",
+      "description": "piped phm sequence"
+    },
+    {
+      "name": "photocd_pipe",
+      "description": "piped photocd sequence"
+    },
+    {
+      "name": "pictor_pipe",
+      "description": "piped pictor sequence"
+    },
+    {
+      "name": "pjs",
+      "description": "PJS (Phoenix Japanimation Society) subtitles"
+    },
+    {
+      "name": "pmp",
+      "description": "Playstation Portable PMP"
+    },
+    {
+      "name": "png_pipe",
+      "description": "piped png sequence"
+    },
+    {
+      "name": "pp_bnk",
+      "description": "Pro Pinball Series Soundbank"
+    },
+    {
+      "name": "ppm_pipe",
+      "description": "piped ppm sequence"
+    },
+    {
+      "name": "psd_pipe",
+      "description": "piped psd sequence"
+    },
+    {
+      "name": "psxstr",
+      "description": "Sony Playstation STR"
+    },
+    {
+      "name": "pva",
+      "description": "TechnoTrend PVA"
+    },
+    {
+      "name": "pvf",
+      "description": "PVF (Portable Voice Format)"
+    },
+    {
+      "name": "qcp",
+      "description": "QCP"
+    },
+    {
+      "name": "qdraw_pipe",
+      "description": "piped qdraw sequence"
+    },
+    {
+      "name": "qoi_pipe",
+      "description": "piped qoi sequence"
+    },
+    {
+      "name": "r3d",
+      "description": "REDCODE R3D"
+    },
+    {
+      "name": "rawvideo",
+      "description": "raw video"
+    },
+    {
+      "name": "realtext",
+      "description": "RealText subtitle format"
+    },
+    {
+      "name": "redspark",
+      "description": "RedSpark"
+    },
+    {
+      "name": "rl2",
+      "description": "RL2"
+    },
+    {
+      "name": "rm",
+      "description": "RealMedia"
+    },
+    {
+      "name": "roq",
+      "description": "id RoQ"
+    },
+    {
+      "name": "rpl",
+      "description": "RPL / ARMovie"
+    },
+    {
+      "name": "rsd",
+      "description": "GameCube RSD"
+    },
+    {
+      "name": "rso",
+      "description": "Lego Mindstorms RSO"
+    },
+    {
+      "name": "rtp",
+      "description": "RTP input"
+    },
+    {
+      "name": "rtsp",
+      "description": "RTSP input"
+    },
+    {
+      "name": "s16be",
+      "description": "PCM signed 16-bit big-endian"
+    },
+    {
+      "name": "s16le",
+      "description": "PCM signed 16-bit little-endian"
+    },
+    {
+      "name": "s24be",
+      "description": "PCM signed 24-bit big-endian"
+    },
+    {
+      "name": "s24le",
+      "description": "PCM signed 24-bit little-endian"
+    },
+    {
+      "name": "s32be",
+      "description": "PCM signed 32-bit big-endian"
+    },
+    {
+      "name": "s32le",
+      "description": "PCM signed 32-bit little-endian"
+    },
+    {
+      "name": "s337m",
+      "description": "SMPTE 337M"
+    },
+    {
+      "name": "s8",
+      "description": "PCM signed 8-bit"
+    },
+    {
+      "name": "sami",
+      "description": "SAMI subtitle format"
+    },
+    {
+      "name": "sap",
+      "description": "SAP input"
+    },
+    {
+      "name": "sbc",
+      "description": "raw SBC (low-complexity subband codec)"
+    },
+    {
+      "name": "sbg",
+      "description": "SBaGen binaural beats script"
+    },
+    {
+      "name": "scc",
+      "description": "Scenarist Closed Captions"
+    },
+    {
+      "name": "scd",
+      "description": "Square Enix SCD"
+    },
+    {
+      "name": "sdp",
+      "description": "SDP"
+    },
+    {
+      "name": "sdr2",
+      "description": "SDR2"
+    },
+    {
+      "name": "sds",
+      "description": "MIDI Sample Dump Standard"
+    },
+    {
+      "name": "sdx",
+      "description": "Sample Dump eXchange"
+    },
+    {
+      "name": "ser",
+      "description": "SER (Simple uncompressed video format for astronomical capturing)"
+    },
+    {
+      "name": "sga",
+      "description": "Digital Pictures SGA"
+    },
+    {
+      "name": "sgi_pipe",
+      "description": "piped sgi sequence"
+    },
+    {
+      "name": "shn",
+      "description": "raw Shorten"
+    },
+    {
+      "name": "siff",
+      "description": "Beam Software SIFF"
+    },
+    {
+      "name": "simbiosis_imx",
+      "description": "Simbiosis Interactive IMX"
+    },
+    {
+      "name": "sln",
+      "description": "Asterisk raw pcm"
+    },
+    {
+      "name": "smjpeg",
+      "description": "Loki SDL MJPEG"
+    },
+    {
+      "name": "smk",
+      "description": "Smacker"
+    },
+    {
+      "name": "smush",
+      "description": "LucasArts Smush"
+    },
+    {
+      "name": "sol",
+      "description": "Sierra SOL"
+    },
+    {
+      "name": "sox",
+      "description": "SoX native"
+    },
+    {
+      "name": "spdif",
+      "description": "IEC 61937 (compressed data in S/PDIF)"
+    },
+    {
+      "name": "srt",
+      "description": "SubRip subtitle"
+    },
+    {
+      "name": "stl",
+      "description": "Spruce subtitle format"
+    },
+    {
+      "name": "subviewer",
+      "description": "SubViewer subtitle format"
+    },
+    {
+      "name": "subviewer1",
+      "description": "SubViewer v1 subtitle format"
+    },
+    {
+      "name": "sunrast_pipe",
+      "description": "piped sunrast sequence"
+    },
+    {
+      "name": "sup",
+      "description": "raw HDMV Presentation Graphic Stream subtitles"
+    },
+    {
+      "name": "svag",
+      "description": "Konami PS2 SVAG"
+    },
+    {
+      "name": "svg_pipe",
+      "description": "piped svg sequence"
+    },
+    {
+      "name": "svs",
+      "description": "Square SVS"
+    },
+    {
+      "name": "swf",
+      "description": "SWF (ShockWave Flash)"
+    },
+    {
+      "name": "tak",
+      "description": "raw TAK"
+    },
+    {
+      "name": "tedcaptions",
+      "description": "TED Talks captions"
+    },
+    {
+      "name": "thp",
+      "description": "THP"
+    },
+    {
+      "name": "tiertexseq",
+      "description": "Tiertex Limited SEQ"
+    },
+    {
+      "name": "tiff_pipe",
+      "description": "piped tiff sequence"
+    },
+    {
+      "name": "tmv",
+      "description": "8088flex TMV"
+    },
+    {
+      "name": "truehd",
+      "description": "raw TrueHD"
+    },
+    {
+      "name": "tta",
+      "description": "TTA (True Audio)"
+    },
+    {
+      "name": "tty",
+      "description": "Tele-typewriter"
+    },
+    {
+      "name": "txd",
+      "description": "Renderware TeXture Dictionary"
+    },
+    {
+      "name": "ty",
+      "description": "TiVo TY Stream"
+    },
+    {
+      "name": "u16be",
+      "description": "PCM unsigned 16-bit big-endian"
+    },
+    {
+      "name": "u16le",
+      "description": "PCM unsigned 16-bit little-endian"
+    },
+    {
+      "name": "u24be",
+      "description": "PCM unsigned 24-bit big-endian"
+    },
+    {
+      "name": "u24le",
+      "description": "PCM unsigned 24-bit little-endian"
+    },
+    {
+      "name": "u32be",
+      "description": "PCM unsigned 32-bit big-endian"
+    },
+    {
+      "name": "u32le",
+      "description": "PCM unsigned 32-bit little-endian"
+    },
+    {
+      "name": "u8",
+      "description": "PCM unsigned 8-bit"
+    },
+    {
+      "name": "v210",
+      "description": "Uncompressed 4:2:2 10-bit"
+    },
+    {
+      "name": "v210x",
+      "description": "Uncompressed 4:2:2 10-bit"
+    },
+    {
+      "name": "vag",
+      "description": "Sony PS2 VAG"
+    },
+    {
+      "name": "vbn_pipe",
+      "description": "piped vbn sequence"
+    },
+    {
+      "name": "vc1",
+      "description": "raw VC-1"
+    },
+    {
+      "name": "vc1test",
+      "description": "VC-1 test bitstream"
+    },
+    {
+      "name": "vidc",
+      "description": "PCM Archimedes VIDC"
+    },
+    {
+      "name": "vividas",
+      "description": "Vividas VIV"
+    },
+    {
+      "name": "vivo",
+      "description": "Vivo"
+    },
+    {
+      "name": "vmd",
+      "description": "Sierra VMD"
+    },
+    {
+      "name": "vobsub",
+      "description": "VobSub subtitle format"
+    },
+    {
+      "name": "voc",
+      "description": "Creative Voice"
+    },
+    {
+      "name": "vpk",
+      "description": "Sony PS2 VPK"
+    },
+    {
+      "name": "vplayer",
+      "description": "VPlayer subtitles"
+    },
+    {
+      "name": "vqf",
+      "description": "Nippon Telegraph and Telephone Corporation (NTT) TwinVQ"
+    },
+    {
+      "name": "w64",
+      "description": "Sony Wave64"
+    },
+    {
+      "name": "wav",
+      "description": "WAV / WAVE (Waveform Audio)"
+    },
+    {
+      "name": "wc3movie",
+      "description": "Wing Commander III movie"
+    },
+    {
+      "name": "webm_dash_manifest",
+      "description": "WebM DASH Manifest"
+    },
+    {
+      "name": "webp_pipe",
+      "description": "piped webp sequence"
+    },
+    {
+      "name": "webvtt",
+      "description": "WebVTT subtitle"
+    },
+    {
+      "name": "wsaud",
+      "description": "Westwood Studios audio"
+    },
+    {
+      "name": "wsd",
+      "description": "Wideband Single-bit Data (WSD)"
+    },
+    {
+      "name": "wsvqa",
+      "description": "Westwood Studios VQA"
+    },
+    {
+      "name": "wtv",
+      "description": "Windows Television (WTV)"
+    },
+    {
+      "name": "wv",
+      "description": "WavPack"
+    },
+    {
+      "name": "wve",
+      "description": "Psion 3 audio"
+    },
+    {
+      "name": "xa",
+      "description": "Maxis XA"
+    },
+    {
+      "name": "xbin",
+      "description": "eXtended BINary text (XBIN)"
+    },
+    {
+      "name": "xbm_pipe",
+      "description": "piped xbm sequence"
+    },
+    {
+      "name": "xmv",
+      "description": "Microsoft XMV"
+    },
+    {
+      "name": "xpm_pipe",
+      "description": "piped xpm sequence"
+    },
+    {
+      "name": "xvag",
+      "description": "Sony PS3 XVAG"
+    },
+    {
+      "name": "xwd_pipe",
+      "description": "piped xwd sequence"
+    },
+    {
+      "name": "xwma",
+      "description": "Microsoft xWMA"
+    },
+    {
+      "name": "yop",
+      "description": "Psygnosis YOP"
+    },
+    {
+      "name": "yuv4mpegpipe",
+      "description": "YUV4MPEG pipe"
+    }
+  ]
+}

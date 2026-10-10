@@ -78,3 +78,27 @@ describe('pickMode', async () => {
     expect(JSON.stringify([mt, coreUrls('st')])).not.toMatch(/jsdelivr|unpkg|core-st/);
   });
 });
+
+describe('caption fonts', async () => {
+  const { fontCovers, cjkFontFor } = await import('../wasm/ffmpegEngine.js');
+  it('Inter covers Latin, Greek, Cyrillic and common punctuation', () => {
+    expect(fontCovers('Hello, world! 50% — «Привет» Γεια')).toBe(true);
+    expect(fontCovers('')).toBe(true);
+  });
+  it('CJK text is not covered by Inter', () => {
+    expect(fontCovers('你好世界')).toBe(false);
+    expect(fontCovers('こんにちは')).toBe(false);
+    expect(fontCovers('Hello 你好')).toBe(false);
+  });
+  it('cjkFontFor picks jp for kana, sc for han', () => {
+    expect(cjkFontFor('Hello world')).toBe(null);
+    expect(cjkFontFor('你好世界')).toBe('sc');
+    expect(cjkFontFor('繁體中文')).toBe('sc');
+    expect(cjkFontFor('こんにちは世界')).toBe('jp');
+    expect(cjkFontFor('カタカナ')).toBe('jp');
+  });
+  it('cjkFontFor returns null for scripts with no bundled font (hangul, emoji)', () => {
+    expect(cjkFontFor('안녕하세요')).toBe(null);
+    expect(cjkFontFor('hello 😀')).toBe(null);
+  });
+});

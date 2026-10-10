@@ -287,6 +287,7 @@ export function parseCliCommand(command, catalog = null) {
   return {
     outName: `out.${format}`,
     format,
+    codecs,
     argv: ({ input, output, threads }) => [
       ...HEAD, ...parts.map(p => (typeof p === 'string' ? p : input)),
       // FFmpeg's default WebM encoder is VP9, which crashes in the wasm core.

@@ -105,6 +105,21 @@ async function helpText(help, { run, bin }) {
   return text;
 }
 
+/** The server FFmpeg's version ("4.4.2-..."), cached for the real runner; null when ffmpeg cannot run. */
+let serverFfmpegVersion = null;
+let serverFfmpegVersionTried = false;
+async function ffmpegVersion({ run = runProcess, bin = FFMPEG_BIN } = {}) {
+  const cacheable = run === runProcess && bin === FFMPEG_BIN;
+  if (cacheable && serverFfmpegVersionTried) return serverFfmpegVersion;
+  let version = null;
+  try {
+    const res = await run(bin, ['-hide_banner', '-version'], { timeoutMs: HELP_TIMEOUT_MS });
+    version = /ffmpeg version (\S+)/.exec(res.stdout || '')?.[1] || null;
+  } catch { version = null; }
+  if (cacheable) { serverFfmpegVersion = version; serverFfmpegVersionTried = true; }
+  return version;
+}
+
 /** `grep -i -E`: a pattern that is not a valid regular expression is matched literally. */
 function grepRegex(pattern) {
   try {
@@ -169,7 +184,11 @@ export async function searchCapabilities({ help, pattern, after, before, query }
   let output = shown.slice(0, MAX_OUTPUT_LINES).join('\n');
   if (output.length > MAX_OUTPUT_CHARS) output = output.slice(0, output.lastIndexOf('\n', MAX_OUTPUT_CHARS));
   const printed = output ? output.split('\n').length : 0;
-  const result = { ok: true, command, ...(matches === null ? {} : { matches }), output };
+  // This help comes from the server's FFmpeg, not the browser's 5.1 wasm core: a filter, encoder
+  // or option named here may not exist in the browser (the browser validates run_ffmpeg against
+  // its own catalog from /api/v2/capabilities and the command itself fails loudly if not).
+  const version = await ffmpegVersion({ run, bin });
+  const result = { ok: true, command, ...(version ? { ffmpegVersion: version } : {}), ...(matches === null ? {} : { matches }), output };
   if (printed < total) result.truncated = `showing ${printed} of ${total} lines; narrow the pattern${grep ? '' : ' (none was given)'} or pick a more specific help`;
   else if (matches === 0) result.hint = 'no lines matched; try other words (FFmpeg\'s own terms), fewer of them, or another help';
   if (grep) {
@@ -208,7 +227,9 @@ export const searchCapabilitiesToolDefinition = {
   type: 'function',
   function: {
     name: SEARCH_CAPABILITIES_TOOL_NAME,
-    description: 'Reads FFmpeg\'s own help, like running `ffmpeg <help> | grep -i -E <pattern>` in a shell, and returns the matching lines. ' +
+    description: 'Reads the server FFmpeg\'s own help, like running `ffmpeg <help> | grep -i -E <pattern>` in a shell, and returns the matching lines. ' +
+      'The result names the server FFmpeg version: it is a different build from the browser\'s 5.1 wasm core, so a filter, encoder or option ' +
+      'listed here may not exist in the browser (the browser checks run_ffmpeg against its own catalog and the command fails loudly if not). ' +
       'Use it to discover how FFmpeg does something: search broadly first, read the lines, then search again for the option or filter they name ' +
       '(for example "-h" with "thumb|cover|attach" shows -disposition; then "-h full" with "disposition" and after=20 lists its values; then "-h muxer=mp4"). ' +
       `Several calls in a row are expected. It only reads help text; ${RUN_FFMPEG_TOOL_NAME} runs the command you work out.`,
@@ -242,7 +263,8 @@ export const WEB_EXECUTION_INSTRUCTIONS =
 const WEB_FALLBACK_GUIDANCE =
   `Routing: always prefer the dedicated editing tools. Only if NONE of them can fulfil the request, call ${SEARCH_CAPABILITIES_TOOL_NAME} to find how FFmpeg can do it: grep its help, read what comes back and grep again until you know the options, ` +
   `then ${RUN_FFMPEG_TOOL_NAME} with the command. One empty search is not an answer: try FFmpeg's own terms before deciding. ` +
-  'The help comes from the server\'s FFmpeg, which is newer than the one in the browser; if the command fails on an unknown filter or option, use an older equivalent. ' +
+  'The help comes from the server\'s FFmpeg, which is a different version and build from the browser\'s 5.1 core: it can name filters, encoders or options the browser cannot run. ' +
+  'If the command fails on an unknown filter, encoder or option, use an older or simpler equivalent. ' +
   'Never answer that an edit is unsupported before those searches show FFmpeg cannot do it here.';
 
 /** Tools offered to the web app: every tool in src/tools.js for the media type, then the FFmpeg fallback pair. */

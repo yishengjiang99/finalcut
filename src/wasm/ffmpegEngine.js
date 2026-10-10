@@ -102,8 +102,11 @@ function describe(error) {
   if (isOutOfMemory(error)) {
     return Object.assign(new Error('This clip is too large for the browser\'s memory. Try a shorter clip or a lower resolution.'), { code: 'wasm_oom', cause: error });
   }
-  // The last lines of ffmpeg's log usually name the real problem ("Invalid argument", codec…).
-  const tail = String(error?.stderr || '').split('\n').map(l => l.trim()).filter(Boolean).slice(-3).join(' | ');
+  // The lines of ffmpeg's log that name the real problem ("No such filter", "Invalid argument",
+  // "Error opening ..."). Prefer those over the raw tail, which is often just teardown noise.
+  const lines = String(error?.stderr || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const diagnostic = lines.filter(l => /no such|invalid argument|unknown|error opening|could not|not found/i.test(l));
+  const tail = (diagnostic.length ? diagnostic : lines).slice(-3).join(' | ');
   if (tail && error.code === 'wasm_exec_failed') error.message = `${error.message}: ${tail}`;
   return error;
 }
@@ -151,6 +154,65 @@ function loadFont() {
 export function fontCovers(text) {
   // eslint-disable-next-line no-control-regex
   return !/[^\u0000-ԯḀ-ỿ -⁯₠-₿℀-⅏←-⇿∀-⋿]/.test(String(text || ''));
+}
+
+// CJK caption fonts, lazy-loaded from the app server when a burn needs glyphs Inter lacks.
+// Static Regular instances (see public/fonts/README.md); same-origin, cached after first use.
+// Hangul and emoji have no bundled font: those still fall back to the upload prompt.
+const CJK_FONTS = {
+  // Kana first: Japanese text mixes kana and kanji, and the JP font covers both.
+  jp: { file: 'NotoSansJP-Regular.ttf', family: 'Noto Sans JP', url: '/fonts/NotoSansJP-Regular.ttf', re: /[぀-ヿㇰ-ㇿ]/ },
+  sc: { file: 'NotoSansSC-Regular.ttf', family: 'Noto Sans SC', url: '/fonts/NotoSansSC-Regular.ttf', re: /[一-鿿㐀-䶿豈-﫿]/ },
+};
+
+/** Which CJK font ('jp' | 'sc') the text needs beyond Inter, or null when none covers it. */
+export function cjkFontFor(text) {
+  const s = String(text || '');
+  if (fontCovers(s)) return null;
+  if (CJK_FONTS.jp.re.test(s)) return 'jp';
+  if (CJK_FONTS.sc.re.test(s)) return 'sc';
+  return null;
+}
+
+const cjkPromises = {};
+function loadCjkFont(kind) {
+  if (!cjkPromises[kind]) {
+    cjkPromises[kind] = fetch(CJK_FONTS[kind].url)
+      .then((res) => { if (!res.ok) throw new Error(`Could not load the CJK caption font (${res.status})`); return res.arrayBuffer(); })
+      .then((buf) => new Uint8Array(buf))
+      .catch((e) => { delete cjkPromises[kind]; throw e; });
+  }
+  return cjkPromises[kind];
+}
+
+/** The ASS `Style:` lines pointed at `family` (libass has only the fonts in fontsdir). */
+function assFontFamily(ass, family) {
+  return String(ass).replace(/^(Style:\s*[^,]*,)[^,]*/gm, `$1${family}`);
+}
+
+/**
+ * The font files a burn needs for `text`: always Inter, plus the CJK font when the text needs
+ * it. Throws OpArgsError (unsupported_in_browser) when no bundled font can draw the text or the
+ * CJK font cannot be downloaded; the caller then asks before uploading instead.
+ * @returns {{ files: {name:string,data:Uint8Array}[], family: string }}
+ */
+async function fontsForBurn(text) {
+  const files = [{ name: FONT_FILE, data: await loadFont() }];
+  const cjk = cjkFontFor(text);
+  if (!cjk) {
+    if (!fontCovers(text)) {
+      throw new OpArgsError('This text uses characters the in-browser font cannot draw.', 'unsupported_in_browser');
+    }
+    return { files, family: FONT_FAMILY };
+  }
+  try {
+    files.push({ name: CJK_FONTS[cjk].file, data: await loadCjkFont(cjk) });
+  } catch {
+    throw new OpArgsError('These captions use characters the in-browser font cannot draw.', 'unsupported_in_browser');
+  }
+  // The CJK font covers Latin too, so the whole caption is set in it (libass would tofu the
+  // CJK glyphs if the style stayed on Inter).
+  return { files, family: CJK_FONTS[cjk].family };
 }
 
 /** Summary of an ffprobe result: the small facts the model is told about a clip. */
@@ -201,18 +263,30 @@ export async function processMedia(operation, args, bytes, mime) {
   const imageFormat = isPhoto ? (IMAGE_FORMAT_BY_EXT[EXT_BY_MIME[type]] || 'png') : undefined;
   // Validates the operation for this media type before any work starts.
   const { outName, contentType } = resolveOutput(operation, args, { isPhoto, imageFormat });
-  if (operation === 'add_text' && !fontCovers(args?.text)) {
-    throw new OpArgsError('This text uses characters the in-browser font cannot draw.', 'unsupported_in_browser');
+  // The caption/text font: Inter, or the lazy CJK font when the text needs it (drawtext takes a
+  // single fontfile; the CJK fonts cover Latin too).
+  let textFont = FONT_FILE;
+  let textFiles = [];
+  if (operation === 'add_text') {
+    const burn = await fontsForBurn(args?.text);
+    textFont = burn.files.length > 1 ? burn.files[1].name : FONT_FILE;
+    textFiles = burn.files;
+  }
+
+  // H.265 is impractical on the single-threaded core (10+ minutes for seconds of video): fail
+  // fast so the consent fallback can offer the server instead of hanging until the watchdog fires.
+  if (args?.codec === 'libx265' && getHost().mode !== 'mt') {
+    throw new OpArgsError('H.265 encoding needs the multi-threaded browser core, which is not available here.', 'unsupported_in_browser');
   }
 
   // Build the command once up front so a bad or unsupported request fails before the core loads.
   if (!(operation === 'audio_fade' && audioFadeNeedsDuration(args))) {
-    buildProcessArgs(operation, args, { input: 'in', output: 'out', isPhoto, imageFormat, fontFile: FONT_FILE });
+    buildProcessArgs(operation, args, { input: 'in', output: 'out', isPhoto, imageFormat, fontFile: textFont });
   }
 
   let file = toFile(bytes, type);
   if (imageFormat === 'heic') file = toFile(await heicToPng(bytes), 'image/png');
-  const files = operation === 'add_text' ? [{ name: FONT_FILE, data: await loadFont() }] : [];
+  const files = textFiles;
   // A fade without `start` is placed from the clip's length.
   const needsDuration = (operation === 'audio_fade' && audioFadeNeedsDuration(args)) || operation === 'fade_transition';
   const duration = needsDuration ? summarizeProbe(await probeFile(file)).duration : undefined;
@@ -222,7 +296,7 @@ export async function processMedia(operation, args, bytes, mime) {
     files,
     outName,
     buildArgv: ({ inputs, output, dir, threads }) => buildProcessArgs(operation, args, {
-      input: inputs[0], output, threads, isPhoto, imageFormat, duration, fontFile: `${dir}/${FONT_FILE}`,
+      input: inputs[0], output, threads, isPhoto, imageFormat, duration, fontFile: `${dir}/${textFont}`,
     }),
   });
   return { data, contentType };
@@ -252,31 +326,32 @@ export async function addAudioTrack({ mode, volume }, videoBytes, mime, audio) {
   return data;
 }
 
-/** Burn one or two SRT tracks into the video with the bundled font. */
+/** Burn one or two SRT tracks into the video. CJK captions lazy-load a CJK font (see fontsForBurn). */
 export async function burnSubtitles({ srt, translatedSrt, style, position }, videoBytes, mime) {
-  if (!fontCovers(`${srt}\n${translatedSrt || ''}`)) {
-    throw new OpArgsError('These captions use characters the in-browser font cannot draw.', 'unsupported_in_browser');
-  }
+  const { files, family } = await fontsForBurn(`${srt}\n${translatedSrt || ''}`);
   const encoder = new TextEncoder();
-  const files = [{ name: FONT_FILE, data: await loadFont() }, { name: 'subs.srt', data: encoder.encode(srt) }];
+  files.push({ name: 'subs.srt', data: encoder.encode(srt) });
   if (translatedSrt) files.push({ name: 'translated.srt', data: encoder.encode(translatedSrt) });
   const { data } = await run({
     inputs: [toFile(videoBytes, mime)],
     files,
     buildArgv: ({ inputs, output, dir, threads }) => buildBurnSubtitlesArgs({ style, position }, {
-      input: inputs[0], output, threads, fontsDir: dir, fontName: FONT_FAMILY,
+      input: inputs[0], output, threads, fontsDir: dir, fontName: family,
       srtPath: `${dir}/subs.srt`, translatedSrtPath: translatedSrt ? `${dir}/translated.srt` : null,
     }),
   });
   return data;
 }
 
-/** Burn an ASS script (lyric captions) with the bundled font. */
+/** Burn an ASS script (lyric captions) with the bundled font, or the lazy CJK font when needed. */
 export async function burnAss(ass, videoBytes, mime) {
-  if (!fontCovers(ass)) throw new OpArgsError('These captions use characters the in-browser font cannot draw.', 'unsupported_in_browser');
+  const { files, family } = await fontsForBurn(ass);
+  // The server's script names its own font; point every style at the font actually in fontsdir.
+  const script = family === FONT_FAMILY ? ass : assFontFamily(ass, family);
+  files.push({ name: 'lyrics.ass', data: new TextEncoder().encode(script) });
   const { data } = await run({
     inputs: [toFile(videoBytes, mime)],
-    files: [{ name: FONT_FILE, data: await loadFont() }, { name: 'lyrics.ass', data: new TextEncoder().encode(ass) }],
+    files,
     buildArgv: ({ inputs, output, dir, threads }) => buildBurnAssArgs({ input: inputs[0], output, threads, assPath: `${dir}/lyrics.ass`, fontsDir: dir }),
   });
   return data;
@@ -305,6 +380,10 @@ export async function thumbnail(videoBytes, mime, { at = 0, width = 320 } = {}) 
 /** Run a model-written `ffmpeg -i input … output.<ext>` command. Errors carry `stderr`. */
 export async function runCliCommand(command, bytes, mime, catalog = null) {
   const parsed = parseCliCommand(command, catalog);
+  // Same fail-fast as processMedia: H.265 on the single-threaded core never finishes in practice.
+  if (getHost().mode !== 'mt' && parsed.codecs.includes('libx265')) {
+    throw new OpArgsError('H.265 encoding needs the multi-threaded browser core, which is not available here.', 'unsupported_in_browser');
+  }
   const { data } = await run({
     inputs: [toFile(bytes, mime)],
     outName: parsed.outName,

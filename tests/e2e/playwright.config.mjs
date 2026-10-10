@@ -7,22 +7,18 @@ const MT_PORT = Number(process.env.E2E_MT_PORT || 4173);
 const ST_PORT = Number(process.env.E2E_ST_PORT || 4175);
 const chromeExecutable = process.env.E2E_CHROME_PATH || undefined; // e.g. /usr/bin/google-chrome
 
-// E2E_BASE_URL=https://grepawk.com runs the same specs against a deployed site instead of local
-// servers: "prod-mt" (auto -> mt) and "prod-st" (?wasm=st forces the single-thread core on the same
-// isolated page). Read-only: GET/HEAD only, every non-GET is blocked by the guard.
-const PROD = process.env.E2E_BASE_URL;
+// E2E_BASE_URL=https://grepawk.com used to run the same specs against the deployed /v2 editor.
+// The /v2 page is retired (it redirects to the main app at /); prod is now covered by
+// tests/e2e/check-v2-headers.sh (redirect, cores, source) and the contract gate, so there are
+// no prod projects anymore. These specs run against local throwaway servers only.
 const localProjects = [
   { name: 'mt', use: { baseURL: `http://127.0.0.1:${MT_PORT}` }, metadata: { expectedMode: 'mt', isolated: true } },
   { name: 'st', use: { baseURL: `http://127.0.0.1:${ST_PORT}` }, metadata: { expectedMode: 'st', isolated: false } },
 ];
-const prodProjects = PROD && [
-  { name: 'prod-mt', use: { baseURL: PROD }, metadata: { expectedMode: 'mt', isolated: true, query: '' } },
-  { name: 'prod-st', use: { baseURL: PROD }, metadata: { expectedMode: 'st', isolated: true, query: '?wasm=st' } },
-];
 
 export default defineConfig({
   testDir: '.',
-  testMatch: /.*\.pw\.mjs$/,
+  testMatch: /v2-.*\.pw\.mjs$/, // main-app specs (main-*.pw.mjs) have their own config (vite dev server)
   timeout: 180_000,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
@@ -34,8 +30,8 @@ export default defineConfig({
     trace: 'retain-on-failure',
     launchOptions: chromeExecutable ? { executablePath: chromeExecutable } : {},
   },
-  projects: prodProjects || localProjects,
-  webServer: PROD ? [] : [
+  projects: localProjects,
+  webServer: [
     { command: 'node server.mjs', cwd: '.', port: MT_PORT, env: { PORT: String(MT_PORT), ISOLATE: '1' }, reuseExistingServer: false },
     { command: 'node server.mjs', cwd: '.', port: ST_PORT, env: { PORT: String(ST_PORT), ISOLATE: '0' }, reuseExistingServer: false },
   ],
