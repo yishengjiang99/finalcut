@@ -78,6 +78,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/tests/playwright/**',
+      '**/.claude/**', // other checkouts of this repo (agent worktrees)
     ],
   },
 })
