@@ -47,7 +47,7 @@ async function session(page, q) {
 
 const out = [];
 for (const b of BROWSERS) {
-  const browser = await engines[b].launch({ headless: true });
+  const browser = await engines[b].launch({ headless: true, ...(process.env.E2E_CHROME_PATH ? { executablePath: process.env.E2E_CHROME_PATH } : {}) });
   for (const [label, q] of [['auto', ''], ['st', '?wasm=st']]) {
     for (let i = 0; i < RUNS; i++) {
       const ctx = await browser.newContext();
