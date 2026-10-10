@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertToolCallApplied, buildChatRequestBody, messagesForCurrentTurn, needsFollowUp, NO_MEDIA_NOTE } from '../useCallAPI.js';
+import { assertToolCallApplied, buildChatRequestBody, mediaForInference, messagesForCurrentTurn, needsFollowUp, NO_MEDIA_NOTE, cliStringFallbackRequest } from '../useCallAPI.js';
 
 describe('assertToolCallApplied', () => {
   it('accepts a successful tool result', () => {
@@ -26,6 +26,16 @@ describe('buildChatRequestBody', () => {
     expect(body.tools.length).toBeGreaterThan(0);
     expect(body.tool_choice).toBe('auto');
     expect(body.messages).toEqual([{ role: 'user', content: 'What can you do?' }]);
+  });
+
+  it('tells the server what kind of file is attached', () => {
+    expect(mediaForInference('image/png')).toEqual({ type: 'image' });
+    expect(mediaForInference('audio/mpeg')).toEqual({ type: 'audio' });
+    expect(mediaForInference('video/quicktime')).toEqual({ type: 'video' });
+    expect(mediaForInference('')).toBeNull();
+    expect(buildChatRequestBody(messages, true, { type: 'image' }).media).toEqual({ type: 'image' });
+    expect(buildChatRequestBody(messages, true)).not.toHaveProperty('media');
+    expect(buildChatRequestBody(messages, false, { type: 'image' })).not.toHaveProperty('media');
   });
 
   it('sends a plain chat request without tools when no media is attached', () => {
@@ -64,5 +74,18 @@ describe('ffmpeg_cli follow-up rounds', () => {
       { role: 'assistant', content: null, tool_calls: [discover] },
       { role: 'tool', tool_call_id: 'c1', name: 'ffmpeg_cli', content: '{"ok":true}' }
     ]);
+  });
+});
+
+describe('ffmpeg CLI string fallback trigger', () => {
+  const messages = [{ role: 'user', content: 'add cover image to the video', id: 1 }, { role: 'assistant', content: 'I will work it out with FFmpeg.', id: 2 }];
+  const call = { id: 'c1', type: 'function', function: { name: 'trim_video', arguments: '{}' } };
+
+  it('asks for the CLI string only when a video/audio reply carries no tool call', () => {
+    expect(cliStringFallbackRequest(messages, [], true, 'video/mp4')).toBe('add cover image to the video');
+    expect(cliStringFallbackRequest(messages, [], true, 'audio/mpeg')).toBe('add cover image to the video');
+    expect(cliStringFallbackRequest(messages, [call], true, 'video/mp4')).toBeNull();
+    expect(cliStringFallbackRequest(messages, [], false, null)).toBeNull();
+    expect(cliStringFallbackRequest(messages, [], true, 'image/png')).toBeNull();
   });
 });

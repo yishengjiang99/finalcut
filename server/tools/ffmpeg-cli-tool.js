@@ -5,11 +5,12 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { tools as builtinTools } from '../../src/tools.js';
 import { FFMPEG_CLI_TOOL_NAME, ffmpegCliToolDefinition, FFMPEG_FALLBACK_GUIDANCE, withFfmpegFallback } from '../../src/ffmpegFallback.js';
-import { TMP_DIR } from '../../src/server/config.js';
+import { TMP_DIR, XAI_API_TOKEN } from '../../src/server/config.js';
 import { videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, upload } from '../../src/server/middleware.js';
 import { discovery as defaultDiscovery } from '../ffmpeg/ffmpeg-discovery.js';
 import { buildCommand, CommandValidationError } from '../ffmpeg/ffmpeg-commander.js';
 import { executeCommand } from '../ffmpeg/ffmpeg-executor.js';
+import { parseCliString, buildCliStringMessages, extractCommand } from '../ffmpeg/ffmpeg-cli-string.js';
 
 const OUTPUT_FORMATS = new Set(['mp4', 'mov', 'webm', 'mkv', 'gif', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'jpg', 'png']);
 
@@ -55,8 +56,37 @@ export async function planCommand({ args = {}, inputPath = 'input.mp4', outputPa
   }
 }
 
+/**
+ * No built-in tool matched: ask inference for the FFmpeg CLI string for the user's request.
+ * Returns { ok, command } with command null when the model answers NONE (not an edit, or not doable).
+ */
+export async function askForCliString({ request, attempts }, { fetchImpl = fetch } = {}) {
+  const response = await fetchImpl('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XAI_API_TOKEN}` },
+    body: JSON.stringify({ model: 'grok-3', messages: buildCliStringMessages(request, attempts), stream: false, temperature: 0 }),
+  });
+  if (!response.ok) throw new Error(`xAI API request failed with status ${response.status}`);
+  const data = await response.json();
+  return { ok: true, command: extractCommand(data.choices?.[0]?.message?.content) };
+}
+
+/** Validate and execute a model-written CLI string on a file on disk. Same result shape as runFfmpegCli. */
+export async function runCliString({ command, inputPath }, deps = {}) {
+  let parsed;
+  try {
+    parsed = await parseCliString(command, { inputPath, outputPathFor: ext => path.join(TMP_DIR, `ffcli-${randomUUID()}.${ext}`) }, deps.discovery);
+  } catch (e) {
+    if (e instanceof CommandValidationError) return { ok: false, errors: e.errors, suggestions: e.suggestions };
+    throw e;
+  }
+  const result = await executeCommand({ args: parsed.args, outputPath: parsed.outputPath }, deps.exec);
+  return { ...result, outputPath: parsed.outputPath, outputFormat: parsed.outputFormat, command: parsed.command, explanation: `Ran ${parsed.command}` };
+}
+
 /** Plan and execute on a file on disk. Returns { ok, outputPath, command, explanation } or errors. */
 export async function runFfmpegCli({ args = {}, inputPath }, deps = {}) {
+  if (typeof args.command === 'string') return runCliString({ command: args.command, inputPath }, deps);
   const fmt = String(args.output_format || 'mp4').toLowerCase();
   const outputPath = path.join(TMP_DIR, `ffcli-${randomUUID()}.${fmt}`);
   const plan = await planCommand({ args, inputPath, outputPath }, deps);
@@ -88,7 +118,13 @@ ffmpegCliRouter.post('/api/ffmpeg-cli', express.json({ limit: '50kb' }), videoPr
       if (plan.ok) delete plan.args;
       return res.status(plan.ok ? 200 : 400).json(plan);
     }
-    return res.status(400).json({ error: 'action must be "discover" or "plan" (use multipart POST /api/ffmpeg-cli/run to execute)' });
+    if (body.action === 'command') {
+      if (typeof body.request !== 'string' || !body.request.trim()) return res.status(400).json({ error: 'request is required' });
+      const asked = await askForCliString(body);
+      debugCli('command', JSON.stringify({ request: body.request, attempts: body.attempts?.length || 0, command: asked.command }));
+      return res.json(asked);
+    }
+    return res.status(400).json({ error: 'action must be "discover", "plan" or "command" (use multipart POST /api/ffmpeg-cli/run to execute)' });
   } catch (e) {
     console.error('ffmpeg-cli error:', e);
     return res.status(500).json({ error: 'FFmpeg capability discovery failed' });
