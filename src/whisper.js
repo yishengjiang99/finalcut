@@ -74,6 +74,10 @@ let loadedDevice = null;
 async function loadPipeline(onStatus) {
   const { pipeline, env } = await import('@huggingface/transformers');
   env.allowLocalModels = false;
+  // The model is self-hosted (Hugging Face sends no CORP header, so its downloads are blocked
+  // by the site's COEP: require-corp). Files live under /models/ mirroring the HF repo layout.
+  env.remoteHost = `${self.location.origin}/models/`;
+  env.remotePathTemplate = '{model}/';
   const base = new URL(`${ORT_ROOT}/`, self.location.href).href;
   // Renamed to .js on the server so it is served as JavaScript (nginx has no type for .mjs).
   env.backends.onnx.wasm.wasmPaths = { mjs: `${base}ort-wasm-simd-threaded.asyncify.js`, wasm: `${base}ort-wasm-simd-threaded.asyncify.wasm` };
