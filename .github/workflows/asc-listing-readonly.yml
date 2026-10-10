@@ -1,0 +1,71 @@
+name: ASC listing snapshot (read-only)
+
+# GET-only dump of the live App Store Connect listing for version 1.0:
+# app name/subtitle, version localizations (description, promo, keywords)
+# and screenshot sets in display order. No writes. Secrets are only used
+# to sign the JWT and are never printed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dump live listing (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_ID: "6815060815"
+          VERSION: "1.0"
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request
+          import jwt
+          p8 = os.environ["APP_STORE_CONNECT_API_KEY_P8"].replace("\\n", "\n").strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(), "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
+                             p8, algorithm="ES256", headers={"kid": os.environ["APP_STORE_CONNECT_KEY_ID"].strip()})
+          def get(path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method="GET",
+                                           headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req, timeout=90) as r:
+                  return json.loads(r.read().decode() or "{}")
+          app_id = os.environ["APP_ID"]
+          out = {"app": app_id}
+          infos = get(f"/v1/apps/{app_id}/appInfos")["data"]
+          out["appInfos"] = []
+          for info in infos:
+              locs = get(f"/v1/appInfos/{info['id']}/appInfoLocalizations")["data"]
+              out["appInfos"].append({"state": info["attributes"].get("state") or info["attributes"].get("appStoreState"),
+                                      "localizations": [{k: l["attributes"].get(k) for k in ("locale", "name", "subtitle", "privacyPolicyUrl")} for l in locs]})
+          vers = get(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&filter[versionString]={os.environ['VERSION']}")["data"]
+          v = vers[0]
+          out["version"] = {"id": v["id"], "versionString": v["attributes"]["versionString"], "state": v["attributes"].get("appStoreState")}
+          out["localizations"] = []
+          for loc in get(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations?limit=50")["data"]:
+              a = loc["attributes"]
+              entry = {k: a.get(k) for k in ("locale", "description", "promotionalText", "keywords", "whatsNew", "marketingUrl", "supportUrl")}
+              entry["screenshotSets"] = []
+              for st in get(f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets?limit=50")["data"]:
+                  shots = get(f"/v1/appScreenshotSets/{st['id']}/appScreenshots?limit=50")["data"]
+                  entry["screenshotSets"].append({
+                      "displayType": st["attributes"].get("screenshotDisplayType"),
+                      "shots": [{"order": i + 1, "fileName": s["attributes"].get("fileName"),
+                                 "sourceFileChecksum": s["attributes"].get("sourceFileChecksum"),
+                                 "width": (s["attributes"].get("imageAsset") or {}).get("width"),
+                                 "height": (s["attributes"].get("imageAsset") or {}).get("height"),
+                                 "templateUrl": (s["attributes"].get("imageAsset") or {}).get("templateUrl"),
+                                 "state": ((s["attributes"].get("assetDeliveryState") or {}).get("state"))} for i, s in enumerate(shots)]})
+              out["localizations"].append(entry)
+          print("LISTING_JSON_BEGIN")
+          print(json.dumps(out, indent=2, ensure_ascii=False))
+          print("LISTING_JSON_END")
+          PY
