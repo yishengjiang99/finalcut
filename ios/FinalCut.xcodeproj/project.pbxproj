@@ -28,6 +28,7 @@
 		3DDB0D8C26BB4841980AFEB8 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A775571821445ABA7BF61C5 /* ExportSheet.swift */; };
 		3BFA0055043342C584FB23D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD12BBC329E457BBA7331E4 /* AppTheme.swift */; };
 		2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 01F8F90184F0448FAD35E158 /* Assets.xcassets */; };
+		FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */; };
 		7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */; };
 		FC0A11B2C3D4E5F601020301 /* PaywallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */; };
 		FC0A11B2C3D4E5F601020303 /* PaywallScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */; };
@@ -113,6 +114,7 @@
 		2A775571821445ABA7BF61C5 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
 		1DD12BBC329E457BBA7331E4 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "finalcap-test-video.mp4"; sourceTree = "<group>"; };
 		59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "BigBuckBunny.mp4"; path = "../public/BigBuckBunny.mp4"; sourceTree = SOURCE_ROOT; };
 		FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallTests.swift; sourceTree = "<group>"; };
 		FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallScreenshotTests.swift; sourceTree = "<group>"; };
@@ -362,6 +364,7 @@
 			isa = PBXGroup;
 			children = (
 				59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */,
+				FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */,
 			);
 			path = SampleMedia;
 			sourceTree = "<group>";
@@ -480,6 +483,7 @@
 			files = (
 				2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */,
 				7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */,
+				FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

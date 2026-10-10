@@ -135,7 +135,7 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
     }
 
     func testCatalogCoversAllSchemaV1Tools() {
-        XCTAssertEqual(ToolCatalog.requiredArgs.count, 46)
+        XCTAssertEqual(ToolCatalog.requiredArgs.count, 47)  // + lyric captions tool
         XCTAssertEqual(ToolCatalog.requiredArgs["crop_video"], ["x", "y", "width", "height"])
         XCTAssertEqual(ToolCatalog.requiredArgs["adjust_contrast"], ["contrast"])
     }

@@ -25,8 +25,11 @@ jobs:
       - name: Boot iPhone 6.9" simulator (clean status bar)
         run: |
           set -euo pipefail
-          RT=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["platform"]=="iOS" and x["isAvailable"]]; print(sorted(r,key=lambda x:[int(n) for n in x["version"].split(".")])[-1]["identifier"])')
-          DT=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys,re; d=[x for x in json.load(sys.stdin)['devicetypes'] if re.search(r'iPhone 1[6-9] Pro Max', x['name'])]; print(sorted(d,key=lambda x:x['name'])[-1]['identifier'])")
+          SDKV=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          echo "simulator SDK $SDKV"
+          # runtime matching the selected Xcode's SDK (a newer runtime fails with "No matching device")
+          RT=$(xcrun simctl list runtimes -j | SDKV="$SDKV" python3 -c 'import json,os,sys; v=[int(n) for n in os.environ["SDKV"].split(".")]; r=[x for x in json.load(sys.stdin)["runtimes"] if x["platform"]=="iOS" and x["isAvailable"]]; key=lambda x:[int(n) for n in x["version"].split(".")]; ok=[x for x in r if key(x)[:2]==v[:2]] or [x for x in r if key(x)<=v] or r; print(sorted(ok,key=key)[-1]["identifier"])')
+          DT=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys,re; d=[x for x in json.load(sys.stdin)['devicetypes'] if re.search(r'iPhone 1[6-9] Pro Max', x['name'])]; print(sorted(d,key=lambda x:x['name'])[0]['identifier'])")
           echo "runtime=$RT devicetype=$DT"
           SIM=$(xcrun simctl create paywall-shot "$DT" "$RT")
           xcrun simctl boot "$SIM"
@@ -47,6 +50,7 @@ jobs:
             -project FinalCut.xcodeproj -scheme FinalCut \
             -destination "id=$SIM" \
             -only-testing:FinalCutTests/PaywallScreenshotTests \
+            -parallel-testing-enabled NO \
             -resultBundlePath "$RUNNER_TEMP/paywall.xcresult" \
             CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/paywall-xcodebuild.log" 2>&1 &
           XB=$!
@@ -57,14 +61,19 @@ jobs:
           done
           if [[ -f "$OUT/paywall-ready" ]]; then
             sleep 2
-            xcrun simctl io "$SIM" screenshot "$GITHUB_WORKSPACE/shots/subscription-paywall.png"
+            xcrun simctl io "$SIM" screenshot --type=png "$GITHUB_WORKSPACE/shots/subscription-paywall.png" || {
+              echo "::warning::simctl screenshot failed; using the in-process render"
+              rm -f "$GITHUB_WORKSPACE/shots/subscription-paywall.png"; }
             touch "$OUT/paywall-done"
           fi
           wait $XB; rc=$?
           grep -E "paywall-shot|error:|XCTAssert|Test Case|failed|passed|skipped" "$RUNNER_TEMP/paywall-xcodebuild.log" | tail -60
           [[ $rc -eq 0 ]] || { tail -80 "$RUNNER_TEMP/paywall-xcodebuild.log"; exit $rc; }
-          test -f "$GITHUB_WORKSPACE/shots/subscription-paywall.png"
           cp "$OUT/paywall-render.png" "$GITHUB_WORKSPACE/shots/" || true
+          if [[ ! -s "$GITHUB_WORKSPACE/shots/subscription-paywall.png" ]]; then
+            cp "$GITHUB_WORKSPACE/shots/paywall-render.png" "$GITHUB_WORKSPACE/shots/subscription-paywall.png"
+          fi
+          test -s "$GITHUB_WORKSPACE/shots/subscription-paywall.png"
           sips -g pixelWidth -g pixelHeight "$GITHUB_WORKSPACE"/shots/*.png
 
       - uses: actions/upload-artifact@v4

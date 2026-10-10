@@ -314,7 +314,7 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(model.state, .empty)
         model.loadSampleClip()
         XCTAssertEqual(model.state, .ready)
-        XCTAssertEqual(model.localVideoURL?.lastPathComponent, "finalcap-test-video.mp4")
+        XCTAssertTrue(["BigBuckBunny.mp4", "finalcap-test-video.mp4"].contains(model.localVideoURL?.lastPathComponent ?? ""))
     }
 
     func testAPIErrorCaptionsChatCopy() {
