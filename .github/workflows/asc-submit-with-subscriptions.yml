@@ -1,7 +1,7 @@
 name: ASC submit version + first subscription (FinalCap)
 
 # One reviewSubmission: version 1.0 + new build + 'FinalCap Pro' group + monthly subscription.
-# mode=status is read-only. mode=cancel pulls ONE given submission from review.
+# mode=status is read-only. mode=resubmit re-submits an UNRESOLVED_ISSUES submission after a fix. mode=cancel pulls ONE given submission from review.
 # mode=submit SUBMITS FOR APP REVIEW (also clears export compliance, attaches the build, writes review notes);
 # run only when the owner asks.
 on:
@@ -10,13 +10,16 @@ on:
       mode:
         description: status (read-only), cancel or submit
         type: choice
-        options: [status, submit, cancel]
+        options: [status, submit, cancel, resubmit]
         default: status
       version_string:
         description: App Store versionString
         default: "1.0"
       build_number:
         description: CFBundleVersion
+        default: ""
+      resubmit_submission_id:
+        description: UNRESOLVED_ISSUES reviewSubmission id to re-submit after a fix (mode=resubmit)
         default: ""
       cancel_submission_id:
         description: reviewSubmission id to pull from review (mode=cancel)
@@ -48,6 +51,12 @@ jobs:
       - name: Submit version + subscription group + subscription
         if: ${{ inputs.mode == 'submit' }}
         env: { MODE: submit }
+        run: python3 scripts/asc/submit_version_with_subscriptions.py
+      - name: Re-submit fixed submission
+        if: ${{ inputs.mode == 'resubmit' }}
+        env:
+          MODE: resubmit
+          RESUBMIT_ID: ${{ inputs.resubmit_submission_id }}
         run: python3 scripts/asc/submit_version_with_subscriptions.py
       - name: Status (read-only)
         if: ${{ inputs.mode == 'status' }}

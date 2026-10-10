@@ -10,6 +10,8 @@ be added, nothing is submitted.
 MODE:
   status      read-only: build, version (+attached build, review details), group, subscriptions, open submissions
   wait_build  read-only poll until build BUILD_NUMBER is VALID (30 min max)
+  resubmit    after fixing a rejection: re-submit the SAME reviewSubmission RESUBMIT_ID (UNRESOLVED_ISSUES):
+              attach build + write review notes, mark each REJECTED item resolved, then submitted=true.
   cancel      pull reviewSubmission CANCEL_SUBMISSION_ID from review, wait until version is editable
   submit      clear export compliance on the build if unset, attach the build, write review notes + contact,
               then create/reuse a reviewSubmission with version + group + subscription(s) and submit it.
@@ -46,6 +48,9 @@ IN-APP PURCHASE (FinalCap Pro Monthly, com.ragnus.w2.subscription.monthly, auto-
 - The paywall shows the subscription title, the localized price and period from StoreKit, what it includes, Subscribe, Restore Purchases, the auto-renew terms, and working links to the Terms of Use (Apple standard EULA) and the Privacy Policy (https://grepawk.com/legal/privacy.html).
 - Sandbox purchases work: Subscribe with any sandbox Apple ID; Restore Purchases restores the subscription. No external payment or website checkout is used in the app.
 
+UPDATE FOR SUBMISSION 9cace8d1
+Added a functional Terms of Use (EULA) link and Privacy Policy link to the App Store description, per 3.1.2.
+
 CONTACT
 Yisheng Jiang, yisheng.jiang@gmail.com, +1 669 251 7789"""
 
@@ -59,7 +64,7 @@ def token():
 
 
 def api(method, path, body=None):
-    if MODE not in ("submit", "cancel") and method != "GET":
+    if MODE not in ("submit", "cancel", "resubmit") and method != "GET":
         raise SystemExit(f"read-only mode but tried {method} {path}")
     for attempt in range(4):
         r = requests.request(method, path if path.startswith("http") else BASE + path, json=body,
@@ -174,6 +179,50 @@ def prepare_version(ver, build):
         raise SystemExit("build attach did not stick")
 
 
+def resubmit(app_id):
+    rs_id = os.environ.get("RESUBMIT_ID", "").strip() or sys.exit("RESUBMIT_ID required")
+    a = must("GET", f"/v1/reviewSubmissions/{rs_id}")["data"]["attributes"]
+    print("SUBMISSION", rs_id, a)
+    if a.get("state") != "UNRESOLVED_ISSUES":
+        raise SystemExit(f"submission {rs_id} is {a.get('state')}, not UNRESOLVED_ISSUES; not resubmitting")
+    code, eula = api("GET", f"/v1/apps/{app_id}/endUserLicenseAgreement")
+    print("CUSTOM EULA:", "none (standard Apple EULA)" if code == 404 or not eula.get("data") else json.dumps(eula["data"])[:500])
+    build = find_build(app_id)
+    if not build or build["attributes"].get("processingState") != "VALID":
+        raise SystemExit(f"build {BUILD_NUMBER} not VALID: {build and build['attributes']}")
+    ver = get_version(app_id)
+    print("VERSION", ver["id"], ver["attributes"].get("appStoreState"))
+    if ver["attributes"].get("appStoreState") not in EDITABLE:
+        raise SystemExit(f"version state {ver['attributes'].get('appStoreState')} not submittable")
+    loc = next(l for l in must("GET", f"/v1/appStoreVersions/{ver['id']}/appStoreVersionLocalizations")["data"]
+               if l["attributes"]["locale"] == "en-US")
+    desc = loc["attributes"].get("description") or ""
+    if "itunes/dev/stdeula" not in desc:
+        raise SystemExit("live description has no EULA link yet; upload the listing first")
+    print("DESCRIPTION has EULA link: yes")
+    prepare_version(ver, build)
+    items = must("GET", f"/v1/reviewSubmissions/{rs_id}/items?limit=50")["data"]
+    for it in items:
+        print("ITEM", it["id"], it["attributes"])
+        if it["attributes"].get("state") == "REJECTED":
+            j = must("PATCH", f"/v1/reviewSubmissionItems/{it['id']}", {"data": {"type": "reviewSubmissionItems", "id": it["id"],
+                                                                             "attributes": {"resolved": True}}})
+            print("  RESOLVED ->", j["data"]["attributes"])
+    j = must("PATCH", f"/v1/reviewSubmissions/{rs_id}", {"data": {"type": "reviewSubmissions", "id": rs_id,
+                                                                    "attributes": {"submitted": True}}})
+    print("RESUBMIT_OK", rs_id, j["data"]["attributes"])
+    for i in range(12):
+        time.sleep(10)
+        a = must("GET", f"/v1/reviewSubmissions/{rs_id}")["data"]["attributes"]
+        vs = get_version(app_id)["attributes"].get("appStoreState")
+        items = must("GET", f"/v1/reviewSubmissions/{rs_id}/items?limit=50")["data"]
+        print(f"poll {i + 1}: submission={a.get('state')} submitted={a.get('submittedDate')} version={vs}",
+              [x["attributes"].get("state") for x in items])
+        if a.get("state") in ("WAITING_FOR_REVIEW", "IN_REVIEW") and vs in ("WAITING_FOR_REVIEW", "IN_REVIEW"):
+            break
+    status(app_id)
+
+
 def main():
     app_id = must("GET", f"/v1/apps?filter[bundleId]={BUNDLE_ID}")["data"][0]["id"]
     print("APP", app_id, BUNDLE_ID, "version", VERSION_STRING, "build", BUILD_NUMBER or "-", "mode", MODE)
@@ -217,6 +266,10 @@ def main():
         else:
             raise SystemExit(f"timed out: submission={st} version={vs}")
         status(app_id)
+        return
+
+    if MODE == "resubmit":
+        resubmit(app_id)
         return
 
     if MODE != "submit":
