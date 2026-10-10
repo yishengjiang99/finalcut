@@ -150,7 +150,9 @@
   @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
 
   /* ---------- composer ---------- */
-  .composer-zone { padding: 8px 32px 18px; position: relative; z-index: 30; }
+  .composer-zone { padding: 8px 32px 18px; position: relative; z-index: 30; transition: padding-right .25s ease; }
+  /* keep the fixed dock from covering the text input */
+  body.dock-open .composer-zone { padding-right: 412px; }
   .composer {
     background: rgba(21,27,37,.96); border: 1px solid var(--line); border-radius: 20px;
     box-shadow: var(--shadow); backdrop-filter: blur(14px);
@@ -276,6 +278,7 @@
     .rail { display: none; }
     .chat { padding: 20px 16px; }
     .composer-zone { padding: 8px 12px 14px; }
+    body.dock-open .composer-zone { padding-right: 12px; }
     .dock { left: 12px; right: 12px; bottom: 12px; width: auto; }
     .nav { display: none; }
   }
@@ -424,6 +427,9 @@
   function refreshDock(){
     const running = [...jobs.values()].filter(j=>!j.done && !j.cancelled).length;
     const total = jobs.size;
+    /* reserve composer space while jobs exist; hide the dock when empty */
+    document.body.classList.toggle('dock-open', total > 0);
+    dock.style.display = total > 0 ? '' : 'none';
     dockCount.textContent = running > 0 ? running + ' running' : (total ? total + ' done' : '0 running');
     dockDot.style.background = running > 0 ? 'var(--accent)' : 'var(--ok)';
     dockDot.style.animation = running > 0 ? '' : 'none';
