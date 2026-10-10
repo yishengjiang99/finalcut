@@ -63,9 +63,9 @@ describe('App Component', () => {
     expect(screen.getByText('Try with a sample video')).toBeInTheDocument();
   });
 
-  it('renders footer on landing page', () => {
+  it('does not render a rights-reserved footer', () => {
     render(<App />);
-    expect(screen.getByText('© 2026 FinalCap. All rights reserved.')).toBeInTheDocument();
+    expect(screen.queryByText('© 2026 FinalCap. All rights reserved.')).not.toBeInTheDocument();
   });
 
   it('does not expose token in client-side code', () => {

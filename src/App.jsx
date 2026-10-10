@@ -951,7 +951,6 @@ export default function App() {
 
         <footer>
           <div className="wrap">
-            <span>© 2026 FinalCap. All rights reserved.</span>
             <div className="spacer" />
             <a href="/legal/privacy.html">Privacy</a>
             <a href="/legal/terms.html">Terms</a>
@@ -1301,7 +1300,6 @@ export default function App() {
                 )}
               </div>
             </div>
-            <p className="copyright">© 2026 FinalCap. All rights reserved.</p>
           </div>
         </div>
       </div>
