@@ -7,16 +7,21 @@
 #   1. GATE (before touching prod): iOS endpoint contract test against prod (21 checks, recorded as
 #      the baseline) + a header snapshot of existing routes. Any failure aborts here.
 #   2. Build on the runner: npm run build && npm run build:v2 (pinned cores + verified GPL source).
-#   3. Installer tests: stubbed harness.
+#   3. Installer tests: stubbed harness (/v2) + real nginx 1.18 in ubuntu:22.04 (site settings).
 #   4. PREFLIGHT over SSH, read-only: nginx -t passes, sudo works, exactly one nginx file holds
 #      `root $DEPLOY_DIR/dist;`. If prod can't be managed this way the job stops here, unchanged.
 #   5. Ship: dist -> $DEPLOY_DIR/dist.new; code rsync; npm ci; dist.new -> dist (old kept as
 #      dist.prev); restart finalcut.
 #   6. nginx: scripts/nginx/finalcut-v2-nginx.sh install (backup -> snippets -> one include in this
 #      site's server block -> nginx -t -> reload; restores the backup on any failure).
+#   6b. nginx: scripts/nginx/finalcut-site-nginx.sh install (HSTS, gzip, http2, www/http -> apex,
+#      real 404s, /legal redirect, asset caching; backup -> edits -> nginx -t -> reload -> on-server
+#      smoke incl. other vhosts unchanged; restores the backup on any failure).
 #   7. GATE (after): health + commit, contract test vs the step-1 baseline (no drift), /v2 headers,
 #      existing routes' headers identical to the step-1 snapshot, licenses + source reachable.
-#   8. Any failure after step 5 started: nginx rollback (only this run's backup) + dist.prev -> dist.
+#      + site checks (tests/e2e/check-site-seo.sh) + one telemetry event received then deleted.
+#   8. Any failure after step 5 started: nginx rollback (only this run's backups: site, then /v2)
+#      + dist.prev -> dist.
 #
 # Required repository secret:
 #   DEPLOY_SSH_KEY          — private SSH key that can SSH as DEPLOY_USER@DEPLOY_HOST
@@ -107,8 +112,11 @@ jobs:
           (cd dist/v2/vendor/ffmpeg/source && sha256sum -c --quiet SHA256SUMS)
           du -sh dist dist/v2
 
-      - name: Installer tests (stubbed harness)
-        run: bash tests/nginx/finalcut-v2-nginx.test.sh
+      - name: Installer tests (stubbed harness + real nginx 1.18)
+        run: |
+          set -euo pipefail
+          bash tests/nginx/finalcut-v2-nginx.test.sh
+          bash tests/nginx/finalcut-site-nginx.test.sh --docker
 
       - name: Configure SSH
         env:
@@ -141,6 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes "$TARGET" "bash -s -- preflight '$APP_DIR'" < scripts/nginx/finalcut-v2-nginx.sh
+          ssh -o BatchMode=yes "$TARGET" "bash -s -- preflight '$APP_DIR'" < scripts/nginx/finalcut-site-nginx.sh
           ssh -o BatchMode=yes "$TARGET" "set -e; cd '$APP_DIR'; df -Pk . | awk 'NR==2{print \"free KiB:\", \$4; if (\$4 < 1048576) {print \"less than 1 GiB free\" > \"/dev/stderr\"; exit 1}}'"
           echo "--- files in prod dist that the new build would remove (informational):"
           { rsync -rn --delete --itemize-changes --exclude /v2/ dist/ "$TARGET:$APP_DIR/dist/" || true; } | grep '^\*deleting' || echo "(none)"
@@ -164,6 +173,12 @@ jobs:
           set -euo pipefail
           echo "NGINX_TOUCHED=1" >> "$GITHUB_ENV"
           ssh -o BatchMode=yes "$TARGET" "FINALCUT_DEPLOY_ID='$DEPLOY_ID' bash '$APP_DIR/scripts/nginx/finalcut-v2-nginx.sh' install '$APP_DIR'"
+
+      - name: Install site nginx settings (backup, nginx -t, reload, smoke; restores on failure)
+        run: |
+          set -euo pipefail
+          echo "SITE_NGINX_TOUCHED=1" >> "$GITHUB_ENV"
+          ssh -o BatchMode=yes "$TARGET" "FINALCUT_DEPLOY_ID='$DEPLOY_ID' bash '$APP_DIR/scripts/nginx/finalcut-site-nginx.sh' install '$APP_DIR'"
 
       - name: "GATE (post-deploy): health, iOS contract (no drift), /v2 headers, existing routes"
         env:
@@ -197,6 +212,11 @@ jobs:
             code="$(curl -s -o /dev/null -w '%{http_code}' "$BASE$p")"; echo "$code $p"; [[ "$code" == 200 ]]
           done
           curl -fsS "$BASE/v2/vendor/ffmpeg/source/SHA256SUMS" | diff - dist/v2/vendor/ffmpeg/source/SHA256SUMS
+          echo "==> site: SEO / caching / redirects / HSTS / http2 / 404 + telemetry smoke event"
+          SMOKE_ID="deploy-smoke-${DEPLOY_ID}"
+          TELEMETRY_SMOKE_ID="$SMOKE_ID" tests/e2e/check-site-seo.sh "$BASE"
+          echo "==> telemetry smoke event received on the server, then deleted"
+          ssh -o BatchMode=yes "$TARGET" "cd '$APP_DIR' && node scripts/telemetry-smoke-cleanup.mjs '$SMOKE_ID'"
           echo "deploy OK"
 
       - name: ROLLBACK (nginx backup from this run + previous dist)
@@ -204,6 +224,9 @@ jobs:
         run: |
           set -uo pipefail
           rc=0
+          if [[ "${SITE_NGINX_TOUCHED:-}" == "1" ]]; then
+            ssh -o BatchMode=yes "$TARGET" "bash '$APP_DIR/scripts/nginx/finalcut-site-nginx.sh' rollback '$DEPLOY_ID'" || rc=1
+          fi
           if [[ "${NGINX_TOUCHED:-}" == "1" ]]; then
             ssh -o BatchMode=yes "$TARGET" "bash '$APP_DIR/scripts/nginx/finalcut-v2-nginx.sh' rollback '$DEPLOY_ID'" || rc=1
           fi
@@ -222,6 +245,10 @@ jobs:
           tests/e2e/compare-route-headers.sh deploy-gate/route-headers-before.txt "$BASE" || rc=1
           echo "NOTE: server code (rsynced) and node_modules are not rolled back; re-run this workflow on the previous commit if needed."
           exit $rc
+
+      - name: Telemetry smoke cleanup (idempotent; covers a failed gate)
+        if: always() && env.SHIPPED == '1'
+        run: ssh -o BatchMode=yes "$TARGET" "cd '$APP_DIR' && node scripts/telemetry-smoke-cleanup.mjs 'deploy-smoke-$DEPLOY_ID'" || true
 
       - name: Upload gate artifacts
         if: always()
