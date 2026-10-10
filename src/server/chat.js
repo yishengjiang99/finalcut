@@ -1,5 +1,6 @@
 import express from 'express';
 import { XAI_API_TOKEN } from './config.js';
+import { XAI_CHAT_MODEL, XAI_CHAT_COMPLETIONS_URL } from './xai.js';
 import {
   apiLimiter,
   requireAuthenticatedUser,
@@ -296,7 +297,17 @@ export function cleanFinalText(text) {
 
 /** Model for client-execution turns (defaults to the same model as the streaming chat). */
 export function getClientExecutionModel() {
-  return process.env.XAI_CLIENT_MODEL || 'grok-3';
+  return process.env.XAI_CLIENT_MODEL || XAI_CHAT_MODEL;
+}
+
+/** A non-streaming xAI call may take this long before the request is answered with a 504. */
+const XAI_REQUEST_TIMEOUT_MS = 120_000;
+
+/** Fields of a streaming /api/chat body that are passed on to xAI; anything else is dropped. */
+const FORWARDED_CHAT_FIELDS = ['tools', 'tool_choice', 'temperature', 'top_p'];
+
+export function forwardedChatFields(body) {
+  return Object.fromEntries(Object.entries(body || {}).filter(([key]) => FORWARDED_CHAT_FIELDS.includes(key)));
 }
 
 /**
@@ -333,7 +344,9 @@ async function handleClientExecution(req, res, userId) {
   });
 
   const model = getClientExecutionModel();
-  const thumbnailsAsImages = thumbnails.length > 0 && modelSupportsVision(model);
+  // Thumbnails leave the server only when XAI_CLIENT_MODEL names a vision model: the default
+  // model accepts images too, but forwarding frames stays an explicit choice.
+  const thumbnailsAsImages = thumbnails.length > 0 && Boolean(process.env.XAI_CLIENT_MODEL) && modelSupportsVision(model);
   const rounds = countToolRounds(conversation);
   const skippedTools = skippedToolsInTurn(conversation);
   const unsupportedTools = unsupportedToolsInTurn(conversation);
@@ -385,14 +398,28 @@ async function handleClientExecution(req, res, userId) {
     requestBody.tool_choice = 'auto';
   }
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${XAI_API_TOKEN}`
-    },
-    body: JSON.stringify(requestBody),
-  });
+  let response;
+  try {
+    response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(XAI_REQUEST_TIMEOUT_MS),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${XAI_API_TOKEN}`
+      },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (error) {
+    if (error?.name !== 'TimeoutError') throw error;
+    enqueueChatError({
+      userId,
+      message: 'xAI API request timed out',
+      source: 'xai_api',
+      requestMessageCount: conversation.length,
+      metadata: { timeoutMs: XAI_REQUEST_TIMEOUT_MS, execution: 'client' },
+    });
+    return res.status(504).json({ error: 'The model took too long to answer. Try again.', schemaVersion: CLIENT_SCHEMA_VERSION });
+  }
 
   if (!response.ok) {
     let errorBody = {};
@@ -463,7 +490,7 @@ async function handleClientExecution(req, res, userId) {
     // Usage numbers for on-device edits: a completed edit turn is a final answer after
     // at least one tool result with ok:true (each request is also counted by the quota).
     metadata: {
-      model,
+      model: data?.model || model,
       streamed: false,
       execution: 'client',
       toolRounds: rounds,
@@ -533,17 +560,22 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       tools: Array.isArray(req.body.tools) ? req.body.tools.length : 0,
     }));
 
+    // Stop the xAI request when the client goes away, so nothing is generated for nobody.
+    const upstream = new AbortController();
+    res.on('close', () => upstream.abort());
+
     // Enable streaming for xAI API
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
       method: 'POST',
+      signal: upstream.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
       body: JSON.stringify(restrictStreamingBodyForIos(restrictStreamingToolsToMedia(addFfmpegFallbackTool({
-        ...clientBody,
         messages: [systemMessage, ...req.body.messages],
-        model: 'grok-3', // Specify the new model here
+        ...forwardedChatFields(clientBody),
+        model: XAI_CHAT_MODEL,
         stream: true // Enable streaming
       }, req.get('user-agent')), mediaType), req.get('user-agent')))
     });
@@ -580,6 +612,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
 
     let lineBuffer = '';
     let assistantText = '';
+    let servedModel = null; // the model xAI reports, which can differ from the one requested
     const filter = createStreamFilter();
     let doneFlushed = false;
     let lastParsed = null; // keep reference for flush emit
@@ -641,6 +674,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           }
 
           const delta = parsed.choices?.[0]?.delta;
+          if (parsed.model) servedModel = parsed.model;
 
           if (delta?.content) {
             assistantText += delta.content;
@@ -670,13 +704,16 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
         text: assistantText,
       }));
     } catch (streamError) {
-      console.error('Error streaming response:', streamError);
-      enqueueChatError({
-        userId,
-        message: serializeError(streamError),
-        source: 'xai_stream',
-        requestMessageCount: req.body.messages.length,
-      });
+      // An aborted read means the client left; that is not a stream failure.
+      if (!upstream.signal.aborted) {
+        console.error('Error streaming response:', streamError);
+        enqueueChatError({
+          userId,
+          message: serializeError(streamError),
+          source: 'xai_stream',
+          requestMessageCount: req.body.messages.length,
+        });
+      }
       res.end();
     }
 
@@ -686,11 +723,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       interactionType: 'ai2human',
       content: assistantText,
       metadata: {
-        model: 'grok-3',
+        model: servedModel || XAI_CHAT_MODEL,
         streamed: true,
       },
     });
   } catch (error) {
+    if (error?.name === 'AbortError') return; // the client left before xAI answered
     console.error('Error in /api/chat:', error);
     enqueueChatError({
       userId,

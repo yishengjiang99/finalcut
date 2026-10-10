@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import axios from 'axios';
 import FormData from 'form-data';
 import { OPENAI_API_KEY, XAI_API_TOKEN, TMP_DIR } from './config.js';
+import { XAI_UTILITY_MODEL, XAI_CHAT_COMPLETIONS_URL } from './xai.js';
 import {
   apiLimiter,
   videoProcessLimiter,
@@ -461,8 +462,8 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
-    const xaiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    const xaiResponse = await fetch(XAI_CHAT_COMPLETIONS_URL, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -470,7 +471,7 @@ router.post('/api/translate-captions', apiLimiter, requireAuthenticatedUser, req
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
       body: JSON.stringify({
-        model: 'grok-3',
+        model: XAI_UTILITY_MODEL,
         temperature: 0,
         messages: [
           {

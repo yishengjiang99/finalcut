@@ -24,6 +24,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { OPENAI_API_KEY, XAI_API_TOKEN } from './config.js';
+import { XAI_UTILITY_MODEL, XAI_CHAT_COMPLETIONS_URL } from './xai.js';
 import {
   videoProcessLimiter,
   requireAuthenticatedUser,
@@ -43,7 +44,7 @@ export const LYRIC_MODES = ['auto', 'lyrics', 'speech'];
 export const DEFAULT_POSITION_FROM_BOTTOM_PCT = 20;
 export const UNAVAILABLE = 'lyric_captions_unavailable';
 const SEARCH_MODEL = process.env.LYRIC_CAPTIONS_MODEL || 'grok-4.7';
-const FALLBACK_MODEL = process.env.LYRIC_CAPTIONS_FALLBACK_MODEL || 'grok-3';
+const FALLBACK_MODEL = process.env.LYRIC_CAPTIONS_FALLBACK_MODEL || XAI_UTILITY_MODEL;
 
 export class LyricCaptionsError extends Error {
   constructor(message, { status = 400, code = 'invalid_arguments' } = {}) {
@@ -451,7 +452,7 @@ async function correctWithGrok({ lines, targetLanguage, sourceLanguage, mode, de
       console.warn(`[lyric_captions] web search unavailable (${err.message}); using model knowledge`);
     }
   }
-  const data = await postJson('https://api.x.ai/v1/chat/completions', {
+  const data = await postJson(XAI_CHAT_COMPLETIONS_URL, {
     model: FALLBACK_MODEL,
     temperature: 0,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],

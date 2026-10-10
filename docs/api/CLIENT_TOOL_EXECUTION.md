@@ -233,9 +233,9 @@ stops device retry loops.
 
 ## Thumbnails and vision
 
-Thumbnails are sent to the model as `image_url` inputs (`detail: "low"`) only when the
-configured model accepts images. By default this mode uses the same model as the
-streaming chat (`grok-3`), which has no image input, so only the metadata is used
-and `thumbnailsSentAsImages` is `false`. Set `XAI_CLIENT_MODEL` to a vision-capable
-Grok model (for example a `grok-4.x` model) to forward the thumbnails. The response
-then reports `thumbnailsSentAsImages: true`.
+Thumbnails are sent to the model as `image_url` inputs (`detail: "low"`) only when
+`XAI_CLIENT_MODEL` is set to a model that accepts images. By default this mode uses the
+same model as the streaming chat (`XAI_CHAT_MODEL`, default `grok-4.3`) and thumbnails
+stay on the server: only the metadata is used and `thumbnailsSentAsImages` is `false`.
+Set `XAI_CLIENT_MODEL` to a vision-capable Grok model (for example `grok-4.3`) to
+forward the thumbnails. The response then reports `thumbnailsSentAsImages: true`.
