@@ -42,8 +42,10 @@ import {
  * Configure session middleware and Passport on the Express app.
  * Must be called before registering auth routes.
  */
-export function setupAuth(app) {
+export function setupAuth(app, { sessionStore } = {}) {
   app.use(session({
+    // Without a store express-session keeps sessions in memory and a restart signs everyone out.
+    ...(sessionStore ? { store: sessionStore } : {}),
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,

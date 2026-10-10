@@ -96,6 +96,32 @@ export function buildChatRequestBody(messages, hasMedia, media = null) {
   };
 }
 
+// A failed /api/chat response. The 401s raised by our own auth layer are told apart from
+// errors the server relays from xAI (those carry source: 'xai').
+export class ChatRequestError extends Error {
+  constructor(status, body = {}, statusText = '') {
+    const detail = (typeof body?.error === 'string' && body.error) || statusText || 'no details';
+    const fromXai = body?.source === 'xai';
+    const authExpired = status === 401 && !fromXai;
+    super(authExpired
+      ? 'Your session has expired. Sign in again to continue.'
+      : `${fromXai ? 'xAI API error' : 'Request failed'} (${status}): ${detail}`);
+    this.name = 'ChatRequestError';
+    this.status = status;
+    this.authExpired = authExpired;
+  }
+}
+
+async function chatRequestError(response) {
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    // Not JSON (a proxy error page, say): the status line is all there is.
+  }
+  return new ChatRequestError(response.status, body, response.statusText);
+}
+
 async function reportChatError(error, { authHeaders, messageCount, context } = {}) {
   try {
     await fetch('/api/chat-error', {
@@ -128,31 +154,42 @@ export function useCallAPI({
   setVideoFileData,
   addMessage,
   uploadedVideos,
+  refreshSampleAccessToken,
+  onAuthExpired,
 }) {
   const callAPI = useCallback(async function runTurn(currentMessages, options = {}) {
     const followUpRound = options.followUpRound || 0;
     const currentVideoFileData = options.videoFileData ?? videoFileData;
     const forcedSampleToken = options.sampleAccessToken || null;
     const shouldUseSampleAuth = Boolean(forcedSampleToken || (isSampleMode && sampleAccessToken));
-    const authHeaders = shouldUseSampleAuth
+    let authHeaders = shouldUseSampleAuth
       ? { 'sample-access-token': forcedSampleToken || sampleAccessToken }
       : {};
+    const postChat = () => fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData), mediaForInference(getCurrentFileMimeType()))),
+      ...(options.signal ? { signal: options.signal } : {})
+    });
 
     setIsCallingAPI(true); // Set loading state before API call
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders
-        },
-        body: JSON.stringify(buildChatRequestBody(currentMessages, Boolean(currentVideoFileData), mediaForInference(getCurrentFileMimeType()))),
-        ...(options.signal ? { signal: options.signal } : {})
-      });
+      let response = await postChat();
+      let failure = response.ok ? null : await chatRequestError(response);
 
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+      // Sample tokens are short-lived and do not survive a server restart: get a new one and retry once.
+      if (failure?.authExpired && shouldUseSampleAuth && refreshSampleAccessToken) {
+        const freshToken = await refreshSampleAccessToken();
+        authHeaders = { 'sample-access-token': freshToken };
+        options = { ...options, sampleAccessToken: freshToken };
+        response = await postChat();
+        failure = response.ok ? null : await chatRequestError(response);
       }
+
+      if (failure) throw failure;
 
       // Handle streaming response
       const reader = response.body.getReader();
@@ -353,6 +390,14 @@ export function useCallAPI({
     } catch (error) {
       // Cancelling aborts the in-flight request; that is not an error to report.
       if (options.signal?.aborted) return 'cancelled';
+      if (error instanceof ChatRequestError) {
+        // An expired session cannot report itself: /api/chat-error needs the same auth.
+        if (error.authExpired) {
+          onAuthExpired?.();
+          addMessage({ text: error.message });
+          return 'error';
+        }
+      }
       await reportChatError(error, {
         authHeaders,
         messageCount: currentMessages.length,
@@ -363,12 +408,12 @@ export function useCallAPI({
             .filter(Boolean)
         }
       });
-      addMessage({ text: 'Error communicating with xAI API: ' + error.message });
+      addMessage({ text: error instanceof ChatRequestError ? error.message : 'Error communicating with xAI API: ' + error.message });
       return 'error';
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
     }
-  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos]);
+  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos, refreshSampleAccessToken, onAuthExpired]);
 
   return callAPI;
 }

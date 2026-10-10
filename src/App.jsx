@@ -160,6 +160,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
   const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
   const [authError, setAuthError] = useState(null); // Track authentication errors
+  const [sessionExpired, setSessionExpired] = useState(false); // Set when the server rejects the login session
   const [isCallingAPI, setIsCallingAPI] = useState(false); // Track API call state
   const videoRef = useRef(null);
   const messageRef = useRef(null);
@@ -226,10 +227,10 @@ export default function App() {
     setSampleModeAccessToken(sampleAccessToken);
   }, [sampleAccessToken]);
 
-  const getSampleAccessToken = async () => {
-    if (sampleAccessToken) return sampleAccessToken;
+  const getSampleAccessToken = async ({ force = false } = {}) => {
+    if (sampleAccessToken && !force) return sampleAccessToken;
 
-    if (window.__FINALCUT_SAMPLE_TOKEN_PROMISE__) {
+    if (!force && window.__FINALCUT_SAMPLE_TOKEN_PROMISE__) {
       try {
         const token = await window.__FINALCUT_SAMPLE_TOKEN_PROMISE__;
         if (token) {
@@ -251,6 +252,8 @@ export default function App() {
       throw new Error('Sample access token missing in response');
     }
     setSampleAccessTokenState(token);
+    // Tools read the token from toolFunctions; update it now, ahead of the next render.
+    setSampleModeAccessToken(token);
     return token;
   };
 
@@ -410,6 +413,8 @@ export default function App() {
     setVideoFileData: setWorkingVideoFileData,
     addMessage,
     uploadedVideos,
+    refreshSampleAccessToken: () => getSampleAccessToken({ force: true }),
+    onAuthExpired: () => setSessionExpired(true),
   });
 
   const handleUpload = async (e) => {
@@ -827,6 +832,7 @@ export default function App() {
         <div className="status-pill">
           <span className={`status-dot${health === null ? ' pending' : (health.ok ? '' : ' down')}`}></span> {statusText}
         </div>
+        {sessionExpired && <button className="btn-export" onClick={handleGetStarted} title="Your session has expired">Sign in again</button>}
         <button className="btn-export" onClick={handleExport} disabled={!activeMedia} title={activeMedia ? `Download “${activeMedia.label}”` : 'Add a file to export'}>Export</button>
       </header>
 

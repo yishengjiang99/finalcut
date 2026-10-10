@@ -146,6 +146,16 @@ export async function initDatabase() {
       )
     `);
 
+    // Web login sessions (express-session), so a server restart does not sign everyone out.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS web_sessions (
+        sid VARCHAR(128) PRIMARY KEY,
+        data MEDIUMTEXT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        INDEX idx_web_sessions_expires (expires_at)
+      )
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);

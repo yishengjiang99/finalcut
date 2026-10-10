@@ -409,7 +409,7 @@ async function handleClientExecution(req, res, userId) {
       requestMessageCount: conversation.length,
       metadata: { status: response.status, statusText: response.statusText, execution: 'client' },
     });
-    return res.status(response.status).json({ error: message, schemaVersion: CLIENT_SCHEMA_VERSION });
+    return res.status(response.status).json({ error: message, source: 'xai', schemaVersion: CLIENT_SCHEMA_VERSION });
   }
 
   const data = await response.json();
@@ -566,7 +566,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           statusText: response.statusText,
         },
       });
-      return res.status(response.status).json({ error: message });
+      return res.status(response.status).json({ error: message, source: 'xai' });
     }
 
     // Set headers for Server-Sent Events (SSE)

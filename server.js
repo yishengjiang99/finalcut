@@ -3,6 +3,7 @@ import cors from 'cors';
 import { initDatabase } from './src/db.js';
 import { PORT, stripe, nodeEnvWarning } from './src/server/config.js';
 import { setupAuth, authRouter } from './src/server/auth.js';
+import { MySQLSessionStore } from './src/server/sessionStore.js';
 import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
@@ -32,15 +33,18 @@ app.use(createHealthRouter());
 app.use(iosSuggestionsRouter);
 
 // Initialize database
+let sessionStore;
 try {
   await initDatabase();
+  sessionStore = new MySQLSessionStore();
 } catch (error) {
   console.warn('WARNING: Could not initialize database. Google login features may not work.');
   console.warn('Error:', error.message);
+  console.warn('WARNING: Login sessions are kept in memory and will not survive a restart.');
 }
 
 // Configure session middleware, Passport, and Google OAuth strategy
-setupAuth(app);
+setupAuth(app, { sessionStore });
 
 // Stripe webhook endpoint must be mounted before JSON body parsing
 // so Stripe signature verification receives the raw body.
