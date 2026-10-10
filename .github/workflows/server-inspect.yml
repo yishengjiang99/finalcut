@@ -5,6 +5,12 @@
 name: Server inspect (read-only)
 on:
   workflow_dispatch:
+    inputs:
+      section:
+        description: 'app = service/app layout (default); nginx = nginx/firewall/port-80/mysql read-only report'
+        type: choice
+        options: [app, nginx]
+        default: app
 permissions:
   contents: read
 jobs:
@@ -28,6 +34,7 @@ jobs:
           if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true; fi
           chmod 600 ~/.ssh/known_hosts
       - name: Inspect (read-only)
+        if: ${{ github.event.inputs.section != 'nginx' }}
         run: |
           set -uo pipefail
           git ls-tree --name-only HEAD > /tmp/tracked.txt
@@ -67,3 +74,34 @@ jobs:
           } > /tmp/full.sh
           bash -n /tmp/full.sh
           ssh -o BatchMode=yes "$TARGET" 'bash -s' < /tmp/full.sh || true
+      - name: "Inspect nginx / firewall / port 80 / mysql (read-only)"
+        if: ${{ github.event.inputs.section == 'nginx' }}
+        run: |
+          set -uo pipefail
+          echo "== from the runner: http://, www, https"
+          for u in http://grepawk.com/ http://www.grepawk.com/ https://www.grepawk.com/ https://grepawk.com/; do
+            echo "-- $u"; curl -s -m 10 -o /dev/null -w '%{http_code} %{redirect_url} %{http_version}\n' "$u" || echo "curl exit $?"
+          done
+          cat > /tmp/nginx-remote.sh <<'REMOTE'
+          set -u
+          echo "== nginx -V (modules)"; nginx -V 2>&1 | tr ' ' '\n' | grep -E 'version|brotli|http_v2|gzip_static|ssl' | head -20
+          ls /etc/nginx/modules-enabled/ 2>/dev/null
+          echo "== nginx -t"; nginx -t 2>&1 | tail -2
+          echo "== listening sockets 80/443"; ss -ltnp 2>/dev/null | grep -E ':(80|443)\s' || echo none
+          echo "== ufw"; (ufw status verbose 2>&1 || echo "ufw not available") | head -40
+          echo "== iptables INPUT (first 40)"; iptables -S INPUT 2>/dev/null | head -40
+          echo "== local http://127.0.0.1 Host: grepawk.com"; curl -s -m 5 -o /dev/null -w '%{http_code} %{redirect_url}\n' -H 'Host: grepawk.com' http://127.0.0.1/ || echo "curl exit $?"
+          echo "== DO droplet metadata (id/region only)"; curl -s -m 3 http://169.254.169.254/metadata/v1/id; echo; curl -s -m 3 http://169.254.169.254/metadata/v1/region; echo
+          echo "== server blocks: file:line listen/server_name/root/include (all sites)"
+          grep -RnE '^\s*(listen|server_name|root|include|return 301|ssl_certificate )' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null
+          echo "== http-level gzip/brotli settings (nginx.conf)"; grep -nE 'gzip|brotli|http2|server_tokens' /etc/nginx/nginx.conf
+          T="$(grep -RlF "root $APP_DIR/dist;" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -1)"
+          echo "== FULL finalcut site file: $T -> $(readlink -f "$T")"
+          cat -n "$(readlink -f "$T")"
+          echo "== mysql"; systemctl is-active mysql mariadb 2>/dev/null; (mysql -N -e 'SHOW DATABASES' 2>&1 | head -20)
+          for db in photo_recipes finalcut; do echo "-- $db tables"; mysql -N -e "SHOW TABLES" "$db" 2>&1 | head -40; done
+          echo "-- telemetry_events schema"; mysql -N -e 'SHOW CREATE TABLE telemetry_events\G' photo_recipes 2>&1 | head -40
+          echo "== finalcut .env MYSQL key names"; grep -oE '^[A-Z_]*(MYSQL|DB_|DATABASE)[A-Z_]*=' "$APP_DIR/.env" 2>/dev/null
+          REMOTE
+          { printf "APP_DIR='%s'\n" "$APP_DIR"; cat /tmp/nginx-remote.sh; } > /tmp/nfull.sh
+          ssh -o BatchMode=yes "$TARGET" 'bash -s' < /tmp/nfull.sh || true
