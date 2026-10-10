@@ -24,4 +24,8 @@ expect "/v2/ffmpeg-core/mt/$CORE_VERSION/ffmpeg-core.wasm" Content-Type applicat
 expect "/v2/ffmpeg-core/st/$CORE_VERSION/ffmpeg-core.wasm" Content-Type application/wasm
 code="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$BASE/v2")"
 [[ "$code" == 301* && "$code" == */v2/ ]] && echo "ok   /v2 -> /v2/" || { echo "FAIL /v2 redirect: $code"; fail=1; }
+code="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/v2/vendor/ffmpeg/source/SHA256SUMS")"
+[[ "$code" == 200 ]] && echo "ok   /v2/vendor/ffmpeg/source/SHA256SUMS 200" || { echo "FAIL source SHA256SUMS: $code"; fail=1; }
+ct="$(hdr /v2/vendor/ffmpeg/source/SHA256SUMS Content-Type || true)"
+[[ "$ct" == text/plain* ]] && echo "ok   SHA256SUMS Content-Type: $ct" || { echo "FAIL SHA256SUMS Content-Type: $ct"; fail=1; }
 exit $fail

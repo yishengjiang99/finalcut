@@ -3,7 +3,7 @@
 ```bash
 npm ci
 npx playwright install --with-deps chromium   # once
-npm run build:v2                              # copies self-hosted cores + builds dist/v2
+npm run build:v2                              # copies cores, fetches + verifies GPL source (~104 MB, cached in .cache/), builds dist/v2
 npm run test:e2e:v2                           # mt (COOP/COEP) + st (no isolation) projects
 E2E_BENCH=1 npm run test:e2e:v2 -- v2-bench   # optional: 30 s 1080p benchmark (needs system ffmpeg)
 ```
@@ -26,3 +26,10 @@ npm run test:contract:ios -- --base http://localhost:3001
 node tests/contract/ios-endpoints.mjs --base https://grepawk.com --record before.json   # before deploy
 node tests/contract/ios-endpoints.mjs --base https://grepawk.com --compare before.json  # after deploy
 ```
+
+GPL Corresponding Source (`/v2/vendor/ffmpeg/source/`): `scripts/fetch-ffmpeg-source.mjs` downloads every
+archive in `vendor/ffmpeg-source.lock.json`, verifies the pinned SHA-256/size (plus the git commit id embedded in
+GitHub tarballs and SDL2's sha512 from Emscripten), and fails the build on any mismatch. `npm run source:verify`
+re-checks the cache offline. `v2-licenses.pw.mjs` asserts every same-origin link on `/legal/licenses.html`
+and the source index resolves, `SHA256SUMS` equals the lock, and no written-offer text remains. Needs `tar`
+(xz), `unzip` and `git` on PATH.

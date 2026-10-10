@@ -24,3 +24,5 @@ server/ffmpeg/ffmpeg-cache.json
 v2/public/ffmpeg-core/
 test-results/
 playwright-report/
+.cache/ffmpeg-source/
+v2/public/vendor/

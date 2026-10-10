@@ -27,13 +27,18 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Unit tests (/v2 helpers)
-        run: npx vitest --run src/test/wasm-v2.test.js
+      - name: Unit tests (/v2 helpers + source lock)
+        run: npx vitest --run src/test/wasm-v2.test.js src/test/ffmpeg-source-lock.test.js
+      - name: Cache GPL source archives (keyed on pinned checksums)
+        uses: actions/cache@v4
+        with:
+          path: .cache/ffmpeg-source
+          key: ffmpeg-source-${{ hashFiles('vendor/ffmpeg-source.lock.json') }}
       - name: ffprobe for output verification
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Build /v2 (copies self-hosted cores, verifies pinned versions)
+      - name: Build /v2 (copies cores, fetches + verifies GPL source archives; fails on checksum mismatch)
         run: npm run build:v2
       - name: Playwright e2e (mt with COOP/COEP, st without)
         run: npm run test:e2e:v2
@@ -109,6 +114,11 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - name: Cache GPL source archives (keyed on pinned checksums)
+        uses: actions/cache@v4
+        with:
+          path: .cache/ffmpeg-source
+          key: ffmpeg-source-${{ hashFiles('vendor/ffmpeg-source.lock.json') }}
       - name: Build current editor + /v2
         run: npm run build && npm run build:v2
       - name: Render test configs (baseline without include, candidate with include)

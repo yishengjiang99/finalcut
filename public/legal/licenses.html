@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FinalCap open-source licenses</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
     h1 { font-size: 1.5rem; } h2 { font-size: 1.1rem; margin-top: 1.5rem; }
     .meta { color: #555; font-size: 0.9rem; }
-    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
     th, td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; vertical-align: top; }
-    code { font-size: 0.85em; }
+    code { font-size: 0.8em; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -18,59 +18,83 @@
   <p class="meta">Last updated: 2026-10-09 · Applies to the FinalCap web editor at grepawk.com/v2 (preview)</p>
 
   <p>The FinalCap web editor at <a href="/v2/">/v2</a> edits your videos inside your browser using FFmpeg compiled to WebAssembly
-  (ffmpeg.wasm). The FFmpeg core we send to your browser is built with <code>--enable-gpl</code> and includes libx264 and libx265,
-  so that core is distributed under the <strong>GNU General Public License, version 2 or later</strong>. We serve these files
-  unmodified from the published npm packages listed below. You can get the complete corresponding source code from the links
-  in this table: each one points to the exact release tag or commit used for that build.</p>
+  (ffmpeg.wasm). The FFmpeg core we send to your browser (<code>@ffmpeg/core</code> and <code>@ffmpeg/core-mt</code> 0.12.10, served
+  unmodified from <code>/v2/ffmpeg-core/</code>) is built with <code>--enable-gpl</code> and includes libx264 and libx265, so it is
+  distributed under the <strong>GNU General Public License, version 2 or later</strong>.</p>
 
-  <h2>FFmpeg in your browser</h2>
+  <h2 id="source">Source code</h2>
+  <p>The complete corresponding source code for that core is available <strong>from this website, next to the WebAssembly files</strong>,
+  at <a href="/v2/vendor/ffmpeg/source/">/v2/vendor/ffmpeg/source/</a>. It includes:</p>
+  <ul>
+    <li>the ffmpeg.wasm build recipe at the exact release commit of core 0.12.10 (<code>ffmpegwasm/ffmpeg.wasm@71aa99d3</code>, tag <code>v12.15</code>:
+      Dockerfile, Makefile, <code>build/*.sh</code>, bindings and patched fftools), and <a href="/v2/vendor/ffmpeg/source/BUILD.txt">build instructions</a>;</li>
+    <li>the exact source archive of FFmpeg 5.1.4, x264 and every other library compiled into the core, at the tag or commit the build uses;</li>
+    <li><a href="/v2/vendor/ffmpeg/source/SHA256SUMS">SHA-256 checksums</a> for every archive, and a machine-readable <a href="/v2/vendor/ffmpeg/source/versions.json">version list</a>;</li>
+    <li>the license texts shipped in each source archive (linked in the table below).</li>
+  </ul>
+
+  <h2>Components in the FFmpeg WebAssembly core</h2>
   <table>
-    <tr><th>Component</th><th>Version we serve</th><th>License</th><th>Source</th></tr>
-    <tr><td>FFmpeg (libavcodec, libavformat, libavfilter, …)</td><td>n5.1.4 (inside the ffmpeg.wasm core)</td><td>LGPL-2.1-or-later; the combined build is GPL-2.0-or-later because of <code>--enable-gpl</code></td>
-      <td><a href="https://github.com/FFmpeg/FFmpeg/tree/n5.1.4">FFmpeg n5.1.4 tag</a> · <a href="https://ffmpeg.org/releases/ffmpeg-5.1.4.tar.xz">ffmpeg-5.1.4.tar.xz</a> · <a href="https://ffmpeg.org/legal.html">FFmpeg legal</a></td></tr>
-    <tr><td>ffmpeg.wasm core, single-thread (<code>@ffmpeg/core</code>)</td><td>0.12.10</td><td>GPL-2.0-or-later</td>
-      <td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10">ffmpeg.wasm v0.12.10 tag</a> (Dockerfile + build scripts) · <a href="https://www.npmjs.com/package/@ffmpeg/core/v/0.12.10">npm</a></td></tr>
-    <tr><td>ffmpeg.wasm core, multithreaded (<code>@ffmpeg/core-mt</code>)</td><td>0.12.10</td><td>GPL-2.0-or-later</td>
-      <td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10">ffmpeg.wasm v0.12.10 tag</a> · <a href="https://www.npmjs.com/package/@ffmpeg/core-mt/v/0.12.10">npm</a></td></tr>
-    <tr><td>ffmpeg.wasm JavaScript API (<code>@ffmpeg/ffmpeg</code>)</td><td>0.12.15</td><td>MIT</td>
-      <td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v12.15">ffmpeg.wasm v12.15 tag</a> · <a href="https://www.npmjs.com/package/@ffmpeg/ffmpeg/v/0.12.15">npm</a></td></tr>
-    <tr><td>ffmpeg.wasm utilities (<code>@ffmpeg/util</code>)</td><td>0.12.2</td><td>MIT</td>
-      <td><a href="https://www.npmjs.com/package/@ffmpeg/util/v/0.12.2">npm</a></td></tr>
-    <tr><td>x264 (H.264 encoder)</td><td>ffmpegwasm/x264 branch <code>4-cores</code>, commit <code>33cac6b7</code> (X264_BUILD 164)</td><td>GPL-2.0-or-later</td>
-      <td><a href="https://github.com/ffmpegwasm/x264/tree/33cac6b77d5b9259c552156013a817ab23119612">x264 source at 33cac6b7</a> · upstream <a href="https://www.videolan.org/developers/x264.html">VideoLAN x264</a></td></tr>
+    <tr><th>Component</th><th>Version / ref</th><th>License</th><th>Source archive (this site)</th><th>License texts</th><th>Upstream</th></tr>
+    <tr><td>ffmpeg.wasm (core build scripts, bindings, patched fftools)</td><td>0.12.10<br><small><code>71aa99d37c02a7b4c435275ca9ef50e612f6efa1</code> @ <code>71aa99d37c02</code></small></td><td>MIT (repo); built core GPL-2.0-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/ffmpeg.wasm-71aa99d3.tar.gz">ffmpeg.wasm-71aa99d3.tar.gz</a> (1.3 MB)<br><small>SHA-256 <code>53c5842f160cece0e39345876f9483b56aa84b966637ff6f624353a0fa884219</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg.wasm/LICENSE.txt">LICENSE.txt</a></td><td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1">ffmpegwasm/ffmpeg.wasm</a></td></tr>
+    <tr><td>FFmpeg</td><td>5.1.4<br><small><code>n5.1.4</code> @ <code>4729204c17f7</code></small></td><td>LGPL-2.1-or-later; GPL-2.0-or-later as configured (--enable-gpl)</td>
+      <td><a href="/v2/vendor/ffmpeg/source/ffmpeg-5.1.4.tar.xz">ffmpeg-5.1.4.tar.xz</a> (10.0 MB)<br><small>SHA-256 <code>54383bb890a1cd62580e9f1eaa8081203196ed53bde9e98fb6b0004423f49063</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/COPYING.GPLv2.txt">COPYING.GPLv2.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/COPYING.GPLv3.txt">COPYING.GPLv3.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/COPYING.LGPLv2.1.txt">COPYING.LGPLv2.1.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/COPYING.LGPLv3.txt">COPYING.LGPLv3.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/LICENSE.md.txt">LICENSE.md.txt</a></td><td><a href="https://github.com/FFmpeg/FFmpeg/tree/4729204c17f756e186d622060088371d10b34f7e">FFmpeg/FFmpeg</a></td></tr>
+    <tr><td>FFmpeg 5.1.4 release signature</td><td>5.1.4<br><small><code>n5.1.4</code></small></td><td>n/a</td>
+      <td><a href="/v2/vendor/ffmpeg/source/ffmpeg-5.1.4.tar.xz.asc">ffmpeg-5.1.4.tar.xz.asc</a> (0.0 MB)<br><small>SHA-256 <code>b7ce093a0298dc0908810c629d12bb3a9f7e8818038efb616dfd6aac8870048b</code></small></td><td></td><td><a href="https://github.com/FFmpeg/FFmpeg">FFmpeg/FFmpeg</a></td></tr>
+    <tr><td>x264</td><td>X264_BUILD 164 (branch 4-cores)<br><small><code>4-cores</code> @ <code>33cac6b77d5b</code></small></td><td>GPL-2.0-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/x264-33cac6b7.tar.gz">x264-33cac6b7.tar.gz</a> (0.9 MB)<br><small>SHA-256 <code>75434a5a1f2d7d4314821c6054dd300731d69e2fa73314ba4a5ec9df38d4ec80</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/x264/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/ffmpegwasm/x264/tree/33cac6b77d5b9259c552156013a817ab23119612">ffmpegwasm/x264</a></td></tr>
+    <tr><td>x265</td><td>3.4<br><small><code>3.4</code> @ <code>2bb5520e9596</code></small></td><td>GPL-2.0-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/x265-3.4-2bb5520e.tar.gz">x265-3.4-2bb5520e.tar.gz</a> (1.5 MB)<br><small>SHA-256 <code>e5254828f5db7bc375d385e31247861d25facee87b43fa2d08ea3ab5569672ab</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/x265/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/ffmpegwasm/x265/tree/2bb5520e9596f361bf0ed81b3b8da0d7fd999069">ffmpegwasm/x265</a></td></tr>
+    <tr><td>libvpx</td><td>1.13.1<br><small><code>v1.13.1</code> @ <code>10b9492dcf05</code></small></td><td>BSD-3-Clause (+ patent grant)</td>
+      <td><a href="/v2/vendor/ffmpeg/source/libvpx-1.13.1-10b9492d.tar.gz">libvpx-1.13.1-10b9492d.tar.gz</a> (5.5 MB)<br><small>SHA-256 <code>12181ed27342415e8b01bf09abfbf1dfa27a6a32f302fb78b48bd70efe50f702</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/libvpx/LICENSE.txt">LICENSE.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/libvpx/PATENTS.txt">PATENTS.txt</a></td><td><a href="https://github.com/ffmpegwasm/libvpx/tree/10b9492dcf05b652e2e4b370e205bd605d421972">ffmpegwasm/libvpx</a></td></tr>
+    <tr><td>LAME</td><td>3.100 (branch master)<br><small><code>master</code> @ <code>2badea1974ae</code></small></td><td>LGPL-2.0-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/lame-2badea19.tar.gz">lame-2badea19.tar.gz</a> (1.5 MB)<br><small>SHA-256 <code>0d97ba0776988f5730e0ce1fa936e7c5d6836c757993ba55073513fe89cf410a</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/lame/COPYING.txt">COPYING.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/lame/LICENSE.txt">LICENSE.txt</a></td><td><a href="https://github.com/ffmpegwasm/lame/tree/2badea1974ae36cb8312afe99cff1e6b3b5decee">ffmpegwasm/lame</a></td></tr>
+    <tr><td>libogg</td><td>1.3.4<br><small><code>v1.3.4</code> @ <code>bada45718453</code></small></td><td>BSD-3-Clause</td>
+      <td><a href="/v2/vendor/ffmpeg/source/libogg-1.3.4-bada4571.tar.gz">libogg-1.3.4-bada4571.tar.gz</a> (0.3 MB)<br><small>SHA-256 <code>4d61f8dfa248276c42bd5404b1a87ae9d8a0d58791f55e20018c7b39b38d8823</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/libogg/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/ffmpegwasm/Ogg/tree/bada45718453ac27b56773ae663f7e65112f6a6e">ffmpegwasm/Ogg</a></td></tr>
+    <tr><td>libtheora</td><td>1.1.1<br><small><code>v1.1.1</code> @ <code>7ffd8b2ecfc2</code></small></td><td>BSD-3-Clause</td>
+      <td><a href="/v2/vendor/ffmpeg/source/libtheora-1.1.1-7ffd8b2e.tar.gz">libtheora-1.1.1-7ffd8b2e.tar.gz</a> (1.1 MB)<br><small>SHA-256 <code>c38e6a3fb19566a44dcb283323c48311dd484f1416f3f34676d3e7fd252dfbc5</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/libtheora/COPYING.txt">COPYING.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/libtheora/LICENSE.txt">LICENSE.txt</a></td><td><a href="https://github.com/ffmpegwasm/theora/tree/7ffd8b2ecfc2d93ae5e16028e7528e609266bfbf">ffmpegwasm/theora</a></td></tr>
+    <tr><td>Opus</td><td>1.3.1<br><small><code>v1.3.1</code> @ <code>e85ed7726db5</code></small></td><td>BSD-3-Clause</td>
+      <td><a href="/v2/vendor/ffmpeg/source/opus-1.3.1-e85ed772.tar.gz">opus-1.3.1-e85ed772.tar.gz</a> (0.8 MB)<br><small>SHA-256 <code>c6d574b17d70b8c289d997a8ac81314cf1fd8c52237c421b2ee34e69cea85bf8</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/opus/COPYING.txt">COPYING.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/opus/LICENSE_PLEASE_READ.txt">LICENSE_PLEASE_READ.txt</a></td><td><a href="https://github.com/ffmpegwasm/opus/tree/e85ed7726db5d677c9c0677298ea0cb9c65bdd23">ffmpegwasm/opus</a></td></tr>
+    <tr><td>libvorbis</td><td>1.3.3<br><small><code>v1.3.3</code> @ <code>779816404319</code></small></td><td>BSD-3-Clause</td>
+      <td><a href="/v2/vendor/ffmpeg/source/libvorbis-1.3.3-77981640.tar.gz">libvorbis-1.3.3-77981640.tar.gz</a> (1.3 MB)<br><small>SHA-256 <code>69b87cafe2815d02609886a63b9d4c0b7461e1e2f6ecf3960ede04053da6e96a</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/libvorbis/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/ffmpegwasm/vorbis/tree/7798164043197d7e33f02de4353ce2aa5b248225">ffmpegwasm/vorbis</a></td></tr>
+    <tr><td>zlib</td><td>1.2.11<br><small><code>v1.2.11</code> @ <code>cacf7f1d4e3d</code></small></td><td>Zlib</td>
+      <td><a href="/v2/vendor/ffmpeg/source/zlib-1.2.11-cacf7f1d.tar.gz">zlib-1.2.11-cacf7f1d.tar.gz</a> (0.6 MB)<br><small>SHA-256 <code>6d4d6640ca3121620995ee255945161821218752b551a1a180f4215f7d124d45</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/zlib/README.txt">README.txt</a></td><td><a href="https://github.com/ffmpegwasm/zlib/tree/cacf7f1d4e3d44d871b605da3b647f07d718623f">ffmpegwasm/zlib</a></td></tr>
+    <tr><td>libwebp</td><td>1.3.2<br><small><code>v1.3.2</code> @ <code>ca332209cb55</code></small></td><td>BSD-3-Clause (+ patent grant)</td>
+      <td><a href="/v2/vendor/ffmpeg/source/libwebp-1.3.2-ca332209.tar.gz">libwebp-1.3.2-ca332209.tar.gz</a> (3.7 MB)<br><small>SHA-256 <code>1676107dc385f9bf6cb4c2b94d4a9359d1fd95ab6309cb587191a742df292fe2</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/libwebp/COPYING.txt">COPYING.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/libwebp/PATENTS.txt">PATENTS.txt</a></td><td><a href="https://github.com/ffmpegwasm/libwebp/tree/ca332209cb5567c9b249c86788cb2dbf8847e760">ffmpegwasm/libwebp</a></td></tr>
+    <tr><td>FreeType</td><td>2.10.4<br><small><code>VER-2-10-4</code> @ <code>6a2b3e4007e7</code></small></td><td>FTL OR GPL-2.0-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/freetype-2.10.4-6a2b3e40.tar.gz">freetype-2.10.4-6a2b3e40.tar.gz</a> (2.1 MB)<br><small>SHA-256 <code>09acceb42508c65b7b744cc2ad01d7548868ca57babc39f7683ec3c0f7541e8c</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/freetype/docs_FTL.TXT">docs_FTL.TXT</a><br><a href="/v2/vendor/ffmpeg/source/licenses/freetype/docs_GPLv2.TXT">docs_GPLv2.TXT</a><br><a href="/v2/vendor/ffmpeg/source/licenses/freetype/docs_LICENSE.TXT">docs_LICENSE.TXT</a></td><td><a href="https://github.com/ffmpegwasm/freetype2/tree/6a2b3e4007e794bfc6c91030d0ed987f925164a8">ffmpegwasm/freetype2</a></td></tr>
+    <tr><td>GNU FriBidi</td><td>1.0.9<br><small><code>v1.0.9</code> @ <code>f9e8e71a6fbf</code></small></td><td>LGPL-2.1-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/fribidi-1.0.9-f9e8e71a.tar.gz">fribidi-1.0.9-f9e8e71a.tar.gz</a> (2.1 MB)<br><small>SHA-256 <code>65ff6fb1a478c4d90ae16825da8c97b8a63e2674f8a2d6dae8800f89089640ba</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/fribidi/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/fribidi/fribidi/tree/f9e8e71a6fbf4a4619481284c9f484d10e559995">fribidi/fribidi</a></td></tr>
+    <tr><td>HarfBuzz</td><td>5.2.0<br><small><code>5.2.0</code> @ <code>4a1d891c6317</code></small></td><td>MIT-Modern-Variant (&quot;Old MIT&quot;)</td>
+      <td><a href="/v2/vendor/ffmpeg/source/harfbuzz-5.2.0-4a1d891c.tar.gz">harfbuzz-5.2.0-4a1d891c.tar.gz</a> (33.0 MB)<br><small>SHA-256 <code>69ba7c7a42643a3654781242016dd09245cab7353fc2a02cecb710e479c9a881</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/harfbuzz/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/harfbuzz/harfbuzz/tree/4a1d891c6317d2c83e5f3c2607ec5f5ccedffcde">harfbuzz/harfbuzz</a></td></tr>
+    <tr><td>libass</td><td>0.15.0<br><small><code>0.15.0</code> @ <code>d149636f502f</code></small></td><td>ISC</td>
+      <td><a href="/v2/vendor/ffmpeg/source/libass-0.15.0-d149636f.tar.gz">libass-0.15.0-d149636f.tar.gz</a> (0.2 MB)<br><small>SHA-256 <code>5cfe23562fa623a3b209d156ad469aeb2e31f69bf6b256ea737d87d9ed89301d</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/libass/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/libass/libass/tree/d149636f502f5774ae1a8fb4c554b122674393b2">libass/libass</a></td></tr>
+    <tr><td>zimg</td><td>3.0.5<br><small><code>release-3.0.5</code> @ <code>e5b0de6bebbc</code></small></td><td>WTFPL</td>
+      <td><a href="/v2/vendor/ffmpeg/source/zimg-3.0.5-e5b0de6b.tar.gz">zimg-3.0.5-e5b0de6b.tar.gz</a> (0.3 MB)<br><small>SHA-256 <code>3ab062eff30067799997bc3e911c0108a5b8cbcd6e0ef14053f17ff0ecd0add8</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/zimg/COPYING.txt">COPYING.txt</a></td><td><a href="https://github.com/sekrit-twc/zimg/tree/e5b0de6bebbcbc66732ed5afaafef6b2c7dfef87">sekrit-twc/zimg</a></td></tr>
+    <tr><td>SDL2 (Emscripten port)</td><td>2.24.2<br><small><code>release-2.24.2</code></small></td><td>Zlib</td>
+      <td><a href="/v2/vendor/ffmpeg/source/SDL-release-2.24.2.zip">SDL-release-2.24.2.zip</a> (9.0 MB)<br><small>SHA-256 <code>dc33dfdb24c28b757f32345ea8eca67a6030c9dcb084ae8c78bc27a21e737ada</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/sdl2/LICENSE.txt">LICENSE.txt</a></td><td><a href="https://github.com/libsdl-org/SDL">libsdl-org/SDL</a></td></tr>
+    <tr><td>Emscripten</td><td>3.1.40<br><small><code>3.1.40</code> @ <code>5c27e79dd0a9</code></small></td><td>MIT OR NCSA (emscripten); musl MIT; LLVM libs Apache-2.0 WITH LLVM-exception</td>
+      <td><a href="/v2/vendor/ffmpeg/source/emscripten-3.1.40-5c27e79d.tar.gz">emscripten-3.1.40-5c27e79d.tar.gz</a> (28.8 MB)<br><small>SHA-256 <code>3eb9ea2d69052a491296eb466dbcda5fbc1c0fed4e475c58545a83558fb47d10</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/emscripten/LICENSE.txt">LICENSE.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/emscripten/system_lib_compiler-rt_LICENSE.TXT">system_lib_compiler-rt_LICENSE.TXT</a><br><a href="/v2/vendor/ffmpeg/source/licenses/emscripten/system_lib_libc_musl_COPYRIGHT.txt">system_lib_libc_musl_COPYRIGHT.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/emscripten/system_lib_libcxx_LICENSE.TXT">system_lib_libcxx_LICENSE.TXT</a><br><a href="/v2/vendor/ffmpeg/source/licenses/emscripten/system_lib_libcxxabi_LICENSE.TXT">system_lib_libcxxabi_LICENSE.TXT</a><br><a href="/v2/vendor/ffmpeg/source/licenses/emscripten/system_lib_libunwind_LICENSE.TXT">system_lib_libunwind_LICENSE.TXT</a></td><td><a href="https://github.com/emscripten-core/emscripten/tree/5c27e79dd0a9c4e27ef2326841698cdd4f6b5784">emscripten-core/emscripten</a></td></tr>
   </table>
+  <p class="meta">Versions come from the ffmpeg.wasm <a href="https://github.com/ffmpegwasm/ffmpeg.wasm/blob/71aa99d37c02a7b4c435275ca9ef50e612f6efa1/Dockerfile">Dockerfile</a>
+  and <a href="https://github.com/ffmpegwasm/ffmpeg.wasm/blob/71aa99d37c02a7b4c435275ca9ef50e612f6efa1/build/ffmpeg-wasm.sh">build/ffmpeg-wasm.sh</a>
+  at the release commit. The FFmpeg tarball is the official ffmpeg.org release of tag <code>n5.1.4</code>
+  (<a href="/v2/vendor/ffmpeg/source/ffmpeg-5.1.4.tar.xz.asc">PGP signature</a>).</p>
 
-  <h2>Other libraries compiled into the same core</h2>
-  <p>Versions are the ones pinned in the ffmpeg.wasm v0.12.10 <a href="https://github.com/ffmpegwasm/ffmpeg.wasm/blob/v0.12.10/Dockerfile">Dockerfile</a>.</p>
+  <h2>JavaScript wrapper</h2>
   <table>
-    <tr><th>Library</th><th>Version / tag</th><th>License</th><th>Source</th></tr>
-    <tr><td>x265 (HEVC encoder)</td><td>3.4</td><td>GPL-2.0-or-later</td><td><a href="https://github.com/ffmpegwasm/x265/tree/3.4">ffmpegwasm/x265@3.4</a></td></tr>
-    <tr><td>libvpx (VP8/VP9)</td><td>v1.13.1</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/libvpx/tree/v1.13.1">ffmpegwasm/libvpx@v1.13.1</a></td></tr>
-    <tr><td>LAME (MP3)</td><td>master (as of the v0.12.10 build)</td><td>LGPL-2.0-or-later</td><td><a href="https://github.com/ffmpegwasm/lame">ffmpegwasm/lame</a></td></tr>
-    <tr><td>libogg</td><td>v1.3.4</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/Ogg/tree/v1.3.4">ffmpegwasm/Ogg@v1.3.4</a></td></tr>
-    <tr><td>libtheora</td><td>v1.1.1</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/theora/tree/v1.1.1">ffmpegwasm/theora@v1.1.1</a></td></tr>
-    <tr><td>libvorbis</td><td>v1.3.3</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/vorbis/tree/v1.3.3">ffmpegwasm/vorbis@v1.3.3</a></td></tr>
-    <tr><td>Opus</td><td>v1.3.1</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/opus/tree/v1.3.1">ffmpegwasm/opus@v1.3.1</a></td></tr>
-    <tr><td>zlib</td><td>v1.2.11</td><td>Zlib</td><td><a href="https://github.com/ffmpegwasm/zlib/tree/v1.2.11">ffmpegwasm/zlib@v1.2.11</a></td></tr>
-    <tr><td>libwebp</td><td>v1.3.2</td><td>BSD-3-Clause</td><td><a href="https://github.com/ffmpegwasm/libwebp/tree/v1.3.2">ffmpegwasm/libwebp@v1.3.2</a></td></tr>
-    <tr><td>FreeType</td><td>VER-2-10-4</td><td>FTL or GPL-2.0-or-later</td><td><a href="https://github.com/ffmpegwasm/freetype2/tree/VER-2-10-4">ffmpegwasm/freetype2@VER-2-10-4</a></td></tr>
-    <tr><td>GNU FriBidi</td><td>v1.0.9</td><td>LGPL-2.1-or-later</td><td><a href="https://github.com/fribidi/fribidi/tree/v1.0.9">fribidi@v1.0.9</a></td></tr>
-    <tr><td>HarfBuzz</td><td>5.2.0</td><td>MIT ("Old MIT")</td><td><a href="https://github.com/harfbuzz/harfbuzz/tree/5.2.0">harfbuzz@5.2.0</a></td></tr>
-    <tr><td>libass</td><td>0.15.0</td><td>ISC</td><td><a href="https://github.com/libass/libass/tree/0.15.0">libass@0.15.0</a></td></tr>
-    <tr><td>zimg</td><td>release-3.0.5</td><td>WTFPL</td><td><a href="https://github.com/sekrit-twc/zimg/tree/release-3.0.5">zimg@release-3.0.5</a></td></tr>
+    <tr><th>Component</th><th>Version</th><th>License</th><th>Source</th></tr>
+    <tr><td><code>@ffmpeg/ffmpeg</code></td><td>0.12.15</td><td>MIT</td><td><a href="https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v12.15">ffmpegwasm/ffmpeg.wasm tag v12.15</a> · <a href="https://www.npmjs.com/package/@ffmpeg/ffmpeg/v/0.12.15">npm</a></td></tr>
+    <tr><td><code>@ffmpeg/util</code></td><td>0.12.2</td><td>MIT</td><td><a href="https://www.npmjs.com/package/@ffmpeg/util/v/0.12.2">npm</a></td></tr>
   </table>
 
   <h2>License texts</h2>
   <ul>
-    <li><a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.html">GNU General Public License v2.0</a></li>
-    <li><a href="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html">GNU Lesser General Public License v2.1</a></li>
-    <li><a href="https://opensource.org/license/mit">MIT License</a></li>
+    <li>GNU General Public License v2.0 (governs the combined core, GPL-2.0-or-later): <a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/COPYING.GPLv2.txt">as shipped with FFmpeg</a> · <a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.html">gnu.org</a></li>
+    <li>GNU Lesser General Public License v2.1: <a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg/COPYING.LGPLv2.1.txt">as shipped with FFmpeg</a></li>
+    <li>Each library's own license file: see the "License texts" column above.</li>
   </ul>
-
-  <h2>Written offer</h2>
-  <p>If you cannot get the source code from the links above, email <a href="mailto:yisheng.jiang@gmail.com">yisheng.jiang@gmail.com</a> (the contact on our <a href="/legal/support.html">support page</a>) and,
-  for at least three years after we last serve a given version, we will provide the complete corresponding source code
-  for the GPL components we distribute, for no more than the cost of physically performing the distribution.</p>
   <p><a href="/v2/">Back to the editor</a> · <a href="/legal/privacy.html">Privacy</a></p>
 </body>
 </html>

@@ -19,7 +19,10 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.wasm': 'application/wasm', '.json': 'application/json; charset=utf-8', '.map': 'application/json; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8', '.gz': 'application/gzip', '.xz': 'application/x-xz', '.zip': 'application/zip',
+  '.asc': 'text/plain; charset=utf-8',
 };
+const mimeFor = (file) => (path.basename(file) === 'SHA256SUMS' ? 'text/plain; charset=utf-8' : MIME[path.extname(file)] || 'application/octet-stream');
 const ISOLATION = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -34,7 +37,7 @@ function send(res, status, body, headers = {}) {
 function serveFile(req, res, file, extraHeaders) {
   const st = statSync(file);
   res.writeHead(200, {
-    'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+    'Content-Type': mimeFor(file),
     'Content-Length': st.size,
     'X-Content-Type-Options': 'nosniff',
     // Versioned core files are immutable (same as the nginx snippet); everything else revalidates.

@@ -8,8 +8,8 @@
     "dev:client": "npx vite .",
     "dev:server": "nodemon server.js",
     "build": "NODE_ENV=production vite build",
-    "build:v2": "node scripts/copy-ffmpeg-core.mjs && vite build -c vite.v2.config.js",
-    "dev:v2": "node scripts/copy-ffmpeg-core.mjs && vite -c vite.v2.config.js",
+    "build:v2": "node scripts/copy-ffmpeg-core.mjs && node scripts/fetch-ffmpeg-source.mjs && vite build -c vite.v2.config.js",
+    "dev:v2": "node scripts/copy-ffmpeg-core.mjs && node scripts/fetch-ffmpeg-source.mjs && vite -c vite.v2.config.js",
     "preview": "vite preview",
     "test": "vitest --run",
     "server": "node server.js",
@@ -22,7 +22,8 @@
     "ios:simulator": "./scripts/run-ios-simulator.sh",
     "schema:tools": "node scripts/generate-tools-schema.js",
     "test:e2e:v2": "playwright test -c tests/e2e/playwright.config.mjs",
-    "test:contract:ios": "node tests/contract/ios-endpoints.mjs"
+    "test:contract:ios": "node tests/contract/ios-endpoints.mjs",
+    "source:verify": "node scripts/fetch-ffmpeg-source.mjs --verify"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
