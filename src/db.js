@@ -114,17 +114,6 @@ export async function initDatabase() {
       )
     `);
 
-    // Create user_lessons table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_lessons (
-        id BIGINT PRIMARY KEY AUTO_INCREMENT,
-        user_id INT NOT NULL,
-        lesson VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX (user_id, created_at)
-      )
-    `);
-
     // Non-blocking audit log for chat text sent to and returned by the model.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_interactions (
@@ -397,25 +386,6 @@ export async function revokeApiToken(token) {
   return result.affectedRows > 0;
 }
 
-export async function saveLesson(userId, lesson) {
-  if (!lesson) return;
-  try {
-    const pool = getPool();
-    // De-dupe: skip if same as most recent lesson for this user
-    const [recent] = await pool.query(
-      'SELECT lesson FROM user_lessons WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-      [userId]
-    );
-    if (recent.length > 0 && recent[0].lesson === lesson) return;
-    await pool.query(
-      'INSERT INTO user_lessons (user_id, lesson) VALUES (?, ?)',
-      [userId, lesson]
-    );
-  } catch (err) {
-    console.error('Failed to save lesson:', err.message);
-  }
-}
-
 function normalizeChatContent(content) {
   if (typeof content === 'string') {
     return content.slice(0, CHAT_INTERACTION_MAX_TEXT_LENGTH);
@@ -498,7 +468,6 @@ export default {
   createApiToken,
   findUserByApiToken,
   revokeApiToken,
-  saveLesson,
   enqueueChatInteraction,
   flushChatInteractionQueue,
 };
