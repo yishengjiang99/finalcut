@@ -159,7 +159,7 @@ export const jobStatusText = (job) => (
   job.status === 'done' && !job.producedFile ? 'Done — no edit was made' : JOB_STATUS_TEXT[job.status]
 );
 
-// What the dock shows while a tool runs: lookups are not edits, so they are not "processing".
+// What the inline status shows while a tool runs: lookups are not edits, so they are not "processing".
 export const toolStageText = (toolName, args) => {
   if (toolName === 'get_video_dimensions') return 'Reading video details…';
   if (toolName === 'ffmpeg_cli' && args?.action !== 'run') return 'Working out the ffmpeg command…';
@@ -224,7 +224,7 @@ export default function App() {
   const [view, setView] = useState('editor'); // 'editor' | 'captions' | 'library'
   const [health, setHealth] = useState(null); // null while checking, then { ok, ffmpegVersion }
   const [jobs, setJobs] = useState([]); // One per sent prompt, newest first
-  const [dockOpen, setDockOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
   const [compareIds, setCompareIds] = useState(() => new Set());
   const [toastText, setToastText] = useState('');
   const toastTimerRef = useRef(null);
@@ -261,7 +261,8 @@ export default function App() {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    const cap = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches ? 120 : 200;
+    el.style.height = Math.min(el.scrollHeight, cap) + 'px';
   }, [chatInput, showLanding, view]);
 
   // Fade landing sections in as they scroll into view
@@ -628,7 +629,7 @@ export default function App() {
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
 
-    // Track this prompt as a job in the processing dock; the controller lets it be cancelled.
+    // Track this prompt as a job in the inline processing status; the controller lets it be cancelled.
     const controller = new AbortController();
     const job = { id: jobIdCounterRef.current++, prompt: text, status: 'running', startedAt: Date.now(), endedAt: null, resultMessageId: null, producedFile: false };
     currentJobRef.current = { id: job.id, controller };
@@ -636,7 +637,7 @@ export default function App() {
     setToolStage(null);
     setFetchAbortSignal(controller.signal);
     setJobs(prev => [job, ...prev]);
-    setDockOpen(true);
+    setStatusOpen(true);
 
     let status;
     try {
@@ -1115,47 +1116,6 @@ export default function App() {
           ))}
           </div>
 
-          {/* Processing dock: one entry per sent prompt */}
-          <div className={`dock${dockOpen ? '' : ' collapsed'}`}>
-            <button type="button" className="dock-head" onClick={() => setDockOpen(open => !open)}>
-              <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
-              <span className="title">Processing</span>
-              <span className="count">
-                {runningJobs.length > 0 ? `${runningJobs.length} running` : (jobs.length > 0 ? `${jobs.length} done` : '0 running')}
-              </span>
-              <span className="chev">▲</span>
-            </button>
-            <div className="dock-body">
-              {jobs.length === 0 && (
-                <div className="dock-empty">Nothing processing right now.<br />Send an edit and watch it run here.</div>
-              )}
-              {jobs.map(job => (
-                <div key={job.id} className={`job ${job.status}`}>
-                  <div className="jthumb">🎬</div>
-                  <div className="jmain">
-                    <div className="jtitle" title={job.prompt}>{job.prompt}</div>
-                    <div className="jstage">
-                      {job.status === 'running' ? runningStage : jobStatusText(job)}
-                      {job.status === 'running' && hasProgress && ` ${Math.round(turnStatus.progress * 100)}%`}
-                      {job.status === 'running' && hasProgress && timeLeftText(turnStatus.etaSeconds) && ` · ${timeLeftText(turnStatus.etaSeconds)}`}
-                    </div>
-                    <div className={`pbar${job.status === 'running' && hasProgress ? ' determinate' : ''}`}>
-                      <i style={job.status === 'running' && hasProgress ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined}></i>
-                    </div>
-                    <div className="jfoot">
-                      <Elapsed job={job} />
-                      {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
-                      {job.status !== 'running' && job.resultMessageId !== null && (
-                        <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
-                      )}
-                      {job.status === 'error' && <button className="jbtn open" disabled={isCallingAPI} onClick={() => handleSend(job.prompt)}>Retry</button>}
-                      {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </aside>
 
         <div className="main">
@@ -1234,6 +1194,49 @@ export default function App() {
           )}
 
           <div className="composer-zone">
+            {/* Inline processing status: in the page flow above the composer, never covering it */}
+            {jobs.length > 0 && (
+              <div className={`inline-status${statusOpen ? '' : ' collapsed'}`}>
+                <button type="button" className="is-head" onClick={() => setStatusOpen(open => !open)}>
+                  <span className={`dot-pulse${runningJobs.length > 0 ? '' : ' idle'}`}></span>
+                  <span className="is-title">Processing</span>
+                  <span className="count">
+                    {runningJobs.length > 0 ? `${runningJobs.length} running` : `${jobs.length} done`}
+                  </span>
+                  <span className="chev">▲</span>
+                </button>
+                <div className="is-body">
+                  {jobs.map(job => (
+                    <div key={job.id} className={`job ${job.status}`}>
+                      <div className="jthumb">🎬</div>
+                      <div className="jmain">
+                        <div className="jtitle" title={job.prompt}>{job.prompt}</div>
+                        <div className="jstage">
+                          {job.status === 'running' ? runningStage : jobStatusText(job)}
+                          {job.status === 'running' && hasProgress && ` ${Math.round(turnStatus.progress * 100)}%`}
+                          {job.status === 'running' && hasProgress && timeLeftText(turnStatus.etaSeconds) && ` · ${timeLeftText(turnStatus.etaSeconds)}`}
+                        </div>
+                        <div className={`pbar${job.status === 'running' && hasProgress ? ' determinate' : ''}`}>
+                          <i style={job.status === 'running' && hasProgress ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined}></i>
+                        </div>
+                        <div className="jfoot">
+                          <Elapsed job={job} />
+                          {job.status === 'running' && <button className="jbtn" onClick={() => cancelJob(job)}>Cancel</button>}
+                          {job.status !== 'running' && job.resultMessageId !== null && (
+                            <button className="jbtn open" onClick={() => showMessage(job.resultMessageId)}>Open result</button>
+                          )}
+                          {job.status === 'error' && <button className="jbtn open" disabled={isCallingAPI} onClick={() => handleSend(job.prompt)}>Retry</button>}
+                          {job.status !== 'running' && <button className="jbtn" onClick={() => dismissJob(job)}>Dismiss</button>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className={`is-bar${hasProgress && runningJobs.length > 0 ? ' determinate' : ''}`}>
+                  <i style={hasProgress && runningJobs.length > 0 ? { width: `${Math.round(turnStatus.progress * 100)}%` } : undefined} />
+                </div>
+              </div>
+            )}
             <div className="composer">
               <div className="prompt-chips">
                 {sampleCommands.map((cmd) => (
@@ -1283,20 +1286,6 @@ export default function App() {
                     <input type="checkbox" checked={cloudCaptions} onChange={(e) => toggleCloudCaptions(e.target.checked)} />
                     Cloud captions (uploads audio only)
                   </label>
-                )}
-                {media.length > 0 && (
-                  <select
-                    className="target-select"
-                    title="Which clip this edit applies to"
-                    value={activeMediaId ?? ''}
-                    disabled={isCallingAPI}
-                    onChange={(e) => handleSelectMedia(mediaById(Number(e.target.value)))}
-                  >
-                    {activeMedia === null && <option value="">Apply to: (choose a clip)</option>}
-                    {media.map(item => (
-                      <option key={item.id} value={item.id}>Apply to: {item.label} ({item.kind})</option>
-                    ))}
-                  </select>
                 )}
               </div>
             </div>

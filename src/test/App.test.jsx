@@ -68,6 +68,54 @@ describe('App Component', () => {
     expect(screen.queryByText('© 2026 FinalCap. All rights reserved.')).not.toBeInTheDocument();
   });
 
+  it('does not render an apply-to select in the editor', async () => {
+    delete window.location;
+    window.location = {
+      pathname: '/success',
+      search: '?session_id=cs_test_123',
+      origin: 'http://localhost:3000',
+      href: 'http://localhost:3000/success?session_id=cs_test_123'
+    };
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ verified: true, paymentStatus: 'paid', customerEmail: 'test@example.com' })
+      });
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByText('Get started free')).not.toBeInTheDocument();
+    });
+    // The apply-to dropdown was removed: clip selection lives in the rail/library.
+    expect(document.querySelector('.target-select')).toBeNull();
+    expect(document.querySelector('select.target-select')).toBeNull();
+  });
+
+  it('keeps processing status inline and hidden when there are no jobs', async () => {
+    delete window.location;
+    window.location = {
+      pathname: '/success',
+      search: '?session_id=cs_test_123',
+      origin: 'http://localhost:3000',
+      href: 'http://localhost:3000/success?session_id=cs_test_123'
+    };
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ verified: true, paymentStatus: 'paid', customerEmail: 'test@example.com' })
+      });
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByText('Get started free')).not.toBeInTheDocument();
+    });
+    // No floating dock anywhere; the inline status only renders while jobs exist.
+    expect(container.querySelector('.dock')).toBeNull();
+    expect(container.querySelector('.inline-status')).toBeNull();
+    // The composer textarea is present as the single input box.
+    expect(container.querySelector('.composer textarea')).not.toBeNull();
+  });
+
   it('does not expose token in client-side code', () => {
     const { container } = render(<App />);
     const html = container.innerHTML;
