@@ -301,7 +301,7 @@ export function getClientExecutionModel() {
 }
 
 /** Server-answered lookup rounds (profile.serverTools) allowed inside one request. */
-const MAX_SERVER_LOOKUPS = 3;
+const MAX_SERVER_LOOKUPS = 6;
 
 /** A non-streaming xAI call may take this long before the request is answered with a 504. */
 const XAI_REQUEST_TIMEOUT_MS = 120_000;
@@ -496,6 +496,11 @@ export async function handleClientExecution(req, res, userId, profile = null) {
     }
     conversation.push(lookupMessage, ...lookupResults);
     modelMessages.push(lookupMessage, ...lookupResults);
+    // After the last lookup the model has to act on what it found: the lookups are withdrawn.
+    if (lookups + 1 >= MAX_SERVER_LOOKUPS && requestBody.tools) {
+      requestBody.tools = requestBody.tools.filter(t => !Object.hasOwn(serverTools, t.function.name));
+      modelMessages.push({ role: 'system', content: 'Lookup limit reached for this request: do not search again. Run the command you worked out, or give the final answer.' });
+    }
   }
 
   if (modelToolCalls.length) {

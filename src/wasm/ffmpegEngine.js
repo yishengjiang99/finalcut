@@ -205,6 +205,11 @@ export async function processMedia(operation, args, bytes, mime) {
     throw new OpArgsError('This text uses characters the in-browser font cannot draw.', 'unsupported_in_browser');
   }
 
+  // Build the command once up front so a bad or unsupported request fails before the core loads.
+  if (!(operation === 'audio_fade' && audioFadeNeedsDuration(args))) {
+    buildProcessArgs(operation, args, { input: 'in', output: 'out', isPhoto, imageFormat, fontFile: FONT_FILE });
+  }
+
   let file = toFile(bytes, type);
   if (imageFormat === 'heic') file = toFile(await heicToPng(bytes), 'image/png');
   const files = operation === 'add_text' ? [{ name: FONT_FILE, data: await loadFont() }] : [];

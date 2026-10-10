@@ -23,7 +23,14 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock('../db.js', () => db);
 
-// Guard: no /api/v2 route may run ffmpeg on the server.
+// The help lookup asks the server's FFmpeg for help text only; here it gets a canned answer.
+const helpRuns = vi.hoisted(() => []);
+vi.mock('../../server/ffmpeg/ffmpeg-executor.js', () => ({
+  FFMPEG_BIN: 'ffmpeg',
+  runProcess: async (bin, args) => { helpRuns.push(args); return { stdout: 'Encoders:\n V....D gif   GIF (Graphics Interchange Format)\n', stderr: '', code: 0 }; },
+}));
+
+// Guard: no /api/v2 route may process media with ffmpeg on the server.
 const ffmpegSpy = vi.hoisted(() => vi.fn());
 vi.mock('fluent-ffmpeg', () => {
   const fn = (...a) => { ffmpegSpy(...a); throw new Error('ffmpeg must not run for /api/v2'); };
@@ -125,26 +132,45 @@ describe('web toolset', () => {
   });
 });
 
-describe('capability catalog', () => {
-  const catalog = {
-    ffmpeg: '5.1.4',
-    filters: [{ name: 'gblur', description: 'Apply Gaussian Blur filter.' }, { name: 'boxblur', description: 'Blur the input.' }, { name: 'hflip', description: 'Horizontally flip.' }],
-    encoders: [{ name: 'gif', description: 'GIF (Graphics Interchange Format)' }],
-    muxers: [{ name: 'gif', description: 'CompuServe Graphics Interchange Format (GIF)' }],
+describe('FFmpeg help lookup', () => {
+  const HELP = {
+    '-h': ['Per-file main options:', '-map [-]input_file_id[:stream_specifier]  set input stream mapping', '-disposition        disposition', '-frames number      set the number of frames to output'].join('\n'),
+    '-h full': ['-disposition        disposition', 'AVOptions:', '  default      <flags> E..V..A.S...', '  attached_pic <flags> E..V.....S...', '  captions     <flags> E..V..A.S...', 'gif encoder AVOptions:'].join('\n'),
+    '-h filter=gblur': 'Filter gblur\n  Apply Gaussian Blur filter.\n  sigma <float> ..FV.....T. set sigma (from 0 to 1024) (default 0.5)',
   };
+  const calls = [];
+  const run = async (bin, args) => { calls.push(args); return { stdout: HELP[args.slice(1).join(' ')] || '', stderr: 'Unknown filter', code: 0 }; };
+  const search = args => searchCapabilities(args, { run, bin: 'ffmpeg' });
 
-  it('finds filters by name or description and ranks name matches first', () => {
-    const found = searchCapabilities('gaussian blur', catalog);
-    expect(found.ok).toBe(true);
-    expect(found.filters.map(f => f.name)).toEqual(['gblur', 'boxblur']);
-    expect(found.recipes.some(r => r.task === 'blur')).toBe(true);
+  it('greps the help of the server FFmpeg, case-insensitively, and echoes the command', async () => {
+    const found = await search({ help: 'ffmpeg -h', pattern: 'THUMB|cover|dispos' });
+    expect(calls.at(-1)).toEqual(['-hide_banner', '-h']);
+    expect(found).toMatchObject({ ok: true, matches: 1, output: '-disposition        disposition', command: "ffmpeg -h | grep -i -E 'THUMB|cover|dispos'" });
   });
 
-  it('returns recipes and encoders for "gif", and an error for an empty query', () => {
-    const found = searchCapabilities('gif', catalog);
-    expect(found.encoders[0].name).toBe('gif');
+  it('prints context lines like grep -A/-B and reads -h full by default', async () => {
+    const found = await search({ pattern: '-disposition', after: 3 });
+    expect(found.command).toBe("ffmpeg -h full | grep -i -E '-disposition' -A 3");
+    expect(found.output.split('\n')).toHaveLength(4);
+    expect(found.output).toMatch(/attached_pic/);
+    const two = await search({ help: '-h', pattern: 'Per-file|frames', before: 1 });
+    expect(two.output.split('\n')).toEqual(['Per-file main options:', '--', '-disposition        disposition', '-frames number      set the number of frames to output']);
+  });
+
+  it('reads one filter, says when nothing matched, and still accepts keywords as "query"', async () => {
+    expect((await search({ help: '-h filter=gblur' })).output).toMatch(/^Filter gblur/);
+    expect(await search({ help: '-h', pattern: 'poster' })).toMatchObject({ ok: true, matches: 0, output: '' });
+    const found = await search({ query: 'gif poster' });
+    expect(found.matches).toBe(1);
     expect(found.recipes[0].command).toMatch(/output\.gif$/);
-    expect(searchCapabilities('', catalog).ok).toBe(false);
+  });
+
+  it('runs nothing but help commands, and survives bad patterns', async () => {
+    const before = calls.length;
+    for (const help of ['-i input -f null -', '-h filter=a;rm', '-version', '-h full | grep x']) expect((await search({ help })).ok).toBe(false);
+    expect(calls).toHaveLength(before);
+    expect((await search({ help: '-h', pattern: 'input_file_id[' })).matches).toBe(1);
+    expect((await search({ help: '-h filter=nope' })).ok).toBe(false);
   });
 
   it('GET /api/v2/capabilities serves the catalog with recipes and output formats', async () => {
@@ -181,7 +207,7 @@ describe('POST /api/v2/chat', () => {
 
   it('answers search_ffmpeg_capabilities on the server and asks the model again', async () => {
     xaiResponder = () => (xaiCalls.length === 1
-      ? jsonResponse(completion({ content: null, tool_calls: [toolCall('s1', SEARCH_CAPABILITIES_TOOL_NAME, { query: 'gif' })] }))
+      ? jsonResponse(completion({ content: null, tool_calls: [toolCall('s1', SEARCH_CAPABILITIES_TOOL_NAME, { help: '-encoders', pattern: 'gif' })] }))
       : jsonResponse(completion({ content: null, tool_calls: [toolCall('r1', RUN_FFMPEG_TOOL_NAME, { command: 'ffmpeg -i input output.gif' })] })));
     const res = await post('/api/v2/chat', { messages: [{ role: 'user', content: 'make a gif' }], media: { type: 'video', duration: 6 } });
     const body = await res.json();
@@ -190,9 +216,25 @@ describe('POST /api/v2/chat', () => {
     expect(body.toolCalls.map(c => c.name)).toEqual([RUN_FFMPEG_TOOL_NAME]);
     expect(xaiCalls).toHaveLength(2);
     const lookupResult = xaiCalls[1].messages.find(m => m.role === 'tool' && m.tool_call_id === 's1');
-    expect(JSON.parse(lookupResult.content).recipes[0].command).toMatch(/output\.gif$/);
+    expect(JSON.parse(lookupResult.content)).toMatchObject({ ok: true, matches: 1, command: "ffmpeg -encoders | grep -i -E 'gif'" });
+    expect(JSON.parse(lookupResult.content).output).toMatch(/Graphics Interchange Format/);
+    expect(helpRuns).toEqual([['-hide_banner', '-encoders']]);
     // The conversation handed back includes the lookup exchange, so the next round is consistent.
     expect(body.messages.map(m => m.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
+  });
+
+  it('lets the model search several times, then withdraws the lookup', async () => {
+    xaiResponder = () => jsonResponse(completion({ content: null, tool_calls: [toolCall(`s${xaiCalls.length}`, SEARCH_CAPABILITIES_TOOL_NAME, { help: '-encoders', pattern: 'gif' })] }));
+    const res = await post('/api/v2/chat', { messages: [{ role: 'user', content: 'add a cover image' }], media: { type: 'video', duration: 6 } });
+    const body = await res.json();
+    expect(xaiCalls).toHaveLength(7);
+    expect(xaiCalls[5].tools.map(t => t.function.name)).toContain(SEARCH_CAPABILITIES_TOOL_NAME);
+    const last = xaiCalls[6];
+    expect(last.tools.map(t => t.function.name)).not.toContain(SEARCH_CAPABILITIES_TOOL_NAME);
+    expect(last.tools.map(t => t.function.name)).toContain(RUN_FFMPEG_TOOL_NAME);
+    expect(last.messages.at(-1)).toMatchObject({ role: 'system', content: expect.stringMatching(/Lookup limit/) });
+    // A seventh search is not answered and nothing is sent to the browser.
+    expect(body.status).toBe('final');
   });
 
   it('gives the final answer after browser tool results', async () => {

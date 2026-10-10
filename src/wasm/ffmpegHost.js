@@ -12,6 +12,12 @@ export const MAX_MT_THREADS = 4;
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const CORE_ROOT = '/v2/ffmpeg-core';
 const LOG_TAIL_LINES = 40;
+// One worker is reused for this many ffmpeg/ffprobe runs, then replaced. Measured on core-mt
+// 0.12.10: after a few dozen runs in the same worker a job can hang (the 44th job, an OGG encode,
+// never returned) and filters that read uninitialised memory start to fail (vibrato produced NaN
+// samples on the 29th job); both work in a fresh worker. Reloading a cached core takes well under
+// a second.
+export const RECYCLE_AFTER_RUNS = 12;
 
 export function coreUrls(mode, root = CORE_ROOT) {
   const base = new URL(`${root}/${mode}/${CORE_VERSION}/`, self.location.href).href;
@@ -51,6 +57,7 @@ export class FFmpegHost {
     this.fallbackReason = null;
     this._loading = null;
     this._job = 0;
+    this._runs = 0;
     this._logTail = [];
   }
 
@@ -112,15 +119,28 @@ export class FFmpegHost {
    * `inputs` are Files mounted read-only; `files` ([{ name, data }]) are written to a MEMFS work
    * dir. buildArgv gets { inputs: string[], output, dir, threads }. `signal` cancels the job.
    */
-  async runJob({ inputs = [], files = [], buildArgv, outName = 'out.mp4', timeoutMs = DEFAULT_TIMEOUT_MS, signal } = {}) {
+  async runJob({ inputs = [], files = [], buildArgv, outName = 'out.mp4', timeoutMs = DEFAULT_TIMEOUT_MS, signal, fresh = false } = {}) {
+    // `fresh` asks for a worker that has not run anything yet (see RECYCLE_AFTER_RUNS).
+    if (fresh && this._runs > 0) this.terminate();
     return this._withFiles(inputs, files, async (ff, { paths, dir }) => {
       const output = `${dir}/${outName}`;
       const argv = buildArgv({ inputs: paths, output, dir, threads: this.threads });
       const t0 = performance.now();
-      const exitCode = await this._guard(ff, ff.exec(argv), { timeoutMs, signal });
+      let exitCode;
+      try {
+        exitCode = await this._guard(ff, ff.exec(argv), { timeoutMs, signal });
+      } catch (error) {
+        // A trap inside the core (out-of-bounds access, abort) leaves the worker unusable: the
+        // next job would hang. Replace it.
+        if (this.ffmpeg === ff) this.terminate();
+        throw Object.assign(error, { code: error.code || 'wasm_crashed', stderr: error.stderr || this._logTail.join('\n'), argv });
+      }
       const execMs = Math.round(performance.now() - t0);
       if (exitCode !== 0) {
-        throw Object.assign(new Error(`ffmpeg exited with ${exitCode}`), { code: 'wasm_exec_failed', exitCode, stderr: this._logTail.join('\n'), argv });
+        const stderr = this._logTail.join('\n');
+        // "Aborted()" in the log means the runtime aborted; same treatment as a trap.
+        if (/Aborted\(/.test(stderr) && this.ffmpeg === ff) this.terminate();
+        throw Object.assign(new Error(`ffmpeg exited with ${exitCode}`), { code: 'wasm_exec_failed', exitCode, stderr, argv });
       }
       const data = await ff.readFile(output);
       await ff.deleteFile(output).catch(() => {});
@@ -168,12 +188,13 @@ export class FFmpegHost {
     let onAbort;
     const stop = new Promise((_, reject) => {
       timer = setTimeout(() => {
-        if (this.ffmpeg === ff) this.terminate();
+        // Reject first: terminating also rejects the worker call, with a less useful error.
         reject(Object.assign(new Error(`ffmpeg timed out after ${timeoutMs} ms`), { code: 'wasm_timeout' }));
+        if (this.ffmpeg === ff) this.terminate();
       }, timeoutMs);
       onAbort = () => {
-        if (this.ffmpeg === ff) this.terminate();
         reject(Object.assign(new Error('Job cancelled'), { code: 'cancelled', name: 'AbortError' }));
+        if (this.ffmpeg === ff) this.terminate();
       };
       if (signal?.aborted) onAbort();
       else signal?.addEventListener('abort', onAbort, { once: true });
@@ -190,7 +211,9 @@ export class FFmpegHost {
   }
 
   async _withFiles(inputs, files, fn) {
+    if (this.ffmpeg && this._runs >= RECYCLE_AFTER_RUNS) this.terminate();
     await this.load();
+    this._runs += 1;
     const ff = this.ffmpeg;
     const id = ++this._job;
     const inDir = `/in${id}`;
@@ -233,6 +256,7 @@ export class FFmpegHost {
     this.ffmpeg?.terminate();
     this.ffmpeg = null;
     this._loading = null;
+    this._runs = 0;
   }
 }
 

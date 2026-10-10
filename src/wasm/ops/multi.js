@@ -1,7 +1,7 @@
 // Pure argv builders for the operations with more than one input or a side file: joining clips,
 // adding an audio track, burning subtitles, extracting speech audio, and the generic run_ffmpeg
 // command. Isomorphic: no DOM, no Node APIs.
-import { OpArgsError } from './process.js';
+import { OpArgsError, BROKEN_IN_BROWSER } from './process.js';
 
 const HEAD = ['-hide_banner', '-nostdin', '-y'];
 const X264 = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
@@ -233,6 +233,8 @@ export function parseCliCommand(command, catalog = null) {
   const parts = []; // strings, or { input: true }
   let inputs = 0;
   let format = null;
+  const codecs = [];
+  let dropsVideo = false;
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -247,7 +249,7 @@ export function parseCliCommand(command, catalog = null) {
     const kind = Object.hasOwn(OPTIONS, name) ? OPTIONS[name] : undefined;
     if (kind === undefined || !STREAM_SPECIFIER.test(spec.length ? `:${spec.join(':')}` : '')) { errors.push(`Option "${token.slice(0, 40)}" is not allowed`); continue; }
     if (['y', 'n', 'hide_banner', 'nostdin'].includes(name)) continue;
-    if (kind === FLAG) { parts.push(token); continue; }
+    if (kind === FLAG) { if (name === 'vn') dropsVideo = true; parts.push(token); continue; }
 
     const value = tokens[++i];
     if (value === undefined) { errors.push(`Option "${token}" needs a value`); continue; }
@@ -264,7 +266,9 @@ export function parseCliCommand(command, catalog = null) {
         else if (knownFilters && !knownFilters.has(filter)) errors.push(`Unknown filter "${filter}" (not in this FFmpeg build)`);
       }
     } else if (kind === CODEC) {
-      if (value !== 'copy' && (!/^[A-Za-z0-9_-]{1,64}$/.test(value) || (knownEncoders && !knownEncoders.has(value)))) errors.push(`Unknown encoder "${value.slice(0, 40)}"`);
+      if (BROKEN_IN_BROWSER[value]) errors.push(`Encoder "${value}" is not usable: ${BROKEN_IN_BROWSER[value]}${value === 'libvpx-vp9' ? ' (use libvpx)' : ''}`);
+      else if (value !== 'copy' && (!/^[A-Za-z0-9_-]{1,64}$/.test(value) || (knownEncoders && !knownEncoders.has(value)))) errors.push(`Unknown encoder "${value.slice(0, 40)}"`);
+      codecs.push(value);
     } else if (name === 'f') {
       if (!MUXERS.has(value)) errors.push(`Format "${value.slice(0, 40)}" is not allowed`);
     } else if (name === 'map') {
@@ -279,13 +283,18 @@ export function parseCliCommand(command, catalog = null) {
   if (!format && !errors.some(e => e.includes('output.<ext>'))) errors.push('The command must end with output.<ext>');
   if (errors.length) throw new CommandError(errors);
 
+  const singleThreaded = codecs.some(c => c === 'libx265' || c === 'libtheora');
   return {
     outName: `out.${format}`,
     format,
     argv: ({ input, output, threads }) => [
       ...HEAD, ...parts.map(p => (typeof p === 'string' ? p : input)),
-      // The mt core deadlocks when x264 picks its own thread count, so the cap is always set.
-      ...threadCap(threads), output,
+      // FFmpeg's default WebM encoder is VP9, which crashes in the wasm core.
+      ...(format === 'webm' && !codecs.length && !dropsVideo ? ['-c:v', 'libvpx', '-b:v', '1M', '-deadline', 'realtime', '-cpu-used', '5', '-c:a', 'libvorbis'] : []),
+      // The mt core deadlocks when x264 picks its own thread count, so the cap is always set;
+      // libx265 and libtheora hang on more than one thread.
+      ...(singleThreaded ? ['-threads', '1', ...(codecs.includes('libx265') ? ['-x265-params', 'pools=none:frame-threads=1'] : [])] : threadCap(threads)),
+      output,
     ],
   };
 }

@@ -41,9 +41,20 @@ const IMAGE_OUTPUT = {
   webp: { ext: 'webp', contentType: 'image/webp', codec: ['-c:v', 'libwebp', '-quality', '90'] },
 };
 // Encoders each container can hold; a stream copy into the others fails.
+// WebM gets VP8: libvpx-vp9 crashes in the wasm core ("memory access out of bounds").
 const CONTAINER_CODECS = {
-  webm: { video: 'libvpx-vp9', audio: 'libopus' },
+  webm: { video: 'libvpx', audio: 'libvorbis' },
   ogv: { video: 'libtheora', audio: 'libvorbis' },
+};
+/** Encoders the browser core cannot run. Asking for one is reported as unsupported_in_browser. */
+export const BROKEN_IN_BROWSER = { 'libvpx-vp9': 'the VP9 encoder crashes in the in-browser FFmpeg build' };
+// Only x264 is safe on several threads in the multithreaded core (and only up to the host's cap).
+// Measured on core-mt 0.12.10: libx265 and libtheora hang with more than one thread.
+const VIDEO_ENCODER_ARGS = {
+  libx264: (cap) => [...cap, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'],
+  libx265: () => ['-threads', '1', '-c:v', 'libx265', '-preset', 'veryfast', '-x265-params', 'pools=none:frame-threads=1', '-pix_fmt', 'yuv420p'],
+  libvpx: (cap) => [...cap, '-c:v', 'libvpx', '-crf', '20', '-b:v', '1M', '-deadline', 'realtime', '-cpu-used', '5'],
+  libtheora: () => ['-threads', '1', '-c:v', 'libtheora', '-q:v', '6'],
 };
 const AUDIO_ENCODERS = { ogg: 'libvorbis', wma: 'wmav2', m4a: 'aac', aac: 'aac', mp3: 'libmp3lame', flac: 'flac', wav: 'pcm_s16le' };
 
@@ -205,7 +216,7 @@ export function buildAudioFadeFilter(args = {}, { duration: clipDuration } = {})
 }
 
 /** The audio filter for an audio-only operation, or null when the operation is not one. */
-export function buildAudioFilter(operation, a = {}, { duration } = {}) {
+export function buildAudioFilter(operation, a = {}, { duration, inBrowser = true } = {}) {
   switch (operation) {
     case 'adjust_volume':
       return `volume=${num(a.volume, 'volume', { min: 0, max: 100 })}`;
@@ -236,6 +247,9 @@ export function buildAudioFilter(operation, a = {}, { duration } = {}) {
     case 'audio_phaser':
       return `aphaser=in_gain=${opt(a.in_gain, 'in_gain', 0.4, { min: 0, max: 1 })}:out_gain=${opt(a.out_gain, 'out_gain', 0.74, { min: 0, max: 1e9 })}:delay=${opt(a.delay, 'delay', 3, { min: 0, max: 5 })}:decay=${opt(a.decay, 'decay', 0.4, { min: 0, max: 0.99 })}:speed=${opt(a.speed, 'speed', 0.5, { min: 0.1, max: 2 })}`;
     case 'audio_vibrato':
+      // In the wasm core the vibrato filter reads uninitialised memory and fails unpredictably
+      // (NaN samples, or the encoder aborting), so the browser does not attempt it.
+      if (inBrowser) throw new OpArgsError('The vibrato effect is unreliable in the in-browser FFmpeg build.', 'unsupported_in_browser');
       return `vibrato=f=${opt(a.frequency, 'frequency', 5, { min: 0.1, max: 20000 })}:d=${opt(a.depth, 'depth', 0.5, { min: 0, max: 1 })}`;
     case 'audio_tremolo':
       return `tremolo=f=${opt(a.frequency, 'frequency', 5, { min: 0.1, max: 20000 })}:d=${opt(a.depth, 'depth', 0.5, { min: 0, max: 1 })}`;
@@ -343,10 +357,10 @@ export function buildProcessArgs(operation, args = {}, io = {}) {
     const container = CONTAINER_CODECS[args.format];
     const codec = args.codec && args.codec !== 'auto' ? args.codec : container?.video;
     if (!codec) return [...head, '-i', input, '-c', 'copy', output];
-    const video = codec === 'libx264' ? X264
-      : codec === 'libvpx-vp9' ? ['-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-deadline', 'realtime', '-cpu-used', '6', '-row-mt', '1']
-        : ['-c:v', codec, ...(codec === 'libx265' ? ['-preset', 'veryfast', '-pix_fmt', 'yuv420p'] : [])];
-    return [...head, '-i', input, ...cap, ...video, '-c:a', container?.audio || 'copy', output];
+    if (BROKEN_IN_BROWSER[codec]) throw new OpArgsError(`${codec} cannot be used here: ${BROKEN_IN_BROWSER[codec]}.`, 'unsupported_in_browser');
+    // Apple players only open H.265 in MP4/MOV when it is tagged hvc1.
+    const tag = codec === 'libx265' && (args.format === 'mp4' || args.format === 'mov') ? ['-tag:v', 'hvc1'] : [];
+    return [...head, '-i', input, ...VIDEO_ENCODER_ARGS[codec](cap), ...tag, '-c:a', container?.audio || 'copy', output];
   }
   if (operation === 'convert_audio_format' || operation === 'extract_audio') {
     const format = args.format || 'mp3';
