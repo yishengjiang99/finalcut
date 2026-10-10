@@ -36,6 +36,7 @@ async function setupPage(page, baseURL, chatQueue, { allowUpload = false } = {})
   const uploads = [];
   const origin = new URL(baseURL).origin;
   await page.route('**/api/health', r => r.fulfill({ json: { ok: true, ffmpeg: { version: '4.4.2' } } }));
+  await page.route('**/api/auth/status', r => r.fulfill({ json: { authenticated: false } }));
   await page.route('**/api/v2/config', r => r.fulfill({ json: CONFIG }));
   await page.route('**/api/v2/capabilities', r => r.fulfill({ json: EMPTY_CATALOG }));
   await page.route('**/api/sample-access-token', r => r.fulfill({ status: 404 }));
@@ -101,31 +102,35 @@ test.describe('main chat loop (client engine)', () => {
     await dismissLanding(page);
     await uploadFixture(page);
     await sendPrompt(page, 'trim seconds 1 to 3');
-    await expect(page.locator('[data-message-id] video').last()).toBeVisible({ timeout: 180_000 });
+    // Wait for the trim result: a second video appears (the first is the original upload).
+    await expect(page.locator('[data-message-id] video')).toHaveCount(2, { timeout: 180_000 });
 
-    // Probe the output directly in the page.
+    // Probe the output directly in the page: the trim result message carries the 2s video.
     const meta = await page.evaluate(async () => {
       const eng = await import('/src/wasm/ffmpegEngine.js');
       const els = [...document.querySelectorAll('[data-message-id]')];
-      const video = els.at(-1)?.querySelector('video');
+      const msg = els.find(el => /processed video \(trimmed\)/i.test(el.textContent || ''));
+      const video = msg?.querySelector('video');
+      if (!video) throw new Error('trim result video not found');
       const outBytes = new Uint8Array(await (await fetch(video.src)).arrayBuffer());
       const probe = await eng.probeMedia(outBytes, 'video/mp4');
       const thumb = await eng.thumbnail(outBytes, 'video/mp4', { at: 0 });
       let h = 0; for (let i = 0; i < thumb.length; i += 97) h = (h * 31 + thumb[i]) >>> 0;
       return { duration: Number(probe.format.duration), hash: h.toString(16), bytes: outBytes.length };
     });
-    const inputMeta = await page.evaluate(async (fixtureUrl) => {
+    const inputMeta = await page.evaluate(async () => {
       const eng = await import('/src/wasm/ffmpegEngine.js');
-      const inBytes = new Uint8Array(await (await fetch(fixtureUrl)).arrayBuffer());
-      const thumb = await eng.thumbnail(inBytes, 'video/mp4', { at: 0 });
+      const inBytes = new Uint8Array(await (await fetch('/tests/e2e/fixtures/testclip-6s.mp4')).arrayBuffer());
+      // The trim keeps seconds 1-3, so compare against the original's frame at 1s.
+      const thumb = await eng.thumbnail(inBytes, 'video/mp4', { at: 1 });
       let h = 0; for (let i = 0; i < thumb.length; i += 97) h = (h * 31 + thumb[i]) >>> 0;
       return { hash: h.toString(16) };
-    }, '/@fs' + FIXTURE);
+    });
 
     expect(meta.duration).toBeGreaterThan(1.5);
     expect(meta.duration).toBeLessThan(2.6);
     expect(meta.bytes).toBeGreaterThan(10000);
-    // Stream-copy trim keeps the first frame bit-identical.
+    // Stream-copy trim: the output's first frame matches the original's frame at the trim start.
     expect(meta.hash).toBe(inputMeta.hash);
     expect(uploads).toEqual([]);
     expect(problems).toEqual([]);
@@ -148,8 +153,8 @@ test.describe('main chat loop (client engine)', () => {
     await expect(page.getByRole('dialog')).toContainText(/cannot run in this browser/);
     await page.getByRole('button', { name: /keep it on my device/i }).click();
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15000 });
-    // The turn finishes without any upload.
-    await expect(page.locator('.send-btn')).toBeEnabled({ timeout: 60000 });
+    // The turn finishes without any upload: the model's final message appears.
+    await expect(page.locator('[data-message-id]').last()).toContainText(/skip/i, { timeout: 60000 });
     expect(uploads).toEqual([]);
     expect(problems).toEqual([]);
     expect(badResponses).toEqual([]);
@@ -167,7 +172,8 @@ test.describe('main chat loop (client engine)', () => {
     await sendPrompt(page, 'add vibrato');
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 60000 });
     await page.getByRole('button', { name: /upload and continue/i }).click();
-    await expect(page.locator('[data-message-id] video').last()).toBeVisible({ timeout: 120_000 });
+    // The server fallback runs and the result is registered (a second video appears).
+    await expect(page.locator('[data-message-id] video')).toHaveCount(2, { timeout: 120_000 });
     expect(uploads.length).toBeGreaterThan(0);
     expect(uploads[0].hasFixture).toBe(true);
     // The only upload in the whole turn was the approved one.
@@ -183,10 +189,12 @@ test.describe('main chat loop (client engine)', () => {
     await dismissLanding(page);
     await uploadFixture(page);
     await sendPrompt(page, 'trim seconds 1 to 3');
-    const cancelBtn = page.locator('.dock button', { hasText: /^cancel$/i }).first();
-    await expect(cancelBtn).toBeVisible({ timeout: 30000 });
-    await cancelBtn.click();
-    await expect(page.locator('.dock')).toContainText(/cancelled/i, { timeout: 30000 });
+    const stopBtn = page.locator('.send-btn[title="Stop"]');
+    await expect(stopBtn).toBeVisible({ timeout: 30000 });
+    await stopBtn.click();
+    // The turn aborts: the send button goes back to Send and the chat is usable again.
+    await expect(page.locator('.send-btn[title="Send"]')).toBeVisible({ timeout: 30000 });
+    await page.locator('.composer-row textarea').fill('hello');
     await expect(page.locator('.send-btn')).toBeEnabled({ timeout: 30000 });
     expect(problems).toEqual([]);
     expect(badResponses).toEqual([]);

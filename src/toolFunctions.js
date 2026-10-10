@@ -1293,6 +1293,30 @@ export const toolFunctions = {
     toolFunctions.equalizer(args, videoFileData, setVideoFileData, addMessage),
   audio_delay: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.delay_audio(args, videoFileData, setVideoFileData, addMessage),
+  // The remaining audio effects: the engine runs them (and the consent fallback covers the ones
+  // the browser cannot, like vibrato). They were offered to the model without an implementation.
+  audio_chorus: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_chorus', args, videoFileData, setVideoFileData, addMessage, 'chorus effect'),
+  audio_flanger: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_flanger', args, videoFileData, setVideoFileData, addMessage, 'flanger effect'),
+  audio_phaser: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_phaser', args, videoFileData, setVideoFileData, addMessage, 'phaser effect'),
+  audio_tremolo: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_tremolo', args, videoFileData, setVideoFileData, addMessage, 'tremolo effect'),
+  audio_vibrato: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_vibrato', args, videoFileData, setVideoFileData, addMessage, 'vibrato effect'),
+  audio_gate: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_gate', args, videoFileData, setVideoFileData, addMessage, 'noise gate'),
+  audio_stereo_widen: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_stereo_widen', args, videoFileData, setVideoFileData, addMessage, 'stereo widening'),
+  audio_reverse: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_reverse', args, videoFileData, setVideoFileData, addMessage, 'audio reversal'),
+  audio_limiter: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_limiter', args, videoFileData, setVideoFileData, addMessage, 'limiter'),
+  audio_silence_remove: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_silence_remove', args, videoFileData, setVideoFileData, addMessage, 'silence removal'),
+  audio_pan: async (args, videoFileData, setVideoFileData, addMessage) =>
+    runVisualEdit('audio_pan', args, videoFileData, setVideoFileData, addMessage, 'stereo pan'),
   resize_video_preset: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       if (!args.preset) {
