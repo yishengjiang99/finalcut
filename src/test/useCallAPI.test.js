@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { assertToolCallApplied, buildChatRequestBody, mediaForInference, messagesForCurrentTurn, needsFollowUp, NO_MEDIA_NOTE, cliStringFallbackRequest } from '../useCallAPI.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { ChatRequestError, useCallAPI, assertToolCallApplied, buildChatRequestBody, mediaForInference, messagesForCurrentTurn, needsFollowUp, NO_MEDIA_NOTE, cliStringFallbackRequest } from '../useCallAPI.js';
 
 describe('assertToolCallApplied', () => {
   it('accepts a successful tool result', () => {
@@ -87,5 +88,68 @@ describe('ffmpeg CLI string fallback trigger', () => {
     expect(cliStringFallbackRequest(messages, [call], true, 'video/mp4')).toBeNull();
     expect(cliStringFallbackRequest(messages, [], false, null)).toBeNull();
     expect(cliStringFallbackRequest(messages, [], true, 'image/png')).toBeNull();
+  });
+});
+
+describe('ChatRequestError', () => {
+  it('reports a 401 from our own auth layer as an expired session, not an xAI failure', () => {
+    const error = new ChatRequestError(401, { error: 'Authentication required' }, 'Unauthorized');
+    expect(error.authExpired).toBe(true);
+    expect(error.message).toBe('Your session has expired. Sign in again to continue.');
+  });
+
+  it('attributes a 401 relayed from xAI to xAI', () => {
+    const error = new ChatRequestError(401, { error: 'Incorrect API key provided', source: 'xai' }, 'Unauthorized');
+    expect(error.authExpired).toBe(false);
+    expect(error.message).toBe('xAI API error (401): Incorrect API key provided');
+  });
+
+  it('shows the server error text, falling back to the status line', () => {
+    expect(new ChatRequestError(403, { error: 'Active subscription required' }, 'Forbidden').message)
+      .toBe('Request failed (403): Active subscription required');
+    expect(new ChatRequestError(502, {}, 'Bad Gateway').message).toBe('Request failed (502): Bad Gateway');
+  });
+});
+
+describe('useCallAPI auth failures', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const reply = () => new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n');
+  const setup = (props) => {
+    const addMessage = vi.fn();
+    const { result } = renderHook(() => useCallAPI({
+      setIsCallingAPI: vi.fn(), setProcessing: vi.fn(), setMessages: vi.fn(), setVideoFileData: vi.fn(),
+      messageIdCounterRef: { current: 1 }, videoFileData: null, uploadedVideos: [], addMessage, ...props,
+    }));
+    return { callAPI: result.current, addMessage };
+  };
+  const turn = [{ role: 'user', content: 'hi', id: 1 }];
+
+  it('renews an expired sample token and retries the request once', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json(401, { error: 'Invalid or expired sample access token' }))
+      .mockResolvedValueOnce(reply());
+    vi.stubGlobal('fetch', fetchMock);
+    const refreshSampleAccessToken = vi.fn().mockResolvedValue('fresh');
+    const { callAPI, addMessage } = setup({ isSampleMode: true, sampleAccessToken: 'stale', refreshSampleAccessToken });
+
+    expect(await callAPI([...turn])).not.toBe('error');
+    expect(refreshSampleAccessToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init.headers['sample-access-token']]))
+      .toEqual([['/api/chat', 'stale'], ['/api/chat', 'fresh']]);
+    expect(addMessage).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('expired') }));
+  });
+
+  it('asks a signed-in user to sign in again instead of blaming xAI', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json(401, { error: 'Authentication required' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onAuthExpired = vi.fn();
+    const { callAPI, addMessage } = setup({ isSampleMode: false, sampleAccessToken: null, onAuthExpired });
+
+    expect(await callAPI([...turn])).toBe('error');
+    expect(onAuthExpired).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(addMessage).toHaveBeenCalledWith({ text: 'Your session has expired. Sign in again to continue.' });
   });
 });
