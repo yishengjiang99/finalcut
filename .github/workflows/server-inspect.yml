@@ -1,0 +1,69 @@
+# Read-only inspection of the production app layout (manual). Prints how the finalcut service
+# runs and which files in DEPLOY_DIR are runtime state (not from git / build), so the release-
+# directory migration can preserve them. Never prints secret values: Environment= values and
+# .env values are redacted (key names only).
+name: Server inspect (read-only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_DIR: ${{ vars.DEPLOY_DIR }}
+      TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Inspect (read-only)
+        run: |
+          set -uo pipefail
+          git ls-tree --name-only HEAD > /tmp/tracked.txt
+          cat > /tmp/remote.sh <<'REMOTE'
+          set -u
+          echo "== systemd unit (Environment values redacted)"
+          systemctl cat finalcut 2>&1 | sed -E 's/^(Environment=)"?([A-Za-z_][A-Za-z0-9_]*)=.*/\1\2=<redacted>/'
+          systemctl show finalcut -p User -p Group -p WorkingDirectory -p ExecStart -p EnvironmentFiles -p MainPID -p ActiveState -p Restart -p FragmentPath -p DropInPaths
+          pid="$(systemctl show finalcut -p MainPID --value)"
+          [ -n "$pid" ] && [ "$pid" != 0 ] && { echo "cwd: $(readlink -f /proc/$pid/cwd)"; echo "exe: $(readlink -f /proc/$pid/exe)"; ps -o user=,pid=,etime=,args= -p "$pid"; }
+          echo "== $APP_DIR"
+          stat -c '%F %U:%G %a %n' "$APP_DIR"; readlink -f "$APP_DIR"
+          ls -la "$APP_DIR"
+          echo "== parent"; ls -la "$(dirname "$APP_DIR")"
+          echo "== top-level entries NOT in git HEAD (runtime/build state)"
+          cd "$APP_DIR"
+          for e in * .[!.]*; do
+            [ -e "$e" ] || continue
+            if printf '%s\n' "$tracked" | grep -qxF "$e"; then continue; fi
+            printf '%-28s %s %s files=%s\n' "$e" "$(stat -c '%F %U:%G' "$e")" "$(du -sh "$e" 2>/dev/null | cut -f1)" "$(find "$e" -type f 2>/dev/null | wc -l)"
+          done
+          echo "== .env* key names only"
+          for f in .env*; do [ -f "$f" ] && { echo "-- $f"; grep -oE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=' "$f" | sed -E 's/^[[:space:]]*(export[[:space:]]+)?//; s/=$//' | sort; }; done
+          echo "== files written since last deploy (REVISION), excluding node_modules/dist (names only, max 60)"
+          [ -f REVISION ] && find . -newer REVISION -type f -not -path './node_modules/*' -not -path './dist*' 2>/dev/null | head -60
+          echo "== open files of the service under APP_DIR (max 40)"
+          [ -n "$pid" ] && ls -l /proc/$pid/fd 2>/dev/null | awk '{print $NF}' | grep -F "$APP_DIR" | sort -u | head -40
+          echo "== nginx refs to APP_DIR"; grep -RnF "$APP_DIR" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | sed -E 's/(ssl_certificate_key|password|secret)[^;]*/\1 <redacted>/I'
+          echo "== other refs (cron, systemd)"; grep -RlF "$APP_DIR" /etc/systemd/system /etc/cron* /var/spool/cron 2>/dev/null
+          echo "== disk"; df -h "$APP_DIR"
+          echo "== node"; node -v; npm -v
+          REMOTE
+          {
+            printf "APP_DIR='%s'\n" "$APP_DIR"
+            printf "tracked=\"\$(cat <<'TRACKED'\n"; cat /tmp/tracked.txt; printf 'TRACKED\n)"\n'
+            cat /tmp/remote.sh
+          } > /tmp/full.sh
+          bash -n /tmp/full.sh
+          ssh -o BatchMode=yes "$TARGET" 'bash -s' < /tmp/full.sh || true
