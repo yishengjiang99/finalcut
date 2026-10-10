@@ -4,10 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npx vite .\" \"nodemon server.js\"",
-    "dev:client": "npx vite .",
+    "dev": "node scripts/copy-ffmpeg-core.mjs && concurrently \"npx vite .\" \"nodemon server.js\"",
+    "dev:client": "node scripts/copy-ffmpeg-core.mjs && npx vite .",
     "dev:server": "nodemon server.js",
-    "build": "NODE_ENV=production vite build",
+    "build": "node scripts/copy-ffmpeg-core.mjs && NODE_ENV=production vite build",
     "build:v2": "node scripts/copy-ffmpeg-core.mjs && node scripts/fetch-ffmpeg-source.mjs && vite build -c vite.v2.config.js",
     "dev:v2": "node scripts/copy-ffmpeg-core.mjs && node scripts/fetch-ffmpeg-source.mjs && vite -c vite.v2.config.js",
     "preview": "vite preview",

@@ -58,6 +58,9 @@ describe('ffmpeg_cli follow-up rounds', () => {
     expect(needsFollowUp([call('ffmpeg_cli', { action: 'plan' })])).toBe(true);
     expect(needsFollowUp([call('ffmpeg_cli', { action: 'run' })])).toBe(false);
     expect(needsFollowUp([call('adjust_brightness', { brightness: -0.3 })])).toBe(false);
+    expect(needsFollowUp([call('get_video_dimensions', {})])).toBe(true);
+    expect(needsFollowUp([call('get_video_dimensions', {}), call('add_text', { text: 'Hi' })])).toBe(false);
+    expect(needsFollowUp([])).toBe(false);
   });
 
   it('sends the tool exchange after the latest request back to the model', () => {

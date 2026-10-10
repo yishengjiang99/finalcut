@@ -59,5 +59,21 @@ for (const { mode, pkg, files } of CORES) {
     manifest.cores[mode].files[f] = { bytes: statSync(from).size, sha256: createHash('sha256').update(buf).digest('hex') };
   }
 }
+// The @ffmpeg/ffmpeg class worker, served from the same isolated path as the cores. Loading it
+// from here (classWorkerURL) instead of the app bundle means the worker script always carries
+// the COOP/COEP/CORP headers, whatever the page's own asset location sends.
+{
+  const version = PINNED['@ffmpeg/ffmpeg'];
+  const src = path.join(ROOT, 'node_modules', '@ffmpeg/ffmpeg', 'dist', 'esm');
+  const dest = path.join(OUT, 'ffmpeg', version);
+  mkdirSync(dest, { recursive: true });
+  manifest.classWorker = { package: `@ffmpeg/ffmpeg@${version}`, base: `/v2/ffmpeg-core/ffmpeg/${version}/`, files: {} };
+  for (const f of ['worker.js', 'const.js', 'errors.js']) {
+    const from = path.join(src, f);
+    if (!existsSync(from)) fail(`missing @ffmpeg/ffmpeg@${version}/dist/esm/${f}`);
+    copyFileSync(from, path.join(dest, f));
+    manifest.classWorker.files[f] = { bytes: statSync(from).size, sha256: createHash('sha256').update(readFileSync(from)).digest('hex') };
+  }
+}
 writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 console.log(`copy-ffmpeg-core: wrote ${path.relative(ROOT, OUT)} (mt + st ${PINNED['@ffmpeg/core']})`);

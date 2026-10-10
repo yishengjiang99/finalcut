@@ -47,11 +47,15 @@ export function messagesForCurrentTurn(messages) {
   return [latestUserMessage, ...followUps];
 }
 
-// ffmpeg_cli discover/plan only gather information: the model has to see the
-// result to take the next step, so those rounds are sent back for a follow-up.
+// ffmpeg_cli discover/plan and get_video_dimensions only gather information: the model has
+// to see the result to take the next step, so those rounds are sent back for a follow-up.
 export const MAX_TOOL_FOLLOW_UPS = 6;
+const INFO_ONLY_TOOL_NAMES = new Set(['get_video_dimensions']);
 
 export function needsFollowUp(toolCalls) {
+  // A lookup made alongside an edit needs no second round; a lookup on its own does
+  // (for example reading the frame size before centering text).
+  if (toolCalls.length > 0 && toolCalls.every(call => INFO_ONLY_TOOL_NAMES.has(call?.function?.name))) return true;
   return toolCalls.some(call => {
     if (call?.function?.name !== FFMPEG_CLI_TOOL_NAME) return false;
     try {
