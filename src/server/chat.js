@@ -6,7 +6,7 @@ import {
   requireActiveSubscription,
   requireInferenceAccess,
 } from './middleware.js';
-import { enqueueChatInteraction, saveLesson } from '../db.js';
+import { enqueueChatInteraction } from '../db.js';
 import { PHOTO_SUPPORTED_OPS, PHOTO_OUTPUT_FORMATS, COLOR_FILTER_PRESETS } from './ffmpegOps.js';
 import { buildToolsSchema, mediaTypesForTool, offeredToolsFor, toolsForMediaType } from './toolsSchema.js';
 import {
@@ -41,32 +41,10 @@ function debugChat(...args) {
 // ─── Streaming filter helpers (exported for unit tests) ──────────────────────
 
 /**
- * Extract the lesson text from a completed assistant message.
- * Handles both inline ("Lesson: text") and next-line ("Lesson:\n  text") formats,
- * with or without a leading "- " bullet.
- */
-export function extractLesson(text) {
-  const markerRe = /(?:^|\n)[- ]*Lesson:[ \t]*(.*)/;
-  const match = markerRe.exec(text);
-  if (!match) return '';
-
-  const sameLine = match[1].trim();
-  if (sameLine) return sameLine.slice(0, 240);
-
-  // Lesson text is on the next line(s)
-  const markerEnd = match.index + match[0].length;
-  const remaining = text.slice(markerEnd);
-  for (const line of remaining.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed) return trimmed.slice(0, 240);
-  }
-  return '';
-}
-
-/**
  * Create a new streaming filter state object.
- * The filter strips the "Answer:" heading and hides the "Lesson:" section
- * from the forwarded SSE stream while still accumulating the full text.
+ * The filter strips the "Answer:" heading and anything from a "Lesson:" line on
+ * from the forwarded SSE stream. The model is no longer asked for either; this only
+ * catches replies that still follow the old format.
  */
 export function createStreamFilter() {
   return {
@@ -203,10 +181,7 @@ export function buildSystemMessage({ ffmpegFallback = false, mediaType = null } 
     'The calls run sequentially and each one operates on the output of the one before it, so work out the arguments of later calls ' +
     'from the result you expect from earlier ones: after a crop to 800x600 the frame is 800x600 and later coordinates are relative to it; ' +
     'after a trim, later timestamps are relative to the trimmed clip.',
-    'Write your reply to the user as plain text, once, with no heading or label. ' +
-    'Then end your FINAL response (after any tool use is complete) with one last line in exactly this form:\n' +
-    'Lesson: <1-2 sentences summarizing a key insight, max 240 chars, no private data>\n' +
-    'The Lesson line is removed before the user sees the reply. Write nothing after it and do not repeat your reply.',
+    'Write your reply to the user as plain text, once, with no heading or label.',
   ];
 
   return { role: 'system', content: sections.filter(Boolean).join('\n\n') };
@@ -312,7 +287,7 @@ export function restrictStreamingToolsToMedia(body, mediaType) {
 
 // ─── Client-execution mode (tools run on the device) ─────────────────────────
 
-/** Strip the "Answer:" heading and hidden "Lesson:" section from a final reply. */
+/** Strip a legacy "Answer:" heading and "Lesson:" section from a final reply. */
 export function cleanFinalText(text) {
   const filter = createStreamFilter();
   const head = applyStreamFilter(filter, String(text || ''));
@@ -497,10 +472,6 @@ async function handleClientExecution(req, res, userId) {
       iosClient: isIosClient(req),
     },
   });
-  if (userId) {
-    const lesson = extractLesson(rawText);
-    if (lesson) await saveLesson(userId, lesson);
-  }
   return res.json({
     schemaVersion: CLIENT_SCHEMA_VERSION,
     status: 'final',
@@ -603,7 +574,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // Stream the response chunks to the client, filtering out the Lesson section
+    // Stream the response chunks to the client through the legacy Answer/Lesson filter
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -719,14 +690,6 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
         streamed: true,
       },
     });
-
-    // Persist lesson after stream ends (errors are logged inside saveLesson)
-    if (userId) {
-      const lesson = extractLesson(assistantText);
-      if (lesson) {
-        await saveLesson(userId, lesson);
-      }
-    }
   } catch (error) {
     console.error('Error in /api/chat:', error);
     enqueueChatError({

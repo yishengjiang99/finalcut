@@ -20,7 +20,6 @@ vi.mock('../server/config.js', () => ({
 }));
 
 const db = vi.hoisted(() => ({
-  saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   findUserByApiToken: vi.fn(),
   consumeDailyInference: vi.fn(),

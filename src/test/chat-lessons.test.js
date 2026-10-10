@@ -23,14 +23,12 @@ vi.mock('../server/config.js', () => ({
 
 // Stub out DB calls – not needed for unit-level filter tests
 vi.mock('../db.js', () => ({
-  saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   getPool: vi.fn(),
 }));
 
 import {
   buildSystemMessage,
-  extractLesson,
   createStreamFilter,
   applyStreamFilter,
   flushStreamFilter,
@@ -44,20 +42,19 @@ describe('buildSystemMessage', () => {
 
     expect(message).toEqual(expect.objectContaining({ role: 'system' }));
     expect(message.content).toContain('editing assistant in FinalCap');
-    expect(message.content).toContain('end your FINAL response');
-    expect(message.content).toContain('Lesson: <');
+    expect(message.content).toContain('plain text, once, with no heading or label');
   });
 
   it('does not ask for an Answer section (the model repeated its reply inside it)', () => {
     expect(buildSystemMessage().content).not.toContain('Answer:');
   });
 
-  it('keeps the Lesson line parseable and hidden from the user', () => {
+  it('does not ask for a Lesson line, but still hides one if the model writes it', () => {
+    expect(buildSystemMessage().content).not.toContain('Lesson');
     const reply = 'Hello! How can I help?\nLesson: Greet briefly.';
     const filter = createStreamFilter();
     const shown = applyStreamFilter(filter, reply) + flushStreamFilter(filter);
     expect(shown).toBe('Hello! How can I help?');
-    expect(extractLesson(reply)).toBe('Greet briefly.');
   });
 
   it('states the media type and sends photo rules only when they can apply', () => {
@@ -119,45 +116,6 @@ describe('streaming media type', () => {
     expect(restrictStreamingToolsToMedia(body, 'video')).toBe(body);
     expect(restrictStreamingToolsToMedia(body, null)).toBe(body);
     expect(restrictStreamingToolsToMedia({ tools: [tool('trim_video')], tool_choice: 'auto' }, 'image')).toEqual({});
-  });
-});
-
-// ─── extractLesson ────────────────────────────────────────────────────────────
-
-describe('extractLesson', () => {
-  it('returns empty string when no Lesson marker is present', () => {
-    expect(extractLesson('Some answer text without a lesson.')).toBe('');
-  });
-
-  it('extracts inline lesson text (same line as marker)', () => {
-    const text = 'Answer text.\nLesson: Always validate input before processing.';
-    expect(extractLesson(text)).toBe('Always validate input before processing.');
-  });
-
-  it('extracts lesson text from next line (indented format)', () => {
-    const text = '- Answer:\n  The answer.\n- Lesson:\n  Cache results to avoid repeated work.';
-    expect(extractLesson(text)).toBe('Cache results to avoid repeated work.');
-  });
-
-  it('strips "- " bullet prefix from the Lesson marker', () => {
-    const text = 'Explanation.\n- Lesson: Use typed parameters to prevent injection.';
-    expect(extractLesson(text)).toBe('Use typed parameters to prevent injection.');
-  });
-
-  it('truncates lesson text to 240 characters', () => {
-    const long = 'x'.repeat(300);
-    const text = `Answer.\nLesson: ${long}`;
-    expect(extractLesson(text)).toHaveLength(240);
-  });
-
-  it('returns empty string when Lesson section is present but empty', () => {
-    expect(extractLesson('Something.\nLesson:')).toBe('');
-  });
-
-  it('handles Lesson at the very start of text', () => {
-    expect(extractLesson('Lesson: Start with simplest possible test.')).toBe(
-      'Start with simplest possible test.'
-    );
   });
 });
 

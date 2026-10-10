@@ -18,7 +18,6 @@ vi.mock('../server/config.js', () => ({
 }));
 
 const db = vi.hoisted(() => ({
-  saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   findUserByApiToken: vi.fn(),
   consumeDailyInference: vi.fn(),
@@ -178,7 +177,6 @@ describe('client execution mode', () => {
     const toolMsg = xaiCalls[0].messages.find(m => m.role === 'tool');
     expect(typeof toolMsg.content).toBe('string');
     expect(JSON.parse(toolMsg.content)).toMatchObject({ ok: true, executedOn: 'device' });
-    expect(db.saveLesson).not.toHaveBeenCalled(); // sample mode has no user id
   });
 
   it('skipped_by_user is not a failure: annotated, tool withheld, continues to final', async () => {
