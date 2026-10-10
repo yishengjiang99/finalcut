@@ -7,12 +7,19 @@ name: ASC listing snapshot (read-only)
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "listing = listing snapshot; review = review/rejection state dump (artifact)"
+        type: choice
+        options: [listing, review]
+        default: listing
 
 permissions:
   contents: read
 
 jobs:
   snapshot:
+    if: ${{ inputs.mode != 'review' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -69,3 +76,26 @@ jobs:
           print(json.dumps(out, indent=2, ensure_ascii=False))
           print("LISTING_JSON_END")
           PY
+
+  review:
+    if: ${{ inputs.mode == 'review' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump review state (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_ID: "6815060815"
+          OUT: asc-review-dump.json
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 .github/scripts/asc_review_dump.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asc-review-dump
+          path: asc-review-dump.json
+          retention-days: 7
