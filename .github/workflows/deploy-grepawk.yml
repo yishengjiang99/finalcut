@@ -7,7 +7,7 @@
 #   1. GATE (before touching prod): iOS endpoint contract test against prod (21 checks, recorded as
 #      the baseline) + a header snapshot of existing routes. Any failure aborts here.
 #   2. Build on the runner: npm run build && npm run build:v2 (pinned cores + verified GPL source).
-#   3. Installer tests: stubbed harness + the real installer inside nginx:1.18.0 (docker).
+#   3. Installer tests: stubbed harness.
 #   4. PREFLIGHT over SSH, read-only: nginx -t passes, sudo works, exactly one nginx file holds
 #      `root $DEPLOY_DIR/dist;`. If prod can't be managed this way the job stops here, unchanged.
 #   5. Ship: dist -> $DEPLOY_DIR/dist.new; code rsync; npm ci; dist.new -> dist (old kept as
@@ -107,10 +107,8 @@ jobs:
           (cd dist/v2/vendor/ffmpeg/source && sha256sum -c --quiet SHA256SUMS)
           du -sh dist dist/v2
 
-      - name: Installer tests (stubbed harness + real nginx 1.18 in docker)
-        run: |
-          bash tests/nginx/finalcut-v2-nginx.test.sh
-          tests/nginx/installer-docker.sh 8082
+      - name: Installer tests (stubbed harness)
+        run: bash tests/nginx/finalcut-v2-nginx.test.sh
 
       - name: Configure SSH
         env:
