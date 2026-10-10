@@ -10,6 +10,7 @@ import {
 } from './engineMode.js';
 import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
 import logoUrl from '../logo.png';
+import explainerVideoUrl from '../docs/finalcap-explainer.mp4';
 import './App.css';
 
 // Sample commands for quick access
@@ -851,8 +852,8 @@ export default function App() {
             <div className="hero-visual" aria-hidden="true">
               <div className="editor-card">
                 <div className="ec-video">
+                  <video src={explainerVideoUrl} autoPlay muted loop playsInline preload="metadata" />
                   <span className="tag">preview</span>
-                  <div className="big-play">▶</div>
                 </div>
                 <div className="ec-chat">
                   <div className="ec-bubble user">Convert this to 9:16 for Reels and add burned-in captions</div>
