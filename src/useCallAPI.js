@@ -3,7 +3,6 @@ import { tools } from './tools.js';
 import { noteDerivedVideo } from './captionLineage.js';
 import { toolFunctions, getCurrentFileMimeType, ffmpegCliStringFallback } from './toolFunctions.js';
 import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
-import { getEngineMode, ENGINE_CLIENT } from './engineMode.js';
 import { runClientTurn } from './clientTurn.js';
 
 export function assertToolCallApplied(result, functionName) {
@@ -202,7 +201,7 @@ export function useCallAPI({
 
     setIsCallingAPI(true); // Set loading state before API call
     try {
-      if (getEngineMode() === ENGINE_CLIENT && currentVideoFileData) {
+      if (currentVideoFileData) {
         return await runClientTurn({
           messages: currentMessages,
           videoFileData: currentVideoFileData,

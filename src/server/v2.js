@@ -23,20 +23,6 @@ import { runProcess, FFMPEG_BIN } from '../../server/ffmpeg/ffmpeg-executor.js';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 export const WASM_CATALOG_PATH = path.join(DIR, '..', '..', 'server', 'ffmpeg', 'wasm-capabilities.json');
 
-// ─── Feature flag ────────────────────────────────────────────────────────────
-
-/**
- * CLIENT_FFMPEG = "on" (default) | "off" | a percentage ("25" or "25%").
- * The browser applies it: "percent" enables in-browser editing for that share of visitors.
- */
-export function clientFFmpegFlag(raw = process.env.CLIENT_FFMPEG) {
-  const value = String(raw ?? 'on').trim().toLowerCase();
-  if (value === 'off' || value === 'false' || value === '0') return { mode: 'off', percent: 0 };
-  const percent = /^\d{1,3}%?$/.test(value) ? Number(value.replace('%', '')) : null;
-  if (percent !== null && percent < 100) return { mode: 'percent', percent };
-  return { mode: 'on', percent: 100 };
-}
-
 // ─── Capability catalog of the wasm FFmpeg build ─────────────────────────────
 
 // Commands known to work in the browser core, for requests the typed tools do not cover.
@@ -284,11 +270,11 @@ export const WEB_PROFILE = {
 
 const router = express.Router();
 
-// What the browser needs before the first edit: the feature flag and the clip limits.
+// What the browser needs before the first edit: the clip limits and caption availability.
+// Editing always runs in the browser (ffmpeg.wasm); there is no engine flag.
 router.get('/api/v2/config', apiLimiter, (req, res) => {
   res.set('Cache-Control', 'public, max-age=60');
   res.json({
-    clientFFmpeg: clientFFmpegFlag(),
     limits: { clip: DEFAULT_CLIP_LIMITS },
     captions: { onDevice: true, cloud: Boolean(OPENAI_API_KEY) },
     tools: { fallback: RUN_FFMPEG_TOOL_NAME },

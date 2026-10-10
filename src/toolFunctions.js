@@ -9,7 +9,7 @@ import { abortableFetch as fetch } from './abortableFetch.js';
 import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
 import { CLI_MIME_TYPES } from './wasm/ops/multi.js';
-import { getEngineMode, ENGINE_CLIENT, requestUploadConsent, UploadDeclinedError, getCloudCaptions } from './engineMode.js';
+import { requestUploadConsent, UploadDeclinedError, getCloudCaptions } from './engineMode.js';
 import { dedupeSrtCues, translatedTrackWithoutDuplicates } from './server/captionHelpers.js';
 
 // Aspect ratio presets for social media platforms
@@ -150,7 +150,6 @@ export function setToolStatusListener(listener) {
 const toolStatus = (text, progress) => toolStatusListener?.({ text, ...(Number.isFinite(progress) ? { progress } : {}) });
 
 const sampleAuthHeaders = () => (sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {});
-const clientEngine = () => getEngineMode() === ENGINE_CLIENT;
 
 // Failures that mean "this browser cannot do it", as opposed to a bad request or a bad file.
 const CAN_FALL_BACK = new Set(['unsupported_in_browser', 'wasm_load_failed', 'wasm_timeout']);
@@ -177,13 +176,8 @@ async function browserFirst(tool, inBrowser, onServer, uploads = 'video') {
   }
 }
 
-// One single-input edit: in the browser in client mode, otherwise (or as the agreed fallback) on the server.
+// One single-input edit: in the browser, falling back to the server (with consent) if the browser cannot do it.
 async function processMedia(operation, args, videoFileData) {
-  if (!clientEngine()) {
-    const data = await processVideoOnServer(operation, args, videoFileData);
-    lastExecution.executedOn = 'server';
-    return data;
-  }
   const isPhoto = (currentFileMimeType || '').startsWith('image/');
   return browserFirst(operation, async () => {
     const { data, contentType } = await engine.processMedia(operation, args, videoFileData, currentFileMimeType);
@@ -954,35 +948,9 @@ export const toolFunctions = {
   get_video_info: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       const fileMimeType = currentFileMimeType || 'video/mp4';
-      if (clientEngine()) {
-        const metadata = await engine.probeMedia(videoFileData, fileMimeType);
-        lastExecution.executedOn = 'browser';
-        const info = describeMediaInfo(metadata, videoFileData.length);
-        addMessage({ text: info });
-        return info;
-      }
-      const response = await fetch('/api/process-video', {
-        method: 'POST',
-        headers: {
-          'Content-Type': fileMimeType,
-          'x-operation': 'get_video_info',
-          'x-args': JSON.stringify({}),
-          ...(sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
-        },
-        body: videoFileData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Server processing failed');
-      }
-
-      // Get metadata as JSON
-      const metadata = await response.json();
-      
-      const info = describeMediaInfo(metadata);
-      lastExecution.executedOn = 'server';
-
+      const metadata = await engine.probeMedia(videoFileData, fileMimeType);
+      lastExecution.executedOn = 'browser';
+      const info = describeMediaInfo(metadata, videoFileData.length);
       addMessage({ text: info });
       return info;
     } catch (error) {
@@ -1007,43 +975,11 @@ export const toolFunctions = {
         throw new Error('Volume must be between 0.0 and 2.0');
       }
 
-      if (clientEngine()) {
-        const audio = decodeAudioInput(args.audioFile);
-        const data = await engine.addAudioTrack({ mode, volume }, videoFileData, currentFileMimeType, audio);
-        lastExecution.executedOn = 'browser';
-        setVideoFileData(data);
-        addMessage({ text: `Processed video (audio track ${mode === 'mix' ? 'mixed' : 'replaced'}):`, videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
-        return mode === 'mix' ? 'Audio track mixed successfully.' : 'Audio track replaced successfully.';
-      }
-
-      const normalizedAudioFile = normalizeAudioFileInput(args.audioFile);
-      // add_audio_track requires secondary binary audio input; use FormData so both files are sent together
-      const fileMimeType = currentFileMimeType || 'video/mp4';
-      const formData = new FormData();
-      const videoBlob = new Blob([videoFileData], { type: fileMimeType });
-      formData.append('video', videoBlob, 'input.mp4');
-      formData.append('operation', 'add_audio_track');
-      formData.append('args', JSON.stringify({ audioFile: normalizedAudioFile, mode, volume }));
-
-      const response = await fetch('/api/process-video', {
-        method: 'POST',
-        headers: sampleModeEnabled && sampleModeAccessToken
-          ? { 'sample-access-token': sampleModeAccessToken }
-          : undefined,
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Server processing failed');
-      }
-
-      // Stream the response
-      const data = await collectStreamChunks(response.body.getReader());
-
+      const audio = decodeAudioInput(args.audioFile);
+      const data = await engine.addAudioTrack({ mode, volume }, videoFileData, currentFileMimeType, audio);
+      lastExecution.executedOn = 'browser';
       setVideoFileData(data);
-      const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage({ text: `Processed video (audio track ${mode === 'mix' ? 'mixed' : 'replaced'}):`, videoUrl: videoUrl, mimeType: 'video/mp4' });
+      addMessage({ text: `Processed video (audio track ${mode === 'mix' ? 'mixed' : 'replaced'}):`, videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
       return mode === 'mix' ? 'Audio track mixed successfully.' : 'Audio track replaced successfully.';
     } catch (error) {
       addMessage({ text: 'Error adding audio track: ' + error.message });
@@ -1128,38 +1064,14 @@ export const toolFunctions = {
 
   get_supported_formats: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      if (clientEngine()) {
-        lastExecution.executedOn = 'browser';
-        const info = `Supported conversion formats:
+      lastExecution.executedOn = 'browser';
+      const info = `Supported conversion formats:
 - Video formats: ${SUPPORTED_VIDEO_FORMATS.join(', ')}
 - Video codecs: ${SUPPORTED_VIDEO_CODECS.join(', ')}
 - Audio formats: ${SUPPORTED_AUDIO_FORMATS.join(', ')}
 - Audio bitrates: ${SUPPORTED_AUDIO_BITRATES.join(', ')}
 - Extract audio formats: ${SUPPORTED_EXTRACT_FORMATS.join(', ')}
 - Photo formats: ${PHOTO_OUTPUT_FORMATS.join(', ')}`;
-        addMessage({ text: info });
-        return info;
-      }
-      const response = await fetch('/api/supported-formats', {
-        method: 'GET',
-        headers: sampleModeEnabled && sampleModeAccessToken
-          ? { 'sample-access-token': sampleModeAccessToken }
-          : undefined
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch supported formats');
-      }
-
-      const formats = await response.json();
-      const info = `Supported conversion formats:
-- Video formats: ${formats.video.formats.join(', ')}
-- Video codecs: ${formats.video.codecs.join(', ')}
-- Audio formats: ${formats.audio.formats.join(', ')}
-- Audio bitrates: ${formats.audio.bitrates.join(', ')}
-- Extract audio formats: ${formats.extract.formats.join(', ')}`;
-
       addMessage({ text: info });
       return info;
     } catch (error) {
@@ -1213,45 +1125,10 @@ export const toolFunctions = {
         throw new Error('Transition type is required');
       }
 
-      if (clientEngine()) {
-        const data = await engine.joinClips({ transition: args.transition, duration: args.duration || 1 }, videosToProcess);
-        lastExecution.executedOn = 'browser';
-        setVideoFileData(data);
-        addMessage({ text: `Processed video with ${args.transition} transition between ${videosToProcess.length} clips:`, videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
-        return `Video transition (${args.transition}) applied successfully to ${videosToProcess.length} clips.`;
-      }
-
-      const formData = new FormData();
-      
-      // Add all video files
-      videosToProcess.forEach((videoData, index) => {
-        const videoBlob = new Blob([videoData], { type: 'video/mp4' });
-        formData.append('videos', videoBlob, `input-${index}.mp4`);
-      });
-      
-      formData.append('transition', args.transition);
-      formData.append('duration', args.duration || 1);
-      
-      const response = await fetch('/api/transition-videos', {
-        method: 'POST',
-        headers: sampleModeEnabled ? {
-          ...(sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {})
-        } : undefined,
-        body: formData
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Server processing failed');
-      }
-      
-      // Get the processed video as array buffer
-      const arrayBuffer = await response.arrayBuffer();
-      const data = new Uint8Array(arrayBuffer);
-      
-      setVideoFileData(data); // Update video data for subsequent edits
-      const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
-      addMessage({ text: `Processed video with ${args.transition} transition between ${videosToProcess.length} clips:`, videoUrl: videoUrl, mimeType: 'video/mp4' });
+      const data = await engine.joinClips({ transition: args.transition, duration: args.duration || 1 }, videosToProcess);
+      lastExecution.executedOn = 'browser';
+      setVideoFileData(data);
+      addMessage({ text: `Processed video with ${args.transition} transition between ${videosToProcess.length} clips:`, videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
       return `Video transition (${args.transition}) applied successfully to ${videosToProcess.length} clips.`;
     } catch (error) {
       addMessage({ text: 'Error applying video transition: ' + error.message });
@@ -1347,184 +1224,21 @@ export const toolFunctions = {
 
   generate_captions: async (args, inputVideoFileData, setVideoFileData, addMessage) => {
     try {
-      if (clientEngine()) return await generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileData, addMessage);
-      // Never caption on top of burned captions (that is what showed the text twice): re-burn
-      // from the uncaptioned source, or refuse if other edits were applied on top since.
-      const { bytes: videoFileData, replacing } = captionSourceFor(inputVideoFileData);
-      const replacedNote = replacing ? ' Replaced the captions burned earlier (re-burned from the uncaptioned video).' : '';
-      const language = args.language || 'auto';
-      const translateLanguage = args.translate_language || null;
-      const burnIn = args.burn_in !== false; // default true
-      const style = args.style || 'default';
-      const position = args.position || 'bottom';
-
-      const fileMimeType = currentFileMimeType || 'video/mp4';
-      const sampleHeaders = sampleModeEnabled && sampleModeAccessToken
-        ? { 'sample-access-token': sampleModeAccessToken }
-        : {};
-
-      // Step 1: Generate captions via OpenAI speech-to-text (server)
-      const captionResponse = await fetch('/api/generate-captions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': fileMimeType,
-          'x-args': JSON.stringify({ language }),
-          ...sampleHeaders,
-        },
-        body: videoFileData
-      });
-
-      if (!captionResponse.ok) {
-        let errorData = {};
-        try { errorData = await captionResponse.json(); } catch (_) {}
-        throw new Error(errorData.error || 'Failed to generate captions');
-      }
-
-      const { srt, vtt } = await captionResponse.json();
-
-      if (!srt || !String(srt).trim()) {
-        throw new Error('No captions were generated from the audio');
-      }
-
-      // Step 2: Excerpt + soft-track preview URLs
-      const srtBlob = new Blob([srt], { type: 'text/plain' });
-      const srtUrl = URL.createObjectURL(srtBlob);
-      const lines = srt.split('\n').filter(l => l.trim() && !/^\d+$/.test(l.trim()) && !l.includes('-->'));
-      const excerpt = lines.slice(0, 4).join(' ').substring(0, 200);
-      const vttBlob = new Blob([vtt], { type: 'text/vtt' });
-      const vttUrl = URL.createObjectURL(vttBlob);
-      const originalVideoUrl = URL.createObjectURL(new Blob([videoFileData], { type: fileMimeType }));
-      const langDesc = language === 'auto' ? 'auto-detected' : language;
-
-      let translatedSrt = null;
-      let translatedVtt = null;
-
-      // Step 3: Optional translation (Grok) — server locks original timestamps
-      if (translateLanguage) {
-        const translateResponse = await fetch('/api/translate-captions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...sampleHeaders,
-          },
-          body: JSON.stringify({ srtContent: srt, targetLanguage: translateLanguage })
-        });
-
-        if (!translateResponse.ok) {
-          let errorData = {};
-          try { errorData = await translateResponse.json(); } catch (_) {}
-          throw new Error(errorData.error || 'Failed to translate captions');
-        }
-
-        const translationResult = await translateResponse.json();
-        translatedSrt = translationResult.srt;
-        translatedVtt = translationResult.vtt;
-      }
-
-      // Step 4: Soft preview (always useful) or burn-in into video
-      if (!burnIn) {
-        addMessage({
-          text: `Captions generated! Preview: "${excerpt}${lines.length > 4 ? '...' : ''}"\n\nSoft subtitles (${langDesc}). SRT: ${srtUrl}`,
-          videoUrl: originalVideoUrl,
-          mimeType: fileMimeType,
-          vttUrl: vttUrl,
-        });
-        if (translatedSrt) {
-          const translatedSrtBlob = new Blob([translatedSrt], { type: 'text/plain' });
-          addMessage({ text: `Translated subtitles (${translateLanguage}):`, videoUrl: URL.createObjectURL(translatedSrtBlob), videoType: 'subtitle-srt', mimeType: 'text/plain' });
-          const translatedVttUrl = URL.createObjectURL(new Blob([translatedVtt], { type: 'text/vtt' }));
-          addMessage({ text: `Video with translated soft subtitles (${translateLanguage}):`, videoUrl: originalVideoUrl, mimeType: fileMimeType, vttUrl: translatedVttUrl });
-          return `Captions generated (${langDesc}) and translated to ${translateLanguage}. Soft tracks only (burn_in=false).`;
-        }
-        return `Captions generated successfully (${langDesc}). Soft subtitle track only (burn_in=false).`;
-      }
-
-      // burn_in: multipart → process-video burn_subtitles (supports dual-track)
-      const formData = new FormData();
-      formData.append('video', new Blob([videoFileData], { type: fileMimeType }), 'input.mp4');
-      formData.append('operation', 'burn_subtitles');
-      const burnArgs = {
-        srtContent: srt,
-        style,
-        position,
-      };
-      if (translatedSrt) {
-        burnArgs.translatedSrtContent = translatedSrt;
-      }
-      formData.append('args', JSON.stringify(burnArgs));
-
-      const burnResponse = await fetch('/api/process-video', {
-        method: 'POST',
-        headers: sampleHeaders,
-        body: formData,
-      });
-
-      if (!burnResponse.ok) {
-        let errorData = {};
-        try { errorData = await burnResponse.json(); } catch (_) {}
-        // Fall back to soft tracks rather than hard-failing the whole caption flow
-        addMessage({
-          text: `Captions ready but burn-in failed (${errorData.error || burnResponse.status}). Showing soft subtitles instead.`,
-          videoUrl: originalVideoUrl,
-          mimeType: fileMimeType,
-          vttUrl: translatedVtt ? URL.createObjectURL(new Blob([translatedVtt], { type: 'text/vtt' })) : vttUrl,
-        });
-        return `Captions generated (${langDesc}) but burn-in failed: ${errorData.error || burnResponse.status}. Soft subtitles shown.`;
-      }
-
-      const burned = await collectStreamChunks(burnResponse.body.getReader());
-      recordCaptionBurn(videoFileData, burned);
-      setVideoFileData(burned);
-      const burnedUrl = URL.createObjectURL(new Blob([burned], { type: 'video/mp4' }));
-      const dual = translatedSrt ? ` Dual-track burn-in (translated ${translateLanguage} + original).` : '';
-      addMessage({
-        // Do not echo the caption text in the chat bubble above the burned
-        // video; the text is already present in the rendered video.
-        text: `Captions burned in (${langDesc}).${dual}`,
-        videoUrl: burnedUrl,
-        mimeType: 'video/mp4',
-      });
-      addMessage({ text: 'SRT download:', videoUrl: srtUrl, videoType: 'subtitle-srt', mimeType: 'text/plain' });
-      if (translatedSrt) {
-        addMessage({
-          text: `Translated SRT (${translateLanguage}):`,
-          videoUrl: URL.createObjectURL(new Blob([translatedSrt], { type: 'text/plain' })),
-          videoType: 'subtitle-srt',
-          mimeType: 'text/plain',
-        });
-      }
-      return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in.${replacedNote}`;
+      return await generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileData, addMessage);
     } catch (error) {
       addMessage({ text: 'Error generating captions: ' + error.message });
       return 'Failed to generate captions: ' + error.message;
     }
   },
 
-  // Audio-in, captions-out: only the WAV goes up for transcription. The web app has no
-  // client-side ffmpeg, so the burn-in uses the server fallback (the video is uploaded for that
-  // step, as for every other web edit).
+  // Audio-in, captions-out: transcription and burn-in run in the browser (ffmpeg.wasm).
   lyric_captions: async (args, inputVideoFileData, setVideoFileData, addMessage) => {
     try {
       // Same rule as generate_captions: never burn on top of burned captions.
       const { bytes: videoFileData, replacing } = captionSourceFor(inputVideoFileData);
       if ((currentFileMimeType || '').startsWith('image/')) throw new Error('Lyric captions are not supported for photos');
       if (!args?.target_language) throw new Error('target_language is required');
-      const headers = sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {};
-      if (clientEngine()) return await lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage);
-      addMessage({ text: 'Extracting audio and transcribing lyrics…' });
-      const { burned, summary, result, audioBytes } = await runLyricCaptionsWeb(args, videoFileData, { headers });
-      recordCaptionBurn(videoFileData, burned);
-      setVideoFileData(burned);
-      const lines = result.lines?.length || 0;
-      const songText = describeSong(result.song);
-      const kb = (n) => `${Math.round(n / 1024)} KB`;
-      addMessage({
-        // No lyric text in the bubble: it is in the video.
-        text: `Bilingual captions burned in (${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage}). ${songText}`,
-        videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })),
-        mimeType: 'video/mp4',
-      });
-      return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText}${replacing ? ' Replaced the captions burned earlier.' : ''} Uploaded ${kb(audioBytes)} of audio for transcription; burn-in: server fallback (the web app has no client-side ffmpeg).`;
+      return await lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage);
     } catch (error) {
       addMessage({ text: 'Error creating lyric captions: ' + error.message });
       return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}: ${error.message}`;

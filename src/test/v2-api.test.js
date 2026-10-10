@@ -42,7 +42,7 @@ vi.mock('fluent-ffmpeg', () => {
 import express from 'express';
 import { chatRouter } from '../server/chat.js';
 import {
-  v2Router, clientFFmpegFlag, searchCapabilities, webToolsFor, isWav,
+  v2Router, searchCapabilities, webToolsFor, isWav,
   RUN_FFMPEG_TOOL_NAME, SEARCH_CAPABILITIES_TOOL_NAME,
 } from '../server/v2.js';
 import { issueSampleAccessToken } from '../server/middleware.js';
@@ -94,22 +94,12 @@ const post = (path, body, headers = { 'sample-access-token': token }) => realFet
   body: JSON.stringify(body),
 });
 
-describe('clientFFmpeg feature flag', () => {
-  it('defaults to on, and reads off and a percentage', () => {
-    expect(clientFFmpegFlag(undefined)).toEqual({ mode: 'on', percent: 100 });
-    expect(clientFFmpegFlag('on')).toEqual({ mode: 'on', percent: 100 });
-    expect(clientFFmpegFlag('off')).toEqual({ mode: 'off', percent: 0 });
-    expect(clientFFmpegFlag('25')).toEqual({ mode: 'percent', percent: 25 });
-    expect(clientFFmpegFlag('5%')).toEqual({ mode: 'percent', percent: 5 });
-    expect(clientFFmpegFlag('100')).toEqual({ mode: 'on', percent: 100 });
-    expect(clientFFmpegFlag('nonsense')).toEqual({ mode: 'on', percent: 100 });
-  });
-
-  it('GET /api/v2/config returns the flag and the clip limits without auth', async () => {
+describe('v2 config', () => {
+  it('GET /api/v2/config returns the clip limits without auth (no engine flag; editing is always in-browser)', async () => {
     const res = await realFetch(`${base}/api/v2/config`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.clientFFmpeg).toEqual({ mode: 'on', percent: 100 });
+    expect(body.clientFFmpeg).toBeUndefined();
     expect(body.limits.clip.desktop).toEqual({ warnBytes: 1024 ** 3, blockBytes: Math.round(1.8 * 1024 ** 3) });
     expect(body.limits.clip.mobile).toEqual({ warnBytes: 300 * 1024 ** 2, blockBytes: 500 * 1024 ** 2 });
     expect(body.captions).toEqual({ onDevice: true, cloud: false });

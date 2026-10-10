@@ -5,7 +5,7 @@ import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
 import {
-  ENGINE_CLIENT, fetchClientConfig, resolveEngineMode, setEngineMode,
+  fetchClientConfig,
   setUploadConsentHandler, getCloudCaptions, setCloudCaptions,
 } from './engineMode.js';
 import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
@@ -218,7 +218,6 @@ export default function App() {
   const toastTimerRef = useRef(null);
   const jobIdCounterRef = useRef(1);
   const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
-  const [engineMode, setEngineModeState] = useState(ENGINE_CLIENT); // client is the default; the flag can still say server
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
   const [cloudCaptionsAvailable, setCloudCaptionsAvailable] = useState(false);
   const [cloudCaptions, setCloudCaptionsState] = useState(() => getCloudCaptions());
@@ -403,14 +402,12 @@ export default function App() {
     verifyPayment();
   }, []);
 
-  // Feature flag: edit in this browser (ffmpeg.wasm, nothing uploaded) or on the server.
+  // Server config: clip limits and caption availability. Editing always runs in this
+  // browser (ffmpeg.wasm, nothing uploaded).
   useEffect(() => {
     let ignore = false;
     fetchClientConfig().then((config) => {
       if (ignore) return;
-      const { mode } = resolveEngineMode({ flag: config?.clientFFmpeg });
-      setEngineMode(mode);
-      setEngineModeState(mode);
       if (config?.limits?.clip) setClipLimits(config.limits.clip);
       setCloudCaptionsAvailable(Boolean(config?.captions?.cloud));
     });
@@ -539,15 +536,13 @@ export default function App() {
         }
 
         // In-browser editing has to fit the clip in this tab's memory.
-        if (engineMode === ENGINE_CLIENT) {
-          const clip = checkClip({ bytes: file.size }, { limits: clipLimits });
-          if (clip.level === 'block') {
-            addMessage({ text: `"${file.name}" is too large to edit in this browser. ${clip.reasons.join(' ')} Try a shorter or lower-resolution clip.` });
-            hasError = true;
-            continue;
-          }
-          if (clip.level === 'warn') addMessage({ text: `"${file.name}": ${clip.reasons.join(' ')}` });
+        const clip = checkClip({ bytes: file.size }, { limits: clipLimits });
+        if (clip.level === 'block') {
+          addMessage({ text: `"${file.name}" is too large to edit in this browser. ${clip.reasons.join(' ')} Try a shorter or lower-resolution clip.` });
+          hasError = true;
+          continue;
         }
+        if (clip.level === 'warn') addMessage({ text: `"${file.name}": ${clip.reasons.join(' ')}` });
 
         // Read file as array buffer for processing
         const arrayBuffer = await file.arrayBuffer();
@@ -950,7 +945,7 @@ export default function App() {
   const finishedJobs = jobs.filter(job => job.status !== 'running');
   const originals = media.filter(item => item.kind === 'original');
   const captionFiles = messages.filter(msg => msg.videoUrl && (msg.videoType === 'subtitle-srt' || msg.vttUrl));
-  const onDevice = engineMode === ENGINE_CLIENT;
+  const onDevice = true; // editing always runs in this browser
   const statusText = health === null
     ? 'checking server…'
     : health.ok

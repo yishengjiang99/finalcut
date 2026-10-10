@@ -1,63 +1,17 @@
-// Which FFmpeg the app edits with: "client" (ffmpeg.wasm in this browser, nothing uploaded) or
-// "server" (the previous upload-and-process flow, kept as the fallback). Decided once at startup
-// from the server's feature flag, the browser, and the ?engine= override.
+// Which FFmpeg the app edits with: "client" (ffmpeg.wasm in this browser, nothing uploaded).
+// The client engine is the only engine — there is no flag, override, or rollout.
+// Server-side processing remains available only as the per-operation consent fallback
+// (a step the browser cannot run asks before anything is uploaded).
 
 export const ENGINE_CLIENT = 'client';
 export const ENGINE_SERVER = 'server';
 
-/** Desktop Chromium and Firefox run the in-browser engine by default; phones and Safari do not yet. */
-export function supportsClientEngine(ua = globalThis.navigator?.userAgent || '', maxTouchPoints = globalThis.navigator?.maxTouchPoints || 0) {
-  if (typeof WebAssembly !== 'object' || typeof Worker !== 'function') return false;
-  const mobile = /iPhone|iPad|iPod|Android|Mobile/i.test(ua) || (/Macintosh/.test(ua) && maxTouchPoints > 1);
-  if (mobile) return false;
-  return /Firefox\/|Chrome\/|Chromium\/|Edg\//.test(ua);
-}
-
-// A stable 0-99 bucket per browser, so a percentage rollout does not flip between visits.
-function rolloutBucket(storage = globalThis.localStorage) {
-  try {
-    let bucket = Number(storage.getItem('fc.rolloutBucket'));
-    if (!Number.isInteger(bucket) || bucket < 0 || bucket > 99 || storage.getItem('fc.rolloutBucket') === null) {
-      bucket = Math.floor(Math.random() * 100);
-      storage.setItem('fc.rolloutBucket', String(bucket));
-    }
-    return bucket;
-  } catch {
-    return Math.floor(Math.random() * 100);
-  }
-}
-
-/**
- * Client (in-browser ffmpeg.wasm) is the default everywhere, including phones.
- * Server-side processing is chosen only by the server kill-switch
- * (CLIENT_FFMPEG=off), an explicit ?engine=server override, or a percent rollout.
- * @param {{ flag?: { mode: 'on'|'off'|'percent', percent?: number }, search?: string, supported?: boolean, bucket?: number }} input
- * @returns {{ mode: 'client'|'server', reason: string }}
- */
-export function resolveEngineMode({ flag, search = globalThis.location?.search || '', supported = supportsClientEngine(), bucket } = {}) {
-  const override = new URLSearchParams(search).get('engine');
-  if (override === ENGINE_SERVER) return { mode: ENGINE_SERVER, reason: 'override' };
-  if (override === ENGINE_CLIENT) return { mode: ENGINE_CLIENT, reason: 'override' };
-  if (flag?.mode === 'off') return { mode: ENGINE_SERVER, reason: 'flag_off' };
-  if (flag?.mode === 'percent') {
-    const b = bucket ?? rolloutBucket();
-    return b < (flag.percent || 0) ? { mode: ENGINE_CLIENT, reason: 'rollout' } : { mode: ENGINE_SERVER, reason: 'rollout' };
-  }
-  return { mode: ENGINE_CLIENT, reason: 'default' };
-}
-
-// Until the flag has been read the app assumes the client engine (the default).
-let engineMode = ENGINE_CLIENT;
-
-export function setEngineMode(mode) {
-  engineMode = mode === ENGINE_CLIENT ? ENGINE_CLIENT : ENGINE_SERVER;
-}
-
+/** The engine is always the in-browser ffmpeg.wasm client. */
 export function getEngineMode() {
-  return engineMode;
+  return ENGINE_CLIENT;
 }
 
-/** Read the feature flag and clip limits. A failed request means defaults (flag on). */
+/** Read the server config (clip limits, caption availability). A failed request means defaults. */
 export async function fetchClientConfig(fetchImpl = globalThis.fetch) {
   try {
     const response = await fetchImpl('/api/v2/config');
