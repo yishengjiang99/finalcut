@@ -18,7 +18,7 @@ export const landingStats = [
 
 export const landingFeatures = [
   ['💬', 'Edit video by chat', 'Describe the edit in plain English. Trim, crop, resize, rotate or add text, and the AI builds the FFmpeg command for you.', 'trim seconds 5–15'],
-  ['🔤', 'Auto captions and subtitles', 'Transcribe speech with a model that runs in your browser, translate the captions, and burn them in at the top or bottom.', 'add Spanish captions'],
+  ['🔤', 'Auto captions and subtitles', 'Transcribe speech in your browser (or in the cloud, audio only, if you opt in), translate the captions on our server, and burn them in at the top or bottom.', 'add Spanish captions'],
   ['🎨', 'Color and transitions', 'Brightness, contrast, saturation, hue, color filters and transitions between clips, all real FFmpeg filters.', 'make it moodier'],
   ['📱', 'Resize for Reels, TikTok and Shorts', 'Reframe to 9:16 for Reels, TikTok and Shorts, 1:1 for feeds or 16:9 for YouTube with one sentence.', 'make it vertical'],
   ['⚡', 'Speed and audio', 'Change speed, volume and fades, normalize loudness, equalize, and trim silence from the start or end.', 'make it 2x faster'],
@@ -26,7 +26,7 @@ export const landingFeatures = [
 ];
 
 export const landingSteps = [
-  ['Open your video', 'Pick a video or audio file, or try the built-in sample. The file stays on your device.', '“BigBuckBunny.mp4 attached ✓”'],
+  ['Open your video', 'Pick a video or audio file, or try the built-in sample. Opening a file does not upload it.', '“BigBuckBunny.mp4 attached ✓”'],
   ['Describe the edit', "Type it the way you'd brief an editor. Ask follow-ups, stack changes, and go back to any earlier version.", '“Cut the boring middle and punch up the colors”'],
   ['Download the result', "FFmpeg renders the edit in your browser. Save the file when it's ready.", '“✓ Done. Download MP4”']
 ];
@@ -90,7 +90,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <div>
             <div className="eyebrow"><span className="dot" /> AI video editor that runs in your browser</div>
             <h1>Edit video by <span className="grad">describing it.</span></h1>
-            <p className="hero-sub">Type what you want: trim, captions, color, speed or format. FinalCap turns your words into FFmpeg edits that run in your browser, so your video stays on your device. No timeline, no learning curve.</p>
+            <p className="hero-sub">Type what you want: trim, captions, color, speed or format. FinalCap turns your words into FFmpeg edits that run in your browser, so your video file is not uploaded to edit. No timeline, no learning curve.</p>
 
             {authError && <div className="auth-error">{authError}</div>}
 
@@ -196,10 +196,10 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
       <section className="block alt" id="privacy">
         <div className="wrap">
           <div className="kicker reveal">Privacy</div>
-          <h2 className="sec reveal">A private video editor: your video stays on your device</h2>
+          <h2 className="sec reveal">A private video editor: edits run in your browser, not on our server</h2>
           <p className="sec-sub reveal">
             FinalCap reads your file straight from your device. Edits run in your browser with FFmpeg compiled to
-            WebAssembly, and captions are transcribed by a speech model that also runs in your browser. To plan an
+            WebAssembly, and captions are transcribed by default with a speech model that also runs in your browser. To plan an
             edit, the AI receives your typed request and up to four small still frames, never the video file.
             Translating captions sends only the caption text. If a step can't run in your browser, FinalCap asks
             before uploading anything; lyric captions, for example, send only the audio track.
@@ -219,7 +219,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
       <div className="wrap">
         <div className="cta-band reveal">
           <h2>Your next edit is one sentence away.</h2>
-          <p>Open a video, describe your first edit, and download the result. It takes less than a minute, and your video stays on your device.</p>
+          <p>Open a video, describe your first edit, and download the result. It takes less than a minute, and your video file is not uploaded.</p>
           <div className="cta-row">
             <button className="btn-primary big" onClick={onGetStarted}>Start editing free</button>
             <button className="btn-secondary" onClick={onLoadSample}>Try with a sample video</button>

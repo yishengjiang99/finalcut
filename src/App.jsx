@@ -144,7 +144,7 @@ export const isVisibleMessage = (msg) => msg?.role !== 'tool' && Boolean(msg?.co
 // Welcome message with sample links
 const welcomeMessage = {
   role: 'assistant',
-  content: 'Welcome to FinalCap! Open a video or audio file to get started (it stays on your device), then tell me what to do with it, or pick a starting point below.',
+  content: 'Welcome to FinalCap! Open a video or audio file to get started (opening it does not upload it), then tell me what to do with it, or pick a starting point below.',
   id: 0,
   excludeFromAPI: true,
   showSampleLinks: true
