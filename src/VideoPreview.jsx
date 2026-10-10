@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
+const FPS_STEPS = [24, 25, 30, 60];
+
 export default function VideoPreview({ videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [fps, setFps] = useState(30);
+  const [fpsIdx, setFpsIdx] = useState(2); // index into FPS_STEPS; default 30
+  const fps = FPS_STEPS[fpsIdx];
+  const playAfterExpandRef = useRef(false);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [isAudio, setIsAudio] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -385,226 +389,298 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${frames.toString().padStart(2, '0')}`;
   };
 
+  const formatShort = (time) => {
+    if (!isFinite(time) || time < 0) time = 0;
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Mini-bar play: expand first, then start playback once the video element mounts.
+  useEffect(() => {
+    if (!isCollapsed && playAfterExpandRef.current && videoRef.current && !isAudio) {
+      playAfterExpandRef.current = false;
+      try {
+        const p = videoRef.current.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (_) { /* ignore */ }
+      setIsPlaying(true);
+    }
+  }, [isCollapsed, isAudio]);
+
+  const togglePlayFromSurface = () => handlePlayPause();
+
+  // Shared control styles (compact chrome)
+  const overlayBtn = {
+    width: '30px', height: '30px', borderRadius: '50%',
+    border: '1px solid rgba(255,255,255,.28)', backgroundColor: 'rgba(10,12,16,.55)',
+    color: '#fff', fontSize: '14px', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    WebkitTapHighlightColor: 'transparent', flex: 'none'
+  };
+  const centerPlayBtn = {
+    position: 'absolute', inset: 0, margin: 'auto', width: '64px', height: '64px',
+    borderRadius: '50%', backgroundColor: 'rgba(255,255,255,.94)', border: 'none',
+    color: '#0b0e13', fontSize: '24px', cursor: 'pointer', zIndex: 2,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 4px 18px rgba(0,0,0,.5)', WebkitTapHighlightColor: 'transparent'
+  };
+  const scrimTime = {
+    fontSize: '10px', color: '#fff', textShadow: '0 1px 3px #000',
+    fontVariantNumeric: 'tabular-nums', flex: 'none'
+  };
+  const chipBtn = {
+    fontSize: '12px', color: '#e8edf4', backgroundColor: '#10141b',
+    border: '1px solid #232c3a', borderRadius: '999px', padding: '7px 11px',
+    cursor: 'pointer', fontVariantNumeric: 'tabular-nums', flex: 'none',
+    WebkitTapHighlightColor: 'transparent'
+  };
+  const tbtnBase = {
+    minWidth: '40px', height: '36px', padding: '0 8px', borderRadius: '9px',
+    border: '1px solid #232c3a', backgroundColor: '#1a2230', color: '#e8edf4',
+    fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', flex: 'none', WebkitTapHighlightColor: 'transparent'
+  };
+  const tbtn = (disabled) => disabled
+    ? { ...tbtnBase, opacity: 0.4, cursor: 'not-allowed' }
+    : tbtnBase;
+
+  const dlPending = !isAudio && !!vttUrl && !downloadUrl;
+  const downloadLabel = (!isAudio && vttUrl)
+    ? (downloadUrl ? 'Download Burned WebM' : (isRecording ? 'Rendering Burned WebM...' : 'Preparing Burned WebM...'))
+    : 'Download';
+
+
+  // ---- Collapsed: 64px mini bar ----
+  if (isCollapsed) {
+    return (
+      <div style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        backgroundColor: '#151b25',
+        borderRadius: '10px',
+        padding: '7px 10px',
+        minHeight: '64px',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        maxWidth: '100%'
+      }}>
+        <div style={{
+          width: '88px', height: '50px', borderRadius: '6px', flex: 'none',
+          backgroundColor: '#000', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: '18px', color: '#9aa7bb'
+        }}>{isAudio ? '\u266A' : '\u25B6'}</div>
+        <div style={{ minWidth: 0, marginRight: 'auto' }}>
+          <div style={{
+            fontSize: '12px', fontWeight: '600', color: '#e8edf4',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>{title}</div>
+          {duration > 0 && (
+            <div style={{ fontSize: '10px', color: '#9aa7bb', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
+              {formatShort(currentTime)} / {formatShort(duration)}
+            </div>
+          )}
+        </div>
+        <button aria-label="Play" title="Play" onClick={() => { playAfterExpandRef.current = true; setIsCollapsed(false); }} style={tbtn(false)}>
+          \u25B6
+        </button>
+        <button aria-label="Expand preview" title="Expand" onClick={() => setIsCollapsed(false)} style={tbtn(false)}>
+          \u2303
+        </button>
+        <div style={{
+          position: 'absolute', left: 0, bottom: 0, height: '3px',
+          backgroundColor: '#7c6cf6',
+          width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`
+        }} />
+      </div>
+    );
+  }
+
   return (
-    <div style={{ 
-      backgroundColor: '#151b25', 
-      padding: '12px', 
+    <div style={{
+      backgroundColor: '#0b0e13',
       borderRadius: '8px',
-            maxWidth: '100%',
+      overflow: 'hidden',
+      maxWidth: '100%',
       boxSizing: 'border-box'
     }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        marginBottom: isCollapsed ? '0' : '8px'
-      }}>
-        <p style={{ margin: '0', fontSize: '14px', fontWeight: 'bold', color: '#e8edf4' }}>{title}</p>
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          style={{
-            padding: '4px 12px',
-            fontSize: '12px',
-            backgroundColor: '#10141b',
-            color: '#e8edf4',
-            border: '1px solid #232c3a',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            WebkitTapHighlightColor: 'transparent'
-          }}
-        >
-          {isCollapsed ? '▼ Expand' : '▲ Collapse'}
-        </button>
-      </div>
-      
-      {!isCollapsed && (
-        <>
       {isAudio ? (
-        <audio 
-          ref={videoRef}
-          src={videoUrl} 
-          style={{ 
-            width: '100%', 
-            maxWidth: '240px', 
-            marginBottom: '12px'
-          }} 
-          controls
-        />
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px' }}>
+            <span style={{ fontSize: '13px', fontWeight: '700', color: '#e8edf4' }}>{title}</span>
+            <button aria-label="Collapse preview" title="Collapse" onClick={() => setIsCollapsed(true)} style={chipBtn}>
+              \u2304
+            </button>
+          </div>
+          <audio
+            ref={videoRef}
+            src={videoUrl}
+            style={{ width: '100%', display: 'block' }}
+            controls
+          />
+        </>
       ) : (
         <>
-          {/* Hidden video element — decode/source only; canvas is the visible player */}
-          <video 
-            ref={videoRef}
-            src={videoUrl} 
-            playsInline
-            crossOrigin="anonymous"
-            style={{ display: 'none' }}
-          >
-            {/* track.mode is set to "hidden" in JS so native captions never show;
-                we read activeCues and burn them into the canvas ourselves. */}
-            {vttUrl && (
-              <track
-                kind="subtitles"
-                src={vttUrl}
-                srcLang={subtitleLang}
-                label={subtitleLabel}
-                default
-              />
-            )}
-          </video>
+          <div style={{ position: 'relative', backgroundColor: '#000' }} onClick={togglePlayFromSurface}>
+            {/* Hidden video element — decode/source only; canvas is the visible player */}
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              playsInline
+              crossOrigin="anonymous"
+              style={{ display: 'none' }}
+            >
+              {/* track.mode is set to "hidden" in JS so native captions never show;
+                  we read activeCues and burn them into the canvas ourselves. */}
+              {vttUrl && (
+                <track
+                  kind="subtitles"
+                  src={vttUrl}
+                  srcLang={subtitleLang}
+                  label={subtitleLabel}
+                  default
+                />
+              )}
+            </video>
 
-          {/* Canvas — the visible "player" with subtitles always burned in */}
-          <canvas
-            ref={canvasRef}
-            style={{
-              width: '100%',
-              maxWidth: '240px',
-              borderRadius: '4px',
-              display: 'block',
-              marginBottom: '12px',
-              backgroundColor: '#000'
-            }}
-          />
+            {/* Canvas — the visible "player" with subtitles always burned in */}
+            <canvas
+              ref={canvasRef}
+              style={{
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                backgroundColor: '#000'
+              }}
+            />
+
+            {/* Top overlay: collapse + title */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0,
+              display: 'flex', alignItems: 'center', padding: '8px 10px',
+              pointerEvents: 'none'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'auto' }}>
+                <button
+                  aria-label="Collapse preview"
+                  title="Collapse"
+                  onClick={(e) => { e.stopPropagation(); setIsCollapsed(true); }}
+                  style={overlayBtn}
+                >
+                  \u2304
+                </button>
+                <span style={{
+                  fontSize: '11px', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,.85)',
+                  maxWidth: '170px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                }}>{title}</span>
+              </div>
+            </div>
+
+            {/* Center play button (when paused) */}
+            {!isPlaying && (
+              <button
+                aria-label="Play"
+                title="Play"
+                onClick={(e) => { e.stopPropagation(); handlePlayPause(); }}
+                style={centerPlayBtn}
+              >
+                \u25B6
+              </button>
+            )}
+
+            {/* Bottom scrim: time + scrubber + total */}
+            <div style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0,
+              padding: '26px 10px 6px',
+              background: 'linear-gradient(transparent, rgba(0,0,0,.72))'
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={scrimTime}>{formatShort(currentTime)}</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={duration || 0}
+                  step={getFrameTime()}
+                  value={currentTime}
+                  onChange={handleSliderChange}
+                  aria-label="Seek"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: '22px',
+                    margin: 0,
+                    cursor: 'pointer',
+                    accentColor: '#7c6cf6'
+                  }}
+                />
+                <span style={scrimTime}>{formatShort(duration)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Slim control strip: time/frame · fps chip · frame step · download */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 8px',
+            backgroundColor: '#151b25'
+          }}>
+            <span style={{
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: '12px',
+              color: '#9aa7bb',
+              marginRight: 'auto',
+              paddingLeft: '4px',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap'
+            }}>
+              {formatTime(currentTime)} \u00B7 F {getCurrentFrame()} / {getTotalFrames()}
+            </span>
+            <button
+              aria-label={`Frame rate ${fps} frames per second. Activate to change.`}
+              title="Frame rate (tap to cycle)"
+              onClick={() => setFpsIdx((fpsIdx + 1) % FPS_STEPS.length)}
+              style={chipBtn}
+            >
+              {fps} fps
+            </button>
+            <button
+              aria-label="Step back one frame"
+              title="Previous frame"
+              onClick={handleFrameBackward}
+              disabled={currentTime <= 0}
+              style={tbtn(currentTime <= 0)}
+            >
+              \u23EE
+            </button>
+            <button
+              aria-label="Step forward one frame"
+              title="Next frame"
+              onClick={handleFrameForward}
+              disabled={duration > 0 && currentTime >= duration}
+              style={tbtn(duration > 0 && currentTime >= duration)}
+            >
+              \u23ED
+            </button>
+            <button
+              aria-label={downloadLabel}
+              title={downloadLabel}
+              onClick={handleDownload}
+              disabled={dlPending}
+              style={tbtn(dlPending)}
+            >
+              {dlPending ? '\u23FA' : '\u2B07'}
+            </button>
+          </div>
 
           {corsError && (
-            <p style={{ color: '#f85149', fontSize: '12px', marginBottom: '8px' }}>
-              ⚠ CORS error: canvas export/recording may fail for cross-origin videos.
+            <p style={{ color: '#f85149', fontSize: '11px', margin: 0, padding: '6px 10px', backgroundColor: '#151b25' }}>
+              \u26A0 CORS error: canvas export/recording may fail for cross-origin videos.
             </p>
           )}
-        </>
-      )}
-      
-      {/* Meter/Slider control */}
-      <div style={{ marginBottom: '12px' }}>
-        <input 
-          type="range"
-          min="0"
-          max={duration || 0}
-          step={getFrameTime()}
-          value={currentTime}
-          onChange={handleSliderChange}
-          style={{
-            width: '100%',
-            cursor: 'pointer',
-            accentColor: '#7c6cf6'
-          }}
-        />
-      </div>
-      
-      {/* Time and Frame info */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        fontSize: '12px', 
-        marginBottom: '12px',
-        color: '#9aa7bb'
-      }}>
-        <span>Time: {formatTime(currentTime)}</span>
-        {!isAudio && <span>Frame: {getCurrentFrame()} / {getTotalFrames()}</span>}
-      </div>
-      
-      {/* FPS selector - only for video */}
-      {!isAudio && (
-        <div style={{ marginBottom: '12px', fontSize: '12px', color: '#e8edf4' }}>
-          <label style={{ marginRight: '8px' }}>FPS:</label>
-          <select 
-            value={fps} 
-            onChange={(e) => setFps(Number(e.target.value))}
-            style={{
-              padding: '4px 8px',
-              borderRadius: '4px',
-              border: '1px solid #232c3a',
-              fontSize: '12px',
-              backgroundColor: '#0b0e13',
-              color: '#e8edf4'
-            }}
-          >
-            <option value={24}>24</option>
-            <option value={25}>25</option>
-            <option value={30}>30</option>
-            <option value={60}>60</option>
-          </select>
-        </div>
-      )}
-      
-      {/* Control buttons */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '8px', 
-        flexWrap: 'wrap',
-        justifyContent: 'center'
-      }}>
-        {!isAudio && (
-          <button 
-            onClick={handleFrameBackward}
-            disabled={currentTime <= 0}
-            style={{
-              padding: '8px 12px',
-              fontSize: '14px',
-              backgroundColor: currentTime <= 0 ? '#151b25' : '#1a2230',
-              color: currentTime <= 0 ? '#5f6b80' : '#e8edf4',
-              border: '1px solid #232c3a',
-              borderRadius: '4px',
-              cursor: currentTime <= 0 ? 'not-allowed' : 'pointer',
-              WebkitTapHighlightColor: 'transparent'
-            }}
-          >
-            ◀ Frame
-          </button>
-        )}
-        
-        <button 
-          onClick={handlePlayPause}
-          style={{
-            padding: '8px 16px',
-            fontSize: '14px',
-            backgroundColor: '#10141b',
-            color: '#e8edf4',
-            border: '1px solid #232c3a',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            WebkitTapHighlightColor: 'transparent'
-          }}
-        >
-          {isPlaying ? '⏸ Pause' : '▶ Play'}
-        </button>
-        
-        <button
-          onClick={handleDownload}
-          disabled={!isAudio && !!vttUrl && !downloadUrl}
-          style={{
-            padding: '8px 16px',
-            fontSize: '14px',
-            backgroundColor: (!isAudio && !!vttUrl && !downloadUrl) ? '#151b25' : '#10141b',
-            color: (!isAudio && !!vttUrl && !downloadUrl) ? '#5f6b80' : '#e8edf4',
-            border: '1px solid #232c3a',
-            borderRadius: '4px',
-            cursor: (!isAudio && !!vttUrl && !downloadUrl) ? 'not-allowed' : 'pointer',
-            WebkitTapHighlightColor: 'transparent'
-          }}
-        >
-          {!isAudio && !!vttUrl ? (downloadUrl ? '⬇ Download Burned WebM' : (isRecording ? '⏺ Rendering Burned WebM...' : '⏺ Preparing Burned WebM...')) : '⬇ Download'}
-        </button>
-
-        {!isAudio && (
-          <button 
-            onClick={handleFrameForward}
-            disabled={currentTime >= duration}
-            style={{
-              padding: '8px 12px',
-              fontSize: '14px',
-              backgroundColor: currentTime >= duration ? '#151b25' : '#1a2230',
-              color: currentTime >= duration ? '#5f6b80' : '#e8edf4',
-              border: '1px solid #232c3a',
-              borderRadius: '4px',
-              cursor: currentTime >= duration ? 'not-allowed' : 'pointer',
-              WebkitTapHighlightColor: 'transparent'
-            }}
-          >
-            Frame ▶
-          </button>
-        )}
-      </div>
         </>
       )}
     </div>

@@ -200,6 +200,7 @@ export default function App() {
 
   const [messages, setMessages] = useState([{ role: 'system', content: systemPrompt, id: -1 }, welcomeMessage]);
   const [chatInput, setChatInput] = useState('');
+  const [composerFocused, setComposerFocused] = useState(false);
   const [videoFileData, setVideoFileData] = useState(null);
   const [uploadedVideos, setUploadedVideos] = useState([]); // Array of {data: Uint8Array, url: string, name: string, mimeType: string}
   const [fileType, setFileType] = useState('video'); // 'video' or 'audio'
@@ -944,6 +945,8 @@ export default function App() {
   const visibleMessages = messages.slice(1).filter(isVisibleMessage);
   const finishedJobs = jobs.filter(job => job.status !== 'running');
   const originals = media.filter(item => item.kind === 'original');
+  // Gemini-style composer: slim pill when idle, expanded card when active.
+  const composerActive = composerFocused || chatInput.trim().length > 0 || originals.length > 0 || isCallingAPI;
   const captionFiles = messages.filter(msg => msg.videoUrl && (msg.videoType === 'subtitle-srt' || msg.vttUrl));
   const onDevice = true; // editing always runs in this browser
   const statusText = health === null
@@ -1180,7 +1183,10 @@ export default function App() {
           )}
 
           <div className="composer-zone">
-            <div className="composer">
+            <div
+              className={`composer${composerActive ? ' active' : ''}`}
+              onClick={() => { if (!composerActive) textareaRef.current?.focus(); }}
+            >
               <div className="attachments">
                 {originals.map(item => (
                   <div key={item.id} className={`attach${item.id === activeMediaId ? ' active' : ''}`}>
@@ -1190,7 +1196,23 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <div className="composer-row">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onFocus={() => setComposerFocused(true)}
+                onBlur={() => setComposerFocused(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
+                aria-label="Message input"
+              />
+              <div className="composer-actions">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1199,21 +1221,9 @@ export default function App() {
                   multiple
                   hidden
                 />
-                <button className="icon-btn" title="Attach video or audio" disabled={isCallingAPI} onClick={openFilePicker}>📎</button>
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
-                />
-                <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onClick={() => isCallingAPI ? cancelRunning() : handleSend()} disabled={!isCallingAPI && !chatInput.trim()}>
+                <button className="icon-btn" title="Attach video or audio" disabled={isCallingAPI} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); openFilePicker(); }}>📎</button>
+                <span className="ca-spacer" />
+                <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); isCallingAPI ? cancelRunning() : handleSend(); }} disabled={!isCallingAPI && !chatInput.trim()}>
                   {isCallingAPI ? '■' : '↑'}
                 </button>
               </div>

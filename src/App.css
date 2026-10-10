@@ -668,9 +668,18 @@ body {
 .composer {
   background: #26314a;
   border: 1px solid #3a4a6b;
-  border-radius: 20px;
+  border-radius: 999px;
   box-shadow: var(--shadow);
-  transition: border-color .18s, box-shadow .18s;
+  transition: border-color .18s, box-shadow .18s, border-radius .22s ease;
+  padding: 6px 8px;
+  cursor: text;
+}
+
+/* Active = focused, has text, has attachments, or a job is running: the
+   pill expands into the full card, like the Gemini mobile composer. */
+.composer.active {
+  border-radius: 20px;
+  cursor: default;
 }
 
 .composer:focus-within {
@@ -770,11 +779,21 @@ body {
   opacity: .5;
 }
 
-.composer-row {
-  display: flex;
-  align-items: flex-end;
+/* Action row (attach / send) — only visible when the composer is active. */
+.composer-actions {
+  display: none;
+  align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 2px 8px 8px;
+}
+
+.composer.active .composer-actions {
+  display: flex;
+  animation: rise .18s ease-out;
+}
+
+.composer-actions .ca-spacer {
+  flex: 1;
 }
 
 .icon-btn {
@@ -804,11 +823,11 @@ body {
 }
 
 .composer textarea {
-  flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 13px;
+  background: transparent;
+  border: none;
   outline: none;
   resize: none;
   color: var(--text);
@@ -818,6 +837,11 @@ body {
   max-height: 200px;
   padding: 12px 14px;
   min-height: 48px;
+}
+
+/* Idle pill: single slim line */
+.composer:not(.active) textarea {
+  min-height: 0;
 }
 
 .composer textarea::placeholder {
@@ -867,12 +891,17 @@ body {
 }
 
 .composer-foot {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 14px;
   padding: 0 16px 12px;
   font-size: 12px;
   color: var(--text-faint);
+}
+
+.composer.active .composer-foot {
+  display: flex;
+  animation: rise .18s ease-out;
 }
 
 .composer-foot kbd {
@@ -1723,14 +1752,13 @@ body {
     padding: 10px 12px;
   }
 
-  .composer {
+  .composer.active {
     border-radius: 16px;
   }
 
-  .composer-row {
-    padding: 8px 10px;
+  .composer-actions {
+    padding: 2px 6px 6px;
     gap: 8px;
-    align-items: center;
   }
 
   .icon-btn {
