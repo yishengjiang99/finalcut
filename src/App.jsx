@@ -1188,23 +1188,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onFocus={() => setComposerFocused(true)}
-                onBlur={() => setComposerFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
-                aria-label="Message input"
-              />
-              <div className="composer-actions">
+              <div className="composer-input-row">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1213,7 +1197,25 @@ export default function App() {
                   multiple
                   hidden
                 />
-                <button className="icon-btn" title="Attach video or audio" disabled={isCallingAPI} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); openFilePicker(); }}>📎</button>
+                <button className="icon-btn attach-btn" title="Attach video or audio" disabled={isCallingAPI} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); openFilePicker(); }}>📎</button>
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onFocus={() => setComposerFocused(true)}
+                  onBlur={() => setComposerFocused(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
+                  aria-label="Message input"
+                />
+              </div>
+              <div className="composer-actions">
                 <span className="ca-spacer" />
                 <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); isCallingAPI ? cancelRunning() : handleSend(); }} disabled={!isCallingAPI && !chatInput.trim()}>
                   {isCallingAPI ? '■' : '↑'}

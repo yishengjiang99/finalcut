@@ -146,6 +146,35 @@ describe('App Component', () => {
     expect(container.querySelector('.composer .chat-suggestions')).toBeNull();
   });
 
+  it('always shows the attach button, even when the composer is idle', async () => {
+    delete window.location;
+    window.location = {
+      pathname: '/success',
+      search: '?session_id=cs_test_123',
+      origin: 'http://localhost:3000',
+      href: 'http://localhost:3000/success?session_id=cs_test_123'
+    };
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ verified: true, paymentStatus: 'paid', customerEmail: 'test@example.com' })
+      });
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByText('Get started free')).not.toBeInTheDocument();
+    });
+    // The composer is idle (no focus, no text): the upload button must still be there,
+    // and it must not live inside the active-only actions row.
+    const composer = container.querySelector('.composer');
+    expect(composer).not.toBeNull();
+    expect(composer.classList.contains('active')).toBe(false);
+    const attach = container.querySelector('.composer-input-row .attach-btn');
+    expect(attach).not.toBeNull();
+    expect(attach.getAttribute('title')).toBe('Attach video or audio');
+    expect(container.querySelector('.composer-actions .attach-btn')).toBeNull();
+  });
+
   it('does not expose token in client-side code', () => {
     const { container } = render(<App />);
     const html = container.innerHTML;

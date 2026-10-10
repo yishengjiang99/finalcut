@@ -779,7 +779,21 @@ body {
   opacity: .5;
 }
 
-/* Action row (attach / send) — only visible when the composer is active. */
+/* Input row (attach + textarea) — always visible, even in the idle pill,
+   so the upload button never hides behind the keyboard. */
+.composer-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.composer-input-row > textarea {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* Action row (send) — only visible when the composer is active. */
 .composer-actions {
   display: none;
   align-items: center;
