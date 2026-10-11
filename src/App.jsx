@@ -162,8 +162,11 @@ export const shouldRenderVideoPreview = (msg) => {
   return Boolean(msg?.videoUrl) && !isDownloadOnlyAttachment(msg);
 };
 
-export default function App() {
-  const [showLanding, setShowLanding] = useState(true); // Show landing page initially
+// skipLanding/startWithSample are set by Root.jsx, which renders the landing page itself and loads
+// this module as a separate chunk only when the editor is needed. Without props (tests), App
+// still renders its own landing first.
+export default function App({ skipLanding = false, startWithSample = false } = {}) {
+  const [showLanding, setShowLanding] = useState(!skipLanding); // Show landing page initially
   const [loaded, setLoaded] = useState(true); // Server-side processing doesn't require loading
   const [processing, setProcessing] = useState(false); // Track ffmpeg processing state
   const [authError, setAuthError] = useState(null); // Track authentication errors
@@ -778,6 +781,14 @@ export default function App() {
       toast('Error loading sample video. Please open your own video.');
     }
   };
+
+  // Root.jsx opened the editor from "Try the sample video": load the sample once.
+  const sampleStartedRef = useRef(false);
+  useEffect(() => {
+    if (!startWithSample || sampleStartedRef.current) return;
+    sampleStartedRef.current = true;
+    loadSampleVideo();
+  }, [startWithSample]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Landing page component
   if (showLanding) {
