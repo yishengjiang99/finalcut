@@ -1,8 +1,10 @@
 # FinalCap push notification lifecycle
 
-Status (2026-10-10): server shipped in **dry-run** (default). No real push is sent until the
-go-live steps at the bottom are done. iOS client support ships with the next TestFlight build
-after 1.0 (build 16 is in App Store review and is untouched).
+Status (2026-10-10 18:30 PT): **LIVE** (`PUSH_LIFECYCLE_MODE=live`) with APNs configured
+(team key GAPGVZ7K2D at `/etc/finalcut/AuthKey_GAPGVZ7K2D.p8`, root:finalcut 0640; auth check
+accepted in sandbox and production for `com.ragnus.w2`). Devices appear once users run 1.0.1+
+(first push-capable build); 1.0 (build 16, in App Store review) has no push client.
+Auto kill switch + daily monitor enabled (§8).
 
 ## 1. Audit (before this change)
 
@@ -105,7 +107,16 @@ Per segment: sent / would_send / failed / opened / returned24h. Use dry-run coun
 ## 8. Ops
 
 Actions → **Push lifecycle (FinalCap)** (`.github/workflows/push-lifecycle.yml`, runs `scripts/push-lifecycle.mjs` on the server):
-`report`, `dry_run_tick`, `samples`, `kill_switch_on`, `kill_switch_off`.
+`report`, `monitor`, `dry_run_tick`, `live_tick` (only when live), `guard`, `apns_check` (fake token, no user contacted),
+`samples`, `configure_apns`, `set_mode`, `kill_switch_on`, `kill_switch_off`.
+
+**Auto kill switch** (`autoGuard`, after every non-dry tick and in the daily monitor): sets
+`push_ops.kill_switch=on` (+ `auto_kill` reason) when, since go-live within 7 days, distinct users who
+turned Tips & offers off or turned notifications off (app unregisters) exceed **2%** of push users
+(minimum 2), or > **20%** of real APNs sends in 24 h fail (minimum 10; uninstalled tokens excluded).
+
+**Daily monitor**: scheduled `monitor` at 10:05 PT — guard + KPIs in the job summary; the job fails
+(GitHub notifies the owner) while the kill switch is on.
 
 ## 9. Go live (user actions)
 
