@@ -9,10 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "listing = listing snapshot; review = review/rejection state dump (artifact); list-apps = GET-only inventory of every app in the account"
+        description: "listing = listing snapshot; review = review/rejection state dump (artifact); list-apps = GET-only inventory of every app in the account; remove-from-sale = WRITES (allowlisted legacy apps only)"
         type: choice
-        options: [listing, review, list-apps]
+        options: [listing, review, list-apps, remove-from-sale]
         default: listing
+      app_ids:
+        description: "remove-from-sale only: space/comma separated app ids (must be in the script's hard-coded allowlist; empty = all 6 allowlisted)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -115,3 +119,22 @@ jobs:
           set -euo pipefail
           pip install -q PyJWT cryptography
           python3 .github/scripts/asc_list_apps.py
+
+  remove-from-sale:
+    # Approved 2026-10-10: removes ONLY the 6 allowlisted legacy apps (+ their IAPs) from sale.
+    # Never deletes apps. The script refuses any id outside its hard-coded allowlist.
+    if: ${{ inputs.mode == 'remove-from-sale' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove allowlisted apps from sale
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_IDS: ${{ inputs.app_ids }}
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 .github/scripts/asc_remove_from_sale.py
