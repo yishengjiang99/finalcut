@@ -5,6 +5,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(NativeSettings.cloudProcessingKey) private var cloudProcessing = false
+    @ObservedObject private var push = PushManager.shared
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         NavigationStack {
@@ -15,6 +17,24 @@ struct SettingsView: View {
                         .accessibilityIdentifier("CloudProcessingToggle")
                 } footer: {
                     Text(UXCopy.cloudSettingFootnote)
+                }
+                Section {
+                    Toggle("Tips & offers", isOn: Binding(
+                        get: { push.marketingOptIn },
+                        set: { push.setMarketingOptIn($0) }
+                    ))
+                    .tint(AppTheme.accent)
+                    .disabled(!PushManager.isAllowed(push.authorization))
+                    .accessibilityIdentifier("TipsAndOffersToggle")
+                    Button("Notification settings") {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text(PushManager.isAllowed(push.authorization)
+                         ? "Editing tips and export alerts are on. Tips & offers adds occasional feature news and FinalCap Pro offers, at most a few a week. Off by default."
+                         : "Notifications are off. Turn them on in iOS Settings to get export alerts and editing tips.")
                 }
                 Section("Privacy") {
                     Text(UXCopy.privacyFirstRun)

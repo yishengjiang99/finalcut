@@ -25,6 +25,11 @@ enum APIEndpoints {
     /// FFmpeg CLI fallback: multipart video + args JSON → processed media bytes.
     static let ffmpegCliRun = "/api/ffmpeg-cli/run"
 
+    /// Push notifications (docs/push-lifecycle.md). Bearer device session.
+    static let pushRegister = "/api/push/register"
+    static let pushPrefs = "/api/push/prefs"
+    static let pushEvents = "/api/push/events"
+
     /// Poll job status: GET /api/jobs/:id
     static func jobStatus(_ id: String) -> String {
         "/api/jobs/\(id)"

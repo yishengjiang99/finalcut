@@ -55,6 +55,7 @@ struct PaywallView: View {
         .background(AppTheme.background.ignoresSafeArea())
         .accessibilityIdentifier("Paywall")
         .task { await store.load() }
+        .onAppear { PushManager.shared.track("paywall_view") }
     }
 
     // MARK: - Sections

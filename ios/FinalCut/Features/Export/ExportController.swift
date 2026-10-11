@@ -81,9 +81,11 @@ final class ExportController: ObservableObject {
                     self.phase = .idle
                     self.toast = UXCopy.savedToPhotos
                     self.notifyIfInactive(success: true, isPhoto: isPhoto, savedToPhotos: true)
+                    PushManager.shared.track("export_done")
                 case .files:
                     self.phase = .idle
                     self.filesPickerURL = url
+                    PushManager.shared.track("export_done")
                 }
             } catch NativeExporter.ExportError.cancelled {
                 self.phase = .idle
@@ -148,7 +150,9 @@ final class ExportController: ObservableObject {
 
     func requestNotifications() {
         showNotifyOffer = false
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            Task { @MainActor in PushManager.shared.permissionResult(granted: granted) }
+        }
     }
 
     private func notifyIfInactive(success: Bool, isPhoto: Bool, savedToPhotos: Bool) {

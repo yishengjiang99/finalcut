@@ -155,6 +155,18 @@ final class APIClient {
         return result
     }
 
+    // MARK: - Push notifications
+
+    /// Sends a small JSON body to one of the /api/push/* endpoints with the device session.
+    /// Errors are swallowed by callers: push bookkeeping must never disturb editing.
+    func pushRequest(path: String, method: String, json: [String: Any]) async throws {
+        try await ensureDeviceSession()
+        let body = try JSONSerialization.data(withJSONObject: json)
+        let request = makeRequest(url: url(for: path), method: method, auth: .bearerPreferred, body: body)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+    }
+
     @discardableResult
     func registerDevice() async throws -> MobileDeviceAuthResponse {
         let body = try encoder.encode(MobileDeviceAuthRequest(deviceInstallId: DeviceIdentity.installID))
