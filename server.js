@@ -15,6 +15,8 @@ import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { v2Router } from './src/server/v2.js';
 import { telemetryRouter, scheduleTelemetryPurge } from './src/server/telemetry.js';
+import { pushRouter, getPushStore } from './src/server/push/router.js';
+import { scheduleLifecycle } from './src/server/push/lifecycle.js';
 
 const app = express();
 
@@ -70,6 +72,9 @@ app.use(chatRouter);
 app.use(jobsRouter);
 app.use(lyricCaptionsRouter);
 app.use(v2Router);
+// Push notifications (token registration, lifecycle; dry-run by default). See docs/push-lifecycle.md.
+app.use(pushRouter);
+scheduleLifecycle(getPushStore);
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);

@@ -27,6 +27,7 @@
     <li><strong>Cloud captions (optional, off by default)</strong> — if you turn this on, only the extracted audio track (never the video) is uploaded to our server and sent to OpenAI for transcription; our server deletes the uploaded audio right after transcription.</li>
     <li><strong>Lyric captions (optional)</strong> — runs only when you ask for lyric captions. Your video's audio is uploaded to our server and sent to OpenAI (whisper-1 model) to transcribe it; our server deletes the uploaded audio right after transcription. The transcript text (not the audio) is then sent to xAI (Grok, which may search the web) to identify the song, look up its lyrics, and translate the lines. Your audio is never sent to xAI. On the web, the captions are burned into your video in your browser, the same as other web edits (on iOS and on older web flows they were burned on our server). On iOS, lyric captions runs only with Cloud processing on, after asking you before uploading, and follows the same OpenAI/xAI handling.</li>
     <li><strong>Microphone and speech (iOS)</strong> — used only for dictation. Speech is turned into text on your iPhone and the audio is never uploaded. Only the resulting text is sent as your edit request.</li>
+    <li><strong>Notifications (iOS)</strong> — if you allow notifications, the app sends our server the device's push token, your time zone and app version, linked to the app's random device ID (not your name or email). While notifications are allowed, the app also reports a few event names with a time: that the app was opened, that an export finished, that the Pro screen was shown, and that you tapped a notification. Together with the number of edits per day we already count for quotas, these decide which tip to send and when (for example, a tip about captions a few days after install). We never use your prompts, captions or media for this. Tips are limited to at most one a day and three a week, are not sent at night in your time zone, and promotional messages ("Tips &amp; offers") are sent only if you turn that on in Settings. To word a notification, our server sends xAI (Grok) only a short anonymous summary, such as "free plan, 1–3 edits last week, has exported", with no identifiers.</li>
     <li><strong>Purchases</strong> — App Store transaction identifiers (iOS) or Stripe customer/subscription ids (web). We do not receive your full card number from Apple.</li>
     <li><strong>Diagnostics</strong> — optional crash or performance logs if enabled.</li>
     <li><strong>Usage analytics (web)</strong> — anonymous product events recorded on our own servers so we can see which parts of the site work: page views of the landing page, which editing tool ran and whether it succeeded, that a file was opened (type and a coarse size range, not the name), exports, sign-in and upgrade steps, and the referring website's domain and campaign tags. To count repeat visits, the site stores a random ID in your browser's local storage, plus a per-tab session ID. We use no cookies and no third-party analytics for this, we do not store your IP address, and we never record your prompts, file names, media, frames, or account details. If your browser sends Global Privacy Control or Do Not Track, no events are sent.</li>
@@ -41,17 +42,18 @@
   </ul>
 
   <h2>Sharing</h2>
-  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; xAI for Grok AI models, including lyric lookup and translation; Apple; and Stripe on web). The on-device speech model is served from our own servers. We do not sell your personal information.</p>
+  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; xAI for Grok AI models, including lyric lookup, translation, and wording notifications from an anonymous summary; Apple, including Apple Push Notification service to deliver notifications; and Stripe on web). The on-device speech model is served from our own servers. We do not sell your personal information.</p>
 
   <h2>Retention</h2>
   <p>Uploaded media and job outputs are kept as needed to provide the service and then deleted or anonymized according to our retention schedule and your deletion requests, subject to legal holds. For lyric captions, the uploaded audio is deleted right after transcription, and the transcript lines and translations are kept in server memory for up to 30 minutes so the caption burn-in step can use them, then expire.</p>
-  <p>Anonymous usage analytics events are deleted automatically after 13 months.</p>
+  <p>Anonymous usage analytics events are deleted automatically after 13 months. Notification events and the log of notifications sent are deleted after 13 months; a push token is disabled as soon as Apple reports it is no longer valid (for example after the app is deleted).</p>
 
   <h2>Your choices</h2>
   <ul>
     <li>You can request access or deletion by emailing the support address below.</li>
     <li>You can revoke Sign in with Apple/Google in system settings.</li>
     <li>You can manage or cancel iOS subscriptions in Apple ID → Subscriptions.</li>
+    <li>You can turn off promotional notifications in FinalCap → Settings → Tips &amp; offers, and all notifications in iOS Settings → Notifications → FinalCap. Turning notifications off stops the notification events described above.</li>
     <li>You can reset the anonymous analytics ID by clearing this site's data in your browser, or turn analytics off by enabling Global Privacy Control or Do Not Track.</li>
   </ul>
 

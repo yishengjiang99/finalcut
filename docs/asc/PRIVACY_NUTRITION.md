@@ -27,7 +27,7 @@ Default: **Do not track** across apps/sites. No third-party ad SDK in v1. If you
 
 ## Nutrition ↔ legal HTML
 
-[`public/legal/privacy.html`](../../public/legal/privacy.html) must list the same uploads: edit-request thumbnails + metadata, opt-in cloud clips (iOS) / video files (web), auth identifiers, push tokens (if added), purchase receipts, and diagnostics. It also states that the microphone is used only for on-device dictation. Local export notifications are on-device (no push token).
+[`public/legal/privacy.html`](../../public/legal/privacy.html) must list the same uploads: edit-request thumbnails + metadata, opt-in cloud clips (iOS) / video files (web), auth identifiers, push tokens (POST /api/push/register, linked to the device user id) with the notification-only events app_open / export_done / paywall_view / push_opened and the anonymous xAI copy summary (see docs/push-lifecycle.md), purchase receipts, and diagnostics. It also states that the microphone is used only for on-device dictation. Local export notifications are on-device (no push token). Remote lifecycle notifications: the App Store label should add **Identifiers → Device ID** and **Usage Data → Product Interaction** (purposes: App Functionality, plus Developer’s Advertising or Marketing for Tips & offers), linked to the device user id, not used for tracking. Update the label in App Store Connect before shipping the push build.
 
 ## Explicit non-claims
 

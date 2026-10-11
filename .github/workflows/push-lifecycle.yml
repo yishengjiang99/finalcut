@@ -1,0 +1,52 @@
+# Push lifecycle ops for grepawk.com (FinalCap). Manual only. Runs scripts/push-lifecycle.mjs on
+# the server over SSH (same DEPLOY_* secrets/vars as deploy-grepawk.yml). Nothing here can send a
+# real push: dry_run_tick is forced dry-run, samples only generates copy.
+name: Push lifecycle (FinalCap)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'report | dry_run_tick | samples | kill_switch_on | kill_switch_off'
+        type: choice
+        options: [report, dry_run_tick, samples, kill_switch_on, kill_switch_off]
+        default: report
+      days:
+        description: 'report window (days)'
+        default: '7'
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_DIR: ${{ vars.DEPLOY_DIR }}
+      TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+    steps:
+      - name: SSH setup
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Run ${{ github.event.inputs.action }}
+        env:
+          ACTION: ${{ github.event.inputs.action }}
+          DAYS: ${{ github.event.inputs.days }}
+        run: |
+          set -euo pipefail
+          [[ "$ACTION" =~ ^(report|dry_run_tick|samples|kill_switch_on|kill_switch_off)$ ]] || exit 2
+          [[ "$DAYS" =~ ^[0-9]{1,2}$ ]] || DAYS=7
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TARGET" "cd '$APP_DIR' && node scripts/push-lifecycle.mjs $ACTION $DAYS" | tee push-lifecycle-$ACTION.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: push-lifecycle-${{ github.event.inputs.action }}
+          path: push-lifecycle-*.json
