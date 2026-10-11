@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "listing = listing snapshot; review = review/rejection state dump (artifact)"
+        description: "listing = listing snapshot; review = review/rejection state dump (artifact); list-apps = GET-only inventory of every app in the account"
         type: choice
-        options: [listing, review]
+        options: [listing, review, list-apps]
         default: listing
 
 permissions:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   snapshot:
-    if: ${{ inputs.mode != 'review' }}
+    if: ${{ inputs.mode == 'listing' || inputs.mode == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -99,3 +99,19 @@ jobs:
           name: asc-review-dump
           path: asc-review-dump.json
           retention-days: 7
+
+  list-apps:
+    if: ${{ inputs.mode == 'list-apps' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory all apps (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 .github/scripts/asc_list_apps.py
