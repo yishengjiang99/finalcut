@@ -174,6 +174,12 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
               </div>
             ))}
           </div>
+          <nav className="guides" aria-label="Step-by-step guides">
+            <span>Step-by-step guides:</span>
+            <a href="/add-subtitles">Add subtitles to a video</a>
+            <a href="/translate-subtitles">Translate subtitles</a>
+            <a href="/add-lyrics-to-video">Add lyrics to a video</a>
+          </nav>
         </div>
       </section>
 
@@ -274,6 +280,12 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <a href="/legal/licenses.html">Open-source licenses</a>
           <a href="/legal/support.html">Support</a>
         </div>
+        <nav className="wrap footer-more" aria-label="Guides">
+          <span>Guides:</span>
+          <a href="/add-subtitles">Add subtitles to a video</a>
+          <a href="/translate-subtitles">Translate video subtitles</a>
+          <a href="/add-lyrics-to-video">Add lyrics to a video</a>
+        </nav>
         <nav className="wrap footer-more" aria-label="More apps by the same developer">
           <span>More apps:</span>
           <a href="https://photo.grepawk.com/" onClick={() => track('cta_click', { cta: 'sister_photo', placement: 'footer' })}>ProTune AI Camera: auto shutter, ISO and focus for iPhone</a>

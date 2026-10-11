@@ -7,6 +7,7 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Landing from './Landing.jsx';
 import { track, trackOnce, landingProps } from './telemetry.js';
+import { readDeepLink, storePendingPrompt } from './pendingPrompt.js';
 import './App.css';
 
 const loadEditor = () => import('./App.jsx');
@@ -75,7 +76,22 @@ export default function Root() {
   useLandingReveal(onLanding);
   useEditorPrefetch(onLanding);
 
+  // Deep link from a guide page: /?prompt=…&start=signin|sample (read once, before the URL is cleaned).
+  const [deepLink] = useState(() => (typeof window === 'undefined' ? { prompt: '', start: null } : readDeepLink()));
+
   useEffect(() => { trackOnce('landing_view', landingProps()); }, []);
+
+  // Runs after landing_view so the visit keeps its utm/ref props. The prompt waits in sessionStorage
+  // until the editor opens (after sign-in for start=signin; right away for start=sample).
+  useEffect(() => {
+    if (!deepLink.prompt && !deepLink.start) return;
+    storePendingPrompt(deepLink.prompt);
+    window.history.replaceState({}, '', '/');
+    if (deepLink.start === 'sample') {
+      prefetchEditor();
+      setMode('sample');
+    }
+  }, [deepLink]);
 
   // Auth status: subscribers go straight to the editor. Same logic App.jsx uses on its landing.
   useEffect(() => {
@@ -92,6 +108,13 @@ export default function Root() {
         const response = await fetch('/api/auth/status');
         if (!response.ok) return;
         const data = await response.json();
+        // start=signin: anyone who is not already a subscriber goes on to Google sign-in, exactly as
+        // the "Start editing free" button does.
+        if (deepLink.start === 'signin' && !ignore && !(data.authenticated && data.user && data.user.hasSubscription)) {
+          try { sessionStorage.setItem('finalcap.signin.started', '1'); } catch { /* storage blocked */ }
+          window.location.href = '/auth/google';
+          return;
+        }
         if (!data.authenticated) return;
         try {
           if (sessionStorage.getItem('finalcap.signin.started')) {
@@ -105,7 +128,7 @@ export default function Root() {
       }
     })();
     return () => { ignore = true; };
-  }, []);
+  }, [deepLink]);
 
   // Returning from Stripe checkout: verify, then open the editor.
   useEffect(() => {

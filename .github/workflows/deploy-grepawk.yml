@@ -219,6 +219,11 @@ jobs:
           ssh -o BatchMode=yes "$TARGET" "cd '$APP_DIR' && node scripts/telemetry-smoke-cleanup.mjs '$SMOKE_ID'"
           echo "deploy OK"
 
+      - name: IndexNow (non-fatal)
+        # Only after a successful deploy and post-deploy gate (implicit success()). Never fails the job.
+        continue-on-error: true
+        run: bash scripts/indexnow-submit.sh grepawk.com 9ddf5c58c8a56407a7bebcdc44c8e7a0 public/sitemap.xml
+
       - name: ROLLBACK (nginx backup from this run + previous dist)
         if: failure() && env.SHIPPED == '1'
         run: |

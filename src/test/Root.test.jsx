@@ -27,4 +27,28 @@ describe('Root (landing shell with lazy editor)', () => {
     await waitFor(() => expect(container.querySelector('.landing')).toBeNull(), { timeout: 10000 });
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/BigBuckBunny.mp4'), { timeout: 10000 });
   });
+
+  it('guide deep link ?start=sample opens the sample and prefills (never sends) the prompt', async () => {
+    window.history.replaceState({}, '', '/?prompt=Add%20a%20title&start=sample');
+    const { container } = render(<Root />);
+    expect(window.location.search).toBe('');
+    await waitFor(() => expect(container.querySelector('.landing')).toBeNull(), { timeout: 10000 });
+    await waitFor(() => expect(container.querySelector('textarea')?.value).toBe('Add a title'), { timeout: 10000 });
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/chat', expect.anything());
+  });
+
+  it('guide deep link ?start=signin sends a signed-out visitor to Google sign-in with the prompt saved', async () => {
+    const assign = vi.fn();
+    const original = window.location;
+    delete window.location;
+    window.location = { ...original, search: '?prompt=Generate%20captions%20for%20this%20video&start=signin', pathname: '/', hostname: 'localhost', set href(v) { assign(v); }, get href() { return 'http://localhost/'; } };
+    try {
+      render(<Root />);
+      await waitFor(() => expect(assign).toHaveBeenCalledWith('/auth/google'));
+      expect(sessionStorage.getItem('finalcap.pendingPrompt')).toBe('Generate captions for this video');
+    } finally {
+      window.location = original;
+      sessionStorage.clear();
+    }
+  });
 });

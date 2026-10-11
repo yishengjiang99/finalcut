@@ -9,7 +9,10 @@
 - Table: `finalcut_telemetry_events` in the app database (docs/migrations/finalcut_telemetry_events.sql;
   created automatically on first event). Rows older than 395 days (13 months) are deleted daily.
 - Events: landing_view, cta_click, video_loaded, first_prompt, tool_executed, upload_consent, export,
-  signup, upgrade, app_store_click (reserved for when the App Store link goes live).
+  signup, upgrade, app_store_click (reserved for when the App Store link goes live), page_view.
+  `page_view` comes from the static guide pages (/add-subtitles, /translate-subtitles,
+  /add-lyrics-to-video; scripts/build-task-pages.mjs) with `props.path = '/<slug>'` (plus ref/utm_*).
+  Their buttons send `cta_click` with `cta` = task_try | task_sample, `source` = slug, `placement` = top | bottom.
   Allowed props are listed in `PROP_RULES` in src/server/telemetry.js. Anything else is dropped.
 
 ## Summary endpoint (optional)

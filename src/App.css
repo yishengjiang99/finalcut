@@ -1886,3 +1886,19 @@ body {
     flex-wrap: wrap;
   }
 }
+
+.landing .guides {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  margin-top: 28px;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+
+.landing .guides a {
+  display: inline-block;
+  padding: 10px 0;
+  color: #a99ffb;
+}

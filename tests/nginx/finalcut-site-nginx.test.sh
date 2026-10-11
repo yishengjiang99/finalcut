@@ -93,6 +93,16 @@ grep -qi '^strict-transport-security' <<<"$h" || fail "mp4 lost HSTS"; grep -qi 
 curl -sk --resolve grepawk.com:443:127.0.0.1 https://grepawk.com/nope | grep -q 'noindex' || fail "custom 404 page"
 [[ "$(C grepawk.com /success)" == 200 ]] || fail "/success"
 [[ "$(C grepawk.com /legal/privacy.html)" == 200 ]] || fail "legal page"
+for slug in add-subtitles translate-subtitles add-lyrics-to-video; do
+  h="$(H grepawk.com "/$slug")"; grep -q '^HTTP/[0-9.]* 200' <<<"$h" || fail "/$slug not 200"
+  grep -qi '^content-type: text/html' <<<"$h" || fail "/$slug not text/html"
+  grep -qi '^strict-transport-security' <<<"$h" || fail "/$slug lost HSTS"
+  curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/$slug" | grep -q "<link rel=\"canonical\" href=\"https://grepawk.com/$slug\">" || fail "/$slug canonical"
+  for v in "/$slug/" "/$slug.html"; do h="$(H grepawk.com "$v")"; grep -qi "^location: https\?://grepawk.com/$slug\$\|^location: /$slug\$" <<<"$h" || fail "$v redirect"; done
+done
+h="$(H grepawk.com /lyric-captions)"; grep -qi 'location: .*/add-lyrics-to-video$' <<<"$h" || fail "/lyric-captions redirect"
+k="$(ls dist/*.txt | grep -E '/[0-9a-f]{32}\.txt$' | head -1)"; [[ -n "$k" ]] || fail "IndexNow key file missing from dist"
+[[ "$(curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/$(basename "$k")")" == "$(basename "$k" .txt)" ]] || fail "IndexNow key file not served"
 [[ "$(C grepawk.com /robots.txt)" == 200 ]] || fail "robots"
 h="$(H grepawk.com /legal)"; grep -qi '^location: .*/legal/privacy.html' <<<"$h" || fail "/legal redirect"
 h="$(H www.grepawk.com '/a?b=1')"; grep -qi '^location: https://grepawk.com/a?b=1$' <<<"$h" || fail "www redirect"

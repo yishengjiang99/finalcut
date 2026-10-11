@@ -25,6 +25,21 @@ has "$html" 'property="og:image" content="https://grepawk.com/og/finalcap-og-120
 has "$html" 'application/ld\+json' "JSON-LD"
 grep -q 'sourceMappingURL' <<<"$html" && bad "sourcemap reference in HTML" || ok "no sourcemap in HTML"
 
+# Static guide pages (scripts/build-task-pages.mjs): 200, one h1, own canonical, FAQPage JSON-LD,
+# listed in the sitemap, linked from the landing page; old/variant URLs 301 to the clean URL.
+sitemap="$(curl -fsS -m 20 "$BASE/sitemap.xml")"
+for slug in add-subtitles translate-subtitles add-lyrics-to-video; do
+  page="$(curl -fsS -m 20 "$BASE/$slug")" || { bad "/$slug not 200"; continue; }
+  [[ "$(grep -o '<h1[ >]' <<<"$page" | wc -l)" == 1 ]] && ok "/$slug one <h1>" || bad "/$slug one <h1>"
+  has "$page" "<link rel=\"canonical\" href=\"https://$HOST/$slug\">" "/$slug canonical"
+  has "$page" '"@type":"FAQPage"' "/$slug FAQPage JSON-LD"
+  has "$page" "page_view" "/$slug page_view telemetry"
+  has "$sitemap" "<loc>https://$HOST/$slug</loc>" "/$slug in sitemap"
+  has "$html" "href=\"/$slug\"" "/$slug linked from the landing page"
+  expect_code 301 "$BASE/$slug/"
+done
+expect_code 301 "$BASE/lyric-captions"
+
 js="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$html" | head -1)"
 if [[ -n "$js" ]]; then
   h="$(hdr -H 'Accept-Encoding: gzip, br' "$BASE$js")"

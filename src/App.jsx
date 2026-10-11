@@ -12,6 +12,7 @@ import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
 import logoUrl from './brand/logo-96.webp';
 import Landing from './Landing.jsx';
 import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './telemetry.js';
+import { takePendingPrompt } from './pendingPrompt.js';
 import './App.css';
 
 // Sample commands for quick access
@@ -227,6 +228,14 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     const cap = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches ? 120 : 200;
     el.style.height = Math.min(el.scrollHeight, cap) + 'px';
   }, [chatInput, showLanding, view]);
+
+  // A prompt carried over from a guide page deep link (/?prompt=…): prefill the chat box once the
+  // editor is showing. Never sent automatically.
+  useEffect(() => {
+    if (showLanding) return;
+    const pending = takePendingPrompt();
+    if (pending) setChatInput(prev => prev || pending);
+  }, [showLanding]);
 
   // Fade landing sections in as they scroll into view
   useEffect(() => {

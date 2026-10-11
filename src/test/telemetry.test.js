@@ -13,9 +13,13 @@ async function serve(router) {
 const valid = { event: 'tool_executed', anon_id: '1b2c3d4e-aaaa-bbbb-cccc-1234567890ab', session_id: 'sess-12345678', platform: 'web', props: { tool: 'trim_video', ok: true, ms_bucket: '1-5s' } };
 
 describe('sanitizeTelemetryEvent', () => {
-  it('accepts the 10 funnel events', () => {
-    expect([...TELEMETRY_EVENTS]).toEqual(['landing_view', 'cta_click', 'video_loaded', 'first_prompt', 'tool_executed', 'upload_consent', 'export', 'app_store_click', 'signup', 'upgrade']);
+  it('accepts the 10 funnel events plus page_view', () => {
+    expect([...TELEMETRY_EVENTS]).toEqual(['landing_view', 'cta_click', 'video_loaded', 'first_prompt', 'tool_executed', 'upload_consent', 'export', 'app_store_click', 'signup', 'upgrade', 'page_view']);
     expect(sanitizeTelemetryEvent(valid).row).toMatchObject({ event: 'tool_executed', platform: 'web', props: { tool: 'trim_video', ok: true, ms_bucket: '1-5s' } });
+  });
+  it('accepts a guide page_view with its slug path', () => {
+    const { row } = sanitizeTelemetryEvent({ ...valid, event: 'page_view', props: { path: '/add-lyrics-to-video', ref: 'www.google.com', utm_source: 'news' } });
+    expect(row).toMatchObject({ event: 'page_view', props: { path: '/add-lyrics-to-video', ref: 'www.google.com', utm_source: 'news' } });
   });
   it('rejects unknown events and bad ids', () => {
     expect(sanitizeTelemetryEvent({ ...valid, event: 'whatever' }).error).toBeTruthy();

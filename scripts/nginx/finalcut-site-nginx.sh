@@ -107,6 +107,7 @@ smoke_new() { # $1 = file with the pre-change snapshot
   check "https://${APEX}/success" "$(code_https "$APEX" /success)" 200
   check "https://${APEX}/this-page-does-not-exist" "$(code_https "$APEX" /this-page-does-not-exist)" 404
   check "https://${APEX}/legal" "$(code_https "$APEX" /legal)" 301
+  check "https://${APEX}/add-subtitles" "$(code_https "$APEX" /add-subtitles)" 200
   check "https://${WWW}/x?y=1 Location" "$(location_of "$WWW" '/x?y=1')" "https://${APEX}/x?y=1"
   check "http://${WWW}/ code" "$(code_http "$WWW" /)" 301
   check "http://${APEX}/ code" "$(code_http "$APEX" /)" 301

@@ -28,6 +28,7 @@ export const TELEMETRY_EVENTS = Object.freeze(new Set([
   'app_store_click',  // click on an App Store link/badge
   'signup',           // returned from Google sign-in
   'upgrade',          // checkout started / subscription confirmed
+  'page_view',        // a static guide page was viewed (props.path = '/<slug>')
 ]));
 
 // Allowed prop keys and the shape of their values. Anything else is dropped.
