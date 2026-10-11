@@ -20,6 +20,29 @@ final class PushManagerTests: XCTestCase {
         XCTAssertEqual(PushManager.parse([:]).0, .editor)
     }
 
+    func testNotifyOfferOnlyWhileNeverAskedAndNotSnoozed() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(PushManager.shouldOfferNotifications(status: .notDetermined, dismissedAt: nil, now: now))
+        XCTAssertFalse(PushManager.shouldOfferNotifications(status: .authorized, dismissedAt: nil, now: now))
+        XCTAssertFalse(PushManager.shouldOfferNotifications(status: .denied, dismissedAt: nil, now: now))
+        XCTAssertFalse(PushManager.shouldOfferNotifications(status: .provisional, dismissedAt: nil, now: now))
+        XCTAssertFalse(PushManager.shouldOfferNotifications(
+            status: .notDetermined, dismissedAt: now.addingTimeInterval(-3600), now: now))
+        XCTAssertTrue(PushManager.shouldOfferNotifications(
+            status: .notDetermined, dismissedAt: now.addingTimeInterval(-8 * 24 * 3600), now: now))
+    }
+
+    func testOldOneTimeOfferFlagNoLongerBlocksTheOffer() {
+        // Builds before 1.0.1 (17) set export.notifyOfferShown on the first edited video export,
+        // which hid the offer forever. Only the iOS status and the "Not now" snooze matter now.
+        let defaults = UserDefaults(suiteName: "PushManagerTests.offer")!
+        defaults.removePersistentDomain(forName: "PushManagerTests.offer")
+        defaults.set(true, forKey: NativeSettings.notifyOfferShownKey)
+        XCTAssertNil(defaults.object(forKey: PushManager.notifyOfferDismissedAtKey))
+        XCTAssertTrue(PushManager.shouldOfferNotifications(
+            status: .notDetermined, dismissedAt: defaults.object(forKey: PushManager.notifyOfferDismissedAtKey) as? Date))
+    }
+
     func testTokenHex() {
         XCTAssertEqual(PushManager.hex(Data([0x00, 0xab, 0x10, 0xff])), "00ab10ff")
     }

@@ -64,11 +64,19 @@ struct ExportSheet: View {
                         .accessibilityIdentifier("ExportCancel")
                 }
 
-                if controller.showNotifyOffer, controller.isRunning {
-                    Button(UXCopy.exportNotifyMe) { controller.requestNotifications() }
+                if controller.showNotifyOffer {
+                    HStack(spacing: 16) {
+                        Button(controller.isRunning ? UXCopy.exportNotifyMe : UXCopy.exportNotifyNextTime) {
+                            controller.requestNotifications()
+                        }
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppTheme.accent)
                         .accessibilityIdentifier("ExportNotifyMe")
+                        Button("Not now") { controller.dismissNotifyOffer() }
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .accessibilityIdentifier("ExportNotifyNotNow")
+                    }
                 }
 
                 if controller.photosPermissionDenied {

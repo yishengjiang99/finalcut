@@ -71,6 +71,40 @@ final class PushManager: NSObject, ObservableObject {
         if reportOpen { reportAppOpenIfDue() }
     }
 
+    static let notifyOfferDismissedAtKey = "push.notifyOfferDismissedAt"
+    /// "Not now" on the export offer hides it for this long.
+    nonisolated static let notifyOfferSnooze: TimeInterval = 7 * 24 * 3600
+
+    /// Whether the export screen should offer "Notify me": only while iOS has never asked
+    /// (a system prompt is impossible after allow/deny) and not snoozed by "Not now".
+    nonisolated static func shouldOfferNotifications(
+        status: UNAuthorizationStatus,
+        dismissedAt: Date?,
+        now: Date = Date()
+    ) -> Bool {
+        guard status == .notDetermined else { return false }
+        guard let dismissedAt else { return true }
+        return now.timeIntervalSince(dismissedAt) >= notifyOfferSnooze
+    }
+
+    func shouldOfferNotifications() async -> Bool {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        authorization = settings.authorizationStatus
+        let dismissed = defaults.object(forKey: Self.notifyOfferDismissedAtKey) as? Date
+        return Self.shouldOfferNotifications(status: settings.authorizationStatus, dismissedAt: dismissed)
+    }
+
+    func snoozeNotifyOffer(now: Date = Date()) {
+        defaults.set(now, forKey: Self.notifyOfferDismissedAtKey)
+    }
+
+    /// Shows the iOS permission alert (only after the user tapped a notify button), then registers.
+    func requestPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            Task { @MainActor in PushManager.shared.permissionResult(granted: granted) }
+        }
+    }
+
     /// The soft prompt's permission request finished.
     func permissionResult(granted: Bool) {
         Task { await refreshAuthorizationAndRegister(reportOpen: granted) }

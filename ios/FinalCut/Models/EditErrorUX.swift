@@ -34,6 +34,7 @@ enum UXCopy {
     static let exportRenderedLocal = "Rendered on your iPhone."               // export.rendered.local
     static let exportLeaveHint = "You can leave the app. We'll let you know when it's ready." // export.leaveHint
     static let exportNotifyMe = "Notify me when it's done"                    // export.notifyMe
+    static let exportNotifyNextTime = "Notify me when future exports finish"   // export.notifyNextTime
     static let exportResuming = "Resuming export…"                            // export.resuming
     static let notifVideoTitle = "Your video is ready"                        // notif.video.title
     static let notifVideoBodyPhotos = "Saved to Photos. Tap to open FinalCap." // notif.video.body.photos

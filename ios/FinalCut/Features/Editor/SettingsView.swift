@@ -26,14 +26,22 @@ struct SettingsView: View {
                     .tint(AppTheme.accent)
                     .disabled(!PushManager.isAllowed(push.authorization))
                     .accessibilityIdentifier("TipsAndOffersToggle")
-                    Button("Notification settings") {
-                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                    if push.authorization == .notDetermined {
+                        // iOS Settings has no FinalCap notification switch until the app has asked once.
+                        Button("Turn on notifications") { push.requestPermission() }
+                            .accessibilityIdentifier("TurnOnNotifications")
+                    } else {
+                        Button("Notification settings") {
+                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                        }
                     }
                 } header: {
                     Text("Notifications")
                 } footer: {
                     Text(PushManager.isAllowed(push.authorization)
                          ? "Editing tips and export alerts are on. Tips & offers adds occasional feature news and FinalCap Pro offers, at most a few a week. Off by default."
+                         : push.authorization == .notDetermined
+                         ? "Turn on notifications to get export alerts and editing tips."
                          : "Notifications are off. Turn them on in iOS Settings to get export alerts and editing tips.")
                 }
                 Section("Privacy") {
