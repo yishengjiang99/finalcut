@@ -161,6 +161,24 @@ for a in apps:
     rec["publicLookupUS"] = lookup(aid)
     out.append(rec)
 
-print("ASC_APPS_JSON_BEGIN")
-print(json.dumps(out, indent=1, ensure_ascii=False))
-print("ASC_APPS_JSON_END")
+def compact(r):
+    c = dict(r)
+    v = r.get("versions")
+    if isinstance(v, list):
+        c["versionCount"] = len(v)
+        c["versions"] = [{k: x.get(k) for k in ("versionString", "platform", "appStoreState", "appVersionState",
+                                                  "createdDate", "earliestReleaseDate", "releaseType", "build")} for x in v[:3]]
+    rs = r.get("reviewSubmissions")
+    if isinstance(rs, list):
+        c["reviewSubmissions"] = [{k: x.get(k) for k in ("submittedDate", "state")} for x in rs[:2]]
+    ai = r.get("appInfos")
+    if isinstance(ai, list):
+        c["appInfos"] = [{k: x.get(k) for k in ("state", "appStoreState")} for x in ai]
+    return c
+
+
+# One compact line per app so the log stays small (log readers truncate).
+print(f"ASC_APPS_COUNT {len(out)}")
+for r in out:
+    print("ASC_APP " + json.dumps(compact(r), ensure_ascii=False, separators=(",", ":")))
+print("ASC_APPS_END")
