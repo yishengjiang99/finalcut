@@ -172,6 +172,16 @@ export function createMysqlPushStore(poolFn = getPool) {
       await q('DELETE FROM push_events WHERE created_at < ?', [cutoff]);
       await q('DELETE FROM push_sends WHERE created_at < ?', [cutoff]);
     },
+    /** Inputs for the auto kill-switch guard (distinct users; real sends only). */
+    async guardStats(optOutSince, errorSince) {
+      await this.ensureSchema();
+      const [o] = await q(`SELECT COUNT(DISTINCT user_id) AS n FROM (
+          SELECT user_id FROM push_events WHERE event = 'marketing_opt_out' AND created_at >= ?
+          UNION SELECT user_id FROM push_devices WHERE disabled_reason = 'app_unregistered' AND disabled_at >= ?) t`, [optOutSince, optOutSince]);
+      const [b] = await q('SELECT COUNT(DISTINCT user_id) AS n FROM push_devices WHERE disabled_at IS NULL');
+      const rows = await q("SELECT status, reason FROM push_sends WHERE dry_run = 0 AND status IN ('sent','failed') AND created_at >= ?", [errorSince]);
+      return { optOuts: Number(o?.n || 0), activeUsers: Number(b?.n || 0), sends: rows };
+    },
     async reportRows(sinceDate) {
       await this.ensureSchema();
       const sends = await q('SELECT send_id AS sendId, user_id AS userId, segment, dry_run AS dryRun, status, reason, source, title, body, created_at AS at FROM push_sends WHERE created_at >= ? ORDER BY created_at DESC', [sinceDate]);
@@ -228,6 +238,12 @@ export function createMemoryPushStore({ users = [], activity = new Map() } = {})
     async purgeOld() {},
     async getOps() { return { ...ops }; },
     async setOp(k, v) { if (v === null) delete ops[k]; else ops[k] = String(v); },
+    async guardStats(optOutSince, errorSince) {
+      const users = new Set(events.filter((e) => e.event === 'marketing_opt_out' && e.at >= optOutSince).map((e) => e.userId));
+      for (const d of devices.values()) if (d.disabledReason === 'app_unregistered' && d.disabledAt >= optOutSince) users.add(d.userId);
+      const active = new Set([...devices.values()].filter((d) => !d.disabledAt).map((d) => d.userId));
+      return { optOuts: users.size, activeUsers: active.size, sends: sends.filter((x) => !x.dryRun && (x.status === 'sent' || x.status === 'failed') && x.at >= errorSince) };
+    },
     async reportRows(since) {
       const ds = [...devices.values()];
       return { sends: sends.filter((s) => s.at >= since), events: events.filter((e) => e.at >= since),

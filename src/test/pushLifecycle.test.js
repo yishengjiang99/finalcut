@@ -14,7 +14,7 @@ vi.mock('../server/middleware.js', () => ({
 
 const { featuresFrom, matchSegments, SEGMENTS } = await import('../server/push/segments.js');
 const { validateCopy, templateCopy, generateCopy, setCopyFetchForTests, memoryCopyCache } = await import('../server/push/copy.js');
-const { runLifecycleTick, lifecycleReport, effectiveMode } = await import('../server/push/lifecycle.js');
+const { runLifecycleTick, lifecycleReport, effectiveMode, autoGuard } = await import('../server/push/lifecycle.js');
 const { createMemoryPushStore } = await import('../server/push/store.js');
 const { pushRouter, setPushStoreForTests } = await import('../server/push/router.js');
 
@@ -135,6 +135,32 @@ describe('lifecycle engine', () => {
     const s = await runLifecycleTick({ store: dead, send: async () => ({ ok: false, status: 410, reason: 'Unregistered' }), copy: template, now: NOW, env: { ...apnsEnv, PUSH_LIFECYCLE_MODE: 'live' } });
     expect(s.pruned).toBe(1); expect(s.failed).toBe(1);
     expect((await dead.listCandidates()).length).toBe(0);
+  });
+  it('auto guard trips the kill switch on >2% opt-outs since go-live (min 2 users)', async () => {
+    const users = [1, 2, 3].map((id) => ({ id, createdAt: new Date(NOW - 30 * D) }));
+    const store = createMemoryPushStore({ users });
+    for (const u of users) await store.upsertDevice({ userId: u.id, token: tok(u.id), environment: 'production', tz: 'America/Los_Angeles' });
+    await store.setOp('live_since', new Date(+NOW - D).toISOString());
+    await store.recordEvent(1, 'marketing_opt_out', null, new Date(+NOW - 2 * D)); // before go-live: ignored
+    await store.recordEvent(2, 'marketing_opt_out', null, new Date(+NOW - 3600_000));
+    let g = await autoGuard(store, { now: NOW, env: {} });
+    expect(g.optOuts).toBe(1); expect(g.tripped).toBe(false);
+    await store.disableUserDevices(3, 'app_unregistered');
+    g = await autoGuard(store, { now: new Date(), env: {} });
+    expect(g.optOuts).toBe(2); expect(g.tripped).toBe(true);
+    expect((await effectiveMode(store, { PUSH_LIFECYCLE_MODE: 'live' })).mode).toBe('off');
+    expect((await store.getOps()).auto_kill).toMatch(/opt_out_rate/);
+  });
+  it('auto guard trips on APNs errors >20% of 10+ real sends; uninstalled tokens do not count', async () => {
+    const store = createMemoryPushStore();
+    for (let i = 0; i < 12; i++) {
+      const [status, reason] = i < 6 ? ['failed', 'Unregistered'] : i < 9 ? ['sent', null] : ['failed', 'InvalidProviderToken'];
+      await store.claimSend({ at: new Date(+NOW - 3600_000), sendId: `s${i}`, userId: i, segment: 'inactive_7', dedupeKey: 'k', dryRun: false, mode: 'live', status, reason });
+    }
+    const dry = await autoGuard(store, { now: NOW, env: {}, dryRun: true });
+    expect(dry.apnsAttempts24h).toBe(12); expect(dry.apnsErrors24h).toBe(3); expect(dry.tripped).toBe(false);
+    expect((await autoGuard(store, { now: NOW, env: {} })).tripped).toBe(true);
+    expect((await store.getOps()).kill_switch).toBe('on');
   });
   it('report computes open rate and return-within-24h from real sends', async () => {
     const store = world(); const send = sendSpy();

@@ -1,16 +1,31 @@
-# Push lifecycle ops for grepawk.com (FinalCap). Manual only. Runs scripts/push-lifecycle.mjs on
-# the server over SSH (same DEPLOY_* secrets/vars as deploy-grepawk.yml). Nothing here can send a
-# real push: dry_run_tick is forced dry-run, samples only generates copy.
+# Push lifecycle ops + daily monitor for grepawk.com (FinalCap). Runs scripts/push-lifecycle.mjs on
+# the server over SSH (same DEPLOY_* secrets/vars as deploy-grepawk.yml). Never prints secrets.
+#   report | samples | dry_run_tick | guard | apns_check  — read-only / no user contacted
+#   monitor        — (daily schedule) guard + report; the job FAILS when the kill switch is on
+#   live_tick      — one real tick, only if the effective mode is live (all safeties apply)
+#   configure_apns — copies ProTune's team APNs key (from /etc/photo-recipes.env) to
+#                    /etc/finalcut/AuthKey_<id>.p8 (root:finalcut 0640), sets APNS_KEY_ID /
+#                    APNS_TEAM_ID / APNS_P8_PATH / FINALCAP_APNS_TOPIC in the app .env (backup
+#                    kept), restarts finalcut, then runs apns_check as the service user
+#   set_mode       — sets PUSH_LIFECYCLE_MODE in the app .env (backup kept) and restarts finalcut
+#   kill_switch_on | kill_switch_off
 name: Push lifecycle (FinalCap)
 
 on:
+  schedule:
+    - cron: '5 17 * * *'   # daily 10:05 PT (17:05 UTC during PDT)
   workflow_dispatch:
     inputs:
       action:
-        description: 'report | dry_run_tick | samples | kill_switch_on | kill_switch_off'
+        description: 'what to run'
         type: choice
-        options: [report, dry_run_tick, samples, kill_switch_on, kill_switch_off]
+        options: [report, monitor, dry_run_tick, live_tick, guard, apns_check, samples, configure_apns, set_mode, kill_switch_on, kill_switch_off]
         default: report
+      mode:
+        description: 'set_mode only: PUSH_LIFECYCLE_MODE'
+        type: choice
+        options: [dry_run, off, allowlist, live]
+        default: dry_run
       days:
         description: 'report window (days)'
         default: '7'
@@ -18,10 +33,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: push-lifecycle-finalcap
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       APP_DIR: ${{ vars.DEPLOY_DIR }}
       TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
@@ -37,16 +56,64 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
           if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true; fi
           chmod 600 ~/.ssh/known_hosts
-      - name: Run ${{ github.event.inputs.action }}
+      - name: Run ${{ inputs.action || 'monitor' }}
         env:
-          ACTION: ${{ github.event.inputs.action }}
-          DAYS: ${{ github.event.inputs.days }}
+          ACTION: ${{ inputs.action || 'monitor' }}
+          MODE: ${{ inputs.mode || 'dry_run' }}
+          DAYS: ${{ inputs.days || '7' }}
         run: |
           set -euo pipefail
-          [[ "$ACTION" =~ ^(report|dry_run_tick|samples|kill_switch_on|kill_switch_off)$ ]] || exit 2
+          [[ "$ACTION" =~ ^(report|monitor|dry_run_tick|live_tick|guard|apns_check|samples|configure_apns|set_mode|kill_switch_on|kill_switch_off)$ ]] || exit 2
+          [[ "$MODE" =~ ^(dry_run|off|allowlist|live)$ ]] || exit 2
           [[ "$DAYS" =~ ^[0-9]{1,2}$ ]] || DAYS=7
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TARGET" "cd '$APP_DIR' && node scripts/push-lifecycle.mjs $ACTION $DAYS" | tee push-lifecycle-$ACTION.json
+          cat > remote.sh <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ENV_FILE="$APP_DIR/.env"
+          setkv() { if grep -qE "^$1=" "$ENV_FILE"; then sed -i -E "s|^$1=.*|$1=$2|" "$ENV_FILE"; else printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"; fi; }
+          backup() { cp -p "$ENV_FILE" "$ENV_FILE.bak-$(date -u +%Y%m%dT%H%M%SZ)"; chmod 600 "$ENV_FILE".bak-*; }
+          PORT="$(grep -E '^PORT=' "$ENV_FILE" | tail -1 | cut -d= -f2 | tr -dc '0-9' || true)"; PORT="${PORT:-3001}"
+          restart() { systemctl restart finalcut; for i in $(seq 1 40); do curl -sf -m 3 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break; sleep 2; done; systemctl is-active finalcut; }
+          run() { runuser -u finalcut -- node --no-deprecation scripts/push-lifecycle.mjs "$@"; }
+          case "$ACTION" in
+            configure_apns)
+              SRC=/etc/photo-recipes.env
+              get() { grep -E "^$1=" "$SRC" | tail -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"; }
+              KEY_ID="$(get APNS_KEY_ID)"; TEAM="$(get APNS_TEAM_ID)"; P8P="$(get APNS_P8_PATH || true)"
+              [[ "$KEY_ID" =~ ^[A-Z0-9]{10}$ && "$TEAM" =~ ^[A-Z0-9]{10}$ ]] || { echo "ProTune APNS_KEY_ID/APNS_TEAM_ID not found" >&2; exit 1; }
+              install -d -m 0750 -o root -g finalcut /etc/finalcut
+              DEST="/etc/finalcut/AuthKey_${KEY_ID}.p8"
+              umask 077
+              if [[ -n "$P8P" && -f "$P8P" ]]; then cp "$P8P" "$DEST.tmp"; echo "source: APNS_P8_PATH"
+              else
+                C="$(get APNS_P8_CONTENTS || true)"; [[ -n "$C" ]] || { echo "no APNS_P8_PATH/APNS_P8_CONTENTS in $SRC" >&2; exit 1; }
+                printf '%b\n' "$C" > "$DEST.tmp"; echo "source: APNS_P8_CONTENTS"
+              fi
+              openssl pkey -in "$DEST.tmp" -noout 2>/dev/null || { rm -f "$DEST.tmp"; echo "key did not parse" >&2; exit 1; }
+              chown root:finalcut "$DEST.tmp"; chmod 0640 "$DEST.tmp"; mv -f "$DEST.tmp" "$DEST"
+              stat -c '%n %U:%G %a' /etc/finalcut "$DEST"
+              backup
+              setkv APNS_KEY_ID "$KEY_ID"; setkv APNS_TEAM_ID "$TEAM"; setkv APNS_P8_PATH "$DEST"; setkv FINALCAP_APNS_TOPIC com.ragnus.w2
+              echo "env keys set: APNS_KEY_ID APNS_TEAM_ID APNS_P8_PATH FINALCAP_APNS_TOPIC"
+              restart
+              run apns_check ;;
+            set_mode)
+              backup; setkv PUSH_LIFECYCLE_MODE "$MODE"; echo "PUSH_LIFECYCLE_MODE=$MODE"; restart
+              run report 1 | head -c 400; echo ;;
+            monitor) echo '{"guard":'; run guard; echo ',"report":'; run report "$DAYS"; echo '}' ;;
+            report) run report "$DAYS" ;;
+            *) run "$ACTION" ;;
+          esac
+          REMOTE
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TARGET" "APP_DIR='$APP_DIR' ACTION='$ACTION' MODE='$MODE' DAYS='$DAYS' bash -s" < remote.sh | tee out.txt
+          if [[ "$ACTION" == monitor ]] && jq -e . out.txt >/dev/null 2>&1; then
+            { echo '### Push lifecycle (FinalCap)'; echo '```json'; jq '{mode: .report.mode, killSwitch: .report.killSwitch, ops: .report.ops, kpis: .report.kpis, guard: .guard, bySegment: .report.bySegment}' out.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            if jq -e '.report.killSwitch != null or .guard.tripped == true' out.txt >/dev/null; then
+              echo "::error::FinalCap push kill switch is ON ($(jq -r '.report.ops.auto_kill // .guard.reason // "manual"' out.txt))"; exit 1
+            fi
+          fi
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: push-lifecycle-${{ github.event.inputs.action }}
-          path: push-lifecycle-*.json
+          name: push-lifecycle-${{ inputs.action || 'monitor' }}
+          path: out.txt

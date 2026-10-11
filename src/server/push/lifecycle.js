@@ -67,6 +67,10 @@ export async function runLifecycleTick({ store, send = sendApns, copy = generate
   if (modeOverride === 'dry_run' && mode !== 'off') mode = 'dry_run';
   const summary = { at: now.toISOString(), mode, killSwitch: eff.killSwitch, evaluated: 0, matched: 0, sent: 0, wouldSend: 0, failed: 0, pruned: 0, skipped: {}, bySegment: {}, samples: [] };
   if (mode === 'off') return summary;
+  if (mode !== 'dry_run') {
+    const ops = await store.getOps();
+    if (!ops.live_since) await store.setOp('live_since', now.toISOString());
+  }
   const skip = (r) => { summary.skipped[r] = (summary.skipped[r] || 0) + 1; };
   const allow = allowlist(env);
   const apnsReady = isApnsConfigured(env);
@@ -128,7 +132,41 @@ export async function runLifecycleTick({ store, send = sendApns, copy = generate
     await store.finishSend(sendId, anyOk ? 'sent' : 'failed', anyOk ? null : String(lastReason).slice(0, 80));
     if (anyOk) summary.sent++; else summary.failed++;
   }
+  if (mode !== 'dry_run') {
+    summary.guard = await autoGuard(store, { now, env });
+  }
   return summary;
+}
+
+export const GUARD = Object.freeze({ optOutRateMax: 0.02, apnsErrorRateMax: 0.2, minApnsAttempts: 10 });
+const guardMinOptOuts = (env) => Math.max(1, Number(env.PUSH_GUARD_MIN_OPTOUTS) || 2);
+const DEAD_RE = /Unregistered|BadDeviceToken|http_410/;
+
+/**
+ * Auto kill switch: opt-outs (Tips & offers off, or notifications turned off → app unregisters)
+ * by more than 2% of push users within 7 days of going live, or more than 20% of real APNs
+ * sends failing in 24 h (uninstalled tokens excluded). Trips → ops kill_switch=on + log line.
+ */
+export async function autoGuard(store, { now = new Date(), env = process.env, dryRun = false } = {}) {
+  const ops = await store.getOps();
+  const live = ops.live_since ? Date.parse(ops.live_since) : now.getTime();
+  const optOutSince = new Date(Math.max(now.getTime() - 7 * 24 * H, live));
+  const st = await store.guardStats(optOutSince, new Date(now.getTime() - 24 * H));
+  const base = st.activeUsers + st.optOuts;
+  const optOutRate = base ? st.optOuts / base : null;
+  const attempts = st.sends.length;
+  const errors = st.sends.filter((x) => x.status === 'failed' && !DEAD_RE.test(x.reason || '')).length;
+  const apnsErrorRate = attempts ? errors / attempts : null;
+  let reason = null;
+  if (optOutRate !== null && st.optOuts >= guardMinOptOuts(env) && optOutRate > GUARD.optOutRateMax) reason = `opt_out_rate ${(optOutRate * 100).toFixed(1)}% (${st.optOuts}/${base})`;
+  else if (apnsErrorRate !== null && attempts >= GUARD.minApnsAttempts && apnsErrorRate > GUARD.apnsErrorRateMax) reason = `apns_error_rate ${(apnsErrorRate * 100).toFixed(1)}% (${errors}/${attempts})`;
+  const tripped = Boolean(reason) && !dryRun && ops.kill_switch !== 'on';
+  if (tripped) {
+    await store.setOp('kill_switch', 'on');
+    await store.setOp('auto_kill', `${now.toISOString()} ${reason}`.slice(0, 64));
+    console.warn('[push-lifecycle] AUTO KILL SWITCH ON:', reason);
+  }
+  return { tripped, reason, windowStart: optOutSince.toISOString(), optOuts: st.optOuts, optOutBase: base, optOutRate, apnsAttempts24h: attempts, apnsErrors24h: errors, apnsErrorRate24h: apnsErrorRate };
 }
 
 /** KPIs: open rate (push_opened with send_id), return within 24 h (any app_open/export event within 24 h of a real send), opt-outs. */
@@ -153,6 +191,8 @@ export async function lifecycleReport(store, { days = 7, now = new Date(), env =
   const optOuts = events.filter((e) => e.event === 'marketing_opt_out').length;
   return {
     windowDays: days, mode: eff.mode, killSwitch: eff.killSwitch, apnsConfigured: isApnsConfigured(env), caps: CAPS, sendWindow: SEND_WINDOW,
+    guard: { ...GUARD, minOptOuts: guardMinOptOuts(env), ...(await autoGuard(store, { now, env, dryRun: true })) },
+    ops: await store.getOps().catch(() => ({})),
     devices, bySegment: seg,
     kpis: {
       openRate: tot.sent ? +(tot.opened / tot.sent).toFixed(3) : null,
