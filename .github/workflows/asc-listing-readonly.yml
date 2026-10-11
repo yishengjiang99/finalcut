@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "listing = listing snapshot; review = review/rejection state dump (artifact); list-apps = GET-only inventory of every app in the account; remove-from-sale = WRITES (allowlisted legacy apps only)"
+        description: "listing = listing snapshot; review = review/rejection state dump (artifact); list-apps = GET-only inventory of every app in the account; capabilities = GET-only bundle id capabilities + App Store profiles (push entitlement check); remove-from-sale = WRITES (allowlisted legacy apps only)"
         type: choice
-        options: [listing, review, list-apps, remove-from-sale]
+        options: [listing, review, list-apps, capabilities, remove-from-sale]
         default: listing
       app_ids:
         description: "remove-from-sale only: space/comma separated app ids (must be in the script's hard-coded allowlist; empty = all 6 allowlisted)"
@@ -22,6 +22,46 @@ permissions:
   contents: read
 
 jobs:
+  capabilities:
+    if: ${{ inputs.mode == 'capabilities' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Bundle id capabilities + profiles (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import base64, json, os, re, time, urllib.request
+          import jwt
+          p8 = os.environ["APP_STORE_CONNECT_API_KEY_P8"].replace("\\n", "\n").strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(), "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
+                             p8, algorithm="ES256", headers={"kid": os.environ["APP_STORE_CONNECT_KEY_ID"].strip()})
+          def get(path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method="GET",
+                                           headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req, timeout=90) as r:
+                  return json.loads(r.read().decode() or "{}")
+          for ident in ("com.ragnus.w2", "com.ragnus.mvp"):
+              ids = get(f"/v1/bundleIds?filter[identifier]={ident}&limit=5")["data"]
+              for b in ids:
+                  if b["attributes"].get("identifier") != ident:
+                      continue
+                  caps = get(f"/v1/bundleIds/{b['id']}/bundleIdCapabilities")["data"]
+                  print(ident, "capabilities:", sorted(c["attributes"].get("capabilityType") for c in caps))
+                  profs = get(f"/v1/bundleIds/{b['id']}/profiles?limit=50")["data"]
+                  for pr in profs:
+                      a = pr["attributes"]
+                      content = base64.b64decode(a.get("profileContent") or "").decode("latin-1")
+                      aps = re.search(r"<key>aps-environment</key>\s*<string>([^<]+)</string>", content)
+                      print(f"  profile '{a.get('name')}' type={a.get('profileType')} state={a.get('profileState')} expires={a.get('expirationDate')} aps-environment={aps.group(1) if aps else 'ABSENT'}")
+          PY
+
   snapshot:
     if: ${{ inputs.mode == 'listing' || inputs.mode == '' }}
     runs-on: ubuntu-latest
