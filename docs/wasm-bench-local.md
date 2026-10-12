@@ -83,9 +83,9 @@ All rows except `x264_auto_threads` run x264 with `-threads 4` on mt, as `ffmpeg
 | webkit | st | thumbnail | 55 ms | 55 ms | 55 ms |
 | webkit | st | ffprobe | 23 ms, exit -1 | 22 ms, exit 0 | 22 ms, exit 0 |
 | webkit | st | soak60 | 1/60 (crash) | 1/60 (crash) | 60/60 |
-| chromium | mt | x264_auto_threads | not run (hangs without `-threads`) | not run | 1684 ms |
-| firefox | mt | x264_auto_threads | not run (hangs without `-threads`) | not run | 2078 ms |
-| webkit | mt | x264_auto_threads | not run (hangs without `-threads`) | not run | 1743 ms |
+| chromium | mt | x264_auto_threads | not run (`ffmpegHost` records it as a hang) | not run | 1684 ms |
+| firefox | mt | x264_auto_threads | not run (`ffmpegHost` records it as a hang) | not run | 2078 ms |
+| webkit | mt | x264_auto_threads | not run (`ffmpegHost` records it as a hang) | not run | 1743 ms |
 
 ## What changed between the columns
 
