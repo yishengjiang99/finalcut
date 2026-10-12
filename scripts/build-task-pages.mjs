@@ -19,7 +19,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const jsonLd = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
 export const tryHref = (prompt) => `/?prompt=${encodeURIComponent(prompt)}&start=signin`;
 
-const CSS = `
+export const CSS = `
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:#0b0e13;color:#e8edf4;font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
 a{color:#a99ffb}a:hover{color:#c9c2ff}
@@ -52,7 +52,7 @@ footer{border-top:1px solid #1a2230;margin-top:48px;padding:20px 0 32px;color:#9
 footer a{display:inline-block;padding:8px 0;margin-right:16px}
 `.replace(/\n/g, '');
 
-function telemetryScript(slug) {
+export function telemetryScript(slug) {
   // Mirrors src/telemetry.js (ids, endpoint, GPC/DNT); props are limited to the server allowlist.
   return `(function(){try{var n=navigator,w=window;if(n.globalPrivacyControl===true||n.doNotTrack==='1'||w.doNotTrack==='1')return;
 function id(){try{return crypto.randomUUID()}catch(e){return 'id-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12)}}

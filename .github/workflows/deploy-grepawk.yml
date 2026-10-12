@@ -45,6 +45,10 @@ name: Deploy grepawk.com
 on:
   push:
     branches: [main]
+  # Blog rebuilds (docs/blog.md): blog-sync.yml dispatches this workflow when a sibling repo's blog/
+  # changed; a sibling repo with a finalcut-scoped token may also send repository_dispatch.
+  repository_dispatch:
+    types: [blog-updated]
   workflow_dispatch:
     inputs:
       allow_contract_drift:
@@ -222,7 +226,8 @@ jobs:
       - name: IndexNow (non-fatal)
         # Only after a successful deploy and post-deploy gate (implicit success()). Never fails the job.
         continue-on-error: true
-        run: bash scripts/indexnow-submit.sh grepawk.com 9ddf5c58c8a56407a7bebcdc44c8e7a0 public/sitemap.xml
+        # dist/sitemap.xml = public/sitemap.xml + the /blog URLs added by scripts/build-blog.mjs.
+        run: bash scripts/indexnow-submit.sh grepawk.com 9ddf5c58c8a56407a7bebcdc44c8e7a0 dist/sitemap.xml
 
       - name: ROLLBACK (nginx backup from this run + previous dist)
         if: failure() && env.SHIPPED == '1'

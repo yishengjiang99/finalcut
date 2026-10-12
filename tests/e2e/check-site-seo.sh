@@ -40,6 +40,25 @@ for slug in add-subtitles translate-subtitles add-lyrics-to-video; do
 done
 expect_code 301 "$BASE/lyric-captions"
 
+# Blog (scripts/build-blog.mjs): /blog, every post listed in the sitemap, rss.xml; one h1, own
+# canonical, BlogPosting JSON-LD on each post; /blog/ redirects to /blog.
+blog="$(curl -fsS -m 20 "$BASE/blog")" && ok "/blog -> 200" || bad "/blog not 200"
+has "$blog" "<link rel=\"canonical\" href=\"https://$HOST/blog\">" "/blog canonical"
+has "$blog" '"@type":"Blog"' "/blog Blog JSON-LD"
+has "$sitemap" "<loc>https://$HOST/blog</loc>" "/blog in sitemap"
+expect_code 301 "$BASE/blog/"
+expect_code 200 "$BASE/blog/rss.xml"
+has "$(hdr "$BASE/blog/rss.xml")" '^content-type: (application|text)/(rss\+)?xml' "rss.xml xml"
+posts="$(grep -oE "<loc>https://$HOST/blog/[a-z0-9-]+</loc>" <<<"$sitemap" | sed -E 's#</?loc>##g')"
+[[ -n "$posts" ]] && ok "blog posts in sitemap ($(wc -l <<<"$posts"))" || bad "no blog posts in sitemap"
+for u in $posts; do
+  page="$(curl -fsS -m 20 "$u")" || { bad "$u not 200"; continue; }
+  [[ "$(grep -o '<h1[ >]' <<<"$page" | wc -l)" == 1 ]] && ok "$u one <h1>" || bad "$u one <h1>"
+  has "$page" "<link rel=\"canonical\" href=\"$u\">" "$u canonical"
+  has "$page" '"@type":"BlogPosting"' "$u BlogPosting JSON-LD"
+  has "$blog" "href=\"/blog/${u##*/}\"" "$u linked from /blog"
+done
+
 js="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$html" | head -1)"
 if [[ -n "$js" ]]; then
   h="$(hdr -H 'Accept-Encoding: gzip, br' "$BASE$js")"

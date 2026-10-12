@@ -100,6 +100,20 @@ for slug in add-subtitles translate-subtitles add-lyrics-to-video; do
   curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/$slug" | grep -q "<link rel=\"canonical\" href=\"https://grepawk.com/$slug\">" || fail "/$slug canonical"
   for v in "/$slug/" "/$slug.html"; do h="$(H grepawk.com "$v")"; grep -qi "^location: https\?://grepawk.com/$slug\$\|^location: /$slug\$" <<<"$h" || fail "$v redirect"; done
 done
+# Blog (scripts/build-blog.mjs): /blog, each post and rss.xml are 200 with server-level headers;
+# slash / .html / index.html variants redirect to the clean URL.
+[[ -f dist/blog/index.html ]] || fail "dist/blog/index.html missing"
+h="$(H grepawk.com /blog)"; grep -q '^HTTP/[0-9.]* 200' <<<"$h" || fail "/blog not 200"
+grep -qi '^content-type: text/html' <<<"$h" || fail "/blog not text/html"; grep -qi '^strict-transport-security' <<<"$h" || fail "/blog lost HSTS"
+for v in /blog/ /blog/index.html; do h="$(H grepawk.com "$v")"; grep -qi '^location: \(https\?://grepawk.com\)\?/blog$' <<<"$h" || fail "$v redirect"; done
+[[ "$(C grepawk.com /blog/rss.xml)" == 200 ]] || fail "/blog/rss.xml"
+[[ "$(C grepawk.com /blog/no-such-post)" == 404 ]] || fail "/blog/no-such-post not 404"
+for d in dist/blog/*/; do slug="$(basename "$d")"
+  h="$(H grepawk.com "/blog/$slug")"; grep -q '^HTTP/[0-9.]* 200' <<<"$h" || fail "/blog/$slug not 200"
+  grep -qi '^content-type: text/html' <<<"$h" || fail "/blog/$slug not text/html"
+  curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/blog/$slug" | grep -q "<link rel=\"canonical\" href=\"https://grepawk.com/blog/$slug\">" || fail "/blog/$slug canonical"
+  for v in "/blog/$slug/" "/blog/$slug.html" "/blog/$slug/index.html"; do h="$(H grepawk.com "$v")"; grep -qi "^location: \(https\?://grepawk.com\)\?/blog/$slug\$" <<<"$h" || fail "$v redirect"; done
+done
 h="$(H grepawk.com /lyric-captions)"; grep -qi 'location: .*/add-lyrics-to-video$' <<<"$h" || fail "/lyric-captions redirect"
 k="$(ls dist/*.txt | grep -E '/[0-9a-f]{32}\.txt$' | head -1)"; [[ -n "$k" ]] || fail "IndexNow key file missing from dist"
 [[ "$(curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/$(basename "$k")")" == "$(basename "$k" .txt)" ]] || fail "IndexNow key file not served"

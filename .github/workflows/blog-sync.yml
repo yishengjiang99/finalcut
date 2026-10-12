@@ -1,0 +1,62 @@
+# Rebuild https://grepawk.com/blog when a sibling repo's blog changed (docs/blog.md).
+#
+# The blog is built by deploy-grepawk.yml (npm run build -> scripts/build-blog.mjs), which reads
+# blog/ from photo-recipes, earsheet and omr-sheet-cam over anonymous HTTPS (all public). Those repos
+# have no token that can trigger this repo, so this job polls instead: it compares the newest commit
+# touching blog/ (and photo-recipes articles/, shown as link-out cards) with the live build time in
+# https://grepawk.com/blog/sources.json and, if anything is newer, runs the full guarded deploy.
+# Pushes to finalcut itself deploy on push as before. Manual: Actions -> Blog sync -> Run workflow
+# (force=true deploys even when nothing changed).
+name: Blog sync
+
+on:
+  schedule:
+    - cron: '17 * * * *' # hourly; a no-op unless a blog source changed since the live build
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Run the deploy even if no blog source changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: blog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FORCE: ${{ inputs.force || false }}
+    steps:
+      - name: Compare blog sources with the live build
+        id: cmp
+        run: |
+          set -euo pipefail
+          built="$(curl -fsS -m 20 https://grepawk.com/blog/sources.json | jq -r '.builtAt // empty' || true)"
+          echo "live build: ${built:-none}"
+          newest=""
+          for spec in photo-recipes:blog photo-recipes:articles earsheet:blog omr-sheet-cam:blog; do
+            repo="yishengjiang99/${spec%%:*}"; path="${spec#*:}"
+            d="$(gh api "repos/$repo/commits?path=$path&sha=main&per_page=1" --jq '.[0].commit.committer.date // empty')"
+            echo "$repo/$path: ${d:-no commits}"
+            [[ -n "$d" && "$d" > "$newest" ]] && newest="$d"
+          done
+          run=false
+          if [[ "$FORCE" == "true" || -z "$built" ]]; then run=true
+          elif [[ -n "$newest" ]] && (( $(date -d "$newest" +%s) > $(date -d "$built" +%s) )); then run=true; fi
+          echo "deploy=$run" >> "$GITHUB_OUTPUT"
+          echo "newest blog source change: ${newest:-none}; deploy: $run"
+
+      - name: Run the guarded deploy
+        if: steps.cmp.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          gh workflow run deploy-grepawk.yml -R "$GITHUB_REPOSITORY" --ref main
+          echo "dispatched deploy-grepawk.yml"
