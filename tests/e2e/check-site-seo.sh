@@ -59,6 +59,12 @@ for u in $posts; do
   has "$blog" "href=\"/blog/${u##*/}\"" "$u linked from /blog"
 done
 
+# Blog media: AVIF/WebP served with an immutable cache; videos answer range requests (206).
+img="$(grep -oE '/media/blog/[A-Za-z0-9_.-]+\.avif' <<<"$blog" | head -1)"
+if [[ -n "$img" ]]; then h="$(hdr "$BASE$img")"; has "$h" '^content-type: image/avif' "blog AVIF type"; has "$h" '^cache-control: public, max-age=31536000, immutable' "blog media immutable cache"; else bad "no AVIF on /blog"; fi
+for u in $posts; do vid="$(curl -fsS -m 20 "$u" | grep -oE '/media/blog/[A-Za-z0-9_.-]+\.mp4' | head -1)"; [[ -n "$vid" ]] && break; done
+if [[ -n "$vid" ]]; then has "$(hdr -r 0-99 "$BASE$vid")" '^HTTP/[0-9.]+ 206' "blog video range request (206)"; fi
+
 js="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$html" | head -1)"
 if [[ -n "$js" ]]; then
   h="$(hdr -H 'Accept-Encoding: gzip, br' "$BASE$js")"

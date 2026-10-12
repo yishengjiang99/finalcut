@@ -94,3 +94,41 @@ Plain sentences with real facts.
 
 Where to get the app (see the link rules above).
 ```
+
+## Images and video
+
+Full examples: https://grepawk.com/blog/reference (not indexed).
+
+- Put image files next to the post: `blog/<slug>/shot.jpg`. Use plain Markdown: `![What the image shows](shot.jpg)`. Alt text is required; the build fails without it.
+- Originals must be 1.5 MB or less and 3000 px or less on the long side. Prefer JPEG around 900 to 1600 px wide. The build makes AVIF, WebP and a fallback with srcset, sizes and lazy loading.
+- Card and social image: add `hero: shot.jpg` and `heroAlt: ...` to the front matter.
+- No remote images. No raw iframes or script tags.
+- Gallery, one image per line as `file | alt | caption`:
+
+  ```gallery
+  a.jpg | Home screen | Start here
+  b.jpg | Settings drawer | Tweak it
+  ```
+
+- YouTube (click to load, no tracking until click):
+
+  ```youtube
+  id: aqz-KE-bpKQ
+  title: Big Buck Bunny
+  ```
+
+- Post on X (click to load): a `x` block with `url:` and `text:` (the quoted words shown before load).
+- Self hosted video: upload once, then reference by file name. Keep it under 60 MB, H.264 MP4 with faststart.
+
+  ```sh
+  gh release upload blog-media clip.mp4 -R yishengjiang99/finalcut
+  ```
+
+  ```video
+  src: clip.mp4
+  poster: clip-poster.jpg
+  title: Short title
+  caption: What it shows
+  ```
+
+  The poster is a normal image file in the post folder. Video is served from grepawk.com/media/ with range requests and preload none.

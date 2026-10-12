@@ -114,6 +114,14 @@ for d in dist/blog/*/; do slug="$(basename "$d")"
   curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/blog/$slug" | grep -q "<link rel=\"canonical\" href=\"https://grepawk.com/blog/$slug\">" || fail "/blog/$slug canonical"
   for v in "/blog/$slug/" "/blog/$slug.html" "/blog/$slug/index.html"; do h="$(H grepawk.com "$v")"; grep -qi "^location: \(https\?://grepawk.com\)\?/blog/$slug\$" <<<"$h" || fail "$v redirect"; done
 done
+# Blog media: modern image types, immutable cache, byte ranges on video.
+for f in $(ls dist/media/blog 2>/dev/null | grep -E '\.(avif|webp|mp4)$' | sort -t. -k2,2 -u); do
+  h="$(H grepawk.com "/media/blog/$f")"; grep -q '^HTTP/[0-9.]* 200' <<<"$h" || fail "/media/blog/$f not 200"
+  grep -qi '^cache-control: public, max-age=31536000, immutable' <<<"$h" || fail "/media/blog/$f cache"
+  case "$f" in *.avif) grep -qi '^content-type: image/avif' <<<"$h" || fail "avif type";; *.webp) grep -qi '^content-type: image/webp' <<<"$h" || fail "webp type";;
+    *.mp4) grep -qi '^content-type: video/mp4' <<<"$h" || fail "mp4 type"
+      r="$(curl -sk -o /dev/null -D - -r 0-99 --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/media/blog/$f" | tr -d '\r')"; grep -q '^HTTP/[0-9.]* 206' <<<"$r" || fail "mp4 range not 206";; esac
+done
 h="$(H grepawk.com /lyric-captions)"; grep -qi 'location: .*/add-lyrics-to-video$' <<<"$h" || fail "/lyric-captions redirect"
 k="$(ls dist/*.txt | grep -E '/[0-9a-f]{32}\.txt$' | head -1)"; [[ -n "$k" ]] || fail "IndexNow key file missing from dist"
 [[ "$(curl -sk --resolve grepawk.com:443:127.0.0.1 "https://grepawk.com/$(basename "$k")")" == "$(basename "$k" .txt)" ]] || fail "IndexNow key file not served"

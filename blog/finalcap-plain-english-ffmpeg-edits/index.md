@@ -3,11 +3,15 @@ title: How FinalCap turns plain-English requests into FFmpeg edits
 description: FinalCap maps a typed request to an FFmpeg edit that runs in your browser, and transcribes speech into subtitles with an on-device Whisper model.
 date: 2026-10-12
 publish: true
+hero: finalcap-landing.jpg
+heroAlt: The FinalCap landing page, with a chat request to convert a video to 9:16 and burn in captions
 product: finalcap
 tags: [FinalCap, FFmpeg, WebAssembly, Whisper, subtitles]
 properNouns: [Whisper, Grok]
 ---
 FinalCap is a video editor with a chat box instead of a timeline. You open a video and type what you want: "trim the first five seconds", "make it 9:16 for Reels", "add yellow captions at the top". This post explains what happens between the sentence and the edited file.
+
+![The FinalCap landing page: a chat request turns into a 9:16 video with burned-in captions](finalcap-landing.jpg "FinalCap runs in a desktop browser.")
 
 ## The model picks a tool, it does not write video
 
@@ -43,6 +47,26 @@ Ask for "captions translated to Spanish" and FinalCap transcribes on your device
 
 Songs are harder than speech, so lyric captions work differently. After you agree, the audio track (never the video) is uploaded so the server can transcribe the vocals, identify the song and fix misheard lyrics against the published words. Each line then gets a translation underneath, and the two-line captions are burned in in your browser.
 
+## Also on iPhone
+
+A FinalCap app for iPhone is in App Store review. This short promo shows the same idea on the phone: you type the edit and see the result in the preview.
+
+```video
+src: finalcap-promo-v3.mp4
+poster: promo-poster.jpg
+title: FinalCap for iPhone promo
+caption: FinalCap for iPhone, now in App Store review (21 seconds).
+```
+
 ## Try it
 
-FinalCap runs in a desktop browser. Editing your own video needs a Google sign-in and a subscription, and the sample clip works without either. The guides cover each caption feature step by step: [add subtitles](https://grepawk.com/add-subtitles), [translate subtitles](https://grepawk.com/translate-subtitles) and [add lyrics to a video](https://grepawk.com/add-lyrics-to-video).
+FinalCap runs in a desktop browser. Editing your own video needs a Google sign-in and a subscription, and the sample clip works without either. The sample is a short from Big Buck Bunny, the open movie made by the Blender Foundation:
+
+```youtube
+id: aqz-KE-bpKQ
+title: Big Buck Bunny, the Blender Foundation open movie
+```
+
+![The FinalCap guide page for adding subtitles to a video](add-subtitles-guide.jpg "Each caption feature has a step-by-step guide.")
+
+ The guides cover each caption feature step by step: [add subtitles](https://grepawk.com/add-subtitles), [translate subtitles](https://grepawk.com/translate-subtitles) and [add lyrics to a video](https://grepawk.com/add-lyrics-to-video).
