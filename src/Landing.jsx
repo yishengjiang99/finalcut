@@ -20,22 +20,22 @@ export const landingStats = [
 export const landingFeatures = [
   ['💬', 'Edit video by chat', 'Describe the edit in plain English. Trim, crop, resize, rotate or add text, and the AI builds the FFmpeg command for you.', 'trim seconds 5–15'],
   ['🔤', 'Auto captions and subtitles', 'Transcribe speech in your browser (or in the cloud, audio only, if you opt in), translate the captions on our server, and burn them in at the top or bottom.', 'add Spanish captions'],
-  ['🎨', 'Color and transitions', 'Brightness, contrast, saturation, hue, color filters and transitions between clips, all real FFmpeg filters.', 'make it moodier'],
+  ['🎨', 'Color and transitions', 'Brightness, contrast, saturation, hue, color filters and transitions between clips. Each one is an FFmpeg filter.', 'make it moodier'],
   ['📱', 'Resize for Reels, TikTok and Shorts', 'Reframe to 9:16 for Reels, TikTok and Shorts, 1:1 for feeds or 16:9 for YouTube with one sentence.', 'make it vertical'],
   ['⚡', 'Speed and audio', 'Change speed, volume and fades, normalize loudness, equalize, and trim silence from the start or end.', 'make it 2x faster'],
   ['📦', 'Convert and export', 'Convert to MP4, WebM, MOV or MKV, or extract the audio as MP3, WAV or AAC, rendered in your browser.', 'convert to WebM']
 ];
 
 export const landingSteps = [
-  ['Open your video', 'Pick a video or audio file, or try the built-in sample. Opening a file does not upload it.', '“BigBuckBunny.mp4 attached ✓”'],
-  ['Describe the edit', "Type it the way you'd brief an editor. Ask follow-ups, stack changes, and go back to any earlier version.", '“Cut the boring middle and punch up the colors”'],
-  ['Download the result', "FFmpeg renders the edit in your browser. Save the file when it's ready.", '“✓ Done. Download MP4”']
+  ['Open your video', 'Pick a video or audio file, or try the built-in sample. Opening a file does not upload it.', '"BigBuckBunny.mp4 attached ✓"'],
+  ['Describe the edit', "Type it the way you'd brief an editor. Ask follow-ups, stack changes, and go back to any earlier version.", '"Cut the boring middle and punch up the colors"'],
+  ['Download the result', "FFmpeg renders the edit in your browser. Save the file when it's ready.", '"✓ Done. Download MP4"']
 ];
 
 export const landingExamples = [
-  ['🏙️', 'linear-gradient(135deg,#1a2233,#2c3a58)', '“Convert to 9:16 for Instagram Reels”', '✓ Cropped to 1080×1920'],
-  ['🎤', 'linear-gradient(135deg,#231a33,#3a2c58)', '“Generate captions and translate them to Spanish”', '✓ Captions transcribed, translated and burned in'],
-  ['🌅', 'linear-gradient(135deg,#1a3327,#2c5844)', '“Trim 0:05–0:15, 2x speed, boost saturation”', '✓ 3 edits chained']
+  ['🏙️', 'linear-gradient(135deg,#1a2233,#2c3a58)', '"Convert to 9:16 for Instagram Reels"', '✓ Cropped to 1080×1920'],
+  ['🎤', 'linear-gradient(135deg,#231a33,#3a2c58)', '"Generate captions and translate them to Spanish"', '✓ Captions transcribed, translated and burned in'],
+  ['🌅', 'linear-gradient(135deg,#1a3327,#2c5844)', '"Trim 0:05–0:15, 2x speed, boost saturation"', '✓ 3 edits chained']
 ];
 
 // Start the hero video only after the page has loaded, so its download does not compete with
@@ -69,7 +69,7 @@ const sisterApps = [
     cta: 'sister_photo',
     icon: '📷',
     name: 'ProTune AI Camera for iPhone',
-    description: 'An AI camera that sets shutter, ISO, exposure, white balance and focus for the scene when you tap Auto Optimize. Real camera settings, not filters.',
+    description: 'An AI camera that sets shutter, ISO, exposure, white balance and focus for the scene when you tap Auto Optimize. It changes the camera settings and applies no filters.',
     status: 'On the App Store',
   },
   {
@@ -111,7 +111,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <div>
             <div className="eyebrow"><span className="dot" /> AI video editor that runs in your browser</div>
             <h1>Edit video by <span className="grad">describing it.</span></h1>
-            <p className="hero-sub">Type what you want: trim, captions, color, speed or format. FinalCap turns your words into FFmpeg edits that run in your browser, so your video file is not uploaded to edit. No timeline, no learning curve.</p>
+            <p className="hero-sub">Type the edit you want, such as a trim, captions, a color change, a speed change or a new format. FinalCap turns your words into FFmpeg edits that run in your browser, so your video file is not uploaded to edit.</p>
 
             {authError && <div className="auth-error">{authError}</div>}
 
@@ -163,14 +163,14 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
         <div className="wrap">
           <div className="kicker reveal">Features</div>
           <h2 className="sec reveal">An AI video editor you control with chat</h2>
-          <p className="sec-sub reveal">FinalCap understands plain language and maps it to real FFmpeg operations.</p>
+          <p className="sec-sub reveal">FinalCap maps each plain-English request to FFmpeg filters and commands.</p>
           <div className="feat-grid">
             {landingFeatures.map(([icon, name, description, example]) => (
               <div className="feat reveal" key={name}>
                 <div className="fic">{icon}</div>
                 <h3>{name}</h3>
                 <p>{description}</p>
-                <span className="try">Try: “{example}” →</span>
+                <span className="try">Try: "{example}" →</span>
               </div>
             ))}
           </div>
@@ -187,7 +187,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
         <div className="wrap">
           <div className="kicker reveal">How it works</div>
           <h2 className="sec reveal">How to edit a video by chat, in three steps</h2>
-          <p className="sec-sub reveal">If you can describe it, you can edit it.</p>
+          <p className="sec-sub reveal">Open a file, type the edit, download the result.</p>
           <div className="steps">
             {landingSteps.map(([name, description, example], index) => (
               <div className="step reveal" key={name}>
@@ -223,7 +223,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
       <section className="block alt" id="privacy">
         <div className="wrap">
           <div className="kicker reveal">Privacy</div>
-          <h2 className="sec reveal">A private video editor: edits run in your browser, not on our server</h2>
+          <h2 className="sec reveal">A private video editor that runs edits in your browser, not on our server</h2>
           <p className="sec-sub reveal">
             FinalCap reads your file straight from your device. Edits run in your browser with FFmpeg compiled to
             WebAssembly, and captions are transcribed by default with a speech model that also runs in your browser. To plan an
@@ -262,7 +262,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
 
       <div className="wrap">
         <div className="cta-band reveal">
-          <h2>Your next edit is one sentence away.</h2>
+          <h2>Edit your video with one sentence.</h2>
           <p>Open a video, describe your first edit, and download the result. It takes less than a minute, and your video file is not uploaded.</p>
           <div className="cta-row">
             <button className="btn-primary big" onClick={onGetStarted}>Start editing free</button>
@@ -273,7 +273,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
 
       <footer>
         <div className="wrap">
-          <span>FinalCap: an AI video editor that runs in your browser.</span>
+          <span>FinalCap is an AI video editor that runs in your browser.</span>
           <div className="spacer" />
           <a href="/legal/privacy.html">Privacy</a>
           <a href="/legal/terms.html">Terms</a>
