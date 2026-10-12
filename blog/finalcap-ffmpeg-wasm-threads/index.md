@@ -9,10 +9,10 @@ product: finalcap
 tags: [FinalCap, FFmpeg, WebAssembly, threads, SIMD]
 properNouns: [FFmpeg, WebAssembly, SharedArrayBuffer, SIMD, Workers, Web]
 ---
-FinalCap edits video inside the browser tab with FFmpeg compiled to WebAssembly, so your clip is not uploaded to be edited. The upstream ffmpeg.wasm project has stopped shipping releases, so we are building our own fork on FFmpeg 8. This post is a written version of a two and a half minute explainer video about that work.
+FinalCap edits video inside the browser tab with FFmpeg compiled to WebAssembly, so your clip is not uploaded to be edited. The upstream ffmpeg.wasm project has stopped shipping releases, so we are building our own fork on FFmpeg 8. This post is a written version of a three minute explainer video about that work.
 
 ```video
-src: ffmpeg-wasm-explainer.mp4
+src: ffmpeg-wasm-explainer-v2.mp4
 poster: explainer-poster.jpg
 captions: explainer.vtt
 title: ffmpeg.wasm threads explainer

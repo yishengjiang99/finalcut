@@ -52,7 +52,7 @@ Songs are harder than speech, so lyric captions work differently. After you agre
 A FinalCap app for iPhone is in App Store review. This short promo shows the same idea on the phone: you type the edit and see the result in the preview.
 
 ```video
-src: finalcap-promo-v3.mp4
+src: finalcap-promo-v4.mp4
 poster: promo-poster.jpg
 title: FinalCap for iPhone promo
 caption: FinalCap for iPhone, now in App Store review (21 seconds).
@@ -60,12 +60,7 @@ caption: FinalCap for iPhone, now in App Store review (21 seconds).
 
 ## Try it
 
-FinalCap runs in a desktop browser. Editing your own video needs a Google sign-in and a subscription, and the sample clip works without either. The sample is a short from Big Buck Bunny, the open movie made by the Blender Foundation:
-
-```youtube
-id: aqz-KE-bpKQ
-title: Big Buck Bunny, the Blender Foundation open movie
-```
+FinalCap runs in a desktop browser. Editing your own video needs a Google sign-in and a subscription, and the sample clip works without either.
 
 ![The FinalCap guide page for adding subtitles to a video](add-subtitles-guide.jpg "Each caption feature has a step-by-step guide.")
 

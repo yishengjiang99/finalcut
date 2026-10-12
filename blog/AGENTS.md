@@ -163,3 +163,24 @@ Videos always play on the page. Never add a bare link to a video file, YouTube o
 5. If the explainer is on YouTube instead, use a `youtube` block with `id:` and `title:`.
 
 Captions: add `captions: explainer.vtt` to a `video` block (WebVTT file in the post folder; convert an .srt by adding a `WEBVTT` first line and changing the commas in times to dots). It becomes a default-on `<track kind="captions">`. Optional `lang:` (default en) and `label:` (default English).
+
+## ElevenLabs voiceover
+
+Use this to (re)narrate an explainer or promo video.
+
+- Key: `ELEVENLABS_API_KEY` in the finalcut app `.env` on the grepawk.com server. Read it over ssh on that
+  server only (best: run the TTS calls there, so the key never leaves it). Never print, log or commit it,
+  and never put it in a script.
+- Voice: Matilda (`XrExE9yKIg1WjnnlVkGX`, warm female). Model: `eleven_multilingual_v2`. Pass
+  `previous_text` / `next_text` so the lines flow.
+- Script: one TTS clip per caption cue (or per slide), so each line lands on its visual.
+- Fit with no dead air: trim edge silence, squeeze pauses inside a clip to about 0.3 s, then time-stretch
+  each cue's video segment to its line plus a short gap (about 0.3 s). No gap over about 0.5 s, no overlaps.
+  For a fixed-length cut (promo), place each line at its beat and speed it up slightly (atempo up to 1.15).
+- Loudness: about -14 LUFS integrated, peaks under -1 dBTP. Drop the old voice; keep a music bed only if it
+  was a separate stem.
+- Regenerate the captions from the new timing (SRT and the post's `.vtt`).
+- Mux H.264 + AAC with `-movflags +faststart`, then upload under a new file name and point the `video`
+  block at it: `gh release upload blog-media new-name.mp4 -R yishengjiang99/finalcut`.
+- finalcut has a script that does all of this from an MP4 + SRT:
+  `python3 scripts/blog/elevenlabs-voiceover.py in.mp4 in.srt outdir/` (it runs TTS on the server over ssh).
