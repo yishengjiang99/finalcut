@@ -133,7 +133,15 @@ export function buildVisualFilter(operation, args = {}, { isPhoto = false, fontF
       }
       // libx264 needs even dimensions; a photo keeps the exact size asked for.
       const even = (n) => (n > 0 && !isPhoto ? n - (n % 2) : n === -1 && !isPhoto ? -2 : n);
-      return `scale=${even(width)}:${even(height)}`;
+      const w = even(width), h = even(height);
+      // fit:"pad" letterboxes into the exact frame (no stretch); fit:"crop" fills it and trims the overflow.
+      if (args.fit === 'pad' && w > 0 && h > 0) {
+        return `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
+      }
+      if (args.fit === 'crop' && w > 0 && h > 0) {
+        return `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1`;
+      }
+      return `scale=${w}:${h}`;
     }
     case 'crop_video': {
       const width = Math.round(num(args.width, 'width', { min: 1, max: 16384 }));

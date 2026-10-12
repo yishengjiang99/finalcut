@@ -3,7 +3,8 @@
 
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {
-  '9:16': { width: 1080, height: 1920, description: 'Stories, Reels, & TikToks' },
+  '9:16': { width: 1080, height: 1920, description: 'Instagram Reels & Stories, TikTok, Shorts' },
+  '4:5': { width: 1080, height: 1350, description: 'Instagram feed posts (portrait)' },
   '16:9': { width: 1920, height: 1080, description: 'YT thumbnails & Cinematic widescreen' },
   '1:1': { width: 1080, height: 1080, description: 'X feed posts & Profile pics' },
   '2:3': { width: 1080, height: 1620, description: 'Posters, Pinterest & Tall Portraits' },

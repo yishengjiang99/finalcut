@@ -253,16 +253,54 @@ const WEB_FALLBACK_GUIDANCE =
   'If the command fails on an unknown filter, encoder or option, use an older or simpler equivalent. ' +
   'Never answer that an edit is unsupported before those searches show FFmpeg cannot do it here.';
 
+// The browser engine letterboxes or crops resize_video_preset (src/toolFunctions.js) and knows the
+// Instagram feed shape. Only the web profile is offered these, so iOS builds keep their exact schema.
+export const WEB_ASPECT_PRESETS = ['9:16', '4:5', '16:9', '1:1', '2:3', '3:2'];
+
+function withWebResizePreset(tool) {
+  if (tool.function?.name !== 'resize_video_preset') return tool;
+  const params = tool.function.parameters;
+  return {
+    ...tool,
+    function: {
+      ...tool.function,
+      description: tool.function.description + ' The picture is never stretched: it is letterboxed (fit "pad", default) or filled and cropped (fit "crop").',
+      parameters: {
+        ...params,
+        properties: {
+          ...params.properties,
+          preset: {
+            ...params.properties.preset,
+            description: 'The aspect ratio preset. 9:16 = Instagram Reels/Stories, TikTok, Shorts; 4:5 = Instagram feed post (portrait); 1:1 = square post; 16:9 = YouTube/landscape.',
+            enum: WEB_ASPECT_PRESETS,
+          },
+          fit: {
+            type: 'string',
+            description: 'How to fit a different shape: "pad" (default) keeps the whole picture with bars; "crop" fills the frame and trims the edges.',
+            enum: ['pad', 'crop'],
+          },
+        },
+      },
+    },
+  };
+}
+
+export const WEB_SHAPE_GUIDANCE =
+  'Platform shapes: "Instagram shape" or "for Instagram" with no other hint means a feed post, so use resize_video_preset with preset 4:5; ' +
+  'Reels or Stories mean 9:16 and "square" means 1:1. When you choose the shape yourself, name it in your reply and say the user can ask for 9:16 (Reels) or 1:1 instead. ' +
+  'Pass fit "crop" only when the user asks to fill or crop the frame; otherwise leave the default letterbox. ' +
+  'For several edits in one request (for example a color look plus a resize), call the dedicated tools in order; they run one after another on the previous result.';
+
 /** Tools offered to the web app: every tool in src/tools.js for the media type, then the FFmpeg fallback pair. */
 export function webToolsFor({ mediaType } = {}) {
-  const typed = toolsForMediaType(mediaType);
+  const typed = toolsForMediaType(mediaType).map(withWebResizePreset);
   return mediaType === 'image' ? typed : [...typed, searchCapabilitiesToolDefinition, runFfmpegToolDefinition];
 }
 
 export const WEB_PROFILE = {
   tools: webToolsFor,
   instructions: WEB_EXECUTION_INSTRUCTIONS,
-  guidance: [WEB_FALLBACK_GUIDANCE],
+  guidance: [WEB_FALLBACK_GUIDANCE, WEB_SHAPE_GUIDANCE],
   serverTools: { [SEARCH_CAPABILITIES_TOOL_NAME]: async (args) => searchCapabilities(args) },
 };
 

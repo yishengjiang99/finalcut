@@ -161,6 +161,17 @@ function requireFiniteNumber(value, field, { min = -Infinity, max = Infinity } =
   return n;
 }
 
+/** scale filter for resize_video; fit "pad" letterboxes and "crop" fills, both without stretching. */
+export function resizeFilter(width, height, fit) {
+  if (fit === 'pad' && width > 0 && height > 0) {
+    return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
+  }
+  if (fit === 'crop' && width > 0 && height > 0) {
+    return `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`;
+  }
+  return `scale=${width}:${height}`;
+}
+
 /** Build the ffmpeg filter for apply_color_filter (red/sepia/grayscale/…). */
 export function buildColorFilter(parsedArgs = {}) {
   const raw = String(parsedArgs.filter ?? parsedArgs.color ?? parsedArgs.preset ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -223,7 +234,7 @@ export function buildVisualFilter(operation, parsedArgs = {}, mediaType = MEDIA_
       if (width === 0 || height === 0 || (width < 0 && height < 0)) {
         throw new OpValidationError('width and height must be positive (one of them may be -1 to keep aspect ratio)');
       }
-      return `scale=${width}:${height}`;
+      return resizeFilter(width, height, parsedArgs.fit);
     }
     case 'crop_video': {
       const width = Math.round(requireFiniteNumber(parsedArgs.width, 'width', { min: 1, max: 16384 }));
@@ -524,7 +535,7 @@ export function resolveOutputMeta(operation, parsedArgs = {}) {
 export function applyOperation(command, operation, parsedArgs = {}, { mediaDuration } = {}) {
   switch (operation) {
     case 'resize_video':
-      return command.videoFilters(`scale=${parsedArgs.width}:${parsedArgs.height}`).audioCodec('copy');
+      return command.videoFilters(resizeFilter(parsedArgs.width, parsedArgs.height, parsedArgs.fit)).audioCodec('copy');
     case 'crop_video':
       return command.videoFilters(`crop=${parsedArgs.width}:${parsedArgs.height}:${parsedArgs.x}:${parsedArgs.y}`).audioCodec('copy');
     case 'rotate_video':
