@@ -1,0 +1,167 @@
+{
+  "startedAt": "2026-10-12T20:48:23.835Z",
+  "host": {
+    "platform": "linux",
+    "cpus": 14
+  },
+  "soakRuns": 60,
+  "coreRoot": "/cores",
+  "wrapper": "core-root/ffmpeg",
+  "runs": [
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "trim_copy",
+      "loadMs": 312,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 133,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 15427866
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "x264_veryfast",
+      "loadMs": 291,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 4867,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 5897026
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "xfade_join3",
+      "loadMs": 297,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 3279,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3589722
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "burn_ass",
+      "loadMs": 292,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2241,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3154880
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "loudnorm",
+      "loadMs": 288,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 937,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 532291
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "thumbnail",
+      "loadMs": 297,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 54,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 6865
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "ffprobe",
+      "loadMs": 285,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 18,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 4369
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "soak60",
+      "loadMs": 305,
+      "status": "ok",
+      "runsOk": 60,
+      "runs": 60,
+      "firstFailure": null,
+      "execMs": 2810,
+      "medianRunMs": 46,
+      "peakMemBytes": null,
+      "peakCtxBytes": null
+    }
+  ],
+  "finishedAt": "2026-10-12T20:48:43.457Z"
+}

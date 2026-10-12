@@ -1,0 +1,167 @@
+{
+  "startedAt": "2026-10-12T20:46:08.103Z",
+  "host": {
+    "platform": "darwin",
+    "cpus": 14
+  },
+  "soakRuns": 60,
+  "coreRoot": "/Users/yishengj/ffmpeg.wasm-phase1/packages",
+  "wrapper": "core-root/ffmpeg",
+  "runs": [
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "trim_copy",
+      "loadMs": 83,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 355,
+      "peakMemBytes": 35481031011,
+      "peakCtxBytes": 1075239536,
+      "outBytes": 15427866
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "x264_veryfast",
+      "loadMs": 101,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 4092,
+      "peakMemBytes": 35481015247,
+      "peakCtxBytes": 1075242380,
+      "outBytes": 5897026
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "xfade_join3",
+      "loadMs": 80,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2780,
+      "peakMemBytes": 35481027867,
+      "peakCtxBytes": 1075253088,
+      "outBytes": 3589722
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "burn_ass",
+      "loadMs": 77,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2011,
+      "peakMemBytes": 35481823721,
+      "peakCtxBytes": 1075991112,
+      "outBytes": 3154880
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "loudnorm",
+      "loadMs": 80,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 977,
+      "peakMemBytes": 35481011381,
+      "peakCtxBytes": 1075244600,
+      "outBytes": 532291
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "thumbnail",
+      "loadMs": 93,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 315,
+      "peakMemBytes": 35480998297,
+      "peakCtxBytes": 1075234000,
+      "outBytes": 6865
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "ffprobe",
+      "loadMs": 80,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 286,
+      "peakMemBytes": 35480990835,
+      "peakCtxBytes": 1075231219,
+      "outBytes": 4369
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "soak60",
+      "loadMs": 94,
+      "status": "ok",
+      "runsOk": 60,
+      "runs": 60,
+      "firstFailure": null,
+      "execMs": 18140,
+      "medianRunMs": 301,
+      "peakMemBytes": 35482958395,
+      "peakCtxBytes": 1075601678
+    }
+  ],
+  "finishedAt": "2026-10-12T20:46:39.706Z"
+}

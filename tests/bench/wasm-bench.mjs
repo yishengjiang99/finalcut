@@ -26,6 +26,9 @@ const ops = arg('ops', ALL_OPS.join(',')).split(',');
 const soakRuns = Number(arg('soak-runs', 60));
 const outFile = path.resolve(ROOT, arg('out', 'test-results/wasm-bench.json'));
 const coreRoot = arg('core-root', null); // optional: <dir>/core/dist/esm and <dir>/core-mt/dist/esm
+// A fork checkout also carries its own @ffmpeg/ffmpeg build (<dir>/ffmpeg/dist/esm); its cores
+// need it (the fork's mt exec is async), so it is used whenever it is there.
+const forkWrapper = !!coreRoot && existsSync(path.join(coreRoot, 'ffmpeg', 'dist', 'esm', 'index.js'));
 
 if (!existsSync(path.join(FIX, 'src-1080p-60s.mp4'))) { console.error('fixtures missing: run node tests/bench/make-fixtures.mjs'); process.exit(1); }
 
@@ -36,6 +39,7 @@ function resolve(url) {
   if (p === '/bench-page.js') return path.join(HERE, 'bench-page.js');
   if (p.startsWith('/fixtures/')) return path.join(FIX, path.basename(p));
   if (coreRoot && /^\/node_modules\/@ffmpeg\/core(-mt)?\//.test(p)) return path.join(path.resolve(coreRoot), p.replace(/^\/node_modules\/@ffmpeg\//, ''));
+  if (forkWrapper && p.startsWith('/node_modules/@ffmpeg/ffmpeg/')) return path.join(path.resolve(coreRoot), p.replace(/^\/node_modules\/@ffmpeg\//, ''));
   if (p.startsWith('/node_modules/@ffmpeg/')) return path.join(ROOT, p);
   return null;
 }
@@ -52,7 +56,7 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 const engines = { chromium, webkit, firefox };
 // Full Chromium (not headless-shell): headless-shell refuses measureUserAgentSpecificMemory.
 const launchArgs = { chromium: { channel: 'chromium', args: ['--enable-blink-features=ForceEagerMeasureMemory'] } };
-const results = { startedAt: new Date().toISOString(), host: { platform: process.platform, cpus: (await import('node:os')).cpus().length }, soakRuns, coreRoot: coreRoot || 'node_modules', runs: [] };
+const results = { startedAt: new Date().toISOString(), host: { platform: process.platform, cpus: (await import('node:os')).cpus().length }, soakRuns, coreRoot: coreRoot || 'node_modules', wrapper: forkWrapper ? 'core-root/ffmpeg' : 'node_modules/@ffmpeg/ffmpeg', runs: [] };
 const save = () => { mkdirSync(path.dirname(outFile), { recursive: true }); writeFileSync(outFile, JSON.stringify(results, null, 2) + '\n'); };
 
 for (const b of browsers) {
