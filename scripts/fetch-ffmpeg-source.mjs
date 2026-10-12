@@ -36,7 +36,7 @@ const sha = (algo, file) => createHash(algo).update(readFileSync(file)).digest('
 async function download(url, dest) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(300_000) });
+      const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': 'curl/8 (finalcut fetch-ffmpeg-source)', Accept: '*/*' }, signal: AbortSignal.timeout(300_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const tmp = `${dest}.part`;
       writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
@@ -137,14 +137,21 @@ const versions = {
 writeFileSync(path.join(OUT, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
 const r = lock.buildRecipe;
 writeFileSync(path.join(OUT, 'BUILD.txt'), [
-  'How @ffmpeg/core 0.12.10 and @ffmpeg/core-mt 0.12.10 (served from /v2/ffmpeg-core/) are built',
+  'How the ffmpeg.wasm cores served from /v2/ffmpeg-core/ are built',
+  `(${Object.entries(lock.packages).map(([k, v]) => `${k}@${v}`).join(', ')})`,
   '',
   `Build recipe: ${r.repository} at commit ${r.commit}`,
-  `  archive here: ffmpeg.wasm-71aa99d3.tar.gz (Dockerfile, Makefile, build/*.sh, src/bind, src/fftools)`,
+  `  archive here: ffmpeg.wasm-fork-${r.commit.slice(0, 8)}.tar.gz (Dockerfile, build/*.sh incl. source patches, src/bind, src/fftools-*)`,
   `Toolchain image: ${r.toolchainImage}`,
   '',
   r.howToBuild,
   '',
+  ...(r.legacyBuildRecipe ? [
+    `Fallback core @ffmpeg/core 0.12.10: ${r.legacyBuildRecipe.repository} at commit ${r.legacyBuildRecipe.commit}`,
+    `  archive here: ffmpeg.wasm-71aa99d3.tar.gz; toolchain image ${r.legacyBuildRecipe.toolchainImage}`,
+    `  ${r.legacyBuildRecipe.howToBuild}`,
+    '',
+  ] : []),
   'Every library source the Dockerfile fetches is in this directory at the exact commit/tag it uses',
   '(see versions.json and SHA256SUMS). To build offline, point each `ADD <git url>#<ref>` line in the',
   'Dockerfile at the matching extracted archive here.',
@@ -159,8 +166,8 @@ writeFileSync(path.join(OUT, 'index.html'), `<!DOCTYPE html>
 <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:64rem;margin:2rem auto;padding:0 1rem;line-height:1.45;color:#111}
 table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left;vertical-align:top}code{font-size:.8rem;word-break:break-all}</style></head>
 <body>
-<h1>Corresponding Source: ffmpeg.wasm core 0.12.10</h1>
-<p>Complete source code for <code>@ffmpeg/core@0.12.10</code> and <code>@ffmpeg/core-mt@0.12.10</code>, which this site serves from
+<h1>Corresponding Source: ffmpeg.wasm cores</h1>
+<p>Complete source code for ${Object.entries(lock.packages).map(([k, v]) => `<code>${esc(k)}@${esc(v)}</code>`).join(', ')}, which this site serves from
 <code>/v2/ffmpeg-core/</code>, including the scripts used to build them. Licenses: see <a href="/legal/licenses.html">/legal/licenses.html</a>.</p>
 <p><a href="SHA256SUMS">SHA256SUMS</a> · <a href="versions.json">versions.json</a> · <a href="BUILD.txt">BUILD.txt</a> (how to rebuild)</p>
 <table><tr><th>Component</th><th>Version / ref</th><th>Commit</th><th>License</th><th>Archive</th><th>Size</th><th>SHA-256</th><th>License texts</th></tr>

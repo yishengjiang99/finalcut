@@ -22,8 +22,10 @@ function runVerify(component, fileBytes) {
 
 describe('vendor/ffmpeg-source.lock.json', () => {
   it('pins every library the ffmpeg.wasm 0.12.10 build links, with sha256 and exact refs', () => {
-    expect(lock.packages).toEqual({ '@ffmpeg/core': '0.12.10', '@ffmpeg/core-mt': '0.12.10' });
-    expect(lock.buildRecipe.commit).toBe('71aa99d37c02a7b4c435275ca9ef50e612f6efa1');
+    expect(lock.packages).toEqual({ '@ffmpeg/core-mt': '0.13.0-finalcut.3', '@ffmpeg/core': '0.13.0-finalcut.3', '@ffmpeg/core-legacy': '0.12.10' });
+    expect(lock.buildRecipe.commit).toBe('bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a');
+    expect(lock.buildRecipe.legacyBuildRecipe.commit).toBe('71aa99d37c02a7b4c435275ca9ef50e612f6efa1');
+    for (const id of ['ffmpeg.wasm-fork', 'ffmpeg-8.0.1', 'ffmpeg-5.1.10', 'x264-stable', 'emscripten-4.0.23']) expect(lock.components.map((c) => c.id)).toContain(id);
     const ids = lock.components.map((c) => c.id);
     for (const id of ['ffmpeg.wasm', 'ffmpeg', 'x264', 'x265', 'libvpx', 'lame', 'libogg', 'libtheora', 'opus', 'libvorbis',
       'zlib', 'libwebp', 'freetype', 'fribidi', 'harfbuzz', 'libass', 'zimg', 'sdl2', 'emscripten']) {

@@ -1,24 +1,167 @@
 {
-  "$comment": "Corresponding Source for the self-hosted @ffmpeg/core and @ffmpeg/core-mt 0.12.10 (served from /v2/vendor/ffmpeg/source/). Versions/commits come from the ffmpeg.wasm Dockerfile and build/ffmpeg-wasm.sh at the release commit. Checksums pinned here; scripts/fetch-ffmpeg-source.mjs fails the build on any mismatch.",
+  "$comment": "Corresponding Source for every self-hosted ffmpeg.wasm core: the FinalCut fork cores @ffmpeg/core-mt and @ffmpeg/core 0.13.0-finalcut.3 (yishengjiang99/ffmpeg.wasm@bf6a3f3, FFmpeg 8.0.1 mt / 5.1.10 st, emsdk 4.0.23) and the fallback core @ffmpeg/core 0.12.10 (ffmpegwasm/ffmpeg.wasm@71aa99d, FFmpeg 5.1.4). Served from /v2/vendor/ffmpeg/source/. Fork entries copied from the fork's build/sources.lock.json and each core's dist/manifest.json; scripts/fetch-ffmpeg-source.mjs fails the build on any mismatch.",
   "schemaVersion": 1,
   "packages": {
-    "@ffmpeg/core": "0.12.10",
-    "@ffmpeg/core-mt": "0.12.10"
+    "@ffmpeg/core-mt": "0.13.0-finalcut.3",
+    "@ffmpeg/core": "0.13.0-finalcut.3",
+    "@ffmpeg/core-legacy": "0.12.10"
   },
   "buildRecipe": {
-    "repository": "https://github.com/ffmpegwasm/ffmpeg.wasm",
-    "commit": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
+    "repository": "https://github.com/yishengjiang99/ffmpeg.wasm",
+    "commit": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
     "dockerfile": "Dockerfile",
     "linkScript": "build/ffmpeg-wasm.sh",
-    "toolchainImage": "emscripten/emsdk:3.1.40",
-    "howToBuild": "At the commit above: `make prd` (single-thread, @ffmpeg/core) and `make prd-mt` (multithreaded, @ffmpeg/core-mt), which run `docker buildx build` on the Dockerfile with FFMPEG_ST=yes / FFMPEG_MT=yes. The Dockerfile fetches each library at the ref listed below."
+    "toolchainImage": "emscripten/emsdk:4.0.23@sha256:86537645c51e44899812d29820ee3b64b96c321ebb2aba4416a04ceeb1bcde62",
+    "howToBuild": "At the commit above: scripts/ci-local.sh (Docker build of mt and st; sources pinned in build/sources.lock.json; source patches live in build/ffmpeg.sh, build/x264.sh and src/fftools-*). The fallback core 0.12.10 is built from legacyBuildRecipe. Cores of 0.13.0-finalcut.3 were built by the fork workflow core-build, run 38321096611.",
+    "legacyBuildRecipe": {
+      "repository": "https://github.com/ffmpegwasm/ffmpeg.wasm",
+      "commit": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
+      "dockerfile": "Dockerfile",
+      "linkScript": "build/ffmpeg-wasm.sh",
+      "toolchainImage": "emscripten/emsdk:3.1.40",
+      "howToBuild": "At the commit above: `make prd` (single-thread, @ffmpeg/core) and `make prd-mt` (multithreaded, @ffmpeg/core-mt), which run `docker buildx build` on the Dockerfile with FFMPEG_ST=yes / FFMPEG_MT=yes. The Dockerfile fetches each library at the ref listed below."
+    }
   },
-  "resolvedOn": "2026-10-09",
+  "resolvedOn": "2026-10-12",
   "components": [
+    {
+      "id": "ffmpeg.wasm-fork",
+      "name": "ffmpeg.wasm FinalCut fork (build scripts, bindings, patched fftools)",
+      "role": "Build recipe + source patches for @ffmpeg/core and @ffmpeg/core-mt 0.13.0-finalcut.3",
+      "version": "0.13.0-finalcut.3",
+      "ref": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
+      "commit": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
+      "repository": "https://github.com/yishengjiang99/ffmpeg.wasm",
+      "license": "MIT (repo); built cores GPL-2.0-or-later",
+      "file": "ffmpeg.wasm-fork-bf6a3f37.tar.gz",
+      "url": "https://codeload.github.com/yishengjiang99/ffmpeg.wasm/tar.gz/bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
+      "bytes": 9438378,
+      "sha256": "8fc6b286ea4b855249f928e541808bfa5a0cdce01baf472ea9610d799a00dca1",
+      "verify": {
+        "tarCommitId": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "id": "ffmpeg-8.0.1",
+      "name": "FFmpeg 8.0.1 (mt core)",
+      "role": "FFmpeg for @ffmpeg/core-mt 0.13.0-finalcut.3",
+      "version": "8.0.1",
+      "ref": "n8.0.1",
+      "commit": "894da5ca7d742e4429ffb2af534fcda0103ef593",
+      "repository": "https://github.com/FFmpeg/FFmpeg",
+      "license": "LGPL-2.1-or-later; GPL-2.0-or-later as configured (--enable-gpl)",
+      "file": "ffmpeg-8.0.1.tar.xz",
+      "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
+      "bytes": 11388848,
+      "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
+      "licenseFiles": [
+        "COPYING.GPLv2",
+        "COPYING.LGPLv2.1",
+        "COPYING.GPLv3",
+        "COPYING.LGPLv3",
+        "LICENSE.md"
+      ]
+    },
+    {
+      "id": "ffmpeg-8.0.1-sig",
+      "name": "FFmpeg 8.0.1 release signature",
+      "role": "Detached PGP signature",
+      "version": "8.0.1",
+      "ref": "n8.0.1",
+      "repository": "https://github.com/FFmpeg/FFmpeg",
+      "license": "n/a",
+      "file": "ffmpeg-8.0.1.tar.xz.asc",
+      "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz.asc",
+      "bytes": 520,
+      "sha256": "54ab4020bb4eb280444da74d7aabc282acf6e8500cf6feaefd9821373fa9e72c"
+    },
+    {
+      "id": "ffmpeg-5.1.10",
+      "name": "FFmpeg 5.1.10 (st core)",
+      "role": "FFmpeg for @ffmpeg/core 0.13.0-finalcut.3",
+      "version": "5.1.10",
+      "ref": "n5.1.10",
+      "commit": "19feb712f5c1821d8a3fa1ad63c5bd2e3b9672eb",
+      "repository": "https://github.com/FFmpeg/FFmpeg",
+      "license": "LGPL-2.1-or-later; GPL-2.0-or-later as configured (--enable-gpl)",
+      "file": "ffmpeg-5.1.10.tar.xz",
+      "url": "https://ffmpeg.org/releases/ffmpeg-5.1.10.tar.xz",
+      "bytes": 10040952,
+      "sha256": "392306d6fc45dab0e9e0ea55381e071842e83a2fb31d320aeda40477a7766293",
+      "licenseFiles": [
+        "COPYING.GPLv2",
+        "COPYING.LGPLv2.1",
+        "COPYING.GPLv3",
+        "COPYING.LGPLv3",
+        "LICENSE.md"
+      ]
+    },
+    {
+      "id": "ffmpeg-5.1.10-sig",
+      "name": "FFmpeg 5.1.10 release signature",
+      "role": "Detached PGP signature",
+      "version": "5.1.10",
+      "ref": "n5.1.10",
+      "repository": "https://github.com/FFmpeg/FFmpeg",
+      "license": "n/a",
+      "file": "ffmpeg-5.1.10.tar.xz.asc",
+      "url": "https://ffmpeg.org/releases/ffmpeg-5.1.10.tar.xz.asc",
+      "bytes": 520,
+      "sha256": "2eb9acf95c4e2faee05abc410c24844613b8ea64c67c16befcd2da98dccbf22d"
+    },
+    {
+      "id": "x264-stable",
+      "name": "x264 (upstream stable, fork cores)",
+      "role": "H.264 encoder for the 0.13.0-finalcut.3 cores; patched by build/x264.sh in the fork recipe; mirrored byte-for-byte as a fork release asset because code.videolan.org refuses scripted downloads (HTTP 406)",
+      "version": "stable",
+      "ref": "stable",
+      "commit": "b35605ace3ddf7c1a5d67a2eb553f034aef41d55",
+      "repository": "https://code.videolan.org/videolan/x264",
+      "license": "GPL-2.0-or-later",
+      "file": "x264-b35605ac.tar.gz",
+      "url": "https://github.com/yishengjiang99/ffmpeg.wasm/releases/download/v0.13.0-finalcut.2/x264-b35605ac.tar.gz",
+      "bytes": 1040327,
+      "sha256": "cd71a7515b0e9a012e1ac9b1f8415bebcaf6fc97d4db32286642ac4c0fbe24f9",
+      "verify": {
+        "tarCommitId": "b35605ace3ddf7c1a5d67a2eb553f034aef41d55"
+      },
+      "licenseFiles": [
+        "COPYING"
+      ],
+      "upstreamUrl": "https://code.videolan.org/videolan/x264/-/archive/b35605ace3ddf7c1a5d67a2eb553f034aef41d55/x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.tar.gz"
+    },
+    {
+      "id": "emscripten-4.0.23",
+      "name": "Emscripten 4.0.23 (fork cores)",
+      "role": "Toolchain + runtime/system libraries linked into the 0.13.0-finalcut.3 wasm",
+      "version": "4.0.23",
+      "ref": "4.0.23",
+      "commit": "7a5d93b50f6a3a35e85a0d2fc9e667b8498e6aed",
+      "repository": "https://github.com/emscripten-core/emscripten",
+      "license": "MIT OR NCSA (emscripten); musl MIT; LLVM libs Apache-2.0 WITH LLVM-exception",
+      "file": "emscripten-4.0.23.tar.gz",
+      "url": "https://codeload.github.com/emscripten-core/emscripten/tar.gz/refs/tags/4.0.23",
+      "bytes": 34282527,
+      "sha256": "a5e6699fa4142f1b934452f15d1cda7998a92d5e0e59692af3d8cb5ffc77db19",
+      "verify": {
+        "tarCommitId": "7a5d93b50f6a3a35e85a0d2fc9e667b8498e6aed"
+      },
+      "licenseFiles": [
+        "LICENSE",
+        "system/lib/libc/musl/COPYRIGHT",
+        "system/lib/libcxx/LICENSE.TXT",
+        "system/lib/libcxxabi/LICENSE.TXT",
+        "system/lib/libunwind/LICENSE.TXT",
+        "system/lib/compiler-rt/LICENSE.TXT"
+      ]
+    },
     {
       "id": "ffmpeg.wasm",
       "name": "ffmpeg.wasm (core build scripts, bindings, patched fftools)",
-      "role": "Build scripts + glue: Dockerfile, build/*.sh, src/bind, src/fftools. Release commit of @ffmpeg/core and @ffmpeg/core-mt 0.12.10 (also tag v12.15).",
+      "role": "Build scripts + glue: Dockerfile, build/*.sh, src/bind, src/fftools. Release commit of @ffmpeg/core and @ffmpeg/core-mt 0.12.10 (also tag v12.15). [fallback core 0.12.10 only]",
       "version": "0.12.10",
       "ref": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
       "commit": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
@@ -38,7 +181,7 @@
     {
       "id": "ffmpeg",
       "name": "FFmpeg",
-      "role": "libavcodec/libavformat/libavfilter/libavutil/libswscale/libswresample/libpostproc/libavdevice",
+      "role": "libavcodec/libavformat/libavfilter/libavutil/libswscale/libswresample/libpostproc/libavdevice [fallback core 0.12.10 only]",
       "version": "5.1.4",
       "ref": "n5.1.4",
       "commit": "4729204c17f756e186d622060088371d10b34f7e",
@@ -64,7 +207,7 @@
     {
       "id": "ffmpeg-sig",
       "name": "FFmpeg 5.1.4 release signature",
-      "role": "Detached PGP signature for ffmpeg-5.1.4.tar.xz",
+      "role": "Detached PGP signature for ffmpeg-5.1.4.tar.xz [fallback core 0.12.10 only]",
       "version": "5.1.4",
       "ref": "n5.1.4",
       "repository": "https://github.com/FFmpeg/FFmpeg",
@@ -77,7 +220,7 @@
     {
       "id": "x264",
       "name": "x264",
-      "role": "H.264 encoder (libx264)",
+      "role": "H.264 encoder (libx264) [fallback core 0.12.10 only]",
       "version": "X264_BUILD 164 (branch 4-cores)",
       "ref": "4-cores",
       "commit": "33cac6b77d5b9259c552156013a817ab23119612",
@@ -97,7 +240,7 @@
     {
       "id": "x265",
       "name": "x265",
-      "role": "HEVC encoder (libx265)",
+      "role": "HEVC encoder (libx265) [all cores]",
       "version": "3.4",
       "ref": "3.4",
       "commit": "2bb5520e9596f361bf0ed81b3b8da0d7fd999069",
@@ -117,7 +260,7 @@
     {
       "id": "libvpx",
       "name": "libvpx",
-      "role": "VP8/VP9 codec",
+      "role": "VP8/VP9 codec [all cores]",
       "version": "1.13.1",
       "ref": "v1.13.1",
       "commit": "10b9492dcf05b652e2e4b370e205bd605d421972",
@@ -138,7 +281,7 @@
     {
       "id": "lame",
       "name": "LAME",
-      "role": "MP3 encoder (libmp3lame)",
+      "role": "MP3 encoder (libmp3lame) [all cores]",
       "version": "3.100 (branch master)",
       "ref": "master",
       "commit": "2badea1974ae36cb8312afe99cff1e6b3b5decee",
@@ -159,7 +302,7 @@
     {
       "id": "libogg",
       "name": "libogg",
-      "role": "Ogg container library",
+      "role": "Ogg container library [all cores]",
       "version": "1.3.4",
       "ref": "v1.3.4",
       "commit": "bada45718453ac27b56773ae663f7e65112f6a6e",
@@ -179,7 +322,7 @@
     {
       "id": "libtheora",
       "name": "libtheora",
-      "role": "Theora video codec",
+      "role": "Theora video codec [all cores]",
       "version": "1.1.1",
       "ref": "v1.1.1",
       "commit": "7ffd8b2ecfc2d93ae5e16028e7528e609266bfbf",
@@ -200,7 +343,7 @@
     {
       "id": "opus",
       "name": "Opus",
-      "role": "Opus audio codec",
+      "role": "Opus audio codec [all cores]",
       "version": "1.3.1",
       "ref": "v1.3.1",
       "commit": "e85ed7726db5d677c9c0677298ea0cb9c65bdd23",
@@ -221,7 +364,7 @@
     {
       "id": "libvorbis",
       "name": "libvorbis",
-      "role": "Vorbis audio codec",
+      "role": "Vorbis audio codec [all cores]",
       "version": "1.3.3",
       "ref": "v1.3.3",
       "commit": "7798164043197d7e33f02de4353ce2aa5b248225",
@@ -241,7 +384,7 @@
     {
       "id": "zlib",
       "name": "zlib",
-      "role": "Compression",
+      "role": "Compression [all cores]",
       "version": "1.2.11",
       "ref": "v1.2.11",
       "commit": "cacf7f1d4e3d44d871b605da3b647f07d718623f",
@@ -262,7 +405,7 @@
     {
       "id": "libwebp",
       "name": "libwebp",
-      "role": "WebP image codec",
+      "role": "WebP image codec [all cores]",
       "version": "1.3.2",
       "ref": "v1.3.2",
       "commit": "ca332209cb5567c9b249c86788cb2dbf8847e760",
@@ -283,7 +426,7 @@
     {
       "id": "freetype",
       "name": "FreeType",
-      "role": "Font rendering (drawtext, libass)",
+      "role": "Font rendering (drawtext, libass) [all cores]",
       "version": "2.10.4",
       "ref": "VER-2-10-4",
       "commit": "6a2b3e4007e794bfc6c91030d0ed987f925164a8",
@@ -305,7 +448,7 @@
     {
       "id": "fribidi",
       "name": "GNU FriBidi",
-      "role": "Bidirectional text (libass)",
+      "role": "Bidirectional text (libass) [all cores]",
       "version": "1.0.9",
       "ref": "v1.0.9",
       "commit": "f9e8e71a6fbf4a4619481284c9f484d10e559995",
@@ -325,7 +468,7 @@
     {
       "id": "harfbuzz",
       "name": "HarfBuzz",
-      "role": "Text shaping (libass)",
+      "role": "Text shaping (libass) [all cores]",
       "version": "5.2.0",
       "ref": "5.2.0",
       "commit": "4a1d891c6317d2c83e5f3c2607ec5f5ccedffcde",
@@ -345,7 +488,7 @@
     {
       "id": "libass",
       "name": "libass",
-      "role": "ASS/SSA subtitle rendering",
+      "role": "ASS/SSA subtitle rendering [all cores]",
       "version": "0.15.0",
       "ref": "0.15.0",
       "commit": "d149636f502f5774ae1a8fb4c554b122674393b2",
@@ -365,7 +508,7 @@
     {
       "id": "zimg",
       "name": "zimg",
-      "role": "Scaling/colorspace (zscale filter)",
+      "role": "Scaling/colorspace (zscale filter) [all cores]",
       "version": "3.0.5",
       "ref": "release-3.0.5",
       "commit": "e5b0de6bebbcbc66732ed5afaafef6b2c7dfef87",
@@ -386,7 +529,7 @@
     {
       "id": "sdl2",
       "name": "SDL2 (Emscripten port)",
-      "role": "Linked via -sUSE_SDL=2 in build/ffmpeg-wasm.sh",
+      "role": "Linked via -sUSE_SDL=2 in build/ffmpeg-wasm.sh [fallback core 0.12.10 only]",
       "version": "2.24.2",
       "ref": "release-2.24.2",
       "repository": "https://github.com/libsdl-org/SDL",
@@ -406,7 +549,7 @@
     {
       "id": "emscripten",
       "name": "Emscripten",
-      "role": "Toolchain + runtime/system libraries linked into the wasm (musl libc, libc++, libc++abi, libunwind, compiler-rt, JS runtime). Docker image emscripten/emsdk:3.1.40.",
+      "role": "Toolchain + runtime/system libraries linked into the wasm (musl libc, libc++, libc++abi, libunwind, compiler-rt, JS runtime). Docker image emscripten/emsdk:3.1.40. [fallback core 0.12.10 only]",
       "version": "3.1.40",
       "ref": "3.1.40",
       "commit": "5c27e79dd0a9c4e27ef2326841698cdd4f6b5784",

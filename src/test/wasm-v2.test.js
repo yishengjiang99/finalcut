@@ -59,7 +59,7 @@ describe('clip limits', () => {
 });
 
 describe('pickMode', async () => {
-  const { pickMode, coreUrls } = await import('../wasm/ffmpegHost.js');
+  const { pickMode, coreUrls, loadChain } = await import('../wasm/ffmpegHost.js');
   it('mt only when isolated with SharedArrayBuffer and >1 core', () => {
     expect(pickMode({ isolated: true, sab: true, cores: 8 })).toBe('mt');
     expect(pickMode({ isolated: false, sab: true, cores: 8 })).toBe('st');
@@ -72,10 +72,15 @@ describe('pickMode', async () => {
   });
   it('self-hosted versioned core URLs under /v2 (no CDN, no core-st)', () => {
     const mt = coreUrls('mt');
-    expect(mt.coreURL).toMatch(/\/v2\/ffmpeg-core\/mt\/0\.12\.10\/ffmpeg-core\.js$/);
-    expect(mt.workerURL).toMatch(/ffmpeg-core\.worker\.js$/);
-    expect(coreUrls('st').workerURL).toBeUndefined();
-    expect(JSON.stringify([mt, coreUrls('st')])).not.toMatch(/jsdelivr|unpkg|core-st/);
+    expect(mt.coreURL).toMatch(/\/v2\/ffmpeg-core\/mt\/0\.13\.0-finalcut\.3\/ffmpeg-core\.js$/);
+    expect(mt.workerURL).toBeUndefined(); // emsdk 4: no ffmpeg-core.worker.js
+    expect(coreUrls('legacy').coreURL).toMatch(/\/v2\/ffmpeg-core\/st\/0\.12\.10\/ffmpeg-core\.js$/);
+    expect(JSON.stringify([mt, coreUrls('st'), coreUrls('legacy')])).not.toMatch(/jsdelivr|unpkg|core-st/);
+  });
+  it('falls back mt -> st -> legacy 0.12.10 st', () => {
+    expect(loadChain('mt')).toEqual(['mt', 'st', 'legacy']);
+    expect(loadChain('st')).toEqual(['st', 'legacy']);
+    expect(pickMode({ override: 'legacy', isolated: true, sab: true, cores: 8 })).toBe('legacy');
   });
 });
 

@@ -16,20 +16,33 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'v2', 'public', 'ffmpeg-core');
 
 // Single source of truth for the pinned versions (also checked against package.json).
+// Fork packages (yishengjiang99/ffmpeg.wasm release v0.13.0-finalcut.3), installed from the release
+// tarball URLs. @ffmpeg/core-legacy = npm @ffmpeg/core 0.12.10 st, the last-resort fallback core.
+const FORK = '0.13.0-finalcut.3';
+const FORK_URL = (file) => `https://github.com/yishengjiang99/ffmpeg.wasm/releases/download/v${FORK}/${file}`;
 export const PINNED = {
-  '@ffmpeg/ffmpeg': '0.12.15',
+  '@ffmpeg/ffmpeg': FORK,
   '@ffmpeg/util': '0.12.2',
-  '@ffmpeg/core': '0.12.10',
-  '@ffmpeg/core-mt': '0.12.10',
+  '@ffmpeg/core': FORK,
+  '@ffmpeg/core-mt': FORK,
+  '@ffmpeg/core-legacy': '0.12.10',
   '@huggingface/transformers': '4.3.1',
+};
+const DECLARED = {
+  '@ffmpeg/ffmpeg': FORK_URL(`ffmpeg-ffmpeg-${FORK}.tgz`),
+  '@ffmpeg/core': FORK_URL(`ffmpeg-core-${FORK}.tgz`),
+  '@ffmpeg/core-mt': FORK_URL(`ffmpeg-core-mt-${FORK}.tgz`),
+  '@ffmpeg/core-legacy': 'npm:@ffmpeg/core@0.12.10',
 };
 
 // Installed by @huggingface/transformers (pinned in package.json).
 const ORT_VERSION = '1.31.0-dev.20260914-8d85527a0';
 
 const CORES = [
-  { mode: 'mt', pkg: '@ffmpeg/core-mt', files: ['ffmpeg-core.js', 'ffmpeg-core.wasm', 'ffmpeg-core.worker.js'] },
+  // emsdk 4: the mt core script is its own pthread worker (no ffmpeg-core.worker.js).
+  { mode: 'mt', pkg: '@ffmpeg/core-mt', files: ['ffmpeg-core.js', 'ffmpeg-core.wasm'] },
   { mode: 'st', pkg: '@ffmpeg/core', files: ['ffmpeg-core.js', 'ffmpeg-core.wasm'] },
+  { mode: 'st', pkg: '@ffmpeg/core-legacy', files: ['ffmpeg-core.js', 'ffmpeg-core.wasm'] },
 ];
 
 function fail(msg) {
@@ -40,7 +53,7 @@ function fail(msg) {
 const rootPkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const declared = { ...rootPkg.dependencies, ...rootPkg.devDependencies };
 for (const [name, version] of Object.entries(PINNED)) {
-  if (declared[name] !== version) fail(`package.json must pin ${name} to exactly ${version} (found ${declared[name]})`);
+  if (declared[name] !== (DECLARED[name] || version)) fail(`package.json must pin ${name} to exactly ${version} (found ${declared[name]})`);
   const pj = path.join(ROOT, 'node_modules', name, 'package.json');
   if (!existsSync(pj)) fail(`${name} is not installed (run npm ci)`);
   const installed = JSON.parse(readFileSync(pj, 'utf8')).version;
@@ -54,13 +67,13 @@ for (const { mode, pkg, files } of CORES) {
   const src = path.join(ROOT, 'node_modules', pkg, 'dist', 'esm');
   const dest = path.join(OUT, mode, version);
   mkdirSync(dest, { recursive: true });
-  manifest.cores[mode] = { package: `${pkg}@${version}`, base: `/v2/ffmpeg-core/${mode}/${version}/`, files: {} };
+  manifest.cores[`${mode}@${version}`] = { package: `${pkg}@${version}`, base: `/v2/ffmpeg-core/${mode}/${version}/`, files: {} };
   for (const f of files) {
     const from = path.join(src, f);
     if (!existsSync(from)) fail(`missing ${pkg}@${version}/dist/esm/${f}`);
     copyFileSync(from, path.join(dest, f));
     const buf = readFileSync(from);
-    manifest.cores[mode].files[f] = { bytes: statSync(from).size, sha256: createHash('sha256').update(buf).digest('hex') };
+    manifest.cores[`${mode}@${version}`].files[f] = { bytes: statSync(from).size, sha256: createHash('sha256').update(buf).digest('hex') };
   }
 }
 // The @ffmpeg/ffmpeg class worker, served from the same isolated path as the cores. Loading it
@@ -95,4 +108,4 @@ for (const { mode, pkg, files } of CORES) {
   }
 }
 writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-console.log(`copy-ffmpeg-core: wrote ${path.relative(ROOT, OUT)} (mt + st ${PINNED['@ffmpeg/core']})`);
+console.log(`copy-ffmpeg-core: wrote ${path.relative(ROOT, OUT)} (mt + st ${FORK}, fallback st ${PINNED['@ffmpeg/core-legacy']})`);

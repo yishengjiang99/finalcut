@@ -7,7 +7,8 @@
 # keep serving with the isolation headers.
 set -euo pipefail
 BASE="${1:-http://127.0.0.1:8080}"
-CORE_VERSION="${CORE_VERSION:-0.12.10}"
+CORE_VERSION="${CORE_VERSION:-0.13.0-finalcut.3}"
+LEGACY_CORE_VERSION="${LEGACY_CORE_VERSION:-0.12.10}"
 fail=0
 hdr() { curl -fsS -o /dev/null -D - "$BASE$1" | tr -d '\r' | awk -v IGNORECASE=1 -v h="$2" 'tolower($0) ~ "^"tolower(h)":" {sub(/^[^:]*:[ ]*/,""); print; exit}'; }
 expect() { # path header expected
@@ -25,7 +26,7 @@ code="$(code_of "/v2/index.html")"
 [[ "$code" == 301* ]] && echo "ok   /v2/index.html -> / ($code)" || { echo "FAIL /v2/index.html redirect: $code"; fail=1; }
 
 # The cores and the GPL source still serve, with the isolation headers and wasm MIME type.
-for p in "/v2/ffmpeg-core/mt/$CORE_VERSION/ffmpeg-core.js" "/v2/ffmpeg-core/mt/$CORE_VERSION/ffmpeg-core.worker.js" \
+for p in "/v2/ffmpeg-core/mt/$CORE_VERSION/ffmpeg-core.js" "/v2/ffmpeg-core/st/$LEGACY_CORE_VERSION/ffmpeg-core.wasm" \
          "/v2/ffmpeg-core/mt/$CORE_VERSION/ffmpeg-core.wasm" "/v2/ffmpeg-core/st/$CORE_VERSION/ffmpeg-core.wasm"; do
   expect "$p" Cross-Origin-Opener-Policy same-origin
   expect "$p" Cross-Origin-Embedder-Policy require-corp
