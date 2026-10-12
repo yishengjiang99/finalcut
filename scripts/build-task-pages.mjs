@@ -135,7 +135,7 @@ ${cta('bottom')}
 <h2>More FinalCap guides</h2>
 <ul class="guides">${others.map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('')}<li><a href="/">FinalCap home: edit any video by chat</a></li></ul>
 </main>
-<footer><div class="wrap"><a href="/">FinalCap</a>${pages.map((p) => `<a href="/${p.slug}"${p.slug === page.slug ? ' aria-current="page"' : ''}>${esc(p.nav)}</a>`).join('')}<a href="/legal/privacy.html">Privacy</a><a href="/legal/terms.html">Terms</a><a href="/legal/support.html">Support</a></div></footer>
+<footer><div class="wrap"><a href="/">FinalCap</a>${pages.map((p) => `<a href="/${p.slug}"${p.slug === page.slug ? ' aria-current="page"' : ''}>${esc(p.nav)}</a>`).join('')}<a href="/legal/privacy.html">Privacy</a><a href="/legal/terms.html">Terms</a><a href="/legal/support.html">Support</a><a href="/blog">Blog</a></div></footer>
 <script>${telemetryScript(page.slug)}</script>
 </body>
 </html>
