@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-10-12T20:46:39.848Z",
+  "startedAt": "2026-10-12T21:56:51.956Z",
   "host": {
     "platform": "darwin",
     "cpus": 14
@@ -19,10 +19,10 @@
         "memApi": false
       },
       "op": "trim_copy",
-      "loadMs": 121,
+      "loadMs": 113,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 152,
+      "execMs": 146,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 15427867
@@ -38,10 +38,10 @@
         "memApi": false
       },
       "op": "x264_veryfast",
-      "loadMs": 114,
+      "loadMs": 118,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 12281,
+      "execMs": 12428,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 5894745
@@ -57,10 +57,10 @@
         "memApi": false
       },
       "op": "xfade_join3",
-      "loadMs": 104,
+      "loadMs": 109,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 13132,
+      "execMs": 13226,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 3589468
@@ -76,10 +76,10 @@
         "memApi": false
       },
       "op": "burn_ass",
-      "loadMs": 82,
+      "loadMs": 109,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 5898,
+      "execMs": 6004,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 3155059
@@ -95,10 +95,10 @@
         "memApi": false
       },
       "op": "loudnorm",
-      "loadMs": 111,
+      "loadMs": 116,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 1311,
+      "execMs": 1315,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 532276
@@ -114,7 +114,7 @@
         "memApi": false
       },
       "op": "thumbnail",
-      "loadMs": 107,
+      "loadMs": 113,
       "status": "ok",
       "exitCode": 0,
       "execMs": 55,
@@ -133,7 +133,7 @@
         "memApi": false
       },
       "op": "ffprobe",
-      "loadMs": 117,
+      "loadMs": 109,
       "status": "ok",
       "exitCode": 0,
       "execMs": 22,
@@ -152,16 +152,16 @@
         "memApi": false
       },
       "op": "soak60",
-      "loadMs": 110,
+      "loadMs": 116,
       "status": "ok",
       "runsOk": 60,
       "runs": 60,
       "firstFailure": null,
-      "execMs": 4041,
-      "medianRunMs": 66,
+      "execMs": 4142,
+      "medianRunMs": 67,
       "peakMemBytes": null,
       "peakCtxBytes": null
     }
   ],
-  "finishedAt": "2026-10-12T20:47:20.856Z"
+  "finishedAt": "2026-10-12T21:57:33.440Z"
 }

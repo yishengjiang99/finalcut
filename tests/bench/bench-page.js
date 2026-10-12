@@ -85,6 +85,9 @@ const OPS = {
     argv: c => ['-ss', '10', '-i', c.in[0], '-t', '20', '-c', 'copy', c.out] }),
   x264_veryfast: async (m) => ({ inputs: [await fixture('src-1080p-60s.mp4')], out: 'out.mp4', timeoutMs: 300e3,
     argv: c => ['-i', c.in[0], '-t', '10', '-c:v', 'libx264', '-preset', 'veryfast', ...T(m), '-c:a', 'aac', c.out] }),
+  // mt only, not in the default op list: x264 picks its own thread count (hangs on core-mt 0.12.10).
+  x264_auto_threads: async () => ({ inputs: [await fixture('src-1080p-60s.mp4')], out: 'out.mp4', timeoutMs: 300e3,
+    argv: c => ['-i', c.in[0], '-t', '10', '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', c.out] }),
   xfade_join3: async (m) => ({ inputs: [await fixture('clip1-720p-5s.mp4'), await fixture('clip2-720p-5s.mp4'), await fixture('clip3-720p-5s.mp4')], out: 'out.mp4', timeoutMs: 300e3,
     argv: c => ['-i', c.in[0], '-i', c.in[1], '-i', c.in[2], '-filter_complex',
       '[0:v][1:v]xfade=transition=fade:duration=1:offset=4[v01];[v01][2:v]xfade=transition=fade:duration=1:offset=8[v];[0:a][1:a]acrossfade=d=1[a01];[a01][2:a]acrossfade=d=1[a]',

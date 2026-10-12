@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-10-12T20:45:13.626Z",
+  "startedAt": "2026-10-12T21:55:25.349Z",
   "host": {
     "platform": "darwin",
     "cpus": 14
@@ -19,12 +19,12 @@
         "memApi": true
       },
       "op": "trim_copy",
-      "loadMs": 64,
+      "loadMs": 54,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 344,
-      "peakMemBytes": 51842551,
-      "peakCtxBytes": 50786553,
+      "execMs": 339,
+      "peakMemBytes": 51861105,
+      "peakCtxBytes": 50796097,
       "outBytes": 15427867
     },
     {
@@ -41,9 +41,9 @@
       "loadMs": 40,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 11193,
-      "peakMemBytes": 258940633,
-      "peakCtxBytes": 257900745,
+      "execMs": 11347,
+      "peakMemBytes": 258951237,
+      "peakCtxBytes": 257910389,
       "outBytes": 5894745
     },
     {
@@ -57,12 +57,12 @@
         "memApi": true
       },
       "op": "xfade_join3",
-      "loadMs": 45,
+      "loadMs": 46,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 12212,
-      "peakMemBytes": 525380292,
-      "peakCtxBytes": 524340858,
+      "execMs": 12270,
+      "peakMemBytes": 525391620,
+      "peakCtxBytes": 524350462,
       "outBytes": 3589468
     },
     {
@@ -76,12 +76,12 @@
         "memApi": true
       },
       "op": "burn_ass",
-      "loadMs": 47,
+      "loadMs": 45,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 5533,
-      "peakMemBytes": 127569471,
-      "peakCtxBytes": 126520484,
+      "execMs": 5625,
+      "peakMemBytes": 127576849,
+      "peakCtxBytes": 126526672,
       "outBytes": 3155059
     },
     {
@@ -95,12 +95,12 @@
         "memApi": true
       },
       "op": "loudnorm",
-      "loadMs": 45,
+      "loadMs": 41,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 1342,
-      "peakMemBytes": 124387970,
-      "peakCtxBytes": 123354324,
+      "execMs": 1366,
+      "peakMemBytes": 124402160,
+      "peakCtxBytes": 123363940,
       "outBytes": 532276
     },
     {
@@ -114,12 +114,12 @@
         "memApi": true
       },
       "op": "thumbnail",
-      "loadMs": 42,
+      "loadMs": 41,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 309,
-      "peakMemBytes": 43041058,
-      "peakCtxBytes": 42002974,
+      "execMs": 311,
+      "peakMemBytes": 43053962,
+      "peakCtxBytes": 42013450,
       "outBytes": 6870
     },
     {
@@ -133,12 +133,12 @@
         "memApi": true
       },
       "op": "ffprobe",
-      "loadMs": 40,
+      "loadMs": 43,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 278,
-      "peakMemBytes": 36218751,
-      "peakCtxBytes": 35181867,
+      "execMs": 280,
+      "peakMemBytes": 36225469,
+      "peakCtxBytes": 35192311,
       "outBytes": 4231
     },
     {
@@ -152,16 +152,16 @@
         "memApi": true
       },
       "op": "soak60",
-      "loadMs": 41,
+      "loadMs": 39,
       "status": "ok",
       "runsOk": 60,
       "runs": 60,
       "firstFailure": null,
-      "execMs": 20530,
+      "execMs": 20569,
       "medianRunMs": 343,
-      "peakMemBytes": 37053198,
-      "peakCtxBytes": 35961135
+      "peakMemBytes": 37062640,
+      "peakCtxBytes": 35976067
     }
   ],
-  "finishedAt": "2026-10-12T20:46:07.961Z"
+  "finishedAt": "2026-10-12T21:56:20.214Z"
 }

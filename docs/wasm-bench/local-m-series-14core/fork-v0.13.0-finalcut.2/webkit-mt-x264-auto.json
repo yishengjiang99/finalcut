@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-10-12T21:58:59.471Z",
+  "host": {
+    "platform": "darwin",
+    "cpus": 14
+  },
+  "soakRuns": 60,
+  "coreRoot": "/Users/yishengj/ffmpeg.wasm-phase1/packages",
+  "wrapper": "core-root/ffmpeg",
+  "runs": [
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "x264_auto_threads",
+      "loadMs": 129,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 1743,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 5906186
+    }
+  ],
+  "finishedAt": "2026-10-12T21:59:02.366Z"
+}

@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-10-12T20:47:21.002Z",
+  "startedAt": "2026-10-12T21:57:33.588Z",
   "host": {
     "platform": "darwin",
     "cpus": 14
@@ -19,10 +19,10 @@
         "memApi": false
       },
       "op": "trim_copy",
-      "loadMs": 151,
+      "loadMs": 128,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 176,
+      "execMs": 172,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 15427866
@@ -38,10 +38,10 @@
         "memApi": false
       },
       "op": "x264_veryfast",
-      "loadMs": 144,
+      "loadMs": 137,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 4489,
+      "execMs": 4514,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 5897026
@@ -57,10 +57,10 @@
         "memApi": false
       },
       "op": "xfade_join3",
-      "loadMs": 125,
+      "loadMs": 120,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 2915,
+      "execMs": 2959,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 3589722
@@ -76,10 +76,10 @@
         "memApi": false
       },
       "op": "burn_ass",
-      "loadMs": 137,
+      "loadMs": 123,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 2072,
+      "execMs": 2091,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 3154880
@@ -95,10 +95,10 @@
         "memApi": false
       },
       "op": "loudnorm",
-      "loadMs": 137,
+      "loadMs": 114,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 751,
+      "execMs": 781,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 532291
@@ -114,10 +114,10 @@
         "memApi": false
       },
       "op": "thumbnail",
-      "loadMs": 140,
+      "loadMs": 121,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 79,
+      "execMs": 126,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 6865
@@ -133,10 +133,10 @@
         "memApi": false
       },
       "op": "ffprobe",
-      "loadMs": 141,
+      "loadMs": 119,
       "status": "ok",
       "exitCode": 0,
-      "execMs": 28,
+      "execMs": 25,
       "peakMemBytes": null,
       "peakCtxBytes": null,
       "outBytes": 4369
@@ -152,16 +152,16 @@
         "memApi": false
       },
       "op": "soak60",
-      "loadMs": 145,
+      "loadMs": 129,
       "status": "ok",
       "runsOk": 60,
       "runs": 60,
       "firstFailure": null,
-      "execMs": 1692,
+      "execMs": 1694,
       "medianRunMs": 26,
       "peakMemBytes": null,
       "peakCtxBytes": null
     }
   ],
-  "finishedAt": "2026-10-12T20:47:37.373Z"
+  "finishedAt": "2026-10-12T21:57:49.953Z"
 }
