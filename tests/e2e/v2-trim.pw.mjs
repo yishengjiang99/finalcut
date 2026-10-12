@@ -112,7 +112,7 @@ test('trim runs in the browser with no media upload', async ({ page, context, ba
     expect(h['cross-origin-embedder-policy']).toBeUndefined();
   }
   expect(await page.evaluate(() => self.crossOriginIsolated)).toBe(isolated);
-  const wasmHead = await page.request.head(`/v2/ffmpeg-core/${expectedMode}/0.12.10/ffmpeg-core.wasm`);
+  const wasmHead = await page.request.head(`/v2/ffmpeg-core/${expectedMode}/0.13.0-finalcut.2/ffmpeg-core.wasm`);
   expect(wasmHead.headers()['content-type']).toBe('application/wasm');
   await expect(page.getByTestId('licenses-link')).toHaveAttribute('href', '/legal/licenses.html');
 

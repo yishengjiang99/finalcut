@@ -4,8 +4,12 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
-export const CORE_VERSION = '0.12.10';
-export const FFMPEG_JS_VERSION = '0.12.15';
+// FinalCut fork cores (yishengjiang99/ffmpeg.wasm v0.13.0-finalcut.2): mt = FFmpeg 8.0.1,
+// st = FFmpeg 5.1.10, emsdk 4.0.23. The mt core needs this fork's @ffmpeg/ffmpeg (async exec).
+export const CORE_VERSION = '0.13.0-finalcut.2';
+export const FFMPEG_JS_VERSION = '0.13.0-finalcut.2';
+// Previous production core (npm @ffmpeg/core 0.12.10, st). Last-resort fallback if no fork core loads.
+export const LEGACY_CORE_VERSION = '0.12.10';
 export const MAX_MT_THREADS = 4;
 // Wall-clock watchdog. ffmpeg's own exec timeout does not fire when the mt core deadlocks,
 // so the host terminates the worker (and reloads on the next job) instead.
@@ -19,13 +23,17 @@ const LOG_TAIL_LINES = 40;
 // a second.
 export const RECYCLE_AFTER_RUNS = 12;
 
+/** Core URLs. `mode` is 'mt', 'st' or 'legacy' (the 0.12.10 st core). emsdk 4 mt has no worker file. */
 export function coreUrls(mode, root = CORE_ROOT) {
-  const base = new URL(`${root}/${mode}/${CORE_VERSION}/`, self.location.href).href;
-  return {
-    coreURL: `${base}ffmpeg-core.js`,
-    wasmURL: `${base}ffmpeg-core.wasm`,
-    ...(mode === 'mt' ? { workerURL: `${base}ffmpeg-core.worker.js` } : {}),
-  };
+  const [dir, version] = mode === 'legacy' ? ['st', LEGACY_CORE_VERSION] : [mode, CORE_VERSION];
+  const base = new URL(`${root}/${dir}/${version}/`, self.location.href).href;
+  return { coreURL: `${base}ffmpeg-core.js`, wasmURL: `${base}ffmpeg-core.wasm` };
+}
+
+/** Load order for a picked mode: each later entry is tried only if the earlier one fails to load. */
+export function loadChain(mode) {
+  if (mode === 'legacy') return ['legacy'];
+  return mode === 'mt' ? ['mt', 'st', 'legacy'] : ['st', 'legacy'];
 }
 
 /**
@@ -38,7 +46,7 @@ export function classWorkerUrl(root = CORE_ROOT) {
 
 /** Decide mt vs st. `override` comes from ?wasm=mt|st (debugging). */
 export function pickMode({ override, isolated = self.crossOriginIsolated, sab = typeof SharedArrayBuffer === 'function', cores = navigator.hardwareConcurrency ?? 1 } = {}) {
-  if (override === 'st') return 'st';
+  if (override === 'st' || override === 'legacy') return override;
   const canMT = isolated === true && sab && cores > 1;
   if (override === 'mt' && !canMT) return 'st'; // mt is impossible without isolation
   return canMT ? 'mt' : 'st';
@@ -89,21 +97,26 @@ export class FFmpegHost {
 
   async _load() {
     const t0 = performance.now();
-    let mode = pickMode({ override: this.override });
-    try {
-      this.ffmpeg = await this._loadMode(mode);
-    } catch (err) {
-      if (mode !== 'mt') throw err;
-      // e.g. iOS refusing the fixed 1 GB mt heap.
-      this.fallbackReason = String(err?.message || err);
-      console.warn('[ffmpegHost] mt core failed, falling back to st:', this.fallbackReason);
-      mode = 'st';
-      this.ffmpeg = await this._loadMode(mode);
+    // mt -> st -> legacy 0.12.10 st: a core that fails to load (iOS refusing the mt heap, a broken
+    // fork core) falls back to the next one; the last error is rethrown.
+    const chain = loadChain(pickMode({ override: this.override }));
+    let mode;
+    for (let i = 0; i < chain.length; i++) {
+      try {
+        this.ffmpeg = await this._loadMode(chain[i]);
+        mode = chain[i];
+        break;
+      } catch (err) {
+        if (i === chain.length - 1) throw err;
+        this.fallbackReason = String(err?.message || err);
+        console.warn(`[ffmpegHost] ${chain[i]} core failed, falling back to ${chain[i + 1]}:`, this.fallbackReason);
+      }
     }
-    this.mode = mode;
+    this.mode = mode === 'legacy' ? 'st' : mode;
+    this.coreVersion = mode === 'legacy' ? LEGACY_CORE_VERSION : CORE_VERSION;
     this.loadMs = Math.round(performance.now() - t0);
-    console.info('[ffmpegHost]', { mode, crossOriginIsolated: self.crossOriginIsolated, cores: navigator.hardwareConcurrency, loadMs: this.loadMs });
-    return { mode, loadMs: this.loadMs };
+    console.info('[ffmpegHost]', { mode, core: this.coreVersion, crossOriginIsolated: self.crossOriginIsolated, cores: navigator.hardwareConcurrency, loadMs: this.loadMs });
+    return { mode: this.mode, core: this.coreVersion, loadMs: this.loadMs };
   }
 
   /**

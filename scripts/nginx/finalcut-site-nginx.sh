@@ -95,7 +95,7 @@ other_snapshot() {
              | sed -E 's/^.*server_name\s+//; s/;$//' | tr ' ' '\n' | grep -E '\.' | grep -vxF -e "$APEX" -e "$WWW" | sort -u || true); do
     echo "https://$h/ $(code_https "$h" /)"
   done
-  for p in /music-radar/ /high-priestess/ /music-hear/ /music-reader/privacy.html /api/health /legal/privacy.html /v2 /v2/ffmpeg-core/mt/0.12.10/ffmpeg-core.wasm /.well-known/skadnetwork/; do
+  for p in /music-radar/ /high-priestess/ /music-hear/ /music-reader/privacy.html /api/health /legal/privacy.html /v2 /v2/ffmpeg-core/mt/0.13.0-finalcut.2/ffmpeg-core.wasm /.well-known/skadnetwork/; do
     echo "https://${APEX}${p} $(code_https "$APEX" "$p")"
   done
 }
