@@ -1,18 +1,18 @@
 {
-  "$comment": "Corresponding Source for every self-hosted ffmpeg.wasm core: the FinalCut fork cores @ffmpeg/core-mt and @ffmpeg/core 0.13.0-finalcut.2 (yishengjiang99/ffmpeg.wasm@38ba774, FFmpeg 8.0.1 mt / 5.1.10 st, emsdk 4.0.23) and the fallback core @ffmpeg/core 0.12.10 (ffmpegwasm/ffmpeg.wasm@71aa99d, FFmpeg 5.1.4). Served from /v2/vendor/ffmpeg/source/. Fork entries copied from the fork's build/sources.lock.json and each core's dist/manifest.json; scripts/fetch-ffmpeg-source.mjs fails the build on any mismatch.",
+  "$comment": "Corresponding Source for every self-hosted ffmpeg.wasm core: the FinalCut fork cores @ffmpeg/core-mt and @ffmpeg/core 0.13.0-finalcut.3 (yishengjiang99/ffmpeg.wasm@bf6a3f3, FFmpeg 8.0.1 mt / 5.1.10 st, emsdk 4.0.23) and the fallback core @ffmpeg/core 0.12.10 (ffmpegwasm/ffmpeg.wasm@71aa99d, FFmpeg 5.1.4). Served from /v2/vendor/ffmpeg/source/. Fork entries copied from the fork's build/sources.lock.json and each core's dist/manifest.json; scripts/fetch-ffmpeg-source.mjs fails the build on any mismatch.",
   "schemaVersion": 1,
   "packages": {
-    "@ffmpeg/core-mt": "0.13.0-finalcut.2",
-    "@ffmpeg/core": "0.13.0-finalcut.2",
+    "@ffmpeg/core-mt": "0.13.0-finalcut.3",
+    "@ffmpeg/core": "0.13.0-finalcut.3",
     "@ffmpeg/core-legacy": "0.12.10"
   },
   "buildRecipe": {
     "repository": "https://github.com/yishengjiang99/ffmpeg.wasm",
-    "commit": "38ba774b61f4ba9ea5430a99214582f0044f54eb",
+    "commit": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
     "dockerfile": "Dockerfile",
     "linkScript": "build/ffmpeg-wasm.sh",
     "toolchainImage": "emscripten/emsdk:4.0.23@sha256:86537645c51e44899812d29820ee3b64b96c321ebb2aba4416a04ceeb1bcde62",
-    "howToBuild": "At the commit above: scripts/ci-local.sh (Docker build of mt and st; sources pinned in build/sources.lock.json; source patches live in build/ffmpeg.sh, build/x264.sh and src/fftools-*). The fallback core 0.12.10 is built from legacyBuildRecipe.",
+    "howToBuild": "At the commit above: scripts/ci-local.sh (Docker build of mt and st; sources pinned in build/sources.lock.json; source patches live in build/ffmpeg.sh, build/x264.sh and src/fftools-*). The fallback core 0.12.10 is built from legacyBuildRecipe. Cores of 0.13.0-finalcut.3 were built by the fork workflow core-build, run 38321096611.",
     "legacyBuildRecipe": {
       "repository": "https://github.com/ffmpegwasm/ffmpeg.wasm",
       "commit": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
@@ -27,18 +27,18 @@
     {
       "id": "ffmpeg.wasm-fork",
       "name": "ffmpeg.wasm FinalCut fork (build scripts, bindings, patched fftools)",
-      "role": "Build recipe + source patches for @ffmpeg/core and @ffmpeg/core-mt 0.13.0-finalcut.2",
-      "version": "0.13.0-finalcut.2",
-      "ref": "38ba774b61f4ba9ea5430a99214582f0044f54eb",
-      "commit": "38ba774b61f4ba9ea5430a99214582f0044f54eb",
+      "role": "Build recipe + source patches for @ffmpeg/core and @ffmpeg/core-mt 0.13.0-finalcut.3",
+      "version": "0.13.0-finalcut.3",
+      "ref": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
+      "commit": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
       "repository": "https://github.com/yishengjiang99/ffmpeg.wasm",
       "license": "MIT (repo); built cores GPL-2.0-or-later",
-      "file": "ffmpeg.wasm-fork-38ba774b.tar.gz",
-      "url": "https://codeload.github.com/yishengjiang99/ffmpeg.wasm/tar.gz/38ba774b61f4ba9ea5430a99214582f0044f54eb",
-      "bytes": 8607838,
-      "sha256": "e75b9efcbd41bccad8abcca72aa5e3dfc3278a0e231b9a30fb96c9aed0d2fe85",
+      "file": "ffmpeg.wasm-fork-bf6a3f37.tar.gz",
+      "url": "https://codeload.github.com/yishengjiang99/ffmpeg.wasm/tar.gz/bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a",
+      "bytes": 9438378,
+      "sha256": "8fc6b286ea4b855249f928e541808bfa5a0cdce01baf472ea9610d799a00dca1",
       "verify": {
-        "tarCommitId": "38ba774b61f4ba9ea5430a99214582f0044f54eb"
+        "tarCommitId": "bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a"
       },
       "licenseFiles": [
         "LICENSE"
@@ -47,7 +47,7 @@
     {
       "id": "ffmpeg-8.0.1",
       "name": "FFmpeg 8.0.1 (mt core)",
-      "role": "FFmpeg for @ffmpeg/core-mt 0.13.0-finalcut.2",
+      "role": "FFmpeg for @ffmpeg/core-mt 0.13.0-finalcut.3",
       "version": "8.0.1",
       "ref": "n8.0.1",
       "commit": "894da5ca7d742e4429ffb2af534fcda0103ef593",
@@ -81,7 +81,7 @@
     {
       "id": "ffmpeg-5.1.10",
       "name": "FFmpeg 5.1.10 (st core)",
-      "role": "FFmpeg for @ffmpeg/core 0.13.0-finalcut.2",
+      "role": "FFmpeg for @ffmpeg/core 0.13.0-finalcut.3",
       "version": "5.1.10",
       "ref": "n5.1.10",
       "commit": "19feb712f5c1821d8a3fa1ad63c5bd2e3b9672eb",
@@ -115,7 +115,7 @@
     {
       "id": "x264-stable",
       "name": "x264 (upstream stable, fork cores)",
-      "role": "H.264 encoder for the 0.13.0-finalcut.2 cores; patched by build/x264.sh in the fork recipe; mirrored byte-for-byte as a fork release asset because code.videolan.org refuses scripted downloads (HTTP 406)",
+      "role": "H.264 encoder for the 0.13.0-finalcut.3 cores; patched by build/x264.sh in the fork recipe; mirrored byte-for-byte as a fork release asset because code.videolan.org refuses scripted downloads (HTTP 406)",
       "version": "stable",
       "ref": "stable",
       "commit": "b35605ace3ddf7c1a5d67a2eb553f034aef41d55",
@@ -136,7 +136,7 @@
     {
       "id": "emscripten-4.0.23",
       "name": "Emscripten 4.0.23 (fork cores)",
-      "role": "Toolchain + runtime/system libraries linked into the 0.13.0-finalcut.2 wasm",
+      "role": "Toolchain + runtime/system libraries linked into the 0.13.0-finalcut.3 wasm",
       "version": "4.0.23",
       "ref": "4.0.23",
       "commit": "7a5d93b50f6a3a35e85a0d2fc9e667b8498e6aed",

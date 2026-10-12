@@ -16,9 +16,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'v2', 'public', 'ffmpeg-core');
 
 // Single source of truth for the pinned versions (also checked against package.json).
-// Fork packages (yishengjiang99/ffmpeg.wasm release v0.13.0-finalcut.2), installed from the release
+// Fork packages (yishengjiang99/ffmpeg.wasm release v0.13.0-finalcut.3), installed from the release
 // tarball URLs. @ffmpeg/core-legacy = npm @ffmpeg/core 0.12.10 st, the last-resort fallback core.
-const FORK = '0.13.0-finalcut.2';
+const FORK = '0.13.0-finalcut.3';
 const FORK_URL = (file) => `https://github.com/yishengjiang99/ffmpeg.wasm/releases/download/v${FORK}/${file}`;
 export const PINNED = {
   '@ffmpeg/ffmpeg': FORK,

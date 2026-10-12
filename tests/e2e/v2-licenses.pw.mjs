@@ -65,7 +65,7 @@ test('source dir: SHA256SUMS matches the pinned lock, archive bytes verify, inde
   }
 
   const versions = await (await request.get(`${SRC}versions.json`)).json();
-  expect(versions.packages['@ffmpeg/core']).toBe('0.13.0-finalcut.2');
+  expect(versions.packages['@ffmpeg/core']).toBe('0.13.0-finalcut.3');
   expect(versions.packages['@ffmpeg/core-legacy']).toBe('0.12.10');
   expect(versions.components.map((c) => c.id)).toEqual(lock.components.map((c) => c.id));
 

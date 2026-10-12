@@ -4,10 +4,10 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
-// FinalCut fork cores (yishengjiang99/ffmpeg.wasm v0.13.0-finalcut.2): mt = FFmpeg 8.0.1,
+// FinalCut fork cores (yishengjiang99/ffmpeg.wasm v0.13.0-finalcut.3): mt = FFmpeg 8.0.1,
 // st = FFmpeg 5.1.10, emsdk 4.0.23. The mt core needs this fork's @ffmpeg/ffmpeg (async exec).
-export const CORE_VERSION = '0.13.0-finalcut.2';
-export const FFMPEG_JS_VERSION = '0.13.0-finalcut.2';
+export const CORE_VERSION = '0.13.0-finalcut.3';
+export const FFMPEG_JS_VERSION = '0.13.0-finalcut.3';
 // Previous production core (npm @ffmpeg/core 0.12.10, st). Last-resort fallback if no fork core loads.
 export const LEGACY_CORE_VERSION = '0.12.10';
 export const MAX_MT_THREADS = 4;

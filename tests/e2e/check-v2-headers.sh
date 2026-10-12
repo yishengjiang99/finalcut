@@ -7,7 +7,7 @@
 # keep serving with the isolation headers.
 set -euo pipefail
 BASE="${1:-http://127.0.0.1:8080}"
-CORE_VERSION="${CORE_VERSION:-0.13.0-finalcut.2}"
+CORE_VERSION="${CORE_VERSION:-0.13.0-finalcut.3}"
 LEGACY_CORE_VERSION="${LEGACY_CORE_VERSION:-0.12.10}"
 fail=0
 hdr() { curl -fsS -o /dev/null -D - "$BASE$1" | tr -d '\r' | awk -v IGNORECASE=1 -v h="$2" 'tolower($0) ~ "^"tolower(h)":" {sub(/^[^:]*:[ ]*/,""); print; exit}'; }

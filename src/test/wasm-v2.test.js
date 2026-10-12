@@ -72,7 +72,7 @@ describe('pickMode', async () => {
   });
   it('self-hosted versioned core URLs under /v2 (no CDN, no core-st)', () => {
     const mt = coreUrls('mt');
-    expect(mt.coreURL).toMatch(/\/v2\/ffmpeg-core\/mt\/0\.13\.0-finalcut\.2\/ffmpeg-core\.js$/);
+    expect(mt.coreURL).toMatch(/\/v2\/ffmpeg-core\/mt\/0\.13\.0-finalcut\.3\/ffmpeg-core\.js$/);
     expect(mt.workerURL).toBeUndefined(); // emsdk 4: no ffmpeg-core.worker.js
     expect(coreUrls('legacy').coreURL).toMatch(/\/v2\/ffmpeg-core\/st\/0\.12\.10\/ffmpeg-core\.js$/);
     expect(JSON.stringify([mt, coreUrls('st'), coreUrls('legacy')])).not.toMatch(/jsdelivr|unpkg|core-st/);

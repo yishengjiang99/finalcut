@@ -18,7 +18,7 @@
   <p class="meta">Last updated: 2026-10-12 · Applies to the FinalCap web editor at grepawk.com/v2 (preview)</p>
 
   <p>The FinalCap web editor at <a href="/v2/">/v2</a> edits your videos inside your browser using FFmpeg compiled to WebAssembly
-  (ffmpeg.wasm). The FFmpeg cores we send to your browser (<code>@ffmpeg/core-mt</code> and <code>@ffmpeg/core</code> 0.13.0-finalcut.2, built from
+  (ffmpeg.wasm). The FFmpeg cores we send to your browser (<code>@ffmpeg/core-mt</code> and <code>@ffmpeg/core</code> 0.13.0-finalcut.3, built from
   <a href="https://github.com/yishengjiang99/ffmpeg.wasm">our ffmpeg.wasm fork</a> with FFmpeg 8.0.1 (multithreaded) and 5.1.10 (single-thread), and the fallback
   core <code>@ffmpeg/core</code> 0.12.10; all served unmodified from <code>/v2/ffmpeg-core/</code>) are built with <code>--enable-gpl</code> and includes libx264 and libx265, so it is
   distributed under the <strong>GNU General Public License, version 2 or later</strong>.</p>
@@ -37,8 +37,8 @@
   <h2>Components in the FFmpeg WebAssembly core</h2>
   <table>
     <tr><th>Component</th><th>Version / ref</th><th>License</th><th>Source archive (this site)</th><th>License texts</th><th>Upstream</th></tr>
-    <tr><td>ffmpeg.wasm FinalCut fork (build scripts, bindings, patched fftools)</td><td>0.13.0-finalcut.2<br><small><code>38ba774b61f4ba9ea5430a99214582f0044f54eb</code> @ <code>38ba774b61f4</code></small></td><td>MIT (repo); built cores GPL-2.0-or-later</td>
-      <td><a href="/v2/vendor/ffmpeg/source/ffmpeg.wasm-fork-38ba774b.tar.gz">ffmpeg.wasm-fork-38ba774b.tar.gz</a> (8.6 MB)<br><small>SHA-256 <code>e75b9efcbd41bccad8abcca72aa5e3dfc3278a0e231b9a30fb96c9aed0d2fe85</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg.wasm-fork/LICENSE.txt">LICENSE.txt</a></td><td><a href="https://github.com/yishengjiang99/ffmpeg.wasm/tree/38ba774b61f4ba9ea5430a99214582f0044f54eb">yishengjiang99/ffmpeg.wasm</a></td></tr>
+    <tr><td>ffmpeg.wasm FinalCut fork (build scripts, bindings, patched fftools)</td><td>0.13.0-finalcut.3<br><small><code>bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a</code> @ <code>bf6a3f376c11</code></small></td><td>MIT (repo); built cores GPL-2.0-or-later</td>
+      <td><a href="/v2/vendor/ffmpeg/source/ffmpeg.wasm-fork-bf6a3f37.tar.gz">ffmpeg.wasm-fork-bf6a3f37.tar.gz</a> (9.4 MB)<br><small>SHA-256 <code>8fc6b286ea4b855249f928e541808bfa5a0cdce01baf472ea9610d799a00dca1</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg.wasm-fork/LICENSE.txt">LICENSE.txt</a></td><td><a href="https://github.com/yishengjiang99/ffmpeg.wasm/tree/bf6a3f376c11f1e0482deb9a9187e1e6d2b04e0a">yishengjiang99/ffmpeg.wasm</a></td></tr>
     <tr><td>FFmpeg 8.0.1 (mt core)</td><td>8.0.1<br><small><code>n8.0.1</code> @ <code>894da5ca7d74</code></small></td><td>LGPL-2.1-or-later; GPL-2.0-or-later as configured (--enable-gpl)</td>
       <td><a href="/v2/vendor/ffmpeg/source/ffmpeg-8.0.1.tar.xz">ffmpeg-8.0.1.tar.xz</a> (11.4 MB)<br><small>SHA-256 <code>05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41</code></small></td><td><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg-8.0.1/COPYING.GPLv2.txt">COPYING.GPLv2.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg-8.0.1/COPYING.LGPLv2.1.txt">COPYING.LGPLv2.1.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg-8.0.1/COPYING.GPLv3.txt">COPYING.GPLv3.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg-8.0.1/COPYING.LGPLv3.txt">COPYING.LGPLv3.txt</a><br><a href="/v2/vendor/ffmpeg/source/licenses/ffmpeg-8.0.1/LICENSE.md.txt">LICENSE.md.txt</a></td><td><a href="https://github.com/FFmpeg/FFmpeg/tree/894da5ca7d742e4429ffb2af534fcda0103ef593">FFmpeg/FFmpeg</a></td></tr>
     <tr><td>FFmpeg 8.0.1 release signature</td><td>8.0.1<br><small><code>n8.0.1</code></small></td><td>n/a</td>
