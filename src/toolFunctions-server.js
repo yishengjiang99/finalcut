@@ -3,7 +3,8 @@
 
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {
-  '9:16': { width: 1080, height: 1920, description: 'Stories, Reels, & TikToks' },
+  '9:16': { width: 1080, height: 1920, description: 'Instagram Reels & Stories, TikTok, Shorts' },
+  '4:5': { width: 1080, height: 1350, description: 'Instagram feed posts (portrait)' },
   '16:9': { width: 1920, height: 1080, description: 'YT thumbnails & Cinematic widescreen' },
   '1:1': { width: 1080, height: 1080, description: 'X feed posts & Profile pics' },
   '2:3': { width: 1080, height: 1620, description: 'Posters, Pinterest & Tall Portraits' },
@@ -410,11 +411,14 @@ export const toolFunctions = {
       const preset = ASPECT_RATIO_PRESETS[args.ratio];
       const fitMode = args.fit || 'contain';
       
-      // For now, use simple resize - more complex fitting logic would need server implementation
-      const data = await processVideoOnServer('resize_video', { 
-        width: preset.width, 
-        height: preset.height 
+      // contain → letterbox (pad), cover → fill and crop; never stretch.
+      const fit = fitMode === 'cover' || fitMode === 'crop' ? 'crop' : 'pad';
+      const data = await processVideoOnServer('resize_video', {
+        width: preset.width,
+        height: preset.height,
+        fit
       }, videoFileData);
+      setVideoFileData(data);
       
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
       addMessage({ text: `Processed video (resized to ${args.ratio}):\n${preset.description}`, videoUrl: videoUrl, mimeType: 'video/mp4' });

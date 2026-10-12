@@ -14,7 +14,8 @@ import { dedupeSrtCues, translatedTrackWithoutDuplicates } from './server/captio
 
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {
-  '9:16': { width: 1080, height: 1920, description: 'Stories, Reels, & TikToks' },
+  '9:16': { width: 1080, height: 1920, description: 'Instagram Reels & Stories, TikTok, Shorts' },
+  '4:5': { width: 1080, height: 1350, description: 'Instagram feed posts (portrait)' },
   '16:9': { width: 1920, height: 1080, description: 'YT thumbnails & Cinematic widescreen' },
   '1:1': { width: 1080, height: 1080, description: 'X feed posts & Profile pics' },
   '2:3': { width: 1080, height: 1620, description: 'Posters, Pinterest & Tall Portraits' },
@@ -1194,6 +1195,11 @@ export const toolFunctions = {
     runVisualEdit('audio_silence_remove', args, videoFileData, setVideoFileData, addMessage, 'silence removal'),
   audio_pan: async (args, videoFileData, setVideoFileData, addMessage) =>
     runVisualEdit('audio_pan', args, videoFileData, setVideoFileData, addMessage, 'stereo pan'),
+  apply_edits: async (args, videoFileData, setVideoFileData, addMessage) => {
+    const edits = Array.isArray(args?.edits) ? args.edits : [];
+    const label = edits.map(e => e?.op === 'resize_video' && e.preset ? `resize ${e.preset}` : String(e?.op || '').replace(/_/g, ' ')).join(' + ') || 'edits';
+    return runVisualEdit('apply_edits', { edits }, videoFileData, setVideoFileData, addMessage, label);
+  },
   resize_video_preset: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       if (!args.preset) {
@@ -1203,9 +1209,12 @@ export const toolFunctions = {
         throw new Error('Invalid preset: ' + args.preset + '. Must be one of: ' + Object.keys(ASPECT_RATIO_PRESETS).join(', '));
       }
       const preset = ASPECT_RATIO_PRESETS[args.preset];
+      // Letterbox into the preset frame (or fill and crop) instead of stretching the picture.
+      const fit = args.fit === 'crop' ? 'crop' : 'pad';
       const data = await processMedia('resize_video', {
         width: preset.width,
-        height: preset.height
+        height: preset.height,
+        fit
       }, videoFileData);
       setVideoFileData(data);
       // A photo comes back as an image, not an mp4.
