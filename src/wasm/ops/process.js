@@ -20,7 +20,7 @@ export const PHOTO_OUTPUT_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
 export const PHOTO_SUPPORTED_OPS = [
   'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical',
   'add_text', 'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation',
-  'apply_color_filter', 'convert_image_format',
+  'apply_color_filter', 'convert_image_format', 'apply_edits',
 ];
 export const COLOR_FILTER_PRESETS = [
   'red', 'green', 'blue', 'yellow', 'cyan', 'magenta',
@@ -122,9 +122,48 @@ export function buildColorFilter(args = {}) {
   return `colorchannelmixer=${names.map((n, i) => `${n}=${mixed[i]}`).join(':')}`;
 }
 
+
+// ─── apply_edits: several frame edits in ONE filter graph, encoded once ──────
+
+export const APPLY_EDITS_OPS = [
+  'apply_color_filter', 'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical',
+  'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation',
+];
+export const APPLY_EDITS_MAX = 8;
+export const ASPECT_PRESET_SIZES = {
+  '9:16': [1080, 1920], '4:5': [1080, 1350], '16:9': [1920, 1080], '1:1': [1080, 1080], '2:3': [1080, 1620], '3:2': [1620, 1080],
+};
+
+/** One edit of an apply_edits list as the args of its single-op tool; a resize may name a preset instead of a size. */
+export function normalizeEditStep(step) {
+  if (!step || typeof step !== 'object' || Array.isArray(step)) throw new OpArgsError('each edit must be an object with an "op"');
+  const { op, ...args } = step;
+  if (!APPLY_EDITS_OPS.includes(op)) throw new OpArgsError(`edit op must be one of: ${APPLY_EDITS_OPS.join(', ')}`);
+  if (op === 'resize_video' && args.preset !== undefined) {
+    const size = ASPECT_PRESET_SIZES[args.preset];
+    if (!size) throw new OpArgsError(`preset must be one of: ${Object.keys(ASPECT_PRESET_SIZES).join(', ')}`);
+    return { op, args: { width: size[0], height: size[1], fit: args.fit === 'crop' ? 'crop' : 'pad' } };
+  }
+  return { op, args };
+}
+
+/** The comma-joined filter chain for an ordered list of edits (applied left to right). */
+export function buildEditsFilter(edits, opts) {
+  if (!Array.isArray(edits) || edits.length === 0) throw new OpArgsError('edits must be a non-empty list');
+  if (edits.length > APPLY_EDITS_MAX) throw new OpArgsError(`at most ${APPLY_EDITS_MAX} edits per call`);
+  return edits.map(step => {
+    const { op, args } = normalizeEditStep(step);
+    const f = buildVisualFilter(op, args, opts);
+    if (!f || f === 'null') throw new OpArgsError(`${op} produced no filter`);
+    return f;
+  }).join(',');
+}
+
 /** The video filter for a frame-only operation, or null when the operation is not one. */
 export function buildVisualFilter(operation, args = {}, { isPhoto = false, fontFile } = {}) {
   switch (operation) {
+    case 'apply_edits':
+      return buildEditsFilter(args.edits, { isPhoto, fontFile });
     case 'resize_video': {
       const width = Math.round(num(args.width, 'width', { min: -2, max: 16384 }));
       const height = Math.round(num(args.height, 'height', { min: -2, max: 16384 }));

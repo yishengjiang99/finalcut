@@ -21,6 +21,7 @@ import {
   applyTrim,
   assertOperationSupported,
   buildVisualFilter,
+  resizeFilter,
   processImageToFile,
   audioFadeNeedsDuration,
   buildAudioFadeFilter,
@@ -586,7 +587,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
 
   switch (operation) {
     case 'resize_video':
-      command = command.videoFilters(`scale=${parsedArgs.width}:${parsedArgs.height}`).audioCodec('copy');
+      command = command.videoFilters(resizeFilter(parsedArgs.width, parsedArgs.height, parsedArgs.fit)).audioCodec('copy');
       break;
 
     case 'crop_video':
@@ -630,6 +631,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
     case 'apply_color_filter':
     case 'adjust_contrast':
     case 'flip_video_vertical':
+    case 'apply_edits':
       try {
         command = command.videoFilters(buildVisualFilter(operation, parsedArgs, 'video')).audioCodec('copy');
       } catch (error) {

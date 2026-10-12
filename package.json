@@ -24,7 +24,8 @@
     "schema:tools": "node scripts/generate-tools-schema.js",
     "test:e2e:v2": "playwright test -c tests/e2e/playwright.config.mjs",
     "test:contract:ios": "node tests/contract/ios-endpoints.mjs",
-    "source:verify": "node scripts/fetch-ffmpeg-source.mjs --verify"
+    "source:verify": "node scripts/fetch-ffmpeg-source.mjs --verify",
+    "eval:agentic": "node scripts/eval-agentic-prompts.mjs --ffmpeg"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

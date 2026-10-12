@@ -161,6 +161,43 @@ function requireFiniteNumber(value, field, { min = -Infinity, max = Infinity } =
   return n;
 }
 
+
+// ─── apply_edits: several frame edits in ONE filter graph, encoded once ──────
+
+export const APPLY_EDITS_OPS = [
+  'apply_color_filter', 'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical',
+  'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation',
+];
+export const APPLY_EDITS_MAX = 8;
+export const ASPECT_PRESET_SIZES = {
+  '9:16': [1080, 1920], '4:5': [1080, 1350], '16:9': [1920, 1080], '1:1': [1080, 1080], '2:3': [1080, 1620], '3:2': [1620, 1080],
+};
+
+/** One edit of an apply_edits list as the args of its single-op tool; a resize may name a preset instead of a size. */
+export function normalizeEditStep(step) {
+  if (!step || typeof step !== 'object' || Array.isArray(step)) throw new OpValidationError('each edit must be an object with an "op"');
+  const { op, ...args } = step;
+  if (!APPLY_EDITS_OPS.includes(op)) throw new OpValidationError(`edit op must be one of: ${APPLY_EDITS_OPS.join(', ')}`);
+  if (op === 'resize_video' && args.preset !== undefined) {
+    const size = ASPECT_PRESET_SIZES[args.preset];
+    if (!size) throw new OpValidationError(`preset must be one of: ${Object.keys(ASPECT_PRESET_SIZES).join(', ')}`);
+    return { op, args: { width: size[0], height: size[1], fit: args.fit === 'crop' ? 'crop' : 'pad' } };
+  }
+  return { op, args };
+}
+
+/** The comma-joined filter chain for an ordered list of edits (applied left to right). */
+export function buildEditsFilter(edits, opts) {
+  if (!Array.isArray(edits) || edits.length === 0) throw new OpValidationError('edits must be a non-empty list');
+  if (edits.length > APPLY_EDITS_MAX) throw new OpValidationError(`at most ${APPLY_EDITS_MAX} edits per call`);
+  return edits.map(step => {
+    const { op, args } = normalizeEditStep(step);
+    const f = buildVisualFilter(op, args, opts);
+    if (!f || f === 'null') throw new OpValidationError(`${op} produced no filter`);
+    return f;
+  }).join(',');
+}
+
 /** scale filter for resize_video; fit "pad" letterboxes and "crop" fills, both without stretching. */
 export function resizeFilter(width, height, fit) {
   if (fit === 'pad' && width > 0 && height > 0) {
@@ -228,6 +265,8 @@ function optionalInt(value, field, fallback, opts) {
  */
 export function buildVisualFilter(operation, parsedArgs = {}, mediaType = MEDIA_TYPE_IMAGE) {
   switch (operation) {
+    case 'apply_edits':
+      return buildEditsFilter(parsedArgs.edits, mediaType);
     case 'resize_video': {
       const width = Math.round(requireFiniteNumber(parsedArgs.width, 'width', { min: -2, max: 16384 }));
       const height = Math.round(requireFiniteNumber(parsedArgs.height, 'height', { min: -2, max: 16384 }));
@@ -294,7 +333,7 @@ export function buildVisualFilter(operation, parsedArgs = {}, mediaType = MEDIA_
 export const PHOTO_SUPPORTED_OPS = [
   'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical',
   'add_text', 'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation',
-  'apply_color_filter', 'convert_image_format',
+  'apply_color_filter', 'convert_image_format', 'apply_edits',
 ];
 
 export const PHOTO_OUTPUT_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
@@ -501,7 +540,7 @@ export function validateVideoOperation(operation, args = {}) {
   if (operation === 'trim_video') {
     applyTrim({ setStartTime() { return this; }, setDuration() { return this; }, outputOptions() { return this; } }, parsedArgs);
   }
-  if (['apply_color_filter', 'adjust_contrast', 'flip_video_vertical'].includes(operation)) {
+  if (['apply_color_filter', 'adjust_contrast', 'flip_video_vertical', 'apply_edits'].includes(operation)) {
     buildVisualFilter(operation, parsedArgs, MEDIA_TYPE_VIDEO);
   }
   if (operation === 'audio_fade') {
@@ -752,6 +791,7 @@ export function applyOperation(command, operation, parsedArgs = {}, { mediaDurat
     case 'apply_color_filter':
     case 'adjust_contrast':
     case 'flip_video_vertical':
+    case 'apply_edits':
       return command.videoFilters(buildVisualFilter(operation, parsedArgs, MEDIA_TYPE_VIDEO)).audioCodec('copy');
     case 'convert_image_format':
       throw new OpValidationError('convert_image_format only applies to photos — use convert_video_format for videos');

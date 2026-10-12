@@ -411,11 +411,14 @@ export const toolFunctions = {
       const preset = ASPECT_RATIO_PRESETS[args.ratio];
       const fitMode = args.fit || 'contain';
       
-      // For now, use simple resize - more complex fitting logic would need server implementation
-      const data = await processVideoOnServer('resize_video', { 
-        width: preset.width, 
-        height: preset.height 
+      // contain → letterbox (pad), cover → fill and crop; never stretch.
+      const fit = fitMode === 'cover' || fitMode === 'crop' ? 'crop' : 'pad';
+      const data = await processVideoOnServer('resize_video', {
+        width: preset.width,
+        height: preset.height,
+        fit
       }, videoFileData);
+      setVideoFileData(data);
       
       const videoUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
       addMessage({ text: `Processed video (resized to ${args.ratio}):\n${preset.description}`, videoUrl: videoUrl, mimeType: 'video/mp4' });

@@ -289,18 +289,67 @@ export const WEB_SHAPE_GUIDANCE =
   'Platform shapes: "Instagram shape" or "for Instagram" with no other hint means a feed post, so use resize_video_preset with preset 4:5; ' +
   'Reels or Stories mean 9:16 and "square" means 1:1. When you choose the shape yourself, name it in your reply and say the user can ask for 9:16 (Reels), 1:1, or a crop that fills the frame without bars instead. ' +
   'Pass fit "crop" only when the user asks to fill or crop the frame; otherwise leave the default letterbox. ' +
-  'For several edits in one request (for example a color look plus a resize), call the dedicated tools in order; they run one after another on the previous result.';
+  'Tools that run in one response run one after another, each on the previous result.';
+
+export const APPLY_EDITS_TOOL_NAME = 'apply_edits';
+export const applyEditsToolDefinition = {
+  type: 'function',
+  function: {
+    name: APPLY_EDITS_TOOL_NAME,
+    description: 'Apply SEVERAL frame edits (color look, resize/aspect preset, crop, rotate, flip, brightness, contrast, hue, saturation) to the video or photo in ONE pass: ' +
+      'one filter graph, one encode, so it is faster and loses less quality than calling the single tools one after another. Edits apply in list order.',
+    parameters: {
+      type: 'object',
+      properties: {
+        edits: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 8,
+          description: 'Ordered edits. Each is { op, ...the same arguments as the single tool of that name }. ' +
+            'For an aspect-ratio change use { op: "resize_video", preset: "9:16"|"4:5"|"16:9"|"1:1"|"2:3"|"3:2", fit: "pad"|"crop" } (pad = letterbox, default). ' +
+            'Examples: { op: "apply_color_filter", filter: "black_and_white" }, { op: "adjust_saturation", saturation: 1.4 }, { op: "crop_video", width: 720, height: 720, x: 0, y: 0 }, { op: "rotate_video", angle: 90 }.',
+          items: {
+            type: 'object',
+            properties: {
+              op: { type: 'string', enum: ['apply_color_filter', 'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical', 'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation'] },
+              filter: { type: 'string', description: 'apply_color_filter: the look.', enum: ['red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'sepia', 'grayscale', 'black_and_white', 'invert', 'warm', 'cool', 'vintage'] },
+              intensity: { type: 'number', description: 'apply_color_filter: 0-1, default 1.' },
+              preset: { type: 'string', description: 'resize_video: aspect preset (9:16 Reels/Stories/TikTok, 4:5 Instagram feed, 1:1 square, 16:9 landscape).', enum: ['9:16', '4:5', '16:9', '1:1', '2:3', '3:2'] },
+              fit: { type: 'string', description: 'resize_video with preset: pad (letterbox, default) or crop (fill).', enum: ['pad', 'crop'] },
+              width: { type: 'number', description: 'resize_video (instead of preset) or crop_video: width in pixels; -1 keeps aspect for resize.' },
+              height: { type: 'number', description: 'resize_video (instead of preset) or crop_video: height in pixels.' },
+              x: { type: 'number', description: 'crop_video: left edge.' },
+              y: { type: 'number', description: 'crop_video: top edge.' },
+              angle: { type: 'number', description: 'rotate_video: degrees (90, 180, 270).' },
+              brightness: { type: 'number', description: 'adjust_brightness: -1 to 1.' },
+              contrast: { type: 'number', description: 'adjust_contrast: 0 to 3, 1 = no change.' },
+              degrees: { type: 'number', description: 'adjust_hue: hue shift in degrees.' },
+              saturation: { type: 'number', description: 'adjust_saturation: 0 to 3, 1 = no change, 0 = grayscale.' },
+            },
+            required: ['op'],
+          },
+        },
+      },
+      required: ['edits'],
+    },
+  },
+};
+
+export const WEB_COMPOUND_GUIDANCE =
+  `When one request asks for two or more frame edits (color look, resize/aspect, crop, rotate, flip, brightness, contrast, hue, saturation), use a single ${APPLY_EDITS_TOOL_NAME} call listing them in order instead of separate tools. ` +
+  'Edits that change timing or audio (trim, speed, volume, captions, audio effects) are not part of it: call their own tools, in the order the user wants, before or after it.';
 
 /** Tools offered to the web app: every tool in src/tools.js for the media type, then the FFmpeg fallback pair. */
 export function webToolsFor({ mediaType } = {}) {
   const typed = toolsForMediaType(mediaType).map(withWebResizePreset);
-  return mediaType === 'image' ? typed : [...typed, searchCapabilitiesToolDefinition, runFfmpegToolDefinition];
+  const withCompound = mediaType === 'audio' ? typed : [...typed, applyEditsToolDefinition];
+  return mediaType === 'image' ? withCompound : [...withCompound, searchCapabilitiesToolDefinition, runFfmpegToolDefinition];
 }
 
 export const WEB_PROFILE = {
   tools: webToolsFor,
   instructions: WEB_EXECUTION_INSTRUCTIONS,
-  guidance: [WEB_FALLBACK_GUIDANCE, WEB_SHAPE_GUIDANCE],
+  guidance: [WEB_FALLBACK_GUIDANCE, WEB_SHAPE_GUIDANCE, WEB_COMPOUND_GUIDANCE],
   serverTools: { [SEARCH_CAPABILITIES_TOOL_NAME]: async (args) => searchCapabilities(args) },
 };
 

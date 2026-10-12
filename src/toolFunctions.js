@@ -1195,6 +1195,11 @@ export const toolFunctions = {
     runVisualEdit('audio_silence_remove', args, videoFileData, setVideoFileData, addMessage, 'silence removal'),
   audio_pan: async (args, videoFileData, setVideoFileData, addMessage) =>
     runVisualEdit('audio_pan', args, videoFileData, setVideoFileData, addMessage, 'stereo pan'),
+  apply_edits: async (args, videoFileData, setVideoFileData, addMessage) => {
+    const edits = Array.isArray(args?.edits) ? args.edits : [];
+    const label = edits.map(e => e?.op === 'resize_video' && e.preset ? `resize ${e.preset}` : String(e?.op || '').replace(/_/g, ' ')).join(' + ') || 'edits';
+    return runVisualEdit('apply_edits', { edits }, videoFileData, setVideoFileData, addMessage, label);
+  },
   resize_video_preset: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       if (!args.preset) {
