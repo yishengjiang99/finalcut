@@ -98,6 +98,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
             <a href="#features">Features</a>
             <a href="#how">How it works</a>
             <a href="#examples">Examples</a>
+            <a href="/blog">Blog</a>
             <a href="#privacy">Privacy</a>
           </div>
           <div className="spacer" />
@@ -279,6 +280,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <a href="/legal/terms.html">Terms</a>
           <a href="/legal/licenses.html">Open-source licenses</a>
           <a href="/legal/support.html">Support</a>
+          <a href="/blog">Blog</a>
         </div>
         <nav className="wrap footer-more" aria-label="Guides">
           <span>Guides:</span>
