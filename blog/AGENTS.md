@@ -132,3 +132,32 @@ Full examples: https://grepawk.com/blog/reference (not indexed).
   ```
 
   The poster is a normal image file in the post folder. Video is served from grepawk.com/media/ with range requests and preload none.
+
+## Inline video (required: never link out)
+
+Videos always play on the page. Never add a bare link to a video file, YouTube or X in place of a player.
+
+- `video` block: renders a `<video controls playsinline preload="none">` player with the poster, inside the post. Nothing downloads until the reader presses play.
+- `youtube` block: shows the thumbnail; clicking swaps in the youtube-nocookie player in the same spot and starts playing.
+- `x` block: clicking loads the X embed in the same spot, and its video plays there.
+
+### Adding an explainer video
+
+1. Export H.264 MP4 (AAC audio), faststart, under 60 MB. 1080p or smaller.
+   `ffmpeg -i in.mov -c:v libx264 -crf 23 -preset slow -c:a aac -b:a 128k -movflags +faststart explainer.mp4`
+2. Make a poster from a frame that explains the topic:
+   `ffmpeg -ss 3 -i explainer.mp4 -frames:v 1 -vf scale=1280:-2 explainer-poster.jpg`
+   Put the poster in `blog/<slug>/`. Do not commit the MP4.
+3. Upload the MP4 (file names must be unique in the release):
+   `gh release upload blog-media explainer.mp4 -R yishengjiang99/finalcut`
+4. Place the block where the reader needs it, usually right after the intro:
+
+   ```video
+   src: explainer.mp4
+   poster: explainer-poster.jpg
+   title: How X works (2 minutes)
+   caption: One line on what the video shows.
+   ```
+
+   `title` is required (it feeds the player label and the VideoObject data). Add a sentence in the text that says what the video covers, so the post still reads well without playing it.
+5. If the explainer is on YouTube instead, use a `youtube` block with `id:` and `title:`.
