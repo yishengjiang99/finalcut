@@ -40,6 +40,9 @@ const PROMPTS = [
   { id: 'single_reels', text: 'resize for TikTok', expect: ['resize_video_preset'], shape: '1080x1920' },
   { id: 'ambiguous_insta', text: 'make it look good for insta', expect: [] },
   { id: 'audio_visual', text: 'turn the volume down by half and make it black and white', expect: ['adjust_audio_volume', 'apply_color_filter'] },
+  { id: 'make_169', text: 'make it 16:9', expect: [], note: 'source is already 16:9: a no-op answer or resize_video_preset 16:9 both pass', shape: '1920x1080' },
+  { id: 'square', text: 'square', expect: ['resize_video_preset'], shape: '1080x1080' },
+  { id: 'trim2_sepia', text: 'trim first 2s and make it sepia', expect: ['trim_video', 'apply_color_filter'] },
   { id: 'three_op', text: 'flip it horizontally, boost saturation a bit, and make it square', expect: ['apply_edits'], shape: '1080x1080' },
 ].filter(p => !ONLY || p.id === ONLY);
 
@@ -87,11 +90,11 @@ function replay(calls, src, dir) {
     if (!op) return { note: `not replayed: ${call.name}` };
     const out = path.join(dir, `step${i}.mp4`);
     const args = ops.buildProcessArgs(op[0], op[1], { input, output: out, duration: MEDIA.duration });
-    execFileSync('ffmpeg', ['-loglevel', 'error', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    execFileSync(process.env.FFMPEG || 'ffmpeg', ['-loglevel', 'error', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
     if (args.includes('libx264')) encodes += 1;
     input = out;
   }
-  const probe = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,sample_aspect_ratio,display_aspect_ratio', '-of', 'csv=p=0', input]).toString().trim().split(',');
+  const probe = execFileSync(process.env.FFPROBE || 'ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,sample_aspect_ratio,display_aspect_ratio', '-of', 'csv=p=0', input]).toString().trim().split(',');
   return { size: `${probe[0]}x${probe[1]}`, sar: probe[2], dar: probe[3], encodes, ms: Date.now() - t0 };
 }
 
@@ -99,7 +102,7 @@ let src; let dir;
 if (flag('ffmpeg')) {
   dir = mkdtempSync(path.join(tmpdir(), 'fc-eval-'));
   src = path.join(dir, 'src.mp4');
-  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=s=${MEDIA.width}x${MEDIA.height}:r=30:d=${MEDIA.duration}`, '-f', 'lavfi', '-i', `sine=d=${MEDIA.duration}`, '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', src]);
+  execFileSync(process.env.FFMPEG || 'ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=s=${MEDIA.width}x${MEDIA.height}:r=30:d=${MEDIA.duration}`, '-f', 'lavfi', '-i', `sine=d=${MEDIA.duration}`, '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', src]);
 }
 
 const rows = [];
@@ -108,7 +111,9 @@ for (const p of PROMPTS) {
   for (const [run, r] of results.entries()) {
     if (r.raw) console.error(p.id, JSON.stringify(r.raw));
     const names = (r.calls || []).map(c => c.name);
-    const pass = !r.error && p.expect.every(n => names.includes(n));
+    let pass = !r.error && p.expect.every(n => names.includes(n));
+    // Rule: several frame edits in one request -> ONE combined apply_edits call.
+    if (p.expect.includes('apply_edits') && names.length !== 1) pass = false;
     const row = { prompt: p.id, run, calls: r.error || (r.calls.length ? r.calls.map(short).join(' -> ') : `(no tools) ${r.content.slice(0, 80)}`), pass };
     if (src && r.calls?.length && run === 0) {
       try { Object.assign(row, replay(r.calls, src, dir)); if (p.shape && row.size !== p.shape) row.pass = false; } catch (e) { row.note = `ffmpeg failed: ${String(e.stderr || e.message).slice(0, 120)}`; row.pass = false; }
@@ -124,3 +129,5 @@ console.log('|---|---|---|---|---|---|---|---|');
 for (const r of rows) console.log(`| ${r.prompt} | ${r.run} | ${r.calls} | ${r.pass ? 'yes' : 'NO'} | ${r.size || r.note || ''} | ${r.sar || ''} | ${r.encodes ?? ''} | ${r.ms ?? ''} |`);
 const passed = rows.filter(r => r.pass).length;
 console.log(`\n${passed}/${rows.length} runs met expectations`);
+console.log('\n| prompt | pass rate |\n|---|---|');
+for (const p of PROMPTS) { const r = rows.filter(x => x.prompt === p.id); console.log(`| ${p.id} | ${r.filter(x => x.pass).length}/${r.length} |`); }
