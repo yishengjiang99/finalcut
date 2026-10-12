@@ -120,7 +120,7 @@ function renderPage(page) {
 <h1>${esc(page.h1)}</h1>
 <p class="lede">${esc(page.lede)}</p>
 ${cta('top')}
-<p class="note">Opens FinalCap with “${esc(page.prompt)}” ready in the chat box. ${esc(page.signinNote)}</p>
+<p class="note">Opens FinalCap with "${esc(page.prompt)}" ready in the chat box. ${esc(page.signinNote)}</p>
 <h2>How to do it in 3 steps</h2>
 <ol class="steps">${steps}</ol>
 <h2>What you can control</h2>
