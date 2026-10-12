@@ -129,7 +129,7 @@ k="$(ls dist/*.txt | grep -E '/[0-9a-f]{32}\.txt$' | head -1)"; [[ -n "$k" ]] ||
 h="$(H grepawk.com /legal)"; grep -qi '^location: .*/legal/privacy.html' <<<"$h" || fail "/legal redirect"
 h="$(H www.grepawk.com '/a?b=1')"; grep -qi '^location: https://grepawk.com/a?b=1$' <<<"$h" || fail "www redirect"
 h="$(curl -s -o /dev/null -D - -H 'Host: www.grepawk.com' http://127.0.0.1/x | tr -d '\r')"; grep -qi '^location: https://grepawk.com/x$' <<<"$h" || fail "http www redirect"
-[[ "$(C grepawk.com /v2/ffmpeg-core/mt/0.12.10/ffmpeg-core.wasm)" == "$( [[ -f dist/v2/ffmpeg-core/mt/0.12.10/ffmpeg-core.wasm ]] && echo 200 || echo 404)" ]] || fail "/v2 core"
+[[ "$(C grepawk.com /v2/ffmpeg-core/mt/0.13.0-finalcut.3/ffmpeg-core.wasm)" == "$( [[ -f dist/v2/ffmpeg-core/mt/0.13.0-finalcut.3/ffmpeg-core.wasm ]] && echo 200 || echo 404)" ]] || fail "/v2 core"
 [[ "$(C photo.grepawk.com /)" == 200 ]] || fail "other vhost"
 
 # 5. rollback by deploy id restores the original file

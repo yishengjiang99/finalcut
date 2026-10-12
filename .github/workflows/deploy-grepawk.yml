@@ -109,7 +109,7 @@ jobs:
           npm run build:v2
           npm run source:verify
           for f in dist/index.html dist/legal/licenses.html dist/v2/index.html \
-                   dist/v2/ffmpeg-core/mt/0.12.10/ffmpeg-core.wasm dist/v2/ffmpeg-core/st/0.12.10/ffmpeg-core.wasm \
+                   dist/v2/ffmpeg-core/mt/0.13.0-finalcut.3/ffmpeg-core.wasm dist/v2/ffmpeg-core/st/0.13.0-finalcut.3/ffmpeg-core.wasm dist/v2/ffmpeg-core/st/0.12.10/ffmpeg-core.wasm \
                    dist/v2/vendor/ffmpeg/source/SHA256SUMS dist/v2/vendor/ffmpeg/source/index.html; do
             test -s "$f" || { echo "missing build output: $f" >&2; exit 1; }
           done
