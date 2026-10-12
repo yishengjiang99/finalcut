@@ -210,7 +210,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <div className="examples">
             {landingExamples.map(([icon, background, prompt, result]) => (
               <div className="ex reveal" key={prompt}>
-                <div className="thumb" style={{ background }}>{icon}<span className="arrow">→</span></div>
+                <a className="thumb" style={{ background }} href={`/?start=sample&prompt=${encodeURIComponent(prompt.replace(/^"|"$/g, ''))}`} aria-label={`Try ${prompt} in the editor on the sample video`}>{icon}<span className="arrow" aria-hidden="true">→</span></a>
                 <div className="cap">
                   <div className="q">{prompt}</div>
                   <div className="a">{result}</div>
