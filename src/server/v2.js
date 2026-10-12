@@ -287,7 +287,7 @@ function withWebResizePreset(tool) {
 
 export const WEB_SHAPE_GUIDANCE =
   'Platform shapes: "Instagram shape" or "for Instagram" with no other hint means a feed post, so use resize_video_preset with preset 4:5; ' +
-  'Reels or Stories mean 9:16 and "square" means 1:1. When you choose the shape yourself, name it in your reply and say the user can ask for 9:16 (Reels) or 1:1 instead. ' +
+  'Reels or Stories mean 9:16 and "square" means 1:1. When you choose the shape yourself, name it in your reply and say the user can ask for 9:16 (Reels), 1:1, or a crop that fills the frame without bars instead. ' +
   'Pass fit "crop" only when the user asks to fill or crop the frame; otherwise leave the default letterbox. ' +
   'For several edits in one request (for example a color look plus a resize), call the dedicated tools in order; they run one after another on the previous result.';
 
