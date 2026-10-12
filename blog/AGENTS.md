@@ -161,3 +161,5 @@ Videos always play on the page. Never add a bare link to a video file, YouTube o
 
    `title` is required (it feeds the player label and the VideoObject data). Add a sentence in the text that says what the video covers, so the post still reads well without playing it.
 5. If the explainer is on YouTube instead, use a `youtube` block with `id:` and `title:`.
+
+Captions: add `captions: explainer.vtt` to a `video` block (WebVTT file in the post folder; convert an .srt by adding a `WEBVTT` first line and changing the commas in times to dots). It becomes a default-on `<track kind="captions">`. Optional `lang:` (default en) and `label:` (default English).

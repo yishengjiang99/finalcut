@@ -3,13 +3,21 @@ title: Making FFmpeg in the browser use every core
 description: A short video and notes on the ffmpeg.wasm fork we are building for FinalCap, covering WebAssembly threads, SharedArrayBuffer, SIMD and the bugs we fixed.
 date: 2026-10-12
 publish: true
+hero: explainer-poster.jpg
+heroAlt: Title slide of the ffmpeg.wasm threads explainer video
 product: finalcap
 tags: [FinalCap, FFmpeg, WebAssembly, threads, SIMD]
 properNouns: [FFmpeg, WebAssembly, SharedArrayBuffer, SIMD, Workers, Web]
 ---
 FinalCap edits video inside the browser tab with FFmpeg compiled to WebAssembly, so your clip is not uploaded to be edited. The upstream ffmpeg.wasm project has stopped shipping releases, so we are building our own fork on FFmpeg 8. This post is a written version of a two and a half minute explainer video about that work.
 
-[Watch the explainer video](https://github.com/yishengjiang99/ffmpeg.wasm/blob/main/media/ffmpeg-wasm-explainer.mp4). The voice is synthesized and the slides are plain diagrams and charts.
+```video
+src: ffmpeg-wasm-explainer.mp4
+poster: explainer-poster.jpg
+captions: explainer.vtt
+title: ffmpeg.wasm threads explainer
+caption: The voice is synthesized and the slides are plain diagrams and charts.
+```
 
 The fork is not in the app yet. Everything below was measured on test builds, on one machine: an Apple M4 Pro with 14 cores, in Chromium, one run per number.
 

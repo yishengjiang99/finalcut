@@ -83,6 +83,16 @@ export class Media {
     return { url: `${MEDIA_URL}/${out}`, type: ext === '.webm' ? 'video/webm' : 'video/mp4', bytes: size };
   }
 
+  /** WebVTT captions file from the post folder, content-hashed. */
+  captions(file) {
+    if (!existsSync(file)) throw new Error(`captions file not found: ${file}`);
+    const buf = readFileSync(file);
+    if (path.extname(file) !== '.vtt' || !buf.toString('utf8', 0, 6).startsWith('WEBVTT')) throw new Error(`captions must be a WebVTT .vtt file: ${file}`);
+    const out = `${safe(file)}-${hash(buf)}.vtt`;
+    writeFileSync(path.join(this.dir, out), buf);
+    return { url: `${MEDIA_URL}/${out}` };
+  }
+
   /** YouTube thumbnail, fetched at build time and cropped to 16:9. */
   async youtubeThumb(id) {
     mkdirSync(CACHE, { recursive: true });

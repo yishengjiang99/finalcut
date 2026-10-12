@@ -174,11 +174,11 @@ async function resolveMedia(p, media) {
           `<div class="gallery">${imgs.map((img, i) => figure(img, d[i].alt, d[i].caption, '(min-width: 760px) 230px, 45vw')).join('')}</div>\n`)));
       } else if (t.lang === 'video') {
         if (!d.src || !d.poster || !d.title) { problems.push('video block needs src (blog-media release file), poster (image in the post folder) and title'); return; }
-        jobs.push(Promise.all([media.video(d.src), media.image(path.join(p.dir, d.poster)), d.webm ? media.video(d.webm) : null]).then(([v, poster, webm]) => {
+        jobs.push(Promise.all([media.video(d.src), media.image(path.join(p.dir, d.poster)), d.webm ? media.video(d.webm) : null, d.captions ? media.captions(path.join(p.dir, d.captions)) : null]).then(([v, poster, webm, cc]) => {
           const posterUrl = poster.webp.split(', ').map((s) => s.split(' ')).find(([, w]) => parseInt(w, 10) >= 720)?.[0] || poster.webp.split(', ').at(-1).split(' ')[0];
           const tall = poster.ratio > 1.3;
           videos.push({ title: d.title, caption: d.caption, url: v.url, poster: poster.largest });
-          directives.set(key, `<figure class="video${tall ? ' tall' : ''}"><video controls preload="none" playsinline poster="${posterUrl}" width="${poster.width}" height="${poster.height}" aria-label="${esc(d.title)}">${webm ? `<source src="${webm.url}" type="${webm.type}">` : ''}<source src="${v.url}" type="${v.type}"><a href="${v.url}">Download the video</a></video>${d.caption ? `<figcaption>${esc(d.caption)}</figcaption>` : ''}</figure>\n`);
+          directives.set(key, `<figure class="video${tall ? ' tall' : ''}"><video controls preload="none" playsinline poster="${posterUrl}" width="${poster.width}" height="${poster.height}" aria-label="${esc(d.title)}">${webm ? `<source src="${webm.url}" type="${webm.type}">` : ''}<source src="${v.url}" type="${v.type}">${cc ? `<track kind="captions" src="${cc.url}" srclang="${esc(d.lang || 'en')}" label="${esc(d.label || 'English')}" default>` : ''}<a href="${v.url}">Download the video</a></video>${d.caption ? `<figcaption>${esc(d.caption)}</figcaption>` : ''}</figure>\n`);
         }));
       } else if (t.lang === 'youtube') {
         if (!/^[A-Za-z0-9_-]{11}$/.test(d.id || '') || !d.title) { problems.push('youtube block needs id (11 characters) and title'); return; }
