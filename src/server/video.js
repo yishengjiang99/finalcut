@@ -591,11 +591,11 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       break;
 
     case 'crop_video':
-      command = command.videoFilters(`crop=${parsedArgs.width}:${parsedArgs.height}:${parsedArgs.x}:${parsedArgs.y}`).audioCodec('copy');
+      command = command.videoFilters(buildVisualFilter('crop_video', parsedArgs, 'video')).audioCodec('copy');
       break;
 
     case 'rotate_video':
-      command = command.videoFilters(`rotate=${parsedArgs.angle}*PI/180`).audioCodec('copy');
+      command = command.videoFilters(buildVisualFilter('rotate_video', parsedArgs, 'video')).audioCodec('copy');
       break;
 
     case 'flip_video_horizontal':

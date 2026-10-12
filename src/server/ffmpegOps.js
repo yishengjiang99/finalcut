@@ -186,12 +186,21 @@ export function normalizeEditStep(step) {
   return { op, args };
 }
 
+// Color/tone edits are per-pixel, so running them before any geometry changes nothing in the picture
+// but keeps pad bars black (an invert or tint after a pad would recolor the bars).
+export const APPLY_EDITS_COLOR_OPS = ['apply_color_filter', 'adjust_brightness', 'adjust_contrast', 'adjust_hue', 'adjust_saturation'];
+
+/** Stable reorder: color ops first (in their order), then geometry ops (in their order). */
+export function orderEdits(normalized) {
+  const color = normalized.filter(e => APPLY_EDITS_COLOR_OPS.includes(e.op));
+  return [...color, ...normalized.filter(e => !APPLY_EDITS_COLOR_OPS.includes(e.op))];
+}
+
 /** The comma-joined filter chain for an ordered list of edits (applied left to right). */
 export function buildEditsFilter(edits, opts) {
   if (!Array.isArray(edits) || edits.length === 0) throw new OpValidationError('edits must be a non-empty list');
   if (edits.length > APPLY_EDITS_MAX) throw new OpValidationError(`at most ${APPLY_EDITS_MAX} edits per call`);
-  return edits.map(step => {
-    const { op, args } = normalizeEditStep(step);
+  return orderEdits(edits.map(normalizeEditStep)).map(({ op, args }) => {
     const f = buildVisualFilter(op, args, opts);
     if (!f || f === 'null') throw new OpValidationError(`${op} produced no filter`);
     return f;
@@ -199,7 +208,11 @@ export function buildEditsFilter(edits, opts) {
 }
 
 /** scale filter for resize_video; fit "pad" letterboxes and "crop" fills, both without stretching. */
-export function resizeFilter(width, height, fit) {
+export function resizeFilter(width, height, fit, { even: evenDims = true } = {}) {
+  // libx264 needs even dimensions (same rule as the browser engine); a photo keeps the exact size.
+  const even = (n) => (!evenDims ? n : n > 0 ? n - (n % 2) : n === -1 ? -2 : n);
+  width = even(width);
+  height = even(height);
   if (fit === 'pad' && width > 0 && height > 0) {
     return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
   }
@@ -273,14 +286,15 @@ export function buildVisualFilter(operation, parsedArgs = {}, mediaType = MEDIA_
       if (width === 0 || height === 0 || (width < 0 && height < 0)) {
         throw new OpValidationError('width and height must be positive (one of them may be -1 to keep aspect ratio)');
       }
-      return resizeFilter(width, height, parsedArgs.fit);
+      return resizeFilter(width, height, parsedArgs.fit, { even: mediaType !== MEDIA_TYPE_IMAGE });
     }
     case 'crop_video': {
       const width = Math.round(requireFiniteNumber(parsedArgs.width, 'width', { min: 1, max: 16384 }));
       const height = Math.round(requireFiniteNumber(parsedArgs.height, 'height', { min: 1, max: 16384 }));
       const x = optionalInt(parsedArgs.x, 'x', 0, { min: 0, max: 16384 });
       const y = optionalInt(parsedArgs.y, 'y', 0, { min: 0, max: 16384 });
-      return `crop=${width}:${height}:${x}:${y}`;
+      const crop = `crop=${width}:${height}:${x}:${y}`;
+      return mediaType === MEDIA_TYPE_IMAGE ? crop : `${crop},scale=trunc(iw/2)*2:trunc(ih/2)*2`;
     }
     case 'rotate_video': {
       const angle = requireFiniteNumber(parsedArgs.angle, 'angle', { min: -3600, max: 3600 });
@@ -294,7 +308,13 @@ export function buildVisualFilter(operation, parsedArgs = {}, mediaType = MEDIA_
         const rad = `${round4(angle)}*PI/180`;
         return `rotate=${rad}:ow=rotw(${rad}):oh=roth(${rad}):c=black`;
       }
-      return `rotate=${angle}*PI/180`;
+      if (normalized === 0) return 'null';
+      if (normalized === 90) return 'transpose=clock';
+      if (normalized === 180) return 'hflip,vflip';
+      if (normalized === 270) return 'transpose=cclock';
+      // Any other angle: grow the frame to the rotated bounding box (no clipped corners), even for libx264.
+      const vrad = `${round4(angle)}*PI/180`;
+      return `rotate=${vrad}:ow='trunc(rotw(${vrad})/2)*2':oh='trunc(roth(${vrad})/2)*2':c=black`;
     }
     case 'flip_video_horizontal':
       return 'hflip';
@@ -576,9 +596,9 @@ export function applyOperation(command, operation, parsedArgs = {}, { mediaDurat
     case 'resize_video':
       return command.videoFilters(resizeFilter(parsedArgs.width, parsedArgs.height, parsedArgs.fit)).audioCodec('copy');
     case 'crop_video':
-      return command.videoFilters(`crop=${parsedArgs.width}:${parsedArgs.height}:${parsedArgs.x}:${parsedArgs.y}`).audioCodec('copy');
+      return command.videoFilters(buildVisualFilter('crop_video', parsedArgs, MEDIA_TYPE_VIDEO)).audioCodec('copy');
     case 'rotate_video':
-      return command.videoFilters(`rotate=${parsedArgs.angle}*PI/180`).audioCodec('copy');
+      return command.videoFilters(buildVisualFilter('rotate_video', parsedArgs, MEDIA_TYPE_VIDEO)).audioCodec('copy');
     case 'flip_video_horizontal':
       return command.videoFilters('hflip').audioCodec('copy');
     case 'add_text': {
