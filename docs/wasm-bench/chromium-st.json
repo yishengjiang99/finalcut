@@ -1,0 +1,166 @@
+{
+  "startedAt": "2026-10-12T19:02:21.458Z",
+  "host": {
+    "platform": "linux",
+    "cpus": 8
+  },
+  "soakRuns": 60,
+  "coreRoot": "node_modules",
+  "runs": [
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "trim_copy",
+      "loadMs": 175,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 671,
+      "peakMemBytes": 51856012,
+      "peakCtxBytes": 50800770,
+      "outBytes": 15477475
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "x264_veryfast",
+      "loadMs": 113,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 28226,
+      "peakMemBytes": 225664518,
+      "peakCtxBytes": 224629102,
+      "outBytes": 5800477
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "xfade_join3",
+      "loadMs": 165,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 29188,
+      "peakMemBytes": 525396901,
+      "peakCtxBytes": 524358079,
+      "outBytes": 3577005
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "burn_ass",
+      "loadMs": 149,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 13588,
+      "peakMemBytes": 127685690,
+      "peakCtxBytes": 126633173,
+      "outBytes": 3134940
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "loudnorm",
+      "loadMs": 122,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 3000,
+      "peakMemBytes": 124403035,
+      "peakCtxBytes": 123371953,
+      "outBytes": 532256
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "thumbnail",
+      "loadMs": 135,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 391,
+      "peakMemBytes": 36317409,
+      "peakCtxBytes": 35278853,
+      "outBytes": 6852
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "ffprobe",
+      "loadMs": 115,
+      "status": "ok",
+      "exitCode": -1,
+      "execMs": 309,
+      "peakMemBytes": 36247472,
+      "peakCtxBytes": 35207972,
+      "outBytes": 4231
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": true
+      },
+      "op": "soak60",
+      "loadMs": 110,
+      "status": "ok",
+      "runsOk": 60,
+      "runs": 60,
+      "firstFailure": null,
+      "execMs": 24660,
+      "medianRunMs": 406,
+      "peakMemBytes": 37038497,
+      "peakCtxBytes": 35952182
+    }
+  ],
+  "finishedAt": "2026-10-12T19:04:05.161Z"
+}

@@ -1,0 +1,63 @@
+{
+  "startedAt": "2026-10-12T19:11:35.906Z",
+  "host": {
+    "platform": "linux",
+    "cpus": 8
+  },
+  "soakRuns": 60,
+  "coreRoot": "node_modules",
+  "runs": [
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "trim_copy",
+      "loadMs": 360,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 387,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 15477475
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "x264_veryfast",
+      "loadMs": 349,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 10949,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 5797718
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "xfade_join3",
+      "status": "crash",
+      "error": "page: page.evaluate: Target page, context or browser has been closed"
+    }
+  ]
+}

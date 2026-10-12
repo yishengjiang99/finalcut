@@ -1,0 +1,166 @@
+{
+  "startedAt": "2026-10-12T19:09:51.642Z",
+  "host": {
+    "platform": "linux",
+    "cpus": 8
+  },
+  "soakRuns": 60,
+  "coreRoot": "node_modules",
+  "runs": [
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "trim_copy",
+      "loadMs": 264,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 358,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 15477475
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "x264_veryfast",
+      "loadMs": 317,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 31484,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 5800477
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "xfade_join3",
+      "loadMs": 372,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 32506,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3577005
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "burn_ass",
+      "loadMs": 332,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 14695,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3134940
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "loudnorm",
+      "loadMs": 339,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2927,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 532256
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "thumbnail",
+      "loadMs": 311,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 111,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 6852
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "ffprobe",
+      "loadMs": 323,
+      "status": "ok",
+      "exitCode": -1,
+      "execMs": 39,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 4231
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.6",
+      "mode": "st",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+        "crossOriginIsolated": true,
+        "cores": 8,
+        "memApi": false
+      },
+      "op": "soak60",
+      "loadMs": 269,
+      "status": "ok",
+      "runsOk": 60,
+      "runs": 60,
+      "firstFailure": null,
+      "execMs": 9309,
+      "medianRunMs": 151,
+      "peakMemBytes": null,
+      "peakCtxBytes": null
+    }
+  ],
+  "finishedAt": "2026-10-12T19:11:31.631Z"
+}
