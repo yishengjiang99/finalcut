@@ -1,0 +1,187 @@
+{
+  "startedAt": "2026-10-12T19:37:09.094Z",
+  "host": {
+    "platform": "darwin",
+    "cpus": 14
+  },
+  "soakRuns": 60,
+  "coreRoot": "node_modules",
+  "runs": [
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "trim_copy",
+      "loadMs": 102,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 358,
+      "peakMemBytes": 35498176979,
+      "peakCtxBytes": 1090959965,
+      "outBytes": 15427867
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "x264_veryfast",
+      "loadMs": 106,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 5344,
+      "peakMemBytes": 35488719377,
+      "peakCtxBytes": 1081519529,
+      "outBytes": 5897027
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "xfade_join3",
+      "loadMs": 114,
+      "status": "hang",
+      "execMs": 300004,
+      "error": "timeout 300000 ms",
+      "logTail": [
+        "  Stream #1:0 (h264) -> xfade",
+        "  Stream #1:1 (aac) -> acrossfade",
+        "  Stream #2:0 (h264) -> xfade",
+        "  Stream #2:1 (aac) -> acrossfade",
+        "  xfade:default -> Stream #0:0 (libx264)",
+        "  acrossfade:default -> Stream #0:1 (aac)"
+      ]
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "burn_ass",
+      "loadMs": 138,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2581,
+      "peakMemBytes": 35486942931,
+      "peakCtxBytes": 1079736712,
+      "outBytes": 3154881
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "loudnorm",
+      "loadMs": 95,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 1368,
+      "peakMemBytes": 35483702516,
+      "peakCtxBytes": 1076502696,
+      "outBytes": 532276
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "thumbnail",
+      "loadMs": 95,
+      "status": "hang",
+      "execMs": 120002,
+      "error": "timeout 120000 ms",
+      "logTail": [
+        "  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, mono, fltp, 128 kb/s (default)",
+        "    Metadata:",
+        "      handler_name    : SoundHandler",
+        "      vendor_id       : [0][0][0][0]",
+        "Stream mapping:",
+        "  Stream #0:0 -> #0:0 (h264 (native) -> mjpeg (native))"
+      ]
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "ffprobe",
+      "loadMs": 91,
+      "status": "ok",
+      "exitCode": -1,
+      "execMs": 292,
+      "peakMemBytes": 35482549189,
+      "peakCtxBytes": 1075357735,
+      "outBytes": 4231
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": true
+      },
+      "op": "soak60",
+      "loadMs": 103,
+      "status": "crash",
+      "runsOk": 4,
+      "runs": 60,
+      "firstFailure": {
+        "run": 5,
+        "status": "crash",
+        "logTail": [
+          "[aac @ 0xebd480] Input contains (near) NaN/+-Inf",
+          "Error submitting audio frame to the encoder",
+          "[aac @ 0xebd480] Qavg: nan",
+          "[aac @ 0xebd480] 2 frames left in the queue on closing",
+          "Conversion failed!",
+          "Aborted()"
+        ]
+      },
+      "execMs": 1563,
+      "medianRunMs": 318,
+      "peakMemBytes": 35484068166,
+      "peakCtxBytes": 1075900693
+    }
+  ],
+  "finishedAt": "2026-10-12T19:44:23.421Z"
+}

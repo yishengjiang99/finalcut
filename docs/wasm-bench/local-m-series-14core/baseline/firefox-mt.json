@@ -1,0 +1,177 @@
+{
+  "startedAt": "2026-10-12T19:50:59.084Z",
+  "host": {
+    "platform": "linux",
+    "cpus": 14
+  },
+  "soakRuns": 60,
+  "coreRoot": "node_modules",
+  "runs": [
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "trim_copy",
+      "loadMs": 298,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 115,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 15427867
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "x264_veryfast",
+      "loadMs": 281,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 5617,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 5897027
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "xfade_join3",
+      "loadMs": 277,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 4457,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3589723
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "burn_ass",
+      "loadMs": 293,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2561,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3154881
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "loudnorm",
+      "loadMs": 274,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 1413,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 532276
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "thumbnail",
+      "loadMs": 289,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 199,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 6870
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "ffprobe",
+      "loadMs": 288,
+      "status": "ok",
+      "exitCode": -1,
+      "execMs": 15,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 4231
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "soak60",
+      "loadMs": 294,
+      "status": "crash",
+      "runsOk": 3,
+      "runs": 60,
+      "firstFailure": {
+        "run": 4,
+        "status": "crash",
+        "logTail": [
+          "[aac @ 0xebd320] Input contains (near) NaN/+-Inf",
+          "Error submitting audio frame to the encoder",
+          "[aac @ 0xebd320] Qavg: nan",
+          "[aac @ 0xebd320] 2 frames left in the queue on closing",
+          "Conversion failed!",
+          "Aborted()"
+        ]
+      },
+      "execMs": 176,
+      "medianRunMs": 53,
+      "peakMemBytes": null,
+      "peakCtxBytes": null
+    }
+  ],
+  "finishedAt": "2026-10-12T19:51:18.924Z"
+}

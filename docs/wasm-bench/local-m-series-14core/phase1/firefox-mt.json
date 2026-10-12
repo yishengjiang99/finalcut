@@ -1,0 +1,177 @@
+{
+  "startedAt": "2026-10-12T20:03:45.555Z",
+  "host": {
+    "platform": "linux",
+    "cpus": 14
+  },
+  "soakRuns": 60,
+  "coreRoot": "/cores",
+  "runs": [
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "trim_copy",
+      "loadMs": 307,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 1320,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 15427866
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "x264_veryfast",
+      "loadMs": 289,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 5023,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 5897026
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "xfade_join3",
+      "loadMs": 308,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 3347,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3589722
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "burn_ass",
+      "loadMs": 309,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 2508,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 3154880
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "loudnorm",
+      "loadMs": 299,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 3501,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 532291
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "thumbnail",
+      "loadMs": 298,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 155,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 6865
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "ffprobe",
+      "loadMs": 292,
+      "status": "ok",
+      "exitCode": 0,
+      "execMs": 14,
+      "peakMemBytes": null,
+      "peakCtxBytes": null,
+      "outBytes": 4369
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "155.0",
+      "mode": "mt",
+      "env": {
+        "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0",
+        "crossOriginIsolated": true,
+        "cores": 14,
+        "memApi": false
+      },
+      "op": "soak60",
+      "loadMs": 322,
+      "status": "fail",
+      "runsOk": 6,
+      "runs": 60,
+      "firstFailure": {
+        "run": 7,
+        "status": "fail",
+        "logTail": [
+          "[libx264 @ 0x2422ef0] i16 v,h,dc,p: 78% 15%  6%  1%",
+          "[libx264 @ 0x2422ef0] i8c dc,h,v,p: 42% 17% 41%  1%",
+          "[libx264 @ 0x2422ef0] kb/s:683.79",
+          "[aac @ 0x2384e20] Qavg: nan",
+          "[aac @ 0x2384e20] 2 frames left in the queue on closing",
+          "Conversion failed!"
+        ]
+      },
+      "execMs": 1516,
+      "medianRunMs": 227,
+      "peakMemBytes": null,
+      "peakCtxBytes": null
+    }
+  ],
+  "finishedAt": "2026-10-12T20:04:08.392Z"
+}

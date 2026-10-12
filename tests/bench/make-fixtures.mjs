@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Generates the wasm bench fixtures with a native ffmpeg (lavfi sources only; nothing is
-// downloaded). Output goes to tests/fixtures/bench/ (gitignored: these are tens of MB).
+// downloaded except the DejaVu font on hosts that lack it). Output goes to tests/fixtures/bench/ (gitignored: these are tens of MB).
 //   node tests/bench/make-fixtures.mjs [--force]
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,7 +47,23 @@ Dialogue: 0,0:00:00.00,0:00:03.00,Default,First line of the bench subtitles
 Dialogue: 0,0:00:03.00,0:00:06.50,Default,{\\b1}Second{\\b0} line, bold word
 Dialogue: 0,0:00:06.50,0:00:10.00,Default,Third line: 50% [ok]; done
 `);
+// DejaVu Sans 2.37: the system copy on Debian/Ubuntu, otherwise (macOS) the upstream release
+// tarball, checksum-pinned, so every host burns the same glyphs.
+const fontOut = path.join(OUT, 'DejaVuSans.ttf');
 const font = process.env.BENCH_FONT || '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
-if (!existsSync(font)) throw new Error(`font not found: ${font} (set BENCH_FONT)`);
-copyFileSync(font, path.join(OUT, 'DejaVuSans.ttf'));
+if (existsSync(font)) copyFileSync(font, fontOut);
+else if (process.env.BENCH_FONT) throw new Error(`font not found: ${font}`);
+else if (!existsSync(fontOut) || FORCE) {
+  const url = 'https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2';
+  const sha = 'fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7';
+  const tmp = mkdtempSync(path.join(tmpdir(), 'dejavu-'));
+  const tar = path.join(tmp, 'dejavu.tar.bz2');
+  execFileSync('curl', ['-sSfL', '-o', tar, url], { stdio: 'inherit' });
+  const got = createHash('sha256').update(readFileSync(tar)).digest('hex');
+  if (got !== sha) throw new Error(`DejaVu tarball checksum mismatch: ${got}`);
+  execFileSync('tar', ['xjf', tar, '-C', tmp, '--strip-components=2', 'dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf']);
+  copyFileSync(path.join(tmp, 'DejaVuSans.ttf'), fontOut);
+  rmSync(tmp, { recursive: true, force: true });
+  console.log('made DejaVuSans.ttf (downloaded)');
+}
 console.log(`fixtures in ${OUT}`);
