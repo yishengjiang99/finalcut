@@ -45,6 +45,8 @@ rsync -az --delete \
   ./ "${HOST}:${APP_DIR}/"
 
 if [[ "${PREBUILT}" == "1" ]]; then
+  # Keep last week's hashed bundles reachable after the swap (stale cached index.html / open tabs).
+  ssh "${HOST}" "cd '${APP_DIR}' && test -d dist.new && bash -s -- dist dist.new" < scripts/carry-hashed-assets.sh
   ssh "${HOST}" "set -e; cd '${APP_DIR}'; test -f dist.new/index.html; test -f dist.new/v2/index.html; npm ci --production=false; rm -rf dist.prev; if [ -d dist ]; then mv dist dist.prev; fi; mv dist.new dist; echo '${FINALCUT_DEPLOY_ID:-manual}' > .dist-swapped-by; sudo systemctl restart finalcut && sudo systemctl is-active --quiet finalcut"
 else
   ssh "${HOST}" "cd '${APP_DIR}' && npm ci --production=false && npm run build && sudo systemctl restart finalcut && sudo systemctl is-active --quiet finalcut"
