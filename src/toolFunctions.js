@@ -468,7 +468,6 @@ export function assWithFont(ass, fontName) {
 export const toolFunctions = {
   resize_video: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.width === null || args.width === undefined || args.height === null || args.height === undefined) {
         throw new Error('Width and height are required');
       }
@@ -510,7 +509,6 @@ export const toolFunctions = {
   
   rotate_video: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.angle === null || args.angle === undefined) {
         throw new Error('Angle is required for rotation');
       }
@@ -577,7 +575,6 @@ export const toolFunctions = {
   
   adjust_speed: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.speed === null || args.speed === undefined || args.speed <= 0) {
         throw new Error('Speed must be a positive number');
       }
@@ -595,7 +592,6 @@ export const toolFunctions = {
   
   adjust_volume: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.volume === null || args.volume === undefined || args.volume < 0) {
         throw new Error('Volume must be a non-negative number');
       }
@@ -613,7 +609,6 @@ export const toolFunctions = {
   
   audio_fade: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (!args.type || (args.type !== 'in' && args.type !== 'out')) {
         throw new Error('Type must be "in" or "out"');
       }
@@ -638,7 +633,6 @@ export const toolFunctions = {
   
   highpass_filter: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.frequency === null || args.frequency === undefined || args.frequency <= 0) {
         throw new Error('Frequency must be a positive number');
       }
@@ -656,7 +650,6 @@ export const toolFunctions = {
   
   lowpass_filter: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.frequency === null || args.frequency === undefined || args.frequency <= 0) {
         throw new Error('Frequency must be a positive number');
       }
@@ -674,7 +667,6 @@ export const toolFunctions = {
   
   echo_effect: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.delay === null || args.delay === undefined || args.decay === null || args.decay === undefined) {
         throw new Error('Delay and decay are required');
       }
@@ -695,7 +687,6 @@ export const toolFunctions = {
   
   bass_adjustment: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.gain === null || args.gain === undefined) {
         throw new Error('Gain is required');
       }
@@ -716,7 +707,6 @@ export const toolFunctions = {
   
   treble_adjustment: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.gain === null || args.gain === undefined) {
         throw new Error('Gain is required');
       }
@@ -734,7 +724,6 @@ export const toolFunctions = {
   
   equalizer: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.frequency === null || args.frequency === undefined || args.gain === null || args.gain === undefined) {
         throw new Error('Frequency and gain are required');
       }
@@ -752,7 +741,6 @@ export const toolFunctions = {
   
   normalize_audio: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.target === null || args.target === undefined) {
         throw new Error('Target loudness is required');
       }
@@ -860,7 +848,6 @@ export const toolFunctions = {
   
   delay_audio: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.delay === null || args.delay === undefined) {
         throw new Error('Delay is required');
       }
@@ -881,7 +868,6 @@ export const toolFunctions = {
   
   adjust_brightness: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.brightness === null || args.brightness === undefined) {
         throw new Error('Brightness value is required');
       }
@@ -902,7 +888,6 @@ export const toolFunctions = {
   
   adjust_hue: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.degrees === null || args.degrees === undefined) {
         throw new Error('Hue degrees value is required');
       }
@@ -923,7 +908,6 @@ export const toolFunctions = {
   
   adjust_saturation: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (args.saturation === null || args.saturation === undefined) {
         throw new Error('Saturation value is required');
       }
@@ -990,7 +974,6 @@ export const toolFunctions = {
   
   convert_to_format: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // This would need format-aware server handling
       addMessage({ text: 'Format conversion is not yet implemented on server-side' });
       return 'Feature not yet available with server-side processing';
     } catch (error) {
@@ -1083,7 +1066,6 @@ export const toolFunctions = {
   
   resize_to_aspect_ratio: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
-      // Validate inputs
       if (!args.ratio || !ASPECT_RATIO_PRESETS[args.ratio]) {
         throw new Error('Invalid aspect ratio. Must be one of: ' + Object.keys(ASPECT_RATIO_PRESETS).join(', '));
       }
@@ -1113,7 +1095,6 @@ export const toolFunctions = {
       let videosToProcess = [];
       
       if (uploadedVideos && uploadedVideos.length >= 2) {
-        // Use the uploaded videos from the UI
         videosToProcess = uploadedVideos.map(v => v.data);
       } else if (args.videos && Array.isArray(args.videos) && args.videos.length >= 2) {
         // Fallback to videos passed in args (for testing or direct calls)
@@ -1154,7 +1135,6 @@ export const toolFunctions = {
   convert_image_format: async (args, videoFileData, setVideoFileData, addMessage) =>
     runVisualEdit('convert_image_format', args, videoFileData, setVideoFileData, addMessage, `conversion to ${args?.format || 'image'}`),
 
-  // Aliases for backward compatibility with tests
   adjust_audio_volume: async (args, videoFileData, setVideoFileData, addMessage) => 
     toolFunctions.adjust_volume(args, videoFileData, setVideoFileData, addMessage),
   audio_highpass: async (args, videoFileData, setVideoFileData, addMessage) => 

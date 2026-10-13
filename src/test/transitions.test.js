@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toolFunctions } from '../toolFunctions.js';
 
-// Mock fetch for server API calls
 global.fetch = vi.fn();
 global.FormData = class FormData {
   constructor() {
@@ -31,7 +30,6 @@ describe('Video Transitions', () => {
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
     global.Blob = vi.fn();
     
-    // Mock successful server response by default
     global.fetch.mockResolvedValue({
       ok: true,
       arrayBuffer: async () => new ArrayBuffer(16)
@@ -172,7 +170,6 @@ describe('Video Transitions', () => {
       
       const fetchCall = global.fetch.mock.calls[0];
       const formData = fetchCall[1].body;
-      // The FormData should contain duration
       expect(formData.data.duration).toBeDefined();
     });
 

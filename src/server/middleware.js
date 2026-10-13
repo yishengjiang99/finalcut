@@ -50,7 +50,6 @@ if (typeof sampleTokenCleanupTimer.unref === 'function') {
   sampleTokenCleanupTimer.unref();
 }
 
-// Rate limiting for API endpoints
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs

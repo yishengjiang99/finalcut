@@ -26,21 +26,18 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
   let event;
 
   try {
-    // Verify the webhook signature
     event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
-  // Handle the event
   try {
     switch (event.type) {
       case 'checkout.session.completed':
         const session = event.data.object;
         console.log('Payment successful:', session.id);
 
-        // Update user subscription status
         if (session.customer_email) {
           const { updateUserSubscription } = await import('../db.js');
           await updateUserSubscription(
@@ -56,7 +53,6 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
         const subscription = event.data.object;
         console.log('Subscription cancelled:', subscription.id);
 
-        // Update user subscription status to false
         if (subscription.customer) {
           const customer = await stripe.customers.retrieve(subscription.customer);
           if (customer.email) {
@@ -110,7 +106,6 @@ router.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
     const successUrl = `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${baseUrl}/`;
 
-    // Create a Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -145,12 +140,10 @@ router.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
       });
     }
 
-    // Retrieve the session from Stripe to verify it
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     // Verify the session is valid and payment was successful
     if (session && session.payment_status === 'paid') {
-      // Update the user's subscription in the database
       if (session.customer_email) {
         try {
           const { updateUserSubscription } = await import('../db.js');

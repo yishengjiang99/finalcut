@@ -238,7 +238,6 @@ export function useCallAPI({
 
       if (failure) throw failure;
 
-      // Handle streaming response
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -265,11 +264,9 @@ export function useCallAPI({
 
               if (!delta) continue;
 
-              // Handle content streaming
               if (delta.content) {
                 streamedContent += delta.content;
 
-                // Update or create the streaming message in UI
                 if (currentMessageId === null) {
                   currentMessageId = messageIdCounterRef.current++;
                   setMessages(prev => [...prev, {
@@ -287,7 +284,6 @@ export function useCallAPI({
                 }
               }
 
-              // Handle tool calls streaming
               if (delta.tool_calls) {
                 for (const toolCall of delta.tool_calls) {
                   const index = toolCall.index;
@@ -321,10 +317,8 @@ export function useCallAPI({
         }
       }
 
-      // Convert tool calls object to array
       const toolCallsArray = Object.values(streamedToolCalls);
 
-      // Mark the streaming message as complete
       if (currentMessageId !== null) {
         setMessages(prev => prev.map(msg =>
           msg.id === currentMessageId
@@ -345,11 +339,9 @@ export function useCallAPI({
           finalMessage.tool_calls = toolCallsArray;
         }
 
-        // Add assistant message to history
         currentMessages.push(finalMessage);
       }
 
-      // Process tool calls if any
       if (toolCallsArray.length > 0) {
         // Server-side processing - show spinner during ffmpeg processing
         setProcessing(true);

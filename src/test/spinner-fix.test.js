@@ -61,7 +61,6 @@ describe('Spinner Fix - Processing state cleared after tool calls, before follow
   it('should clear processing state even when tool execution throws an error', async () => {
     const setProcessing = vi.fn();
 
-    // Simulate the fixed logic with error handling
     const simulateFixed = async (toolCallsArray, executeTools, recursiveCallAPI) => {
       if (toolCallsArray.length > 0) {
         setProcessing(true);

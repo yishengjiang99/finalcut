@@ -268,7 +268,6 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
   const track = (p) => { tmpFiles.push(p); return p; };
 
   try {
-    // Read video from request body
     const chunks = [];
     for await (const chunk of req) { chunks.push(chunk); }
     const inputBuffer = Buffer.concat(chunks);
@@ -289,7 +288,6 @@ router.post('/api/generate-captions', videoProcessLimiter, requireAuthenticatedU
     const tmpWavPath = track(path.join(TMP_DIR, `audio-${randomUUID()}.wav`));
     await extractAudioToWav(tmpInputPath, tmpWavPath);
 
-    // Split into API-safe chunks if needed
     const audioChunks = await splitAudioIfNeeded(tmpWavPath);
     for (const c of audioChunks) {
       if (c.path !== tmpWavPath) track(c.path);

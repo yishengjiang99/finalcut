@@ -58,7 +58,6 @@ export function setupAuth(app, { sessionStore } = {}) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Configure Google OAuth Strategy
   if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     passport.use(new GoogleStrategy({
       clientID: GOOGLE_CLIENT_ID,
@@ -67,11 +66,9 @@ export function setupAuth(app, { sessionStore } = {}) {
     },
       async (accessToken, refreshToken, profile, done) => {
         try {
-          // Check if user exists by Google ID
           let user = await findUserByGoogleId(profile.id);
 
           if (!user) {
-            // Check if user exists by email
             const email = profile.emails?.[0]?.value;
             if (email) {
               user = await findUserByEmail(email);
@@ -93,7 +90,6 @@ export function setupAuth(app, { sessionStore } = {}) {
                 has_subscription: false
               });
 
-              // Verify user was created successfully
               if (!user || !user.id) {
                 console.error('Failed to create user in database');
                 return done(new Error('Failed to create user'), null);
@@ -114,7 +110,6 @@ export function setupAuth(app, { sessionStore } = {}) {
       }));
 
     passport.serializeUser((user, done) => {
-      // Ensure user has a valid ID before serializing
       if (!user || !user.id) {
         console.error('Attempting to serialize user without valid ID:', user);
         return done(new Error('User object missing ID'), null);
@@ -403,7 +398,6 @@ router.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: appUrl('/') }),
   async (req, res) => {
     try {
-      // Validate user object
       if (!req.user || !req.user.email) {
         console.error('Invalid user object after authentication:', req.user);
         return res.redirect(appUrl('/?error=invalid_user'));
@@ -412,13 +406,11 @@ router.get('/auth/google/callback',
       console.log(`Google auth callback for user: ${req.user.email}`);
       console.log(`User has subscription: ${req.user.has_subscription}`);
 
-      // Check if Stripe is available
       if (!stripe) {
         console.error('Stripe not configured - subscription signup not available');
         return res.redirect(appUrl('/?error=payment_not_configured'));
       }
 
-      // Check if user has subscription
       if (!req.user.has_subscription) {
         console.log('Creating Stripe checkout session for user:', req.user.email);
 
@@ -441,7 +433,6 @@ router.get('/auth/google/callback',
         return res.redirect(session.url);
       }
 
-      // User has subscription, redirect to app
       console.log('User has subscription, redirecting to app');
       res.redirect(appUrl('/'));
     } catch (error) {
@@ -493,7 +484,6 @@ router.get('/api/auth/status', apiLimiter, async (req, res) => {
       // Verify user object exists and has required fields
       if (!req.user || !req.user.id) {
         console.error('User is authenticated but user object is invalid:', req.user);
-        // Clear the invalid session
         req.logout((err) => {
           if (err) console.error('Error logging out invalid user:', err);
         });

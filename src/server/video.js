@@ -33,19 +33,16 @@ export async function checkHasAudioStream(inputPath) {
   return new Promise((resolve) => {
     ffmpeg.ffprobe(inputPath, (err, metadata) => {
       if (err) {
-        // If ffprobe fails, assume no audio
         resolve(false);
         return;
       }
 
-      // Check if there's any audio stream
       const hasAudio = metadata.streams && metadata.streams.some(stream => stream.codec_type === 'audio');
       resolve(hasAudio);
     });
   });
 }
 
-// Helper function to build crossfade filter
 export function buildCrossfadeFilter(numVideos, duration, hasAudio, transition = 'fade') {
   if (numVideos < 2) {
     throw new Error('At least 2 videos required for crossfade');
@@ -54,11 +51,9 @@ export function buildCrossfadeFilter(numVideos, duration, hasAudio, transition =
   let filters = [];
   let audioFilters = [];
 
-  // Simple concatenation approach
   // For proper crossfade with xfade filter, we would need video durations
   // This implementation uses basic concat which is simpler and more reliable
 
-  // Check if any video has audio
   const anyHasAudio = hasAudio.some(h => h);
 
   if (anyHasAudio) {
@@ -66,20 +61,16 @@ export function buildCrossfadeFilter(numVideos, duration, hasAudio, transition =
     const allHasAudio = hasAudio.every(h => h);
 
     if (!allHasAudio) {
-      // Generate silent audio for videos without audio
       for (let i = 0; i < numVideos; i++) {
         if (!hasAudio[i]) {
-          // Add silent audio track
           filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[silent${i}]`);
         }
       }
     }
 
-    // Build video concat
     let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
     filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
 
-    // Build audio concat with proper audio sources
     let audioInputs = Array.from({length: numVideos}, (_, i) => {
       return hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
     }).join('');
@@ -103,7 +94,6 @@ export function buildWipeFilter(numVideos, duration, transition, hasAudio) {
   let filters = [];
   let audioFilters = [];
 
-  // Check if any video has audio
   const anyHasAudio = hasAudio.some(h => h);
 
   if (anyHasAudio) {
@@ -111,20 +101,16 @@ export function buildWipeFilter(numVideos, duration, transition, hasAudio) {
     const allHasAudio = hasAudio.every(h => h);
 
     if (!allHasAudio) {
-      // Generate silent audio for videos without audio
       for (let i = 0; i < numVideos; i++) {
         if (!hasAudio[i]) {
-          // Add silent audio track
           filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[silent${i}]`);
         }
       }
     }
 
-    // Build video concat
     let videoInputs = Array.from({length: numVideos}, (_, i) => `[${i}:v]`).join('');
     filters.push(`${videoInputs}concat=n=${numVideos}:v=1:a=0[v]`);
 
-    // Build audio concat with proper audio sources
     let audioInputs = Array.from({length: numVideos}, (_, i) => {
       return hasAudio[i] ? `[${i}:a]` : `[silent${i}]`;
     }).join('');
@@ -138,7 +124,6 @@ export function buildWipeFilter(numVideos, duration, transition, hasAudio) {
   return [...filters, ...audioFilters].join(';');
 }
 
-// Helper function to build fade to black filter
 export function buildFadeFilter(numVideos, duration, hasAudio) {
   if (numVideos < 2) {
     throw new Error('At least 2 videos required for fade transition');
@@ -153,7 +138,6 @@ export function buildFadeFilter(numVideos, duration, hasAudio) {
   let videoLabels = [];
   let audioLabels = [];
 
-  // Check if any video has audio
   const anyHasAudio = hasAudio.some(h => h);
 
   // If some videos have audio and some don't, add silent audio to those without
@@ -229,7 +213,6 @@ export function burnSubtitleTracks(srtContent, translatedSrtContent) {
 
 const router = express.Router();
 
-// Video processing endpoint
 // Client posts video as a raw body stream; operation, args, and file type are in request headers.
 // For add_audio_track and burn_subtitles (which require secondary inputs), FormData/multipart is used.
 router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
@@ -936,7 +919,6 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
     .pipe(res);
 });
 
-// Multi-video transition endpoint
 router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, upload.array('videos', 10), async (req, res) => {
   const tempFiles = [];
   let outputPath = null;
@@ -959,13 +941,10 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
       }
     }
 
-    // Parse duration if it's a string
     const transitionDuration = duration ? parseFloat(duration) : 1;
 
-    // Create temporary files
     const tmpDir = TMP_DIR;
 
-    // Write uploaded files to disk
     const inputPaths = [];
     for (let i = 0; i < req.files.length; i++) {
       const inputPath = path.join(tmpDir, `input-${randomUUID()}-${i}.mp4`);
@@ -976,16 +955,13 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
 
     outputPath = path.join(tmpDir, `output-${randomUUID()}.mp4`);
 
-    // Check which videos have audio streams
     const hasAudio = await Promise.all(
       inputPaths.map(inputPath => checkHasAudioStream(inputPath))
     );
 
-    // Process videos with transition
     await new Promise((resolve, reject) => {
       let command = ffmpeg();
 
-      // Add all inputs
       inputPaths.forEach(inputPath => {
         command = command.input(inputPath);
       });
@@ -995,7 +971,6 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
 
       switch (transition) {
         case 'crossfade':
-          // Build crossfade filter chain for all videos
           // For 2 videos: [0:v][1:v]xfade=transition=fade:duration=1:offset=<video0_duration-1>[v]
           // For 3+ videos: chain multiple xfades
           filterComplex = buildCrossfadeFilter(inputPaths.length, transitionDuration, hasAudio);
@@ -1059,7 +1034,6 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
           break;
 
         case 'fade':
-          // Fade to black between clips
           filterComplex = buildFadeFilter(inputPaths.length, transitionDuration, hasAudio);
           outputLabels = hasAudio.some(h => h) ? ['v', 'a'] : ['v'];
           command = command.complexFilter(filterComplex, outputLabels);
@@ -1074,7 +1048,6 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
         .output(outputPath)
         .outputOptions('-map', '[v]');
 
-      // Only map audio if at least one video has audio
       if (hasAudio.some(h => h)) {
         command.outputOptions('-map', '[a]').audioCodec('aac');
       }
@@ -1086,23 +1059,19 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
         .run();
     });
 
-    // Read the processed video
     const processedVideo = await fs.readFile(outputPath);
 
-    // Clean up temporary files
     for (const tempFile of tempFiles) {
       await fs.unlink(tempFile);
     }
     await fs.unlink(outputPath);
 
-    // Send the processed video
     res.set('Content-Type', 'video/mp4');
     res.send(processedVideo);
 
   } catch (error) {
     console.error('Error processing video transition:', error);
 
-    // Clean up on error
     for (const tempFile of tempFiles) {
       try { await fs.unlink(tempFile); } catch (e) { /* ignore */ }
     }

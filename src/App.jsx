@@ -15,7 +15,6 @@ import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './tele
 import { takePendingPrompt } from './pendingPrompt.js';
 import './App.css';
 
-// Sample commands for quick access
 const sampleCommands = [
   { icon: '📐', text: 'Resize this video to 1280x720' },
   { icon: '✏️', text: 'Add text "Hello World" at the center of the video' },
@@ -142,7 +141,6 @@ const JOB_ICONS = { done: '✅', error: '⚠️', cancelled: '🚫' };
 // Tool results and tool-call-only assistant turns are for the model, not the chat window.
 export const isVisibleMessage = (msg) => msg?.role !== 'tool' && Boolean(msg?.content || msg?.videoUrl);
 
-// Welcome message with sample links
 const welcomeMessage = {
   role: 'assistant',
   content: 'Welcome to FinalCap! Open a video or audio file to get started (opening it does not upload it), then tell me what to do with it, or pick a starting point below.',
@@ -348,7 +346,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Check for error parameters in URL
         const urlParams = new URLSearchParams(window.location.search);
         const errorParam = urlParams.get('error');
 
@@ -362,7 +359,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
           setAuthError(errorMessages[errorParam] || 'An error occurred. Please try again.');
 
-          // Clean up the URL
           window.history.replaceState({}, '', '/');
           return;
         }
@@ -408,7 +404,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
       if (sessionId && window.location.pathname === '/success') {
         try {
-          // Verify the session with the backend
           const response = await fetch('/api/verify-checkout-session', {
             method: 'POST',
             headers: {
@@ -424,7 +419,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
               track('upgrade', { step: 'paid', method: 'stripe' });
               // Hide landing page and show editor after verified payment
               setShowLanding(false);
-              // Clean up the URL without reloading the page
               window.history.replaceState({}, '', '/');
             }
           }
@@ -551,11 +545,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       // Upload progress is a transient status, not part of the conversation
       toast(`Opening ${files.length} file${files.length > 1 ? 's' : ''}…`);
 
-      // Process all files
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        // Determine if it's audio or video
         const isAudio = file.type.startsWith('audio/');
         const isVideo = file.type.startsWith('video/');
 
@@ -574,12 +566,10 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         }
         if (clip.level === 'warn') addMessage({ text: `"${file.name}": ${clip.reasons.join(' ')}` });
 
-        // Read file as array buffer for processing
         const arrayBuffer = await file.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
         const url = URL.createObjectURL(file);
 
-        // Store the file data
         newVideos.push({
           id: messageIdCounterRef.current++,
           data: data,
@@ -615,7 +605,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         size_bucket: sizeBucket(newVideos[0].data?.byteLength),
       });
 
-      // Update the uploaded videos list
       setUploadedVideos(prev => [...prev, ...newVideos]);
       setIsSampleMode(false);
 
@@ -785,13 +774,10 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const openFilePicker = () => fileInputRef.current?.click();
 
   const handleGetStarted = () => {
-    // Redirect to Google login endpoint
     window.location.href = '/auth/google';
   };
 
   const loadSampleVideo = async () => {
-    // Note: This bypasses authentication for demo purposes
-    // In production, consider requiring authentication
     setShowLanding(false);
     // Sample video path - using BigBuckBunny.mp4 as specified
     const sampleVideoUrl = '/BigBuckBunny.mp4';
@@ -799,7 +785,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     try {
       await getSampleAccessToken();
 
-      // Fetch the sample video
       const response = await fetch(sampleVideoUrl);
       if (!response.ok) {
         // If sample video doesn't exist, just show a message
@@ -818,7 +803,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       setFileMimeType('video/mp4');
       setCurrentFileMimeType('video/mp4');
 
-      // Show selected video
       const uploadedMessage = { role: 'user', content: '', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'BigBuckBunny.mp4', id: messageIdCounterRef.current++ };
       mediaBytesRef.current.set(uploadedMessage.id, data);
       activateMedia(uploadedMessage.id);
@@ -839,7 +823,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     loadSampleVideo();
   }, [startWithSample]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Landing page component
   if (showLanding) {
     return (
       <Landing

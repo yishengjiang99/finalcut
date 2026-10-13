@@ -23,7 +23,6 @@ vi.mock('@ffmpeg/ffmpeg', () => ({
 // Mock @ffmpeg/util
 vi.mock('@ffmpeg/util', () => ({
   toBlobURL: vi.fn((url, mimeType, useCache, progressCallback) => {
-    // Simulate progress callback if provided
     if (progressCallback) {
       progressCallback({ url, received: 1000 });
     }

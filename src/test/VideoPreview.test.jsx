@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import VideoPreview from '../VideoPreview.jsx';
 
-// Mock HTMLMediaElement methods
 beforeEach(() => {
   HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve());
   HTMLMediaElement.prototype.pause = vi.fn();
@@ -82,12 +81,10 @@ describe('VideoPreview Component', () => {
   it('toggles between collapsed and expanded states when button is clicked', () => {
     const { container } = render(<VideoPreview videoUrl="test-video.mp4" />);
 
-    // Open the thumbnail first
     openPlayer();
     let video = container.querySelector('video');
     expect(video).toBeInTheDocument();
 
-    // Click to collapse
     fireEvent.click(screen.getByLabelText(/collapse preview/i));
 
     // Should be collapsed now (mini bar, no video element)
@@ -95,10 +92,8 @@ describe('VideoPreview Component', () => {
     expect(video).not.toBeInTheDocument();
     expect(screen.getByLabelText(/expand preview/i)).toBeInTheDocument();
 
-    // Click to expand again
     fireEvent.click(screen.getByLabelText(/expand preview/i));
 
-    // Should be expanded again
     video = container.querySelector('video');
     expect(video).toBeInTheDocument();
     expect(screen.getByLabelText(/collapse preview/i)).toBeInTheDocument();

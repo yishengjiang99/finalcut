@@ -26,7 +26,6 @@ function normalizeUserRow(user) {
   };
 }
 
-// Create connection pool
 export function getPool() {
   if (!pool) {
     pool = mysql.createPool(dbConfig);
@@ -34,7 +33,6 @@ export function getPool() {
   return pool;
 }
 
-// Initialize database and create tables
 export async function initDatabase() {
   try {
     const connection = await mysql.createConnection({
@@ -56,10 +54,8 @@ export async function initDatabase() {
       await connection.end();
     }
 
-    // Now create tables using the pool
     const pool = getPool();
     
-    // Create users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -163,7 +159,6 @@ export async function initDatabase() {
   }
 }
 
-// User operations
 export async function findUserByEmail(email) {
   const pool = getPool();
   const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -203,7 +198,6 @@ export async function createUser(userData) {
   // Fetch the complete user record from database to ensure consistency
   const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
   
-  // Verify the user was actually inserted
   if (!rows || !rows[0]) {
     throw new Error('Failed to fetch user record after insertion');
   }

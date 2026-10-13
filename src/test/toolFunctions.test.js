@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toolFunctions } from '../toolFunctions.js';
 
-// Mock fetch for server API calls
 global.fetch = vi.fn();
 global.FormData = class FormData {
   constructor() {
@@ -47,7 +46,6 @@ describe('toolFunctions', () => {
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
     global.Blob = vi.fn();
     
-    // Mock successful server response by default
     global.fetch.mockResolvedValue(makeStreamResponse(new ArrayBuffer(8)));
   });
 
@@ -405,7 +403,6 @@ describe('toolFunctions', () => {
     });
 
     it('should handle base64 encoded audio data', async () => {
-      // Create a simple base64 encoded string
       const base64Audio = 'data:audio/mp3;base64,SGVsbG8gV29ybGQ=';
       const result = await toolFunctions.add_audio_track(
         { audioFile: base64Audio, mode: 'replace' },

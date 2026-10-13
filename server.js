@@ -41,7 +41,6 @@ app.use(iosSuggestionsRouter);
 app.use(telemetryRouter);
 if (process.env.NODE_ENV !== 'test') scheduleTelemetryPurge();
 
-// Initialize database
 let sessionStore;
 try {
   await initDatabase();
@@ -59,10 +58,8 @@ setupAuth(app, { sessionStore });
 // so Stripe signature verification receives the raw body.
 app.use(stripeWebhookRouter);
 
-// JSON body parsing
 app.use(express.json({ limit: '950mb' }));
 
-// Routes
 app.use(authRouter);
 app.use(stripeRouter);
 app.use(captionsRouter);

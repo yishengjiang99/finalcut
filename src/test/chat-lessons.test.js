@@ -136,7 +136,6 @@ describe('applyStreamFilter', () => {
   });
 
   it('strips leading "Answer:\\n" prefix and does not forward it', () => {
-    // Feed the prefix in one go
     const chunk = 'Answer:\nThe real answer content.';
     const out = applyStreamFilter(filter, chunk);
     // The prefix itself should not appear in forwarded content
@@ -215,7 +214,6 @@ describe('applyStreamFilter', () => {
   });
 
   it('does not forward lesson content when "Lesson:" appears at buffer start', () => {
-    // Simulate first content chunk IS the lesson
     const out = applyStreamFilter(filter, 'Lesson: Immediate lesson with no answer prefix.');
     expect(out).toBe('');
     expect(filter.passThrough).toBe(false);

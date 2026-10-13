@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toolFunctions } from '../toolFunctions.js';
 
-// Mock fetch for server API calls
 global.fetch = vi.fn();
 global.FormData = class FormData {
   constructor() {
@@ -43,7 +42,6 @@ describe('Video Editing Chaining', () => {
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
     global.Blob = vi.fn();
     
-    // Mock successful server response by default
     global.fetch.mockResolvedValue(makeStreamResponse(new ArrayBuffer(8)));
   });
 
@@ -104,7 +102,6 @@ describe('Video Editing Chaining', () => {
   });
 
   it('should allow chaining edits by updating video data', async () => {
-    // First edit - resize
     const processedData1 = new Uint8Array([4, 5, 6]);
     global.fetch.mockResolvedValueOnce(makeStreamResponse(processedData1));
     
@@ -121,7 +118,6 @@ describe('Video Editing Chaining', () => {
     const processedData2 = new Uint8Array([7, 8, 9]);
     global.fetch.mockResolvedValueOnce(makeStreamResponse(processedData2));
     
-    // Simulate using the processed data
     const updatedVideoData = mockSetVideoFileData.mock.calls[0][0];
     
     await toolFunctions.crop_video(

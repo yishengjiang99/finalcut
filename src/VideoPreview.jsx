@@ -127,7 +127,6 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
       }
       setIsAudio(isAudioFile);
       
-      // Reset state when video URL changes
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
@@ -142,7 +141,6 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         return null;
       });
       
-      // Force the video element to load the new source
       video.load();
       
       const handleLoadedMetadata = () => {
@@ -220,7 +218,6 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
     });
     try {
       const outStream = canvas.captureStream(30);
-      // Best-effort audio
       try {
         const vStream = video.captureStream ? video.captureStream() : null;
         if (vStream) {

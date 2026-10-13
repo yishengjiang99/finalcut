@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App.jsx';
 
-// Mock ffmpeg module
 vi.mock('../ffmpeg.js', () => ({
   ffmpeg: {
     on: vi.fn(),
@@ -16,7 +15,6 @@ vi.mock('../ffmpeg.js', () => ({
   fetchFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
 }));
 
-// Mock fetch
 global.fetch = vi.fn();
 
 // Mock URL.createObjectURL
@@ -44,7 +42,6 @@ describe('App Component', () => {
     });
 
     render(<App />);
-    // Landing page doesn't have file input initially
     expect(screen.queryByText('Get started free')).toBeInTheDocument();
   });
 
@@ -179,14 +176,12 @@ describe('App Component', () => {
     const { container } = render(<App />);
     const html = container.innerHTML;
     
-    // Ensure no token-related UI elements exist
     expect(html).not.toContain('xaiToken');
     expect(html).not.toContain('Set Token');
     expect(html).not.toContain('No token');
   });
 
   it('shows editor interface when returning from successful payment', async () => {
-    // Mock location with session_id query parameter
     delete window.location;
     window.location = { 
       pathname: '/success',
@@ -211,7 +206,6 @@ describe('App Component', () => {
 
     render(<App />);
 
-    // Wait for the verification to complete
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/verify-checkout-session', {
         method: 'POST',
@@ -231,7 +225,6 @@ describe('App Component', () => {
     const fileInput = document.querySelector('input[type="file"]');
     expect(fileInput).toBeInTheDocument();
     
-    // URL should be cleaned up
     expect(replaceStateSpy).toHaveBeenCalledWith({}, '', '/');
 
     replaceStateSpy.mockRestore();

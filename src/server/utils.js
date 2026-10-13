@@ -9,7 +9,6 @@ export function srtToVtt(srt) {
   return vtt;
 }
 
-// Map MIME type to ffmpeg input format string
 export function getMimeTypeToFormat(mimeType) {
   const map = {
     'video/mp4': 'mp4',
@@ -30,7 +29,6 @@ export function getMimeTypeToFormat(mimeType) {
   return map[base] || 'mp4';
 }
 
-// Map MIME type to file extension
 export function getExtFromMimeType(mimeType) {
   const map = {
     'video/mp4': 'mp4',

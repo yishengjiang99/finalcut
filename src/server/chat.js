@@ -572,7 +572,6 @@ export async function handleClientExecution(req, res, userId, profile = null) {
 router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   const userId = req.user?.id ?? null;
   try {
-    // Basic request validation
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({ error: 'Invalid request body' });
     }
@@ -622,7 +621,6 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const upstream = new AbortController();
     res.on('close', () => upstream.abort());
 
-    // Enable streaming for xAI API
     const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
       method: 'POST',
       signal: upstream.signal,
@@ -726,7 +724,6 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           try {
             parsed = JSON.parse(data);
           } catch {
-            // Unparseable line – forward as-is
             res.write(`${line}\n\n`);
             continue;
           }
@@ -827,7 +824,6 @@ router.get('/api/tools/schema', apiLimiter, (req, res) => {
   res.json(buildToolsSchema({ userAgent: req.get('user-agent') }));
 });
 
-// Supported formats introspection endpoint
 router.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, (req, res) => {
   res.json({
     video: {
