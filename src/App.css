@@ -1993,3 +1993,20 @@ body {
     scroll-padding-bottom: calc(var(--composer-h, 64px) + var(--kb-offset, 0px) + 12px);
   }
 }
+
+/* ---------- compact attached-media card: thumbnail only, one overlaid row ---------- */
+.result-card.compact { border: 0; background: transparent; box-shadow: none; width: fit-content; }
+.result-card.active, .result-card.compact.active { border-color: transparent; outline: none; }
+.result-card.compact .rc-media { line-height: 0; }
+.result-card.compact video { display: block; border-radius: var(--radius); }
+.rc-overlay {
+  position: absolute; top: 6px; right: 6px; z-index: 3;
+  display: flex; align-items: center; gap: 6px; line-height: 1;
+}
+.rc-overlay .media-x { position: static; }
+.rc-overlay .rc-badge {
+  border: 0; color: #fff; background: rgba(10, 14, 24, .72);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  padding: 4px 8px; font-size: 11px; line-height: 1.2;
+}
+.rc-overlay .rc-edit { cursor: pointer; font-family: inherit; }

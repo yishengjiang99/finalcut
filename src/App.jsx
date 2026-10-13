@@ -892,7 +892,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     const parent = mediaById(item.parentId);
     const comparing = Boolean(parent) && compareIds.has(item.id);
     return (
-      <div className={`result-card${isActive ? ' active' : ''}`}>
+      <div className={`result-card${isActive ? ' active' : ''}${item.kind !== 'result' ? ' compact' : ''}`} title={item.label} aria-label={item.label}>
         {comparing && (
           <>
             <div className="compare">
@@ -913,19 +913,24 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             vttUrl={msg.vttUrl || null}
           />
           {item.kind !== 'result' && (
-            <button
-              type="button"
-              className="media-x"
-              title="Remove from edit"
-              aria-label={`Remove ${item.label} from edit`}
-              disabled={isCallingAPI}
-              onClick={(e) => { e.stopPropagation(); removeMedia(item); }}
-            >×</button>
+            <div className="rc-overlay">
+              {isActive
+                ? <span className="rc-badge">Editing this</span>
+                : <button type="button" className="rc-badge rc-edit" disabled={isCallingAPI} onClick={() => handleSelectMedia(item)}>✎ Edit</button>}
+              <button
+                type="button"
+                className="media-x"
+                title="Remove from edit"
+                aria-label={`Remove ${item.label} from edit`}
+                disabled={isCallingAPI}
+                onClick={(e) => { e.stopPropagation(); removeMedia(item); }}
+              >×</button>
+            </div>
           )}
         </div>
-        <div className="rc-body">
+        {item.kind === 'result' && <div className="rc-body">
           <div className="rc-title">
-            {item.kind === 'result' ? `✓ ${item.label}` : item.label}
+            {`✓ ${item.label}`}
             {isActive && <span className="rc-badge">Editing this</span>}
           </div>
           <div className="rc-actions">
@@ -939,7 +944,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
               <button className={`chip-btn${comparing ? ' on' : ''}`} onClick={() => toggleCompare(item.id)}>⇄ Compare</button>
             )}
           </div>
-        </div>
+        </div>}
       </div>
     );
   };
