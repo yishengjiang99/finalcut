@@ -193,7 +193,10 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         }
       };
     }
-  }, [videoUrl, mimeType, renderFrame]);
+    // showThumb/isCollapsed: the player's <video> only mounts after the thumbnail is tapped (and
+    // remounts after collapse), so attach the listeners to that element when it appears. Without
+    // this the canvas was never sized or drawn: a black 300x150 player.
+  }, [videoUrl, mimeType, renderFrame, showThumb, isCollapsed]);
 
   useEffect(() => {
     return () => {
