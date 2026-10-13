@@ -293,6 +293,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   useEffect(() => {
     if (chatWindowRef.current) {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
+      // Mobile: the whole editor scrolls (header scrolls away), so pin that to the bottom too.
+      const root = chatWindowRef.current.closest('.fc.editor');
+      if (root && root.scrollHeight > root.clientHeight) root.scrollTop = root.scrollHeight;
     }
   }, [messages, isCallingAPI]);
 

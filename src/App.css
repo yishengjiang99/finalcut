@@ -2010,3 +2010,10 @@ body {
   padding: 4px 8px; font-size: 11px; line-height: 1.2;
 }
 .rc-overlay .rc-edit { cursor: pointer; font-family: inherit; }
+
+/* ---------- mobile: header scrolls away with the chat log (composer stays fixed) ---------- */
+@media (max-width: 760px) {
+  .fc.editor { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .fc.editor .layout, .fc.editor .main { flex: 1 0 auto; min-height: auto; }
+  .fc.editor .chat, .fc.editor .view { flex: 1 0 auto; min-height: auto; overflow: visible; }
+}
