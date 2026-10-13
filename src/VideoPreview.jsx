@@ -471,7 +471,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
         }}
       >
         <video
-          src={videoUrl}
+          // iOS Safari never paints a frame for preload="metadata" (black box with only the
+          // duration). A media fragment makes it decode and show the frame at 0.1 s.
+          src={videoUrl && !videoUrl.includes('#') ? `${videoUrl}#t=0.1` : videoUrl}
           preload="metadata"
           muted
           playsInline
@@ -582,7 +584,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
               src={videoUrl}
               playsInline
               crossOrigin="anonymous"
-              style={{ display: 'none' }}
+              // Not display:none: WebKit (iOS Safari) does not decode frames for a display:none
+              // video, so drawImage() painted a black canvas. Keep it rendered but invisible.
+              style={{ position: 'absolute', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none', left: 0, top: 0 }}
             >
               {/* track.mode is set to "hidden" in JS so native captions never show;
                   we read activeCues and burn them into the canvas ourselves. */}
