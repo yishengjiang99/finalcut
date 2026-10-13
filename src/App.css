@@ -859,6 +859,9 @@ body {
 }
 
 .composer textarea::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-faint);
 }
 

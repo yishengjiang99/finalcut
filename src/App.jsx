@@ -224,9 +224,19 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    const cap = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches ? 120 : 200;
-    el.style.height = Math.min(el.scrollHeight, cap) + 'px';
+    // One row by default; grow only when the typed text wraps, up to ~5 rows. An empty box stays
+    // one row even when the long placeholder wraps (Safari counts the placeholder in scrollHeight).
+    const cs = window.getComputedStyle(el);
+    const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3 || 20;
+    const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    const oneRow = Math.ceil(line + pad + border);
+    if (!chatInput) { el.style.height = oneRow + 'px'; el.style.overflowY = 'hidden'; return; }
+    el.style.height = oneRow + 'px';
+    const cap = Math.ceil(line * 5 + pad + border);
+    const want = el.scrollHeight + border;
+    el.style.height = Math.min(Math.max(want, oneRow), cap) + 'px';
+    el.style.overflowY = want > cap ? 'auto' : 'hidden';
   }, [chatInput, showLanding, view]);
 
   // A prompt carried over from a guide page deep link (/?prompt=…): prefill the chat box once the
@@ -608,6 +618,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     const text = (hasStringOverride ? textOverride : chatInput).trim();
     if (!text || isCallingAPI) return;
     if (!hasStringOverride) setChatInput('');
+    // Dismiss the on-screen keyboard after sending (the box shrinks back to one row via chatInput).
+    textareaRef.current?.blur();
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     trackOnce('first_prompt', { prompt_len_bucket: lengthBucket(text.length), input: hasStringOverride ? 'suggestion' : 'typed' });
     const newMessages = [...messages, newMessage];

@@ -11,6 +11,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   const playAfterExpandRef = useRef(false);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [showThumb, setShowThumb] = useState(true); // thumbnail first; tap to open the full player
+  const [poster, setPoster] = useState(null); // first-frame JPEG data URL for the thumbnail card
   // Audio files skip the video thumbnail (isAudio state is only known after the player mounts).
   const looksLikeAudio = mimeType
     ? mimeType.startsWith('audio/')
@@ -418,6 +419,39 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
 
   const togglePlayFromSurface = () => handlePlayPause();
 
+  // First frame as the card's cover image. iOS Safari shows a black box for a paused video, so
+  // decode a frame in a detached muted video and draw it to a canvas (data-URL JPEG poster).
+  useEffect(() => {
+    setPoster(null);
+    if (!videoUrl || looksLikeAudio || typeof document === 'undefined') return undefined;
+    let done = false;
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+    const finish = (url) => { if (!done && url) { done = true; setPoster(url); } };
+    const grab = () => {
+      try {
+        if (!v.videoWidth) return;
+        const w = Math.min(480, v.videoWidth); const h = Math.round(w * v.videoHeight / v.videoWidth);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const g = c.getContext('2d'); g.drawImage(v, 0, 0, w, h);
+        const px = g.getImageData(0, 0, w, h).data; let sum = 0;
+        for (let i = 0; i < px.length; i += 4 * 97) sum += px[i] + px[i + 1] + px[i + 2];
+        if (sum === 0) return; // a black canvas means the frame was not decoded yet
+        finish(c.toDataURL('image/jpeg', 0.8));
+      } catch (_) { /* tainted or not ready */ }
+    };
+    v.addEventListener('loadeddata', () => { try { v.currentTime = Math.min(0.1, (v.duration || 1) / 2); } catch (_) { grab(); } });
+    v.addEventListener('seeked', grab);
+    v.src = videoUrl;
+    try { v.load(); } catch (_) { /* ignore */ }
+    // iOS may not decode a frame for a paused detached video: briefly play it muted (allowed
+    // inline without a gesture), grab a frame, then stop.
+    v.addEventListener('playing', () => { grab(); setTimeout(() => { grab(); try { v.pause(); } catch (_) { /* ignore */ } }, 150); });
+    const fallback = setTimeout(() => { if (!done) { const p = v.play?.(); if (p && p.catch) p.catch(() => {}); } }, 800);
+    return () => { done = true; clearTimeout(fallback); v.removeAttribute('src'); try { v.load(); } catch (_) { /* ignore */ } };
+  }, [videoUrl, mimeType, looksLikeAudio]);
+
   // Shared control styles (compact chrome)
   const overlayBtn = {
     width: '30px', height: '30px', borderRadius: '50%',
@@ -478,11 +512,17 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           // duration). A media fragment makes it decode and show the frame at 0.1 s.
           src={videoUrl && !videoUrl.includes('#') ? `${videoUrl}#t=0.1` : videoUrl}
           preload="metadata"
+          poster={poster || undefined}
           muted
           playsInline
           onLoadedMetadata={(e) => { if (!duration) setDuration(e.currentTarget.duration || 0); }}
           style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', display: 'block', backgroundColor: '#000' }}
         />
+        {poster && (
+          <img src={poster} alt="" aria-hidden="true" data-testid="video-poster" style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none'
+          }} />
+        )}
         <span style={{
           position: 'absolute', inset: 0, display: 'flex',
           alignItems: 'center', justifyContent: 'center', pointerEvents: 'none'
@@ -585,6 +625,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
             <video
               ref={videoRef}
               src={videoUrl}
+              poster={poster || undefined}
               playsInline
               crossOrigin="anonymous"
               // Not display:none: WebKit (iOS Safari) does not decode frames for a display:none
