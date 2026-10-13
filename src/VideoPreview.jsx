@@ -2,6 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 const FPS_STEPS = [24, 25, 30, 60];
 
+/** Seek a paused video slightly in so WebKit decodes and paints a cover frame (iOS shows black otherwise). */
+export function seekForCover(video) {
+  const d = video.duration;
+  const t = Number.isFinite(d) && d > 0 ? Math.min(0.1, d / 2) : 0.1;
+  try { video.currentTime = t; } catch (_) { /* not seekable yet; the next load retries */ }
+}
+
 export default function VideoPreview({ videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -157,6 +164,9 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           }
         }
         if (!isAudioFile) {
+          // iOS decodes no frame for a paused video until it plays or seeks, so the canvas
+          // stayed black (no cover) until Play. Seek once so the render loop has a frame to draw.
+          if (video.paused && video.currentTime < 0.05) seekForCover(video);
           cancelAnimationFrame(rafRef.current);
           rafRef.current = requestAnimationFrame(renderFrame);
         }
@@ -477,10 +487,15 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           // iOS Safari never paints a frame for preload="metadata" (black box with only the
           // duration). A media fragment makes it decode and show the frame at 0.1 s.
           src={videoUrl && !videoUrl.includes('#') ? `${videoUrl}#t=0.1` : videoUrl}
-          preload="metadata"
+          preload="auto"
           muted
           playsInline
-          onLoadedMetadata={(e) => { if (!duration) setDuration(e.currentTarget.duration || 0); }}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            if (!duration) setDuration(v.duration || 0);
+            // iOS ignores the #t= fragment on blob: URLs; an explicit seek makes it decode a cover frame.
+            if (v.currentTime < 0.05) seekForCover(v);
+          }}
           style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', display: 'block', backgroundColor: '#000' }}
         />
         <span style={{
