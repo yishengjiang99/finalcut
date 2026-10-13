@@ -1953,7 +1953,7 @@ body {
 }
 
 /* ---------- attached media: round × on the video's top-right corner ---------- */
-.rc-media { position: relative; }
+.rc-media { position: relative; width: fit-content; max-width: 100%; }
 .media-x {
   position: absolute;
   top: 6px;
