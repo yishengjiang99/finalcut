@@ -71,6 +71,20 @@ do_preflight() {
   log "preflight ok: target=${target}"
 }
 
+# `nginx -s reload` / `systemctl reload nginx` only SIGNAL the master and return before new
+# workers serve the new config. Wait until every pre-reload worker has been replaced
+# (old ones are retitled "worker process is shutting down"), so callers see the new config live.
+workers() { pgrep -f '^nginx: worker process$' 2>/dev/null | sort || true; }
+reload_and_wait() {
+  local old i; old="$(workers)"
+  $SUDO "${RELOAD[@]}" || return 1
+  for i in $(seq 1 100); do
+    [[ -z "$(comm -12 <(echo "$old") <(workers))" && -n "$(workers)" ]] && return 0
+    sleep 0.1
+  done
+  log "warning: nginx workers not replaced 10s after reload"
+}
+
 restore() {
   local bk="$1" target
   target="$(cat "$bk/TARGET")"
@@ -79,7 +93,7 @@ restore() {
   for s in "${SNIPPETS[@]}"; do
     if [[ -f "$bk/$s" ]]; then $SUDO cp -a "$bk/$s" "$SNIPPET_DIR/$s"; else $SUDO rm -f "$SNIPPET_DIR/$s"; fi
   done
-  $SUDO "${NGINX_TEST[@]}" && $SUDO "${RELOAD[@]}" && log "restored + reloaded"
+  $SUDO "${NGINX_TEST[@]}" && reload_and_wait && log "restored + reloaded"
 }
 
 # status code for https://<host><path> served by THIS machine (no DNS / external network)
@@ -174,7 +188,7 @@ do_install() {
     $SUDO diff -u "$bk/target.conf" "$target" || true
   fi
   $SUDO "${NGINX_TEST[@]}"
-  $SUDO "${RELOAD[@]}"
+  reload_and_wait
   if [[ "$SMOKE" == 1 ]]; then sleep 2; smoke_new "$snap"; fi
   trap - ERR
   rm -f "$snap"
