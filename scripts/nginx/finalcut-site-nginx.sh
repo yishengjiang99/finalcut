@@ -74,7 +74,8 @@ do_preflight() {
 # `nginx -s reload` / `systemctl reload nginx` only SIGNAL the master and return before new
 # workers serve the new config. Wait until every pre-reload worker has been replaced
 # (old ones are retitled "worker process is shutting down"), so callers see the new config live.
-workers() { pgrep -f '^nginx: worker process$' 2>/dev/null | sort || true; }
+# (match on ps fields, not a pgrep -f '...$' regex: setproctitle leaves padding in /proc/*/cmdline)
+workers() { ps -eo pid=,args= 2>/dev/null | awk '$2=="nginx:" && $3=="worker" && $4=="process" && NF==4 {print $1}' | sort || true; }
 reload_and_wait() {
   local old i; old="$(workers)"
   $SUDO "${RELOAD[@]}" || return 1
@@ -116,7 +117,9 @@ other_snapshot() {
 
 smoke_new() { # $1 = file with the pre-change snapshot
   local fail=0 got want
-  check() { if [[ "$2" == "$3" ]]; then log "ok   $1 -> $2"; else log "FAIL $1 -> $2 (want $3)"; fail=1; fi; }
+  # An upstream coming back during the deploy (e.g. /api/health 502 -> 200 while the API restarts)
+  # is backend liveness, not an nginx regression; the reverse direction still fails.
+  check() { if [[ "$2" == "$3" ]] || [[ "$2" == 200 && "$3" =~ ^50[234]$ ]]; then log "ok   $1 -> $2"; else log "FAIL $1 -> $2 (want $3)"; fail=1; fi; }
   check "https://${APEX}/" "$(code_https "$APEX" /)" 200
   check "https://${APEX}/success" "$(code_https "$APEX" /success)" 200
   check "https://${APEX}/this-page-does-not-exist" "$(code_https "$APEX" /this-page-does-not-exist)" 404
