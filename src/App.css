@@ -1951,3 +1951,45 @@ body {
     height: 36px;
   }
 }
+
+/* ---------- attached media: round × on the video's top-right corner ---------- */
+.rc-media { position: relative; }
+.media-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .35);
+  background: rgba(10, 14, 24, .72);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.media-x:disabled { opacity: .5; cursor: default; }
+
+/* ---------- composer pinned to the visible viewport bottom (mobile / iPhone Safari) ---------- */
+@media (max-width: 760px) {
+  .composer-zone {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateY(calc(-1 * var(--kb-offset, 0px)));
+    padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    z-index: 40;
+  }
+  .chat {
+    padding-bottom: calc(var(--composer-h, 64px) + var(--kb-offset, 0px) + 12px);
+    scroll-padding-bottom: calc(var(--composer-h, 64px) + var(--kb-offset, 0px) + 12px);
+  }
+}

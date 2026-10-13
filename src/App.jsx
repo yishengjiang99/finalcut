@@ -187,6 +187,31 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const [sampleAccessToken, setSampleAccessTokenState] = useState(null);
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const chatWindowRef = useRef(null);
+  const composerZoneRef = useRef(null);
+  // Pin the composer to the bottom of the *visual* viewport (iPhone Safari keyboard):
+  // --kb-offset = how far the visible bottom sits above the layout bottom; --composer-h = its height.
+  useEffect(() => {
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    const update = () => {
+      const offset = vv ? Math.max(0, window.innerHeight - (vv.height + vv.offsetTop)) : 0;
+      root.style.setProperty('--kb-offset', `${Math.round(offset)}px`);
+      const el = composerZoneRef.current;
+      if (el) root.style.setProperty('--composer-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    };
+    update();
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    if (ro && composerZoneRef.current) ro.observe(composerZoneRef.current);
+    return () => {
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      ro?.disconnect();
+    };
+  }, []);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
   const [view, setView] = useState('editor'); // 'editor' | 'captions' | 'library'
@@ -879,13 +904,25 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             <div className="compare-label after">After · {item.label}</div>
           </>
         )}
-        <VideoPreview
-          key={`preview-${msg.id}`}
-          videoUrl={msg.videoUrl}
-          title={getVideoTitle(msg.videoType)}
-          mimeType={msg.mimeType}
-          vttUrl={msg.vttUrl || null}
-        />
+        <div className="rc-media">
+          <VideoPreview
+            key={`preview-${msg.id}`}
+            videoUrl={msg.videoUrl}
+            title={getVideoTitle(msg.videoType)}
+            mimeType={msg.mimeType}
+            vttUrl={msg.vttUrl || null}
+          />
+          {item.kind !== 'result' && (
+            <button
+              type="button"
+              className="media-x"
+              title="Remove from edit"
+              aria-label={`Remove ${item.label} from edit`}
+              disabled={isCallingAPI}
+              onClick={(e) => { e.stopPropagation(); removeMedia(item); }}
+            >×</button>
+          )}
+        </div>
         <div className="rc-body">
           <div className="rc-title">
             {item.kind === 'result' ? `✓ ${item.label}` : item.label}
@@ -897,9 +934,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             )}
             {parent && (
               <button className="chip-btn" disabled={isCallingAPI} onClick={() => handleUndo(item)}>↩ Undo</button>
-            )}
-            {item.kind !== 'result' && (
-              <button className="chip-btn" title="Remove from project" disabled={isCallingAPI} onClick={() => removeMedia(item)}>× Remove</button>
             )}
             {parent && (
               <button className={`chip-btn${comparing ? ' on' : ''}`} onClick={() => toggleCompare(item.id)}>⇄ Compare</button>
@@ -1069,7 +1103,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             </div>
           )}
 
-          <div className="composer-zone">
+          <div className="composer-zone" ref={composerZoneRef}>
             <div
               className={`composer${composerActive ? ' active' : ''}`}
               onClick={() => { if (!composerActive) textareaRef.current?.focus(); }}
