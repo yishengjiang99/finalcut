@@ -898,6 +898,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             {parent && (
               <button className="chip-btn" disabled={isCallingAPI} onClick={() => handleUndo(item)}>↩ Undo</button>
             )}
+            {item.kind !== 'result' && (
+              <button className="chip-btn" title="Remove from project" disabled={isCallingAPI} onClick={() => removeMedia(item)}>× Remove</button>
+            )}
             {parent && (
               <button className={`chip-btn${comparing ? ' on' : ''}`} onClick={() => toggleCompare(item.id)}>⇄ Compare</button>
             )}
@@ -1038,7 +1041,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
           {view === 'library' && (
             <div className="view">
               <h2>Library</h2>
-              <p className="lead">Every clip you opened and every edit result in this session. Any of them can become the clip your next edit applies to.</p>
+              <p className="lead">Every clip you opened and every edit result in this session. Any of them can become the clip your next edit applies to. <a href="/legal/licenses.html" target="_blank" rel="noopener">Open-source licenses</a></p>
               {media.length === 0 && <p className="rail-empty">No media yet.</p>}
               <div className="grid">
                 {media.map(item => (
@@ -1071,15 +1074,6 @@ export default function App({ skipLanding = false, startWithSample = false } = {
               className={`composer${composerActive ? ' active' : ''}`}
               onClick={() => { if (!composerActive) textareaRef.current?.focus(); }}
             >
-              <div className="attachments">
-                {originals.map(item => (
-                  <div key={item.id} className={`attach${item.id === activeMediaId ? ' active' : ''}`}>
-                    <MediaThumb item={item} />
-                    <div className="aname" title={item.label}>{item.label}</div>
-                    <button className="ax" title="Remove from project" disabled={isCallingAPI} onClick={() => removeMedia(item)}>×</button>
-                  </div>
-                ))}
-              </div>
               <div className="composer-input-row">
                 <input
                   ref={fileInputRef}
@@ -1106,15 +1100,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                   placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
                   aria-label="Message input"
                 />
-              </div>
-              <div className="composer-actions">
-                <span className="ca-spacer" />
                 <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); isCallingAPI ? cancelRunning() : handleSend(); }} disabled={!isCallingAPI && !chatInput.trim()}>
                   {isCallingAPI ? '■' : '↑'}
                 </button>
-              </div>
-              <div className="composer-foot">
-                <span className="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <a href="/legal/licenses.html" target="_blank" rel="noopener">Open-source licenses</a></span>
               </div>
             </div>
           </div>

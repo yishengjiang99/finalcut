@@ -1914,3 +1914,40 @@ body {
   padding: 10px 0;
   color: #a99ffb;
 }
+
+/* ---------- one-row composer (chat log is the main surface) ---------- */
+.composer, .composer.active {
+  border-radius: 22px;
+  padding: 3px 4px;
+  box-shadow: none;
+}
+.composer-input-row {
+  gap: 4px;
+  padding: 0;
+  align-items: flex-end;
+}
+.composer-input-row .send-btn,
+.composer-input-row .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+}
+.composer-input-row .icon-btn {
+  border: none;
+  background: transparent;
+}
+@media (max-width: 760px) {
+  .composer-zone {
+    padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
+  }
+  .composer textarea {
+    min-height: 36px;
+    padding: 7px 8px;
+  }
+  .composer-input-row .send-btn,
+  .composer-input-row .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
