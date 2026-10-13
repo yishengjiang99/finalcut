@@ -59,7 +59,7 @@ describe('clip limits', () => {
 });
 
 describe('pickMode', async () => {
-  const { pickMode, coreUrls, loadChain, isAppleWebKit } = await import('../wasm/ffmpegHost.js');
+  const { pickMode, coreUrls, loadChain } = await import('../wasm/ffmpegHost.js');
   it('mt only when isolated with SharedArrayBuffer and >1 core', () => {
     expect(pickMode({ isolated: true, sab: true, cores: 8 })).toBe('mt');
     expect(pickMode({ isolated: false, sab: true, cores: 8 })).toBe('st');
@@ -76,15 +76,6 @@ describe('pickMode', async () => {
     expect(mt.workerURL).toBeUndefined(); // emsdk 4: no ffmpeg-core.worker.js
     expect(coreUrls('legacy').coreURL).toMatch(/\/v2\/ffmpeg-core\/st\/0\.12\.10\/ffmpeg-core\.js$/);
     expect(JSON.stringify([mt, coreUrls('st'), coreUrls('legacy')])).not.toMatch(/jsdelivr|unpkg|core-st/);
-  });
-  it('Apple WebKit defaults to the legacy core (temporary), ?wasm=mt|st opt in', () => {
-    const ios = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
-    const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
-    expect(isAppleWebKit(ios, 5)).toBe(true);
-    expect(isAppleWebKit(chrome, 0)).toBe(false);
-    expect(pickMode({ isolated: true, sab: true, cores: 8, apple: true })).toBe('legacy');
-    expect(pickMode({ override: 'mt', isolated: true, sab: true, cores: 8, apple: true })).toBe('mt');
-    expect(pickMode({ override: 'st', apple: true })).toBe('st');
   });
   it('falls back mt -> st -> legacy 0.12.10 st', () => {
     expect(loadChain('mt')).toEqual(['mt', 'st', 'legacy']);
