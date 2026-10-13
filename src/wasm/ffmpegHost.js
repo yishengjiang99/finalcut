@@ -44,9 +44,21 @@ export function classWorkerUrl(root = CORE_ROOT) {
   return new URL(`${root}/ffmpeg/${FFMPEG_JS_VERSION}/worker.js`, self.location.href).href;
 }
 
-/** Decide mt vs st. `override` comes from ?wasm=mt|st (debugging). */
-export function pickMode({ override, isolated = self.crossOriginIsolated, sab = typeof SharedArrayBuffer === 'function', cores = navigator.hardwareConcurrency ?? 1 } = {}) {
+/** Apple WebKit: every iOS/iPadOS browser, and desktop Safari. */
+export function isAppleWebKit(ua = navigator.userAgent, maxTouchPoints = navigator.maxTouchPoints || 0) {
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && maxTouchPoints > 1)) return true;
+  return /Safari\//.test(ua) && !/Chrome\/|Chromium\/|CriOS\/|Edg\/|FxiOS\/|Firefox\//.test(ua);
+}
+
+/**
+ * Decide the core. `override` comes from ?wasm=mt|st|legacy (debugging).
+ * TEMPORARY (2026-10-12): Apple WebKit defaults to the previous 0.12.10 core. After the switch to
+ * the fork cores, every video preview on iPhone Safari rendered blank (not reproducible in
+ * Playwright WebKit/Chromium). ?wasm=mt or ?wasm=st still opt in to the fork cores there.
+ */
+export function pickMode({ override, isolated = self.crossOriginIsolated, sab = typeof SharedArrayBuffer === 'function', cores = navigator.hardwareConcurrency ?? 1, apple = isAppleWebKit() } = {}) {
   if (override === 'st' || override === 'legacy') return override;
+  if (apple && override !== 'mt') return 'legacy';
   const canMT = isolated === true && sab && cores > 1;
   if (override === 'mt' && !canMT) return 'st'; // mt is impossible without isolation
   return canMT ? 'mt' : 'st';
