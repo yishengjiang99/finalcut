@@ -38,101 +38,6 @@ async function installNetworkGuard(page, baseURL) {
   return problems;
 }
 
-// The op matrix, grouped so a failure is easy to bisect. Each entry: [name, run]
-// where run is a page-evaluate fragment returning a short status string, or
-// { expectError: /re/ } when the op must fail with a known error.
-const GROUPS = {
-  'frame ops': [
-    ['trim', `eng.processMedia('trim_video', { start: 1, end: 3 }, bytes, 'video/mp4')`],
-    ['resize', `eng.processMedia('resize_video', { width: 161, height: 120 }, bytes, 'video/mp4')`],
-    ['crop', `eng.processMedia('crop_video', { width: 101, height: 100, x: 0, y: 0 }, bytes, 'video/mp4')`],
-    ['rotate', `eng.processMedia('rotate_video', { angle: 90 }, bytes, 'video/mp4')`],
-    ['hflip', `eng.processMedia('flip_video_horizontal', {}, bytes, 'video/mp4')`],
-    ['vflip', `eng.processMedia('flip_video_vertical', {}, bytes, 'video/mp4')`],
-    ['text', `eng.processMedia('add_text', { text: "Hello: it's 50%, [ok]; yes", fontsize: 20 }, bytes, 'video/mp4')`],
-    ['color', `eng.processMedia('apply_color_filter', { filter: 'sepia' }, bytes, 'video/mp4')`],
-    ['bright', `eng.processMedia('adjust_brightness', { brightness: 0.2 }, bytes, 'video/mp4')`],
-    ['contrast', `eng.processMedia('adjust_contrast', { contrast: 1.5 }, bytes, 'video/mp4')`],
-    ['hue', `eng.processMedia('adjust_hue', { degrees: 90 }, bytes, 'video/mp4')`],
-    ['sat', `eng.processMedia('adjust_saturation', { saturation: 2 }, bytes, 'video/mp4')`],
-    ['speed2', `eng.processMedia('speed_video', { speed: 2 }, bytes, 'video/mp4')`],
-    ['speed025', `eng.processMedia('speed_video', { speed: 0.25 }, bytes, 'video/mp4')`],
-    ['fade_tr', `eng.processMedia('fade_transition', { duration: 1 }, bytes, 'video/mp4')`],
-  ],
-  'audio ops': [
-    ['volume', `eng.processMedia('adjust_volume', { volume: 0.5 }, bytes, 'video/mp4')`],
-    ['fadeout', `eng.processMedia('audio_fade', { type: 'out', duration: 1 }, bytes, 'video/mp4')`],
-    ['fadein', `eng.processMedia('audio_fade', { type: 'in', duration: 1 }, bytes, 'video/mp4')`],
-    ['highpass', `eng.processMedia('highpass_filter', { frequency: 200 }, bytes, 'video/mp4')`],
-    ['lowpass', `eng.processMedia('lowpass_filter', { frequency: 3000 }, bytes, 'video/mp4')`],
-    ['echo', `eng.processMedia('echo_effect', { delay: 500, decay: 0.5 }, bytes, 'video/mp4')`],
-    ['bass', `eng.processMedia('bass_adjustment', { gain: 5 }, bytes, 'video/mp4')`],
-    ['treble', `eng.processMedia('treble_adjustment', { gain: -5 }, bytes, 'video/mp4')`],
-    ['eq', `eng.processMedia('equalizer', { frequency: 1000, gain: 5 }, bytes, 'video/mp4')`],
-    ['normalize', `eng.processMedia('normalize_audio', {}, bytes, 'video/mp4')`],
-    ['delay', `eng.processMedia('delay_audio', { delay: 500 }, bytes, 'video/mp4')`],
-    ['chorus', `eng.processMedia('audio_chorus', {}, bytes, 'video/mp4')`],
-    ['flanger', `eng.processMedia('audio_flanger', {}, bytes, 'video/mp4')`],
-    ['phaser', `eng.processMedia('audio_phaser', {}, bytes, 'video/mp4')`],
-    ['tremolo', `eng.processMedia('audio_tremolo', {}, bytes, 'video/mp4')`],
-    ['compressor', `eng.processMedia('audio_compressor', {}, bytes, 'video/mp4')`],
-    ['dynaudnorm', `eng.processMedia('audio_dynamic_normalize', {}, bytes, 'video/mp4')`],
-    ['compand', `eng.processMedia('audio_dynamic_normalize', { mode: 'compand' }, bytes, 'video/mp4')`],
-    ['gate', `eng.processMedia('audio_gate', {}, bytes, 'video/mp4')`],
-    ['widen', `eng.processMedia('audio_stereo_widen', {}, bytes, 'video/mp4')`],
-    ['reverse', `eng.processMedia('audio_reverse', {}, bytes, 'video/mp4')`],
-    ['limiter', `eng.processMedia('audio_limiter', {}, bytes, 'video/mp4')`],
-    ['silence', `eng.processMedia('audio_silence_remove', {}, bytes, 'video/mp4')`],
-    ['pan', `eng.processMedia('audio_pan', { pan: -0.5 }, bytes, 'video/mp4')`],
-  ],
-  'unsupported stays unsupported': [
-    ['vibrato', { expectError: /vibrato/i, run: `eng.processMedia('audio_vibrato', {}, bytes, 'video/mp4')` }],
-    ['webm_vp9', { expectError: /vp9/i, run: `eng.processMedia('convert_video_format', { format: 'webm', codec: 'libvpx-vp9' }, bytes, 'video/mp4')` }],
-    ['cli_bad_filter', { expectError: /nosuchfilter|unknown filter/i, run: `eng.runCliCommand('ffmpeg -i input.mp4 -vf nosuchfilter output.mp4', bytes, 'video/mp4')` }],
-    ['photo_trim', { expectError: /not supported for photos/i, run: `eng.processMedia('trim_video', { start: 0, end: 1 }, png, 'image/png')` }],
-  ],
-  'conversions': [
-    ['extract_mp3', `eng.processMedia('extract_audio', {}, bytes, 'video/mp4')`],
-    ['extract_ogg', `eng.processMedia('extract_audio', { format: 'ogg' }, bytes, 'video/mp4')`],
-    ['extract_m4a', `eng.processMedia('extract_audio', { format: 'm4a' }, bytes, 'video/mp4')`],
-    ['extract_wav', `eng.processMedia('extract_audio', { format: 'wav' }, bytes, 'video/mp4')`],
-    ['extract_flac', `eng.processMedia('extract_audio', { format: 'flac' }, bytes, 'video/mp4')`],
-    ['extract_aac', `eng.processMedia('extract_audio', { format: 'aac' }, bytes, 'video/mp4')`],
-    ['to_wma', `eng.processMedia('convert_audio_format', { format: 'wma' }, bytes, 'video/mp4')`],
-    ['to_mkv', `eng.processMedia('convert_video_format', { format: 'mkv' }, bytes, 'video/mp4')`],
-    ['to_mov', `eng.processMedia('convert_video_format', { format: 'mov' }, bytes, 'video/mp4')`],
-    ['to_avi', `eng.processMedia('convert_video_format', { format: 'avi' }, bytes, 'video/mp4')`],
-    ['to_flv', `eng.processMedia('convert_video_format', { format: 'flv' }, bytes, 'video/mp4')`],
-    ['to_webm', `eng.processMedia('convert_video_format', { format: 'webm' }, bytes, 'video/mp4')`],
-    ['to_ogv', `eng.processMedia('convert_video_format', { format: 'ogv' }, bytes, 'video/mp4')`],
-    ['to_mp4_x265', `eng.processMedia('convert_video_format', { format: 'mp4', codec: 'libx265' }, bytes, 'video/mp4')`],
-  ],
-  'photos': [
-    ['frame_png', `eng.runCliCommand('ffmpeg -i input -frames:v 1 output.png', bytes, 'video/mp4').then(r => { png = r.data; return r.format + ' ' + r.data.length + 'b'; })`],
-    ['photo_rotate', `eng.processMedia('rotate_video', { angle: 90 }, png, 'image/png')`],
-    ['photo_text', `eng.processMedia('add_text', { text: 'Hi' }, png, 'image/png')`],
-    ['photo_to_webp', `eng.processMedia('convert_image_format', { format: 'webp' }, png, 'image/png')`],
-    ['photo_to_jpg', `eng.processMedia('convert_image_format', { format: 'jpg' }, png, 'image/png')`],
-  ],
-  'joins and audio track': [
-    ['join_fade', `eng.joinClips({ transition: 'fade', duration: 1 }, [bytes, silent, bytes])`],
-    ['join_crossfade', `eng.joinClips({ transition: 'crossfade', duration: 1 }, [bytes, silent, bytes])`],
-    ['join_wipe', `eng.joinClips({ transition: 'wipe_left', duration: 1 }, [bytes, bytes])`],
-    ['audio_replace', `eng.addAudioTrack({ mode: 'replace', volume: 1 }, silent, 'video/mp4', { bytes: mp3, extension: 'mp3' })`],
-    ['audio_mix', `eng.addAudioTrack({ mode: 'mix', volume: 0.5 }, bytes, 'video/mp4', { bytes: mp3, extension: 'mp3' })`],
-  ],
-  'captions, speech, thumbnails, cli': [
-    ['burn', `eng.burnSubtitles({ srt: SRT, translatedSrt: SRT_ES, style: 'yellow', position: 'bottom' }, bytes, 'video/mp4')`],
-    ['burn_cjk', `eng.burnSubtitles({ srt: SRT_ZH, style: 'default', position: 'bottom' }, bytes, 'video/mp4')`],
-    ['burn_ass_cjk', `eng.burnAss(ASS_ZH, bytes, 'video/mp4')`],
-    ['speech', `eng.extractSpeechAudio(bytes, 'video/mp4').then(d => d.length + 'b ' + String.fromCharCode(d[0], d[1], d[2], d[3]))`],
-    ['thumb', `eng.thumbnail(bytes, 'video/mp4', { at: 1 }).then(d => d.length + 'b')`],
-    ['cli_gif', `eng.runCliCommand('ffmpeg -i input.mp4 -vf "fps=5,scale=160:-2" output.gif', bytes, 'video/mp4')`],
-    ['cli_webm', `eng.runCliCommand('ffmpeg -i input -t 2 output.webm', bytes, 'video/mp4')`],
-    ['cli_x265', `eng.runCliCommand('ffmpeg -i input -t 2 -c:v libx265 -an output.mp4', bytes, 'video/mp4')`],
-  ],
-};
-
 const SRT = '1\n00:00:00,000 --> 00:00:02,000\nHello world\n\n2\n00:00:02,000 --> 00:00:04,000\nSecond line';
 const SRT_ZH = '1\n00:00:00,000 --> 00:00:02,000\n你好世界\n\n2\n00:00:02,000 --> 00:00:04,000\n第二行字幕';
 const ASS_ZH = `[Script Info]
@@ -144,32 +49,147 @@ Style: Default,Inter,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,你好世界`;
+const SRT_ES = SRT.replace('Hello world', 'Hola mundo');
+
+// The op matrix, grouped so a failure is easy to bisect. Each entry: [name, run] where run is
+// op(engineMethod, ...args) (media args by $ref, resolved in the page), or
+// { expectError: /re/, run } when the op must fail with a known error.
+const op = (call, ...args) => ({ call, args });
+const ref = (name) => ({ $ref: name });
+const $bytes = ref('bytes');
+const $png = ref('png');
+const $silent = ref('silent');
+const $mp3 = ref('mp3');
+
+const GROUPS = {
+  'frame ops': [
+    ['trim', op('processMedia', 'trim_video', { start: 1, end: 3 }, $bytes, 'video/mp4')],
+    ['resize', op('processMedia', 'resize_video', { width: 161, height: 120 }, $bytes, 'video/mp4')],
+    ['crop', op('processMedia', 'crop_video', { width: 101, height: 100, x: 0, y: 0 }, $bytes, 'video/mp4')],
+    ['rotate', op('processMedia', 'rotate_video', { angle: 90 }, $bytes, 'video/mp4')],
+    ['hflip', op('processMedia', 'flip_video_horizontal', {}, $bytes, 'video/mp4')],
+    ['vflip', op('processMedia', 'flip_video_vertical', {}, $bytes, 'video/mp4')],
+    ['text', op('processMedia', 'add_text', { text: "Hello: it's 50%, [ok]; yes", fontsize: 20 }, $bytes, 'video/mp4')],
+    ['color', op('processMedia', 'apply_color_filter', { filter: 'sepia' }, $bytes, 'video/mp4')],
+    ['bright', op('processMedia', 'adjust_brightness', { brightness: 0.2 }, $bytes, 'video/mp4')],
+    ['contrast', op('processMedia', 'adjust_contrast', { contrast: 1.5 }, $bytes, 'video/mp4')],
+    ['hue', op('processMedia', 'adjust_hue', { degrees: 90 }, $bytes, 'video/mp4')],
+    ['sat', op('processMedia', 'adjust_saturation', { saturation: 2 }, $bytes, 'video/mp4')],
+    ['speed2', op('processMedia', 'speed_video', { speed: 2 }, $bytes, 'video/mp4')],
+    ['speed025', op('processMedia', 'speed_video', { speed: 0.25 }, $bytes, 'video/mp4')],
+    ['fade_tr', op('processMedia', 'fade_transition', { duration: 1 }, $bytes, 'video/mp4')],
+  ],
+  'audio ops': [
+    ['volume', op('processMedia', 'adjust_volume', { volume: 0.5 }, $bytes, 'video/mp4')],
+    ['fadeout', op('processMedia', 'audio_fade', { type: 'out', duration: 1 }, $bytes, 'video/mp4')],
+    ['fadein', op('processMedia', 'audio_fade', { type: 'in', duration: 1 }, $bytes, 'video/mp4')],
+    ['highpass', op('processMedia', 'highpass_filter', { frequency: 200 }, $bytes, 'video/mp4')],
+    ['lowpass', op('processMedia', 'lowpass_filter', { frequency: 3000 }, $bytes, 'video/mp4')],
+    ['echo', op('processMedia', 'echo_effect', { delay: 500, decay: 0.5 }, $bytes, 'video/mp4')],
+    ['bass', op('processMedia', 'bass_adjustment', { gain: 5 }, $bytes, 'video/mp4')],
+    ['treble', op('processMedia', 'treble_adjustment', { gain: -5 }, $bytes, 'video/mp4')],
+    ['eq', op('processMedia', 'equalizer', { frequency: 1000, gain: 5 }, $bytes, 'video/mp4')],
+    ['normalize', op('processMedia', 'normalize_audio', {}, $bytes, 'video/mp4')],
+    ['delay', op('processMedia', 'delay_audio', { delay: 500 }, $bytes, 'video/mp4')],
+    ['chorus', op('processMedia', 'audio_chorus', {}, $bytes, 'video/mp4')],
+    ['flanger', op('processMedia', 'audio_flanger', {}, $bytes, 'video/mp4')],
+    ['phaser', op('processMedia', 'audio_phaser', {}, $bytes, 'video/mp4')],
+    ['tremolo', op('processMedia', 'audio_tremolo', {}, $bytes, 'video/mp4')],
+    ['compressor', op('processMedia', 'audio_compressor', {}, $bytes, 'video/mp4')],
+    ['dynaudnorm', op('processMedia', 'audio_dynamic_normalize', {}, $bytes, 'video/mp4')],
+    ['compand', op('processMedia', 'audio_dynamic_normalize', { mode: 'compand' }, $bytes, 'video/mp4')],
+    ['gate', op('processMedia', 'audio_gate', {}, $bytes, 'video/mp4')],
+    ['widen', op('processMedia', 'audio_stereo_widen', {}, $bytes, 'video/mp4')],
+    ['reverse', op('processMedia', 'audio_reverse', {}, $bytes, 'video/mp4')],
+    ['limiter', op('processMedia', 'audio_limiter', {}, $bytes, 'video/mp4')],
+    ['silence', op('processMedia', 'audio_silence_remove', {}, $bytes, 'video/mp4')],
+    ['pan', op('processMedia', 'audio_pan', { pan: -0.5 }, $bytes, 'video/mp4')],
+  ],
+  'unsupported stays unsupported': [
+    ['vibrato', { expectError: /vibrato/i, run: op('processMedia', 'audio_vibrato', {}, $bytes, 'video/mp4') }],
+    ['webm_vp9', { expectError: /vp9/i, run: op('processMedia', 'convert_video_format', { format: 'webm', codec: 'libvpx-vp9' }, $bytes, 'video/mp4') }],
+    ['cli_bad_filter', { expectError: /nosuchfilter|unknown filter/i, run: op('runCliCommand', 'ffmpeg -i input.mp4 -vf nosuchfilter output.mp4', $bytes, 'video/mp4') }],
+    ['photo_trim', { expectError: /not supported for photos/i, run: op('processMedia', 'trim_video', { start: 0, end: 1 }, $png, 'image/png') }],
+  ],
+  'conversions': [
+    ['extract_mp3', op('processMedia', 'extract_audio', {}, $bytes, 'video/mp4')],
+    ['extract_ogg', op('processMedia', 'extract_audio', { format: 'ogg' }, $bytes, 'video/mp4')],
+    ['extract_m4a', op('processMedia', 'extract_audio', { format: 'm4a' }, $bytes, 'video/mp4')],
+    ['extract_wav', op('processMedia', 'extract_audio', { format: 'wav' }, $bytes, 'video/mp4')],
+    ['extract_flac', op('processMedia', 'extract_audio', { format: 'flac' }, $bytes, 'video/mp4')],
+    ['extract_aac', op('processMedia', 'extract_audio', { format: 'aac' }, $bytes, 'video/mp4')],
+    ['to_wma', op('processMedia', 'convert_audio_format', { format: 'wma' }, $bytes, 'video/mp4')],
+    ['to_mkv', op('processMedia', 'convert_video_format', { format: 'mkv' }, $bytes, 'video/mp4')],
+    ['to_mov', op('processMedia', 'convert_video_format', { format: 'mov' }, $bytes, 'video/mp4')],
+    ['to_avi', op('processMedia', 'convert_video_format', { format: 'avi' }, $bytes, 'video/mp4')],
+    ['to_flv', op('processMedia', 'convert_video_format', { format: 'flv' }, $bytes, 'video/mp4')],
+    ['to_webm', op('processMedia', 'convert_video_format', { format: 'webm' }, $bytes, 'video/mp4')],
+    ['to_ogv', op('processMedia', 'convert_video_format', { format: 'ogv' }, $bytes, 'video/mp4')],
+    ['to_mp4_x265', op('processMedia', 'convert_video_format', { format: 'mp4', codec: 'libx265' }, $bytes, 'video/mp4')],
+  ],
+  'photos': [
+    ['frame_png', { ...op('runCliCommand', 'ffmpeg -i input -frames:v 1 output.png', $bytes, 'video/mp4'), then: 'savePng' }],
+    ['photo_rotate', op('processMedia', 'rotate_video', { angle: 90 }, $png, 'image/png')],
+    ['photo_text', op('processMedia', 'add_text', { text: 'Hi' }, $png, 'image/png')],
+    ['photo_to_webp', op('processMedia', 'convert_image_format', { format: 'webp' }, $png, 'image/png')],
+    ['photo_to_jpg', op('processMedia', 'convert_image_format', { format: 'jpg' }, $png, 'image/png')],
+  ],
+  'joins and audio track': [
+    ['join_fade', op('joinClips', { transition: 'fade', duration: 1 }, [$bytes, $silent, $bytes])],
+    ['join_crossfade', op('joinClips', { transition: 'crossfade', duration: 1 }, [$bytes, $silent, $bytes])],
+    ['join_wipe', op('joinClips', { transition: 'wipe_left', duration: 1 }, [$bytes, $bytes])],
+    ['audio_replace', op('addAudioTrack', { mode: 'replace', volume: 1 }, $silent, 'video/mp4', { bytes: $mp3, extension: 'mp3' })],
+    ['audio_mix', op('addAudioTrack', { mode: 'mix', volume: 0.5 }, $bytes, 'video/mp4', { bytes: $mp3, extension: 'mp3' })],
+  ],
+  'captions, speech, thumbnails, cli': [
+    ['burn', op('burnSubtitles', { srt: SRT, translatedSrt: SRT_ES, style: 'yellow', position: 'bottom' }, $bytes, 'video/mp4')],
+    ['burn_cjk', op('burnSubtitles', { srt: SRT_ZH, style: 'default', position: 'bottom' }, $bytes, 'video/mp4')],
+    ['burn_ass_cjk', op('burnAss', ASS_ZH, $bytes, 'video/mp4')],
+    ['speech', { ...op('extractSpeechAudio', $bytes, 'video/mp4'), then: 'magic' }],
+    ['thumb', { ...op('thumbnail', $bytes, 'video/mp4', { at: 1 }), then: 'size' }],
+    ['cli_gif', op('runCliCommand', 'ffmpeg -i input.mp4 -vf "fps=5,scale=160:-2" output.gif', $bytes, 'video/mp4')],
+    ['cli_webm', op('runCliCommand', 'ffmpeg -i input -t 2 output.webm', $bytes, 'video/mp4')],
+    ['cli_x265', op('runCliCommand', 'ffmpeg -i input -t 2 -c:v libx265 -an output.mp4', $bytes, 'video/mp4')],
+  ],
+};
 
 async function runGroup(page, groupName, mode) {
-  return page.evaluate(async ({ group, SRT, SRT_ZH, ASS_ZH, fixture, mode }) => {
+  return page.evaluate(async ({ group, fixture, mode }) => {
     const eng = await import('/src/wasm/ffmpegEngine.js');
     const bytes = new Uint8Array(await (await fetch(fixture)).arrayBuffer());
     const info = async (data, mime) => {
       const s = eng.summarizeProbe(await eng.probeMedia(data, mime));
       return `${data.length}b ${s.width}x${s.height} ${s.duration?.toFixed(2)}s a=${s.hasAudio} ${s.videoCodec}/${s.audioCodec}`;
     };
-    const SRT_ES = SRT.replace('Hello world', 'Hola mundo');
     const FORMAT_MIME = { png: 'image/png', jpg: 'image/jpeg', gif: 'image/gif', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac', webm: 'video/webm', mp4: 'video/mp4' };
-    let png = null, mp3 = null, silent = null;
+    const media = { bytes, png: null };
     // Shared fixtures for the joins group, built once.
-    silent = (await eng.runCliCommand('ffmpeg -i input -an -t 3 -vf scale=200:100 -c:v libx264 -preset ultrafast output.mp4', bytes, 'video/mp4')).data;
-    mp3 = (await eng.processMedia('extract_audio', {}, bytes, 'video/mp4')).data;
+    media.silent = (await eng.runCliCommand('ffmpeg -i input -an -t 3 -vf scale=200:100 -c:v libx264 -preset ultrafast output.mp4', bytes, 'video/mp4')).data;
+    media.mp3 = (await eng.processMedia('extract_audio', {}, bytes, 'video/mp4')).data;
+    const resolve = (v) => {
+      if (Array.isArray(v)) return v.map(resolve);
+      if (v && typeof v === 'object') {
+        if ('$ref' in v) return media[v.$ref];
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, resolve(x)]));
+      }
+      return v;
+    };
+    const after = {
+      savePng: (r) => { media.png = r.data; return r.format + ' ' + r.data.length + 'b'; },
+      magic: (d) => d.length + 'b ' + String.fromCharCode(d[0], d[1], d[2], d[3]),
+      size: (d) => d.length + 'b',
+    };
     const results = {};
     for (const [name, rawSpec] of group) {
       // H.265 fails fast on the single-threaded core (impractical there); expect the error on st.
       const spec = (mode !== 'mt' && (name === 'to_mp4_x265' || name === 'cli_x265'))
         ? { expectError: /multi-threaded/i, run: rawSpec.run || rawSpec }
         : rawSpec;
-      const run = typeof spec === 'string' ? spec : spec.run;
+      const run = spec.run || spec;
       const t0 = performance.now();
       try {
-        // eslint-disable-next-line no-eval
-        const r = await eval(`(async () => { const r = await (${run}); return r; })()`);
+        const out = await eng[run.call](...resolve(run.args));
+        const r = run.then ? after[run.then](out) : out;
         let status;
         if (r && r.data) {
           const ct = r.contentType || FORMAT_MIME[r.format] || 'video/mp4';
@@ -191,7 +211,7 @@ async function runGroup(page, groupName, mode) {
     }
     results.__mode = eng.getHost().mode;
     return results;
-  }, { group: GROUPS[groupName], SRT, SRT_ZH, ASS_ZH, fixture: FIXTURE_URL, mode });
+  }, { group: GROUPS[groupName], fixture: FIXTURE_URL, mode });
 }
 
 for (const [groupName] of Object.entries(GROUPS)) {

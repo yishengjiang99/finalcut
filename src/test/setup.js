@@ -9,7 +9,7 @@ import '@testing-library/jest-dom/vitest';
 
 // Mock @ffmpeg/ffmpeg
 vi.mock('@ffmpeg/ffmpeg', () => ({
-  FFmpeg: vi.fn().mockImplementation(() => ({
+  FFmpeg: vi.fn().mockImplementation(function FFmpeg() { return {
     load: vi.fn(),
     exec: vi.fn(),
     writeFile: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('@ffmpeg/ffmpeg', () => ({
     on: vi.fn(),
     terminate: vi.fn(),
     loaded: false,
-  })),
+  }; }),
 }));
 
 // Mock @ffmpeg/util

@@ -1,4 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { setUploadConsentHandler } from '../engineMode.js';
+
+vi.mock('../wasm/ffmpegEngine.js', async (importOriginal) => (await import('./helpers/noWasmEngine.js')).noWasmEngine(importOriginal));
+beforeAll(() => setUploadConsentHandler(() => true));
 import { toolFunctions } from '../toolFunctions.js';
 
 global.fetch = vi.fn();

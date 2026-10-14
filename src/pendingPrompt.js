@@ -6,8 +6,7 @@ export const MAX_PROMPT = 300;
 
 export function cleanPrompt(value) {
   if (typeof value !== 'string') return '';
-  // eslint-disable-next-line no-control-regex
-  return value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_PROMPT);
+  return value.replace(/[^\P{Cc}\u0080-\u009f]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_PROMPT);
 }
 
 export function readDeepLink(search = typeof window === 'undefined' ? '' : window.location.search) {

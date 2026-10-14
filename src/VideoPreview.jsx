@@ -224,10 +224,7 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
           const audioTracks = vStream.getAudioTracks();
           if (audioTracks.length > 0) outStream.addTrack(audioTracks[0]);
         }
-      } catch (_) { /* audio capture not supported or CORS issue — proceed without audio */
-        // eslint-disable-next-line no-console
-        console.warn('Audio capture skipped:', _);
-      }
+      } catch { /* audio capture not supported or CORS issue — proceed without audio */ }
       const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
       const recMimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
       const recorder = new MediaRecorder(outStream, { mimeType: recMimeType });

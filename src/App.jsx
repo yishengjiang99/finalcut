@@ -392,9 +392,10 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   }, []);
 
   // Anonymous funnel telemetry (src/telemetry.js): landing view on first load.
+  const landingOnMountRef = useRef(showLanding);
   useEffect(() => {
-    if (showLanding) trackOnce('landing_view', landingProps());
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (landingOnMountRef.current) trackOnce('landing_view', landingProps());
+  }, []);
 
   // Check if user is returning from successful payment
   useEffect(() => {
@@ -817,11 +818,13 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
   // Root.jsx opened the editor from "Try the sample video": load the sample once.
   const sampleStartedRef = useRef(false);
+  const loadSampleVideoRef = useRef(loadSampleVideo);
+  loadSampleVideoRef.current = loadSampleVideo;
   useEffect(() => {
     if (!startWithSample || sampleStartedRef.current) return;
     sampleStartedRef.current = true;
-    loadSampleVideo();
-  }, [startWithSample]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadSampleVideoRef.current();
+  }, [startWithSample]);
 
   if (showLanding) {
     return (

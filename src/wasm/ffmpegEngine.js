@@ -150,10 +150,11 @@ function loadFont() {
   return fontPromise;
 }
 
+const NOT_COVERED = /[^\p{Cc}\u0020-\u052f\u1e00-\u1eff\u2000-\u206f\u20a0-\u20bf\u2100-\u214f\u2190-\u21ff\u2200-\u22ff]/u;
+
 /** True when every character of `text` can be drawn with the bundled (Latin, Greek, Cyrillic) font. */
 export function fontCovers(text) {
-  // eslint-disable-next-line no-control-regex
-  return !/[^\u0000-ԯḀ-ỿ -⁯₠-₿℀-⅏←-⇿∀-⋿]/.test(String(text || ''));
+  return !NOT_COVERED.test(String(text || ''));
 }
 
 // CJK caption fonts, lazy-loaded from the app server when a burn needs glyphs Inter lacks.

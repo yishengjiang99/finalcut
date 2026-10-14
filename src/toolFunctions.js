@@ -926,10 +926,6 @@ export const toolFunctions = {
     }
   },
   
-  // Note: Some complex operations are not yet fully implemented
-  // add_audio_track - needs multipart upload handling on server
-  // convert_to_format - needs format-aware server handling
-  
   get_video_info: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       const fileMimeType = currentFileMimeType || 'video/mp4';
