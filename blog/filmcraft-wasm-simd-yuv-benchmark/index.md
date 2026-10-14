@@ -11,7 +11,7 @@ hero: card.jpg
 heroAlt: Two bar charts comparing upstream filmcraft and the fork, for 1080p frame conversion time and for slow frames at 4x CPU throttle
 properNouns: [WebAssembly, SIMD, YUV, RGBA]
 ---
-[filmcraft](https://github.com/storytold/filmcraft) is an open source video editor written in Rust. Upstream already builds it to WebAssembly so it runs in the browser. Our [fork](https://github.com/yishengjiang99/filmcraft) changes how that WebAssembly build does its work: it uses WebAssembly SIMD (`simd128`) for the step that turns each video frame from YUV, the format video is stored in, into RGBA, the format the screen draws. This post covers what that does to frame conversion, how the app's UI holds up in a browser, and one result we do not understand yet.
+[filmcraft](https://github.com/storytold/filmcraft) is an open source video editor written in Rust. Upstream already builds it to WebAssembly so it runs in the browser. Our [fork](https://github.com/yishengjiang99/filmcraft) changes how that WebAssembly build does its work: it uses WebAssembly SIMD (`simd128`) for the step that turns each video frame from YUV, the format video is stored in, into RGBA, the format the screen draws. This post covers what that does to frame conversion, how the app's UI holds up in a browser, and a playback result that a later rerun did not reproduce.
 
 **Try it live:** the fork's web build runs at [grepawk.com/filmcraft](https://grepawk.com/filmcraft/), right in your browser.
 
@@ -64,11 +64,11 @@ CPU throttled 4 times:
 
 At normal speed the result is mixed. The fork has slightly fewer slow frames, but its worst frames are worse and it runs many more long tasks on the main thread. Under load the fork is much steadier: it keeps about 28 frames per second while upstream drops to under 19, and far fewer of its frames are slow. That fits the adaptive budget shedding work when frames get expensive. Both builds still have long tails at 4 times throttle.
 
-## An open question about playback
+## Playback: the frame drop did not reproduce
 
-In a separate 28 second playback recording (960 by 540, software rendering, on a busy virtual machine), the fork decoded each sample a little faster, 5.4 to 6.0 ms against 6.0 to 7.1 ms. But it showed far fewer frames: 19 to 36 of about 845, against 112 to 472 for upstream.
+A separate 28 second playback recording (960 by 540, software rendering, on a busy virtual machine) first showed the fork decoding each sample a little faster, 5.4 to 6.0 ms against 6.0 to 7.1 ms, but showing far fewer frames: 19 to 36 of about 845, against 112 to 472 for upstream.
 
-We do not know why yet. One guess is that the adaptive frame budget sits at its 4 ms minimum on that machine and leaves too little time to show frames. That is not confirmed. The next step is to run the same test on a machine with a GPU.
+A rerun did not reproduce the drop. Both builds showed about 900 of about 900 frames, and the fork still decoded faster. The budget code had not changed, so the first recording most likely reflects that session's machine, where the page drew at only about 16 frames per second for both builds. The full rerun is in [Rerunning the filmcraft benchmark](https://grepawk.com/blog/filmcraft-benchmark-rerun-threaded-webassembly).
 
 ## What was not measured
 
