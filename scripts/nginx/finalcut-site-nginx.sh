@@ -19,6 +19,8 @@
 #      + `error_page 404 /404.html;`
 #   6. a managed `server { listen 443 ssl http2; server_name www.grepawk.com; return 301 ... }`
 #      appended to the file, reusing the site's own certificate lines.
+#   7. blog.grepawk.com: nginx/blog-site.conf -> sites-enabled/finalcut-blog.conf (own file, backed up
+#      and restored with the rest; skipped while the blog.grepawk.com certificate is missing)
 # Note: `http2` on a listen socket applies to every server block sharing 0.0.0.0:443 (nginx
 # negotiates the protocol per connection, before the Host is known).
 # Smoke after reload compares status codes of other sites/paths with a pre-change snapshot.
@@ -32,6 +34,9 @@ read -r -a RELOAD <<<"${FINALCUT_NGINX_RELOAD:-systemctl reload nginx}"
 read -r -a NGINX_TEST <<<"${FINALCUT_NGINX_TEST:-nginx -t}"
 APEX="${FINALCUT_APEX:-grepawk.com}"
 WWW="www.${APEX}"
+BLOG_HOST="blog.${APEX}"
+BLOG_SITE="${NGINX_DIR}/sites-enabled/finalcut-blog.conf"
+BLOG_CERT="${FINALCUT_BLOG_CERT:-/etc/letsencrypt/live/${BLOG_HOST}/fullchain.pem}"
 SMOKE="${FINALCUT_SITE_SMOKE:-1}"            # test harness sets 0
 MARK='# finalcut site (managed by deploy-grepawk.yml)'
 BEGIN_WWW="# BEGIN finalcut www-redirect (managed by deploy-grepawk.yml)"
@@ -94,6 +99,7 @@ restore() {
   for s in "${SNIPPETS[@]}"; do
     if [[ -f "$bk/$s" ]]; then $SUDO cp -a "$bk/$s" "$SNIPPET_DIR/$s"; else $SUDO rm -f "$SNIPPET_DIR/$s"; fi
   done
+  if [[ -f "$bk/finalcut-blog.conf" ]]; then $SUDO cp -a "$bk/finalcut-blog.conf" "$BLOG_SITE"; else $SUDO rm -f "$BLOG_SITE"; fi
   $SUDO "${NGINX_TEST[@]}" && reload_and_wait && log "restored + reloaded"
 }
 
@@ -107,7 +113,7 @@ location_of() { curl -sk -o /dev/null -m 10 -w '%{redirect_url}' --resolve "$1:4
 other_snapshot() {
   local h p
   for h in $($SUDO grep -RhoE '(^|[{;[:space:]])server_name\s+[^;]+;' "$NGINX_DIR/sites-enabled" "$NGINX_DIR/conf.d" 2>/dev/null \
-             | sed -E 's/^.*server_name\s+//; s/;$//' | tr ' ' '\n' | grep -E '\.' | grep -vxF -e "$APEX" -e "$WWW" | sort -u || true); do
+             | sed -E 's/^.*server_name\s+//; s/;$//' | tr ' ' '\n' | grep -E '\.' | grep -vxF -e "$APEX" -e "$WWW" -e "$BLOG_HOST" | sort -u || true); do
     echo "https://$h/ $(code_https "$h" /)"
   done
   for p in /music-radar/ /high-priestess/ /music-hear/ /music-reader/privacy.html /api/health /legal/privacy.html /v2 /v2/ffmpeg-core/mt/0.13.0-finalcut.3/ffmpeg-core.wasm /.well-known/skadnetwork/; do
@@ -128,6 +134,12 @@ smoke_new() { # $1 = file with the pre-change snapshot
   check "https://${WWW}/x?y=1 Location" "$(location_of "$WWW" '/x?y=1')" "https://${APEX}/x?y=1"
   check "http://${WWW}/ code" "$(code_http "$WWW" /)" 301
   check "http://${APEX}/ code" "$(code_http "$APEX" /)" 301
+  if [[ -f "$BLOG_SITE" ]]; then
+    check "https://${BLOG_HOST}/" "$(code_https "$BLOG_HOST" /)" 200
+    check "https://${BLOG_HOST}/rss.xml" "$(code_https "$BLOG_HOST" /rss.xml)" 200
+    check "https://${BLOG_HOST}/this-page-does-not-exist" "$(code_https "$BLOG_HOST" /this-page-does-not-exist)" 404
+  fi
+  check "https://${APEX}/blog" "$(code_https "$APEX" /blog)" 200
   local now; now="$(mktemp)"; other_snapshot > "$now"
   while read -r url want; do
     got="$(awk -v u="$url" '$1==u{print $2}' "$now")"
@@ -149,6 +161,7 @@ do_install() {
   echo "${FINALCUT_DEPLOY_ID:-manual}" | $SUDO tee "$bk/DEPLOY_ID" >/dev/null
   echo "$target" | $SUDO tee "$bk/TARGET" >/dev/null
   for s in "${SNIPPETS[@]}"; do [[ -f "$SNIPPET_DIR/$s" ]] && $SUDO cp -a "$SNIPPET_DIR/$s" "$bk/$s"; done
+  [[ -f "$BLOG_SITE" ]] && $SUDO cp -a "$BLOG_SITE" "$bk/finalcut-blog.conf"
   echo "$bk" | $SUDO tee "${BACKUP_ROOT}/LAST" >/dev/null
   log "backup: ${bk}"
   snap="$(mktemp)"
@@ -189,6 +202,12 @@ do_install() {
     $SUDO rm -f "${target}.finalcut-site-new"
     log "edited ${target}:"
     $SUDO diff -u "$bk/target.conf" "$target" || true
+  fi
+  if [[ -f "${app_dir}/nginx/blog-site.conf" ]] && $SUDO test -f "$BLOG_CERT"; then
+    $SUDO install -m 0644 "${app_dir}/nginx/blog-site.conf" "$BLOG_SITE"
+    log "installed ${BLOG_SITE}"
+  else
+    log "skipping ${BLOG_HOST}: no ${BLOG_CERT} (or no nginx/blog-site.conf)"
   fi
   $SUDO "${NGINX_TEST[@]}"
   reload_and_wait

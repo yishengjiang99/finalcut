@@ -281,6 +281,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <a href="/legal/licenses.html">Open-source licenses</a>
           <a href="/legal/support.html">Support</a>
           <a href="/blog">Blog</a>
+          <a href="https://blog.grepawk.com/">blog.grepawk.com</a>
         </div>
         <nav className="wrap footer-more" aria-label="Guides">
           <span>Guides:</span>
