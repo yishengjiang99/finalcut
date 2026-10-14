@@ -68,7 +68,7 @@ At normal speed the result is mixed. The fork has slightly fewer slow frames, bu
 
 A separate 28 second playback recording (960 by 540, software rendering, on a busy virtual machine) first showed the fork decoding each sample a little faster, 5.4 to 6.0 ms against 6.0 to 7.1 ms, but showing far fewer frames: 19 to 36 of about 845, against 112 to 472 for upstream.
 
-A rerun did not reproduce the drop. Both builds showed about 900 of about 900 frames, and the fork still decoded faster. The budget code had not changed, so the first recording most likely reflects that session's machine, where the page drew at only about 16 frames per second for both builds. The full rerun is in [Rerunning the filmcraft benchmark](https://grepawk.com/blog/filmcraft-benchmark-rerun-threaded-webassembly).
+A rerun did not reproduce the drop. Both builds showed about 900 of about 900 frames, and the fork still decoded faster. The budget code had not changed, so the first recording most likely reflects that session's machine, where the page drew at only about 16 frames per second for both builds.
 
 ## What was not measured
 
