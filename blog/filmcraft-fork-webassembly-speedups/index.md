@@ -8,7 +8,7 @@ publish: true
 product: finalcap
 tags: [webassembly, simd, rust, benchmark]
 hero: card.jpg
-heroAlt: Card listing three results for the filmcraft fork in WebAssembly, 11 to 18% faster 1080p conversion on x86 and Apple M4 Pro, 27 versus 20 UI fps under 4x CPU load, and 3.9 versus 4.9 ms decode per sample
+heroAlt: Card reading about 18% faster 1080p frame conversion in WebAssembly for the filmcraft fork
 properNouns: [WebAssembly, SIMD, YUV, RGBA, UI, Apple, Mac, M4, Pro]
 ---
 filmcraft is an open source video editor written in Rust that also runs in the browser as WebAssembly. Our fork adds a few performance changes to the WebAssembly build. This post sums up what they gain, where each gain comes from, and where the results are mixed.
