@@ -177,7 +177,7 @@ async function resolveMedia(p, media) {
         jobs.push(Promise.all([media.video(d.src), media.image(path.join(p.dir, d.poster)), d.webm ? media.video(d.webm) : null, d.captions ? media.captions(path.join(p.dir, d.captions)) : null]).then(([v, poster, webm, cc]) => {
           const posterUrl = poster.webp.split(', ').map((s) => s.split(' ')).find(([, w]) => parseInt(w, 10) >= 720)?.[0] || poster.webp.split(', ').at(-1).split(' ')[0];
           const tall = poster.ratio > 1.3;
-          videos.push({ title: d.title, caption: d.caption, url: v.url, poster: poster.largest });
+          videos.push({ title: d.title, caption: d.caption, duration: d.duration, url: v.url, poster: poster.largest });
           directives.set(key, `<figure class="video${tall ? ' tall' : ''}"><video controls preload="none" playsinline poster="${posterUrl}" width="${poster.width}" height="${poster.height}" aria-label="${esc(d.title)}">${webm ? `<source src="${webm.url}" type="${webm.type}">` : ''}<source src="${v.url}" type="${v.type}">${cc ? `<track kind="captions" src="${cc.url}" srclang="${esc(d.lang || 'en')}" label="${esc(d.label || 'English')}" default>` : ''}<a href="${v.url}">Download the video</a></video>${d.caption ? `<figcaption>${esc(d.caption)}</figcaption>` : ''}</figure>\n`);
         }));
       } else if (t.lang === 'youtube') {
@@ -220,11 +220,26 @@ export function loadPosts(dirs) {
       const err = (m) => problems.push(`${where}: ${m}`);
       if (!SLUG.test(p.slug)) err(`slug "${p.slug}" must be lowercase-with-dashes`);
       if (RESERVED.has(p.slug)) err(`slug "${p.slug}" is reserved`);
+      const warn = (m) => console.warn(`::warning title=blog SEO::${where}: ${m}`);
+      if (!p.description) {
+        const para = body.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !/^(#|```|[-*|>!]|\d+\.)/.test(x)) || '';
+        const plain = para.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '').replace(/\s+/g, ' ');
+        p.description = plain.length > 155 ? `${plain.slice(0, 152).replace(/\s+\S*$/, '')}...` : plain;
+        warn('missing front matter "description"; using the first paragraph'); p.descFallback = true;
+      }
+      if (!p.keyword) warn('missing front matter "keyword" (primary search phrase)');
+      else {
+        const kw = String(p.keyword).toLowerCase();
+        if (!String(p.title || '').toLowerCase().includes(kw)) warn(`keyword "${p.keyword}" is not in the title`);
+        if (!new RegExp(`^#{2,4} .*${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'im').test(body)) warn(`keyword "${p.keyword}" is not in any heading`);
+      }
+      if (!p.image_alt && !p.heroAlt) warn('missing front matter "image_alt" (alt text for the share image)');
+      if (p.description && p.description.length > 155) warn(`description is ${p.description.length} chars (aim for <=155)`);
       for (const k of ['title', 'description', 'date', 'product']) if (!p[k]) err(`front matter "${k}" is required`);
       if (p.date && !DATE.test(p.date)) err('date must be YYYY-MM-DD');
       if (p.updated && !DATE.test(p.updated)) err('updated must be YYYY-MM-DD');
       if (p.product && !PRODUCTS[p.product]) err(`unknown product "${p.product}" (${Object.keys(PRODUCTS).join(', ')})`);
-      if (p.description && (p.description.length < 70 || p.description.length > 160)) err(`description is ${p.description.length} chars (want 70-160)`);
+      if (p.description && !p.descFallback && (p.description.length < 70 || p.description.length > 160)) err(`description is ${p.description.length} chars (want 70-160)`);
       if (p.canonical && !/^https:\/\//.test(p.canonical)) err('canonical must be an absolute https URL');
       if (p.hero && !p.heroAlt) err('hero needs heroAlt (what the image shows)');
       if (p.hero && !existsSync(path.join(p.dir, p.hero))) err(`hero "${p.hero}" not found in blog/${slug}/`);
@@ -255,7 +270,7 @@ const fmtDate = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { 
 const readingTime = (text) => Math.max(1, Math.round(text.replace(/```[\s\S]*?```/g, '').split(/\s+/).length / 220));
 const PUBLISHER = { '@type': 'Organization', name: 'GrepAwk LLC', url: `${SITE}/` };
 
-function shell({ title, description, url, type, ld, head = '', body, telemetry, og, robots = 'index, follow, max-image-preview:large', js = '', p = 'finalcap' }) {
+function shell({ title, description, url, type, ld, ogAlt, head = '', body, telemetry, og, robots = 'index, follow, max-image-preview:large', js = '', p = 'finalcap' }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -278,11 +293,12 @@ function shell({ title, description, url, type, ld, head = '', body, telemetry, 
 <meta property="og:image" content="${abs(og)}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${esc(title)}">
+<meta property="og:image:alt" content="${esc(ogAlt || title)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${abs(og)}">
+<meta name="twitter:image:alt" content="${esc(ogAlt || title)}">
 ${head}<style>${CSS}</style>
 ${ld.map((o) => `<script type="application/ld+json">${jsonLd(o)}</script>`).join('\n')}
 </head>
@@ -317,10 +333,10 @@ function renderPost(p, all) {
     headline: p.title, description: p.description, url, mainEntityOfPage: url,
     datePublished: p.date, dateModified: p.updated || p.date,
     author: { '@type': 'Person', name: p.author || AUTHOR }, publisher: PUBLISHER, image: images,
-    ...(p.tags?.length ? { keywords: p.tags.join(', ') } : {}),
+    ...(p.keyword || p.tags?.length ? { keywords: [p.keyword, ...(p.tags || [])].filter(Boolean).join(', ') } : {}),
     about: { '@type': 'SoftwareApplication', name: prod.name, url: prod.site || prod.url, applicationCategory: { finalcap: 'MultimediaApplication', protune: 'PhotographyApplication' }[p.product] || 'MusicApplication', operatingSystem: p.product === 'finalcap' ? 'Web' : 'iOS' },
   };
-  if (p.media.videos.length) posting.video = p.media.videos.map((v) => ({ '@type': 'VideoObject', name: v.title, description: v.caption || p.description, thumbnailUrl: abs(v.poster), uploadDate: p.date, contentUrl: abs(v.url) }));
+  if (p.media.videos.length) posting.video = p.media.videos.map((v) => ({ '@type': 'VideoObject', name: v.title, description: v.caption || p.description, thumbnailUrl: abs(v.poster), uploadDate: p.date, contentUrl: abs(v.url), ...(v.duration ? { duration: v.duration } : {}) }));
   const ld = [posting, { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
     { '@type': 'ListItem', position: 1, name: 'Blog', item: BLOG_URL },
     { '@type': 'ListItem', position: 2, name: p.title, item: url },
@@ -342,7 +358,7 @@ ${html}</div>
 ${newer || older ? `<nav class="pn" aria-label="More posts">${older ? `<a class="prev" href="/blog/${older.slug}"><span>Previous</span>${esc(older.title)}</a>` : '<span></span>'}${newer ? `<a class="next" href="/blog/${newer.slug}"><span>Next</span>${esc(newer.title)}</a>` : ''}</nav>` : ''}
 ${related.length ? `<section class="related" aria-labelledby="rel-h"><h2 class="sec" id="rel-h">Related posts</h2><div class="grid">${related.map((q) => card(q)).join('')}</div></section>` : ''}
 </main>`;
-  const out = shell({ title: `${p.seoTitle || p.title} | GrepAwk blog`, description: p.description, url, type: 'article', ld, body, telemetry: `blog/${p.slug}`, og: p.og, p: p.product,
+  const out = shell({ title: `${p.seoTitle || p.title} | GrepAwk blog`, description: p.description, url, type: 'article', ld, body, telemetry: `blog/${p.slug}`, og: p.og, ogAlt: p.image_alt || p.heroAlt, p: p.product,
     head: `<meta property="article:published_time" content="${p.date}">\n`, js: p.media.embeds ? EMBED_JS : '' });
   if ((out.match(/<h1[ >]/g) || []).length !== 1) throw new Error(`${p.where}: expected exactly one <h1>`);
   return out;

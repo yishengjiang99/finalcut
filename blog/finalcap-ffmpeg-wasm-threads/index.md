@@ -1,4 +1,5 @@
 ---
+keyword: FFmpeg in the browser
 title: Making FFmpeg in the browser use every core
 description: A short video and notes on the ffmpeg.wasm fork we are building for FinalCap, covering WebAssembly threads, SharedArrayBuffer, SIMD and the bugs we fixed.
 date: 2026-10-12

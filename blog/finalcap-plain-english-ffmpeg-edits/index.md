@@ -1,4 +1,5 @@
 ---
+keyword: FFmpeg edits
 title: How FinalCap turns plain-English requests into FFmpeg edits
 description: FinalCap maps a typed request to an FFmpeg edit that runs in your browser, and transcribes speech into subtitles with an on-device Whisper model.
 date: 2026-10-12

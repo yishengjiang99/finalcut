@@ -70,7 +70,7 @@ describe('blog build', () => {
   });
   it('rejects duplicate slugs and missing fields', () => {
     expect(() => loadPosts(fixture([['earsheet', 'same', fm('publish: true\n')], ['omr-sheet-cam', 'same', fm('publish: true\n')]]))).toThrow(/duplicate slug/);
-    expect(() => loadPosts(fixture([['earsheet', 'x', '---\ntitle: T\npublish: true\n---\nbody\n']]))).toThrow(/"description" is required/);
+    expect(() => loadPosts(fixture([['earsheet', 'x', '---\ntitle: T\npublish: true\n---\nbody\n']]))).toThrow(/"date" is required/);
   });
   it('builds the real posts: one h1, canonical, valid JSON-LD, RSS, sitemap', async () => {
     const dirs = Object.fromEntries(SOURCES.map((s) => [s.name, s.local ? ROOT : path.join(process.env.BLOG_SOURCES_DIR || path.join(ROOT, '.cache', 'blog-sources'), s.name)]));

@@ -1,4 +1,5 @@
 ---
+keyword: WebAssembly
 title: Making filmcraft's video frames 20% faster in WebAssembly
 description: Our filmcraft fork turns on WebAssembly SIMD and adds a 4-pixel YUV to RGBA kernel. A 1080p frame converts about 20% faster, with identical output.
 date: 2026-10-13

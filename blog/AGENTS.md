@@ -40,7 +40,27 @@ Jiang), `canonical` (absolute URL, only for a cross-post whose original lives el
 
 ## Images
 
-Not supported yet: an image in a post fails the build. Describe it in text or link to a page that has it.
+Put image files in the post folder and reference them as `![what the image shows](file.jpg)`; an image
+without alt text fails the build. `hero` + `heroAlt` set the share image. Videos use a ```` ```video ````
+block (src, poster, title, optional captions, duration as ISO 8601 e.g. `PT1M30S`); they render with
+`preload="none"` and the poster. See finalcut `docs/blog.md`.
+
+## SEO checklist
+
+The build already emits title, meta description, canonical, Open Graph/Twitter tags, JSON-LD
+BlogPosting (plus VideoObject for videos), sitemap lastmod, RSS and an IndexNow ping on deploy. It
+warns (does not fail) when the fields below are missing. Before publishing:
+
+- Front matter: `title`, `description` (70 to 155 characters; if missing the first paragraph is used
+  with a warning), `keyword` (the one search phrase the post targets), `hero` (share image) and
+  `heroAlt` or `image_alt` (what the share image shows).
+- Put the `keyword` in the title, in the first paragraph and in at least one `##` heading.
+- Every image has alt text describing what it shows.
+- Every video has a caption track (`captions:` WebVTT) or a short transcript in the post, a poster
+  and a title.
+- Link the app page (added at the end via `product`, plus once in the text) and one or two related
+  posts on https://grepawk.com/blog.
+- Set `updated` when you change a published post so sitemap lastmod and dateModified move.
 
 ## Links
 
