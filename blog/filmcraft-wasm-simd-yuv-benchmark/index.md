@@ -12,6 +12,8 @@ properNouns: [WebAssembly, SIMD, YUV, RGBA]
 ---
 [filmcraft](https://github.com/storytold/filmcraft) is an open source video editor written in Rust that also runs in the browser through WebAssembly. We keep a [fork](https://github.com/yishengjiang99/filmcraft) of it. Every video frame it shows has to go from YUV, the format video is stored in, to RGBA, the format the screen draws. This post shows how much faster the fork makes that step in WebAssembly, and where the speed comes from.
 
+**Try it live:** the fork's web build runs at [grepawk.com/filmcraft](https://grepawk.com/filmcraft/), right in your browser.
+
 ![Bar chart of median milliseconds per 1080p frame for upstream without SIMD, upstream with SIMD, and the fork](fork-vs-upstream.jpg)
 
 ## What changed
