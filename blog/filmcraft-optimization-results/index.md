@@ -1,7 +1,7 @@
 ---
 keyword: filmcraft optimization
 title: filmcraft optimization: how browser export got fast, explained
-description: How our filmcraft fork's browser export got up to 111 times faster: hardware encoding, lean caches, GPU compositing and GPU color conversion, with timed results.
+description: How our filmcraft fork's browser export got up to 111 times faster: hardware encoding, lean caches, GPU compositing and GPU color conversion.
 date: 2026-10-16
 updated: 2026-10-17
 publish: true
