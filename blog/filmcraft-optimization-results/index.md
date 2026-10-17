@@ -1,17 +1,17 @@
 ---
 keyword: filmcraft optimization
 title: filmcraft optimization: how browser export got fast, explained
-description: How our filmcraft fork's browser export works: lean caches, a bigger WebAssembly ceiling, GPU color, WebCodecs decoding and async GPU compositing.
+description: How our filmcraft fork's browser export got up to 111 times faster: hardware encoding, lean caches, GPU compositing and GPU color conversion, with timed results.
 date: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 publish: true
 product: finalcap
 tags: [webassembly, webcodecs, webgpu, rust, video-export]
 hero: card.jpg
 heroAlt: Title card for the filmcraft export explainer, with the editor running in a browser and a list of four changes - memory limits, color on the GPU, video decoding and GPU compositing
-properNouns: [WebAssembly, WebCodecs, GPU, CPU, LUT, GOP, WebGPU, Chrome, Apple, M4, Pro, Rust, Look, Lumetri]
+properNouns: [WebAssembly, WebCodecs, GPU, CPU, LUT, GOP, WebGPU, Chrome, Apple, M4, Pro, Rust, Look, Lumetri, RGB, YUV, I420]
 ---
-This post explains the filmcraft optimization work behind our browser export. [filmcraft](https://github.com/storytold/filmcraft) is an open source video editor written in Rust that also runs in a web page, and our [fork](https://github.com/yishengjiang99/filmcraft) of it runs live at [grepawk.com/filmcraft](https://grepawk.com/filmcraft/). The fork now exports on the GPU, and a 4K project that used to crash or crawl finishes quickly. Below, each change is explained the same way: how the technology works, what we did, and why it helped. There are no benchmark numbers in this post on purpose, because careful repeated measurements are still to come.
+This post explains the filmcraft optimization work behind our browser export. [filmcraft](https://github.com/storytold/filmcraft) is an open source video editor written in Rust that also runs in a web page, and our [fork](https://github.com/yishengjiang99/filmcraft) of it runs live at [grepawk.com/filmcraft](https://grepawk.com/filmcraft/). The fork now exports on the GPU, and a 4K project that used to crash or crawl finishes quickly. Below, each change is explained the same way: how the technology works, what we did, and why it helped. The timed, repeated benchmark runs are now done, and the [results](#timed-results) follow the explanations. The newest change, color conversion on the GPU, has its own section.
 
 ```video
 src: filmcraft-web-export-explained.mp4
@@ -21,7 +21,7 @@ caption: Diagrams for the four changes, with footage of the live build (headless
 duration: PT2M33S
 ```
 
-The video covers the same four changes as the sections below, with diagrams. The editor footage in it is the live web build, recorded in headless Chrome and sped up.
+The video covers the first four changes below, with diagrams. It was made before the timed runs and the GPU color conversion. The editor footage in it is the live web build, recorded in headless Chrome and sped up.
 
 ## What changed in the filmcraft optimization
 
@@ -30,9 +30,10 @@ The video covers the same four changes as the sections below, with diagrams. The
 | Memory limits | Smaller caches while an export runs, and a larger ceiling for the threaded build | The export no longer runs out of memory |
 | Color on the GPU | The Look LUT runs as its own GPU pass | The whole 4K layer stays on the GPU |
 | Video decoding | WebCodecs starts one key frame earlier for open GOP video | The export gets every frame it asks for |
-| GPU compositing | Asynchronous read-back, so the page never waits for the GPU | The editor stays responsive during export |
+| GPU compositing | Asynchronous read-back, so the page never waits for the GPU | Every frame is composited on the GPU |
+| Color conversion on the GPU | A compute shader turns each frame into the encoder's YUV format before read-back | 2.4 times faster again, and the editor stays responsive |
 
-How to read this: the results are qualitative. They come from single correctness runs on one Apple M4 Pro with Chrome 155, using a 4K test project, and each output was checked against a reference render. They are not benchmarks. We are not publishing speedups until the timed, repeated runs are done. The fork's [web export notes](https://github.com/yishengjiang99/filmcraft/blob/main/docs/benchmarks/web-export.md) are working notes and the place the timed results will land.
+How to read this: every number in this post comes from timed, repeated runs on one Apple M4 Pro in Chrome 155, and every output was checked against a reference render. The [timed results](#timed-results) section has the method and the caveats. The fork's [web export notes](https://github.com/yishengjiang99/filmcraft/blob/main/docs/benchmarks/web-export.md) record every run.
 
 ## Memory limits: lean caches and a bigger WebAssembly ceiling
 
@@ -131,6 +132,56 @@ A frame the GPU cannot draw, such as one with a transition other than a dissolve
 
 Compositing now runs across all pixels at once, the page never blocks on the GPU, and the GPU and CPU work on different batches at the same time. The editor stays responsive during an export, which was a problem when the CPU compositor held the main thread. In the 4K test project every frame is composited on the GPU.
 
+## Color conversion on the GPU: RGB to YUV in a compute shader
+
+### How it works
+
+The compositor works in RGB: each pixel has a red, green and blue value, stored as 16-bit floating point numbers in linear light, which is the form blending math needs. Video encoders do not take RGB. They take YUV: Y is the brightness of each pixel, and U and V say how blue or red it is. Eyes are less sharp for color than for brightness, so the common I420 layout keeps one U and one V value for each 2 by 2 block of pixels. A frame in I420 takes 1.5 bytes per pixel. The compositor's float RGB image takes 8.
+
+Getting from one to the other is a few steps per pixel: drop the alpha against black, apply the sRGB transfer curve to go from linear light to the values a display expects, round to 8 bits, then mix red, green and blue with the BT.709 weights into Y, U and V and scale them into the limited range that video uses (16 to 235 for Y).
+
+### What we did
+
+Before this change, the GPU read back the whole float RGB frame, and the CPU did every one of those steps: half floats to 32-bit floats, sRGB, then YUV. On the 4K project, the CPU conversion alone took 6.3 seconds of a 24.5 second export.
+
+A new compute shader (`crates/gpu/src/i420.wgsl`) now does the conversion on the GPU, from the compositor's image straight into the I420 layout. Each shader invocation writes one 32-bit word, four output bytes, so no two invocations ever write the same word, and frames of any size work. The shader uses the same 4096 entry sRGB table as the CPU and rounds halves away from zero the way Rust does, not to even as WGSL's `round` would. In the unit test, the GPU's bytes are identical to the CPU's.
+
+The browser's WebCodecs encoder takes I420 frames as they are, so the bytes go from the read-back straight into a `VideoFrame`. The exporter only turns this on when nothing changes a picture after compositing: no resize, no overlay, no video limiter, no alpha and no HDR. A frame the GPU cannot draw is still rendered on the CPU and converted there, so every frame of an export has the same form.
+
+### Why it helped
+
+The read-back moves 5 times less data per frame, the staging buffers hold 5 times more frames in flight, and the CPU no longer converts anything. On the short test projects the export got 2.3 to 2.7 times faster, and the page's slowest frames during export got 4 to 7 times shorter.
+
+## Timed results
+
+Each project is a short cut of a benchmark project, built through the editor's scripting API so every run is the same:
+
+- P1s: 6 seconds of a plain 1080p clip.
+- P2s: 12 seconds of a 1080p edit with two video tracks, cuts, a cross dissolve, Lumetri color, a title, and dialogue and music.
+- P3s: 6 seconds of a 4K edit with blur, a Look LUT, vignette, a picture in picture with a scale keyframe, and titles.
+
+Export wall time in seconds, median of 3 runs after a warmup run (the 4K CPU compositor runs were single runs, at about 17 minutes each):
+
+| Stage | P1s | P2s | P3s |
+| --- | --- | --- | --- |
+| Before: built-in software encoder, CPU compositing | 23.6 | 168.2 | 1118.0 |
+| Browser hardware encoder (WebCodecs) | 7.1 | 133.8 | 1003.4 |
+| GPU compositing | 5.76 | 12.83 | 24.51 |
+| Color conversion on the GPU | 2.54 | 4.80 | 10.09 |
+| Speedup over before | 9.3x | 35x | 111x |
+
+The 4K figure on the hardware encoder row is the CPU compositor measured in the same build as the last row.
+
+What the numbers show:
+
+- The hardware encoder removed the encode cost (about 100 ms per 1080p frame), which was most of a plain clip's export. On edits with effects, CPU compositing then took 96 percent of the time.
+- GPU compositing removed that. On the 1080p edit it is 10 times faster than the CPU compositor in the same build.
+- GPU color conversion removed the last big CPU step. Both 1080p projects now export more than twice as fast as they play.
+- The page's 95th percentile frame time while exporting, with the timeline being scrubbed, went from 309 ms to 16 ms on P1s, and from 5.3 seconds to 91 ms on the 4K project. Peak WebAssembly memory on the 4K project went from 1.9 GiB to 655 MiB.
+- Quality held: Y-PSNR against the reference render is 46 to 51 dB on the GPU path, and every output passed the checks for frame count, audio sync and stream errors.
+
+Caveats: these are short cuts of the projects, on one machine. The last row was timed on a newer Chrome 155 patch release than the rows above it, because the browser updated itself in between. The 1080p edit's first runs varied by up to 20 percent before settling.
+
 ## A fail-fast benchmark script
 
 The export benchmark script that checks all of this now stops quickly when something goes wrong. Every page call has a time limit, a crash or WebAssembly trap ends the run at once, and a stall check ends a run whose frame count stops moving and records the decoder and exporter state. A failed run keeps its last progress samples, and cache sizes are recorded during the export. The script itself is covered in [how we learned to trust our browser video export](https://grepawk.com/blog/how-we-learned-to-trust-our-browser-video-export).
@@ -139,11 +190,12 @@ The export benchmark script that checks all of this now stops quickly when somet
 
 These come from the fork's [handoff notes](https://github.com/yishengjiang99/filmcraft/blob/main/docs/export-optimize-gpu-handoff.md). None of it is finished, and there are no dates.
 
-- The timed benchmark runs: GPU and CPU compositing on the same projects, repeated, on a quiet machine. Until they are done, this post makes no speed claims.
+- The full length projects: the 60 second edit, the 20 second 4K project and the hour long export, which tests streaming and memory.
+- Responsiveness on heavy projects: export steps still draw a batch of several frames, so on the 4K project the page's slow frames are 91 ms. Batch sizes based on measured step time are next.
 - More GPU coverage. Effects such as the Lumetri input LUT, curves, color wheels, HSL secondary and sharpen still send a layer to the CPU, and so do some transitions.
 - Step length. A frame whose plan still has a CPU layer costs time inside an export step, so the prefetch batch needs a cap based on measured cost.
 - Streaming output with backpressure, and moving export off the main thread.
-- Zero-copy hand-off to the encoder and a GPU color-conversion pass are not started. The plan says to measure before building them.
+- Zero-copy hand-off to the encoder is not started. With the frame now read back as I420, the read-back is no longer the obvious cost, so it gets measured first.
 
 For earlier posts on the fork, see [what the fork gains in WebAssembly](https://grepawk.com/blog/filmcraft-fork-webassembly-speedups) and the [YUV conversion benchmark](https://grepawk.com/blog/filmcraft-wasm-simd-yuv-benchmark). To edit video in the browser yourself, see [FinalCap](https://grepawk.com/) or the [live filmcraft build](https://grepawk.com/filmcraft/).
 
