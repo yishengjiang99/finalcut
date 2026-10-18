@@ -24,8 +24,8 @@ another language**, for plain speech as well as songs. Its description maps thes
   the video to Spanish" (`mode: "lyrics"` or `auto`).
 
 `generate_captions` is for same-language captions (and, on web, soft SRT/VTT files). Its web
-description and the system prompt send other-language requests to `lyric_captions`; on iOS builds
-from `LYRIC_CAPTIONS_MIN_BUILD` its description says it never translates. The model fills
+description and the system prompt send other-language requests to `lyric_captions`; on iOS its
+description says it never translates. The model fills
 `target_language` from the language the user wants the translation in, and `source_language` only
 when the user names the spoken or sung language.
 
@@ -42,9 +42,9 @@ Who runs it:
 - **Web (streaming chat):** the browser runs it (`toolFunctions.lyric_captions`, see "Web flow").
 - **Client execution mode (`execution: "client"`):** offered to non-iOS clients, which run the
   flow below and post a short result back.
-- **FinalCap iOS:** gated on `LYRIC_CAPTIONS_MIN_BUILD` in `src/server/iosToolAllowlist.js`, currently
-  the placeholder `1_000_000_000`, so no build (10, 11, 12) sees it yet. From that build on, iOS
-  gets it for videos only, with an iOS description of the on-device flow. See "iOS" below.
+- **FinalCap iOS:** offered to every build that sends the `FinalCap-iOS/<build>` user agent (build 10
+  and up, the same floor as the other iOS tools), with no build gate, for videos only, with an iOS
+  description of the on-device flow. See "iOS" below.
 
 The tool result the model sees is short: song title, artist, link and confidence, line count, and
 languages. It never contains the lyric text. Example:
@@ -206,12 +206,13 @@ video 16.0 MB, 16 kHz mono WAV 384 KB (2.4%, about 42× smaller), mono AAC m4a a
 
 ## iOS (for the FinalCut iOS team; nothing in `ios/` changed)
 
-### Build gate
+### No build gate
 
-`export const LYRIC_CAPTIONS_MIN_BUILD = 1_000_000_000;` in `src/server/iosToolAllowlist.js` is a
-placeholder that no real build reaches, the same pattern as `GROUPED_EFFECTS_MIN_BUILD`. To enable,
-replace it with the first valid TestFlight build that implements this section, then run `npm test`,
-push and deploy. No test needs editing. From that build on, for `User-Agent: FinalCap-iOS/<build>`:
+`lyric_captions` is in `IOS_TOOL_ALLOWLIST` at build 10, the same floor as the other iOS tools; there
+is no cutoff constant. **Risk:** the server only sees the build number, so builds that predate the
+client-side executor (this section) are offered a tool they cannot run; the app answers an unknown
+tool with an error result and the model then tells the user it could not do it. For
+`User-Agent: FinalCap-iOS/<build>`:
 
 - `GET /api/tools/schema` and `POST /api/chat` (`execution: "client"`) offer `lyric_captions` for
   **videos only** (never photos; `mediaTypes.lyric_captions` is `["video"]`). It sits right after
@@ -221,10 +222,9 @@ push and deploy. No test needs editing. From that build on, for `User-Agent: Fin
   as "add Chinese captions" and "translate the video into Chinese"; the app asks before uploading,
   sends only the audio, and draws the captions; if Cloud processing is off or the user declines,
   nothing is uploaded and the model must not retry this turn; the model never quotes the text.
-- `generate_captions` gets `GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION` from the same build: same-language
-  only, translation goes to `lyric_captions`. Older builds keep their pinned description.
-- Builds below the cutoff keep exactly their current tools and descriptions (the iOS/10 snapshot is
-  byte-identical; iOS/12 differs from it only by the `ffmpeg_cli` fallback tool).
+- `generate_captions` gets `GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION` on every iOS build: same-language
+  only, translation goes to `lyric_captions`.
+- The iOS/10 and iOS/12 tool snapshots now include `lyric_captions` (22 and 23 tools).
 
 ### Flow the app runs (client execution)
 

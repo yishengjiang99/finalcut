@@ -1,6 +1,5 @@
 // @vitest-environment node
-// lyric_captions on iOS, gated on LYRIC_CAPTIONS_MIN_BUILD (a placeholder no real build reaches
-// yet). Enabling = replacing that one constant; nothing here needs editing when it changes.
+// lyric_captions on iOS: offered to every FinalCap-iOS build, with no build gate.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -40,7 +39,6 @@ import {
   IOS_TOOL_ALLOWLIST,
   GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION,
   LYRIC_CAPTIONS_IOS_DESCRIPTION,
-  LYRIC_CAPTIONS_MIN_BUILD,
   isToolAllowedForIosBuild,
 } from '../server/iosToolAllowlist.js';
 import { assertOperationSupported } from '../server/ffmpegOps.js';
@@ -50,7 +48,7 @@ const repo = path.join(here, '..', '..');
 const snapshotFile = (name) => readFileSync(path.join(here, 'fixtures', 'tools-snapshots', `${name}.json`), 'utf8');
 const ios = (build) => `FinalCap-iOS/${build}`;
 const names = (list) => list.map(t => t.function.name);
-const CUTOFF = LYRIC_CAPTIONS_MIN_BUILD;
+const BUILDS = [10, 11, 12, 40]; // any build that sends the FinalCap-iOS user agent
 const WEB_DEF = tools.find(t => t.function.name === 'lyric_captions');
 
 // Same serialization as the fixture capture (ios-build12.json was taken on main at c938777).
@@ -60,16 +58,6 @@ function serialize(userAgent) {
     offered: Object.fromEntries(['any', 'video', 'image'].map(mt => [mt, offeredToolsFor({ userAgent, mediaType: mt === 'any' ? undefined : mt })])),
   });
 }
-// A build at or past the cutoff is compared with lyric_captions taken out again.
-function withoutLyric(serialized) {
-  const o = JSON.parse(serialized);
-  const drop = (defs) => defs.filter(t => t.function.name !== 'lyric_captions');
-  delete o.schema.mediaTypes.lyric_captions;
-  o.schema.tools = drop(o.schema.tools);
-  for (const k of Object.keys(o.offered)) o.offered[k] = drop(o.offered[k]);
-  return JSON.stringify(o);
-}
-
 let server;
 let base;
 let token;
@@ -107,28 +95,27 @@ beforeEach(async () => {
   token = issueSampleAccessToken();
 });
 
-describe('the gate is one constant', () => {
-  it('lyric_captions is allowlisted from LYRIC_CAPTIONS_MIN_BUILD, a placeholder above every real build', () => {
-    expect(IOS_TOOL_ALLOWLIST.lyric_captions).toBe(CUTOFF);
-    expect(Number.isSafeInteger(CUTOFF)).toBe(true);
-    expect(CUTOFF).toBeGreaterThan(12);
-    expect(isToolAllowedForIosBuild('lyric_captions', CUTOFF - 1)).toBe(false);
-    expect(isToolAllowedForIosBuild('lyric_captions', CUTOFF)).toBe(true);
+describe('no build gate', () => {
+  it('lyric_captions is allowlisted at the same floor as the other iOS tools (build 10): no cutoff of its own', () => {
+    expect(IOS_TOOL_ALLOWLIST.lyric_captions).toBe(10);
+    expect(isToolAllowedForIosBuild('lyric_captions', 10)).toBe(true);
+    expect(isToolAllowedForIosBuild('lyric_captions', 12)).toBe(true);
+    expect(isToolAllowedForIosBuild('lyric_captions', 5000)).toBe(true);
+    expect(isToolAllowedForIosBuild('lyric_captions', 9)).toBe(false); // below every entry: no allowlisted tools at all
   });
 });
 
-describe('current builds are unchanged', () => {
+describe('snapshots', () => {
   for (const build of [10, 12]) {
-    it(`iOS/${build}: schema + offered lists byte-identical to the snapshot`, () => {
+    it(`iOS/${build}: schema + offered lists match the snapshot (which includes lyric_captions)`, () => {
       const now = serialize(ios(build));
-      expect(build < CUTOFF ? now : withoutLyric(now)).toBe(snapshotFile(`ios-build${build}`));
-      if (build < CUTOFF) expect(now).not.toContain('lyric_captions');
+      expect(now).toBe(snapshotFile(`ios-build${build}`));
+      expect(now).toContain('lyric_captions');
     });
   }
 
-  it('GET /api/tools/schema for iOS/10 and iOS/12: bodies byte-identical to the snapshots', async () => {
+  it('GET /api/tools/schema for iOS/10 and iOS/12: bodies match the snapshots', async () => {
     for (const build of [10, 12]) {
-      if (build >= CUTOFF) continue;
       const res = await realFetch(`${base}/api/tools/schema`, { headers: { 'User-Agent': ios(build) } });
       expect(await res.text()).toBe(JSON.stringify(JSON.parse(snapshotFile(`ios-build${build}`)).schema));
     }
@@ -144,11 +131,11 @@ describe('current builds are unchanged', () => {
   });
 });
 
-describe('builds at or past the cutoff', () => {
+describe('every iOS build', () => {
   const at = (build, mediaType) => offeredToolsFor({ userAgent: ios(build), mediaType });
 
   it('video: lyric_captions offered, right after generate_captions, with the iOS (client-executed) description', () => {
-    for (const build of [CUTOFF, CUTOFF + 7]) {
+    for (const build of BUILDS) {
       const video = at(build, 'video');
       const n = names(video);
       expect(n).toContain('lyric_captions');
@@ -162,17 +149,13 @@ describe('builds at or past the cutoff', () => {
     expect(WEB_DEF.function.description).toMatch(/burns two-line captions into the video/);
   });
 
-  it('generate_captions says "same-language only, translation goes to lyric_captions" from the cutoff; older builds keep their pinned text', () => {
+  it('generate_captions says "same-language only, translation goes to lyric_captions" on every build', () => {
     const desc = (b) => offeredToolsFor({ userAgent: ios(b), mediaType: 'video' }).find(t => t.function.name === 'generate_captions').function;
-    for (const build of [CUTOFF, CUTOFF + 7]) {
+    for (const build of BUILDS) {
       expect(desc(build).description).toBe(GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION);
       expect(desc(build).description).toMatch(/never translates/);
       expect(desc(build).description).toMatch(/call lyric_captions instead/);
       expect(desc(build).parameters.properties).not.toHaveProperty('translate_language');
-    }
-    for (const build of [10, 12, CUTOFF - 1]) {
-      expect(desc(build).description).toMatch(/Translation is not available\./);
-      expect(desc(build).description).not.toMatch(/lyric_captions/);
     }
   });
 
@@ -185,8 +168,8 @@ describe('builds at or past the cutoff', () => {
   });
 
   it('photo: not offered', () => {
-    expect(names(at(CUTOFF, 'image'))).not.toContain('lyric_captions');
-    expect(buildToolsSchema({ userAgent: ios(CUTOFF) }).mediaTypes.lyric_captions).toEqual(['video']);
+    expect(names(at(12, 'image'))).not.toContain('lyric_captions');
+    expect(buildToolsSchema({ userAgent: ios(12) }).mediaTypes.lyric_captions).toEqual(['video']);
   });
 
   it('the iOS description covers the flow: consent, audio only, drawn on device, skip when declined, no lyrics back', () => {
@@ -197,29 +180,29 @@ describe('builds at or past the cutoff', () => {
     }
   });
 
-  it('GET /api/tools/schema: the cutoff build gets it (video only); cutoff-1 does not', async () => {
-    const body = await (await realFetch(`${base}/api/tools/schema`, { headers: { 'User-Agent': ios(CUTOFF) } })).json();
+  it('GET /api/tools/schema: build 10 and 12 get it (video only)', async () => {
+    for (const build of [10, 12]) {
+    const body = await (await realFetch(`${base}/api/tools/schema`, { headers: { 'User-Agent': ios(build) } })).json();
     const def = body.tools.find(t => t.function.name === 'lyric_captions');
     expect(def.function.description).toBe(LYRIC_CAPTIONS_IOS_DESCRIPTION);
     expect(body.mediaTypes.lyric_captions).toEqual(['video']);
-    const before = await (await realFetch(`${base}/api/tools/schema`, { headers: { 'User-Agent': ios(CUTOFF - 1) } })).json();
-    expect(names(before.tools)).not.toContain('lyric_captions');
+    }
   });
 
-  it('POST /api/chat execution:"client": offered for a video, not a photo, not below the cutoff', async () => {
+  it('POST /api/chat execution:"client": offered for a video on every build, not for a photo', async () => {
     const chat = (ua, type) => realFetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'sample-access-token': token, 'User-Agent': ua },
       body: JSON.stringify({ execution: 'client', media: { type }, messages: [{ role: 'user', content: 'subtitle the song in German and Chinese' }] }),
     });
-    await chat(ios(CUTOFF), 'video');
-    await chat(ios(CUTOFF), 'image');
     await chat(ios(12), 'video');
+    await chat(ios(12), 'image');
+    await chat(ios(10), 'video');
     const offered = xaiCalls.map(c => c.tools || []);
     const video = offered[0].find(t => t.function.name === 'lyric_captions');
     expect(video.function.description).toBe(LYRIC_CAPTIONS_IOS_DESCRIPTION);
     expect(names(offered[1])).not.toContain('lyric_captions');
-    expect(names(offered[2])).not.toContain('lyric_captions');
+    expect(names(offered[2])).toContain('lyric_captions');
   });
 });
 
@@ -227,7 +210,7 @@ describe('the server never runs it for iOS', () => {
   it('POST /api/lyric-captions/:jobId/burn from an iOS client: 400 not_available_on_server (before any upload or job lookup)', async () => {
     const form = new FormData();
     form.append('video', new Blob([readFileSync(path.join(here, 'fixtures', 'silent-2s.mp4'))], { type: 'video/mp4' }), 'clip.mp4');
-    const res = await realFetch(`${base}/api/lyric-captions/any-job/burn`, { method: 'POST', headers: { 'sample-access-token': token, 'User-Agent': ios(CUTOFF) }, body: form });
+    const res = await realFetch(`${base}/api/lyric-captions/any-job/burn`, { method: 'POST', headers: { 'sample-access-token': token, 'User-Agent': ios(12) }, body: form });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'not_available_on_server', operation: 'lyric_captions' });
     // Web (no iOS UA) still reaches the job lookup.
@@ -244,7 +227,7 @@ describe('the server never runs it for iOS', () => {
       form.append('operation', 'lyric_captions');
       form.append('args', JSON.stringify({ target_language: 'zh-Hans' }));
       form.append('video', new Blob([readFileSync(path.join(here, 'fixtures', file))], { type }), name);
-      return realFetch(`${base}/api/jobs/process-video`, { method: 'POST', headers: { 'sample-access-token': token, 'User-Agent': ios(CUTOFF) }, body: form });
+      return realFetch(`${base}/api/jobs/process-video`, { method: 'POST', headers: { 'sample-access-token': token, 'User-Agent': ios(12) }, body: form });
     };
     const video = await job('silent-2s.mp4', 'clip.mp4', 'video/mp4');
     expect(video.status).toBe(400);
@@ -253,7 +236,7 @@ describe('the server never runs it for iOS', () => {
     expect(await photo.json()).toMatchObject({ code: 'unsupported_for_photo', operation: 'lyric_captions' });
     const sync = await realFetch(`${base}/api/process-video`, {
       method: 'POST',
-      headers: { 'sample-access-token': token, 'User-Agent': ios(CUTOFF), 'Content-Type': 'video/mp4', 'x-operation': 'lyric_captions', 'x-args': '{"target_language":"de"}' },
+      headers: { 'sample-access-token': token, 'User-Agent': ios(12), 'Content-Type': 'video/mp4', 'x-operation': 'lyric_captions', 'x-args': '{"target_language":"de"}' },
       body: readFileSync(path.join(here, 'fixtures', 'silent-2s.mp4')),
     });
     expect(sync.status).toBe(400);
