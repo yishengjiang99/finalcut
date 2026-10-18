@@ -38,7 +38,7 @@ single-use token reaches the browser. No CSP is set today; if one is added it ne
 ### `POST /api/streaming-captions/token`
 
 Auth + `requireActiveSubscription` + 20 requests / 15 min / IP, then 503 if unconfigured, then the
-ElevenLabs mint, then the edit check/charge.
+ElevenLabs mint. **Not charged here** (see "When the edit is counted" under `/translate`).
 
 Body (all optional): `{ "source_language": "en", "resumeSessionId": "<sessionId of a recent token>" }`
 
@@ -63,12 +63,9 @@ Errors: 503 `{error, code:"streaming_captions_unavailable"|"streaming_captions_b
 (key unset, ElevenLabs refused or busy), 429 `{code:"rate_limited"}`, 403 (no subscription / free
 limit), 401. The token is never logged.
 
-**When the edit is counted:** at this call, after ElevenLabs issued a token (an unconfigured server or a
-failed mint is never counted). A resume (`resumeSessionId` of a recent token of the same user) mints a
-new token for the same edit and is not counted again. Web subscribers have no per-edit counter; iOS
-free installs would be counted here (iOS does not use this route yet). There is no refund today, so an
-edit that fails after the token is still counted. Proposal: count at the first successful translate
-batch (the first moment the user has something), with a non-consuming check at the token.
+`sessionId` is the captions job. Send it back on every translate call; to continue the same job after a
+dropped connection pass it as `resumeSessionId` (same user, within 30 min): the response has the same
+`sessionId` and a new token, and the job keeps its charged state.
 
 ### `POST /api/streaming-captions/translate`
 
@@ -78,7 +75,7 @@ to `speech` on the server (no song lookup, no web search, whatever the client se
 ```json
 { "target_language": "zh-Hans", "source_language": "auto",
   "segments": [{ "i": 0, "start": 0.5, "end": 2.5, "text": "Hello my friend" }],
-  "context": ["previous line", "…up to 4"] }
+  "context": ["previous line", "…up to 4"], "sessionId": "<sessionId from /token>" }
 ```
 
 Limits: ≤ 40 segments, ≤ 400 chars each, ≤ 8000 chars total (413 `batch_too_large`).
@@ -87,6 +84,19 @@ Limits: ≤ 40 segments, ≤ 400 chars each, ≤ 8000 chars total (413 `batch_to
 { "lines": [{ "i": 0, "text": "Hello my friend", "translation": "你好，我的朋友" }],
   "language": "en", "model": "…", "targetLanguage": "zh-Hans", "operation": "streaming_captions" }
 ```
+
+**When the edit is counted:** here, once per captions job, after the first batch that produced a translated
+line (before that response is sent). Later batches and resumes (same `sessionId`) are never charged again, and a
+job that never gets a translated line (the model failed, the translation only repeated the original, the
+user cancelled before the first batch, the token was minted and never used) is not counted. The token mint
+is not charged. A request with no known `sessionId` (missing, expired after 30 min, or another user's) is
+treated as its own job and charged once on its first translated batch, so the route is no free pass. Web
+subscribers have no per-edit counter (the charge step passes them); iOS free installs would be counted
+(iOS does not use this route yet). If the charge is refused (daily limit) the call answers with the refusal
+(`429 {code:"daily_limit_reached"…}` and the `X-Inference-Daily-*` headers) and **no translated lines**; the job
+may try again. There is still no refund for an edit that was counted and later fails. Trade-off: ElevenLabs
+transcription (a cost to us) happens before the charge, bounded by the 20 tokens / 15 min rate limit and the
+subscription check on the token route.
 
 `text` is the lightly corrected original; a translation that only repeats the original comes back as
 `""`. 503 `lyric_captions_unavailable` without `XAI_API_TOKEN`; 502 `{code:"translation_failed", retryable:true}`
@@ -108,7 +118,7 @@ the lyric burn. 400 on malformed lines, 503 `lyric_captions_unavailable` without
 * **Cancel:** the editor's Stop aborts: the socket closes, no more audio or translate calls, the job shows as cancelled.
 * **Timeouts:** 15 s to connect, 30 s without an answer (also after the last chunk) abandons the socket; each range gets one retry; nothing waits open-ended.
 * **Errors from ElevenLabs:** `rate_limited`, `queue_overflow`, `resource_exhausted`, `commit_throttled`: wait 2 s, retry the range once, then "The transcription service is busy. Try again in a moment."; `quota_exceeded`, `unaccepted_terms`: "Translated captions aren't available right now. Try again later."; `auth_error`: silent retry with a fresh token; `session_time_limit_exceeded` and a dropped socket: keep the finished lines and ask to continue; `insufficient_audio_activity`: an empty segment, not an error; any other: retry the range once, then the couldn't-finish message.
-* **Resume:** after a drop the user is asked; **Continue** mints a fresh token (`resumeSessionId`, same edit) and streams only from the start of the first unfinished range. Timestamps of the new session are offset by that start.
+* **Resume:** after a drop (or `session_time_limit_exceeded`) the client resumes **by itself up to 3 times per session** (the whole job, not per range; it is not reset when a range finishes): a short backoff (0.5 s, 1.5 s, 3 s), a fresh token (`resumeSessionId`, same job, no new charge) and streaming only from the start of the first unfinished range. Only when that budget is used up and something is already finished does the user see "The connection dropped at 0:34. Captions up to there are kept. [Continue] [Cancel]"; **Continue** grants a new budget of 3. With nothing finished there is nothing to keep, so it ends with the "couldn't finish" message. Timestamps of a resumed session are relative to its start and are offset by that start.
 * **Translation failures** retry the translation only (no new socket): once, then the range fails.
 
 ## Messages (Design wording)
