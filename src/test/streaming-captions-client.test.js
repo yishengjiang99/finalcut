@@ -200,6 +200,7 @@ describe('runStreamingCaptions', () => {
     // Translation batches go out in order with the earlier text as context.
     const bodies = fetchImpl.mock.calls.map(c => JSON.parse(c[1].body));
     expect(bodies[0].target_language).toBe('zh-Hans');
+    expect(bodies[0].sessionId).toBe('sess-1'); // the job id the server charges once, at the first translated batch
     expect(bodies[1].context).toEqual(['Hello my friend']);
   });
 
@@ -227,7 +228,7 @@ describe('runStreamingCaptions', () => {
     expect(sockets[0].sent.length).toBeLessThanOrEqual(sentAtCancel + 1);
   });
 
-  it('a dropped connection keeps the finished lines and resumes from the first unfinished range with a fresh token', async () => {
+  it('a dropped connection resumes by itself from the first unfinished range with a fresh token, after a short backoff, without asking', async () => {
     const wav = makeWav(52, [[25.7, 26.3]]);
     const mints = [];
     const { FakeSocket, sockets } = socketFactory(({ commitIndex, sockets: all }) => {
@@ -235,27 +236,65 @@ describe('runStreamingCaptions', () => {
       return segmentMsg('Good to see you', wordsAt(1.0, ['Good', 'to', 'see', 'you'])); // second session: times relative to its start
     });
     const confirm = vi.fn(async () => true);
+    const sleeps = [];
     const out = await runStreamingCaptions({ target_language: 'zh-Hans' }, wav, baseDeps({
-      WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), confirmContinue: confirm,
+      WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), confirmContinue: confirm, resumeBackoffMs: [7001, 7002, 7003],
+      sleep: async (ms) => { sleeps.push(ms); },
       mint: async (o) => { mints.push(o.resumeSessionId ?? null); return connectionFor(mints.length); },
     }));
-    expect(confirm).toHaveBeenCalledTimes(1);
-    const ask = confirm.mock.calls[0][0];
-    expect(ask.atSec).toBeCloseTo(sockets[0].sent.find(m => m.commit).audio_base_64 ? ask.atSec : 0);
-    expect(ask.atSec).toBeGreaterThan(25);
-    expect(ask.keptLines.map(l => l.text)).toEqual(['Hello my friend']);
-    expect(ask.reason).toBe('dropped');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(sleeps.filter(ms => ms >= 7000)).toEqual([7001]);
     expect(mints).toEqual([null, 'sess-1']); // second token resumes the same session (same edit)
     expect(sockets).toHaveLength(2);
+    const resumeAt = 25.7; // the first unfinished range starts at the commit point after the quiet spot
     // The second socket carries only the audio after the last finished range.
-    expect(sockets[1].samplesSent() + ask.atSec * SAMPLE_RATE).toBeCloseTo(52 * SAMPLE_RATE, -1);
+    expect(sockets[1].samplesSent()).toBeLessThan(28 * SAMPLE_RATE);
+    expect(sockets[1].samplesSent()).toBeGreaterThan(24 * SAMPLE_RATE);
     expect(sockets[1].url).toContain('token=sutkn_2');
     expect(out.lines.map(l => l.text)).toEqual(['Hello my friend', 'Good to see you']);
-    expect(out.lines[1].start).toBeGreaterThan(ask.atSec); // offset by the resume point
+    expect(out.lines[1].start).toBeGreaterThan(resumeAt - 1); // offset by the resume point
+  });
+
+  it('up to 3 automatic resumes per session (shared across ranges), then the Continue prompt; Continue grants a fresh budget', async () => {
+    const wav = makeWav(52, [[25.7, 26.3]]);
+    // s1 drops at range 0; s2 finishes range 0 then drops at range 1; s3, s4 drop (budget used up: 3 resumes);
+    // the user taps Continue; s5 finishes.
+    const { FakeSocket, sockets } = socketFactory(({ commitIndex, sockets: all }) => {
+      const n = all.length;
+      if (n === 2 && commitIndex === 0) return segmentMsg('Hello my friend', wordsAt(0.5, ['Hello', 'my', 'friend']));
+      if (n === 5) return segmentMsg('Good to see you', wordsAt(1.0, ['Good', 'to', 'see', 'you']));
+      return 'drop';
+    });
+    const confirm = vi.fn(async () => true);
+    const sleeps = [];
+    const out = await runStreamingCaptions({ target_language: 'zh-Hans' }, wav, baseDeps({
+      WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), confirmContinue: confirm, resumeBackoffMs: [7001, 7002, 7003],
+      sleep: async (ms) => { sleeps.push(ms); },
+    }));
+    expect(sleeps.filter(ms => ms >= 7000)).toEqual([7001, 7002, 7003]); // growing backoff
+    expect(sockets).toHaveLength(5);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const ask = confirm.mock.calls[0][0];
+    expect(ask.reason).toBe('dropped');
+    expect(ask.atSec).toBeGreaterThan(25);
+    expect(ask.keptLines.map(l => l.text)).toEqual(['Hello my friend']);
+    expect(out.lines.map(l => l.text)).toEqual(['Hello my friend', 'Good to see you']);
+  });
+
+  it('a resume budget is not reset by a range finishing: drops keep counting for the whole job', async () => {
+    const wav = makeWav(52, [[25.7, 26.3]]);
+    const { FakeSocket, sockets } = socketFactory(({ commitIndex, sockets: all }) => (all.length === 2 && commitIndex === 0
+      ? segmentMsg('Hello', wordsAt(0.5, ['Hello']))
+      : 'drop'));
+    const confirm = vi.fn(async () => false);
+    const error = await runStreamingCaptions({ target_language: 'es' }, wav, baseDeps({ WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), confirmContinue: confirm })).catch(e => e);
+    expect(sockets).toHaveLength(4); // the first try + 3 automatic resumes, then the prompt
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(error.code).toBe('declined_continue');
   });
 
   it('declining to continue throws the Design message with the kept lines', async () => {
-    const { FakeSocket } = socketFactory(({ commitIndex }) => (commitIndex === 0 ? segmentMsg('Hello', wordsAt(0.5, ['Hello'])) : 'drop'));
+    const { FakeSocket } = socketFactory(({ commitIndex, sockets: all }) => (all.length === 1 && commitIndex === 0 ? segmentMsg('Hello', wordsAt(0.5, ['Hello'])) : 'drop'));
     const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(52, [[25.7, 26.3]]), baseDeps({
       WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), confirmContinue: async () => false,
     })).catch(e => e);
@@ -265,8 +304,17 @@ describe('runStreamingCaptions', () => {
     expect(error.lines.map(l => l.text)).toEqual(['Hello']);
   });
 
-  it('session_time_limit_exceeded is a resume prompt with its own wording', async () => {
-    const { FakeSocket } = socketFactory(({ commitIndex }) => (commitIndex === 0
+  it('with nothing finished there is nothing to keep: after the automatic resumes it is "couldn\'t finish", not a prompt', async () => {
+    const { FakeSocket, sockets } = socketFactory(() => 'drop');
+    const confirm = vi.fn(async () => true);
+    const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(52, [[25.7, 26.3]]), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), confirmContinue: confirm })).catch(e => e);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(error.message).toBe(STREAMING_MESSAGES.couldntFinish);
+    expect(sockets.length).toBeLessThanOrEqual(5);
+  });
+
+  it('session_time_limit_exceeded resumes by itself too, then asks with its own wording', async () => {
+    const { FakeSocket } = socketFactory(({ commitIndex, sockets: all }) => (all.length === 1 && commitIndex === 0
       ? segmentMsg('Hello', wordsAt(0.5, ['Hello']))
       : { message_type: 'session_time_limit_exceeded', error: 'limit' }));
     const confirm = vi.fn(async () => false);
@@ -324,7 +372,7 @@ describe('runStreamingCaptions', () => {
     const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), idleTimeoutMs: 30 })).catch(e => e);
     expect(Date.now() - started).toBeLessThan(2000);
     expect(error.message).toBe(STREAMING_MESSAGES.couldntFinish);
-    expect(sockets.length).toBeLessThanOrEqual(2);
+    expect(sockets.length).toBeLessThanOrEqual(5); // the first try, 3 automatic resumes, one range retry
     expect(sockets.every(s => s.closed)).toBe(true);
   });
 

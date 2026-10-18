@@ -25,6 +25,9 @@ export const COMMIT_MIN_SEC = 20;
 export const COMMIT_MAX_SEC = 30;
 export const TRANSLATE_BATCH = 20;
 export const PERCENT_CAP = 99;
+/** Automatic resumes (fresh token, continue from the first unfinished range) per session before the Continue prompt; a user-approved Continue grants a new budget. */
+export const AUTO_RESUMES = 3;
+export const RESUME_BACKOFF_MS = [500, 1500, 3000];
 
 const PACE_KEY = 'fc.streamPace';
 /** Pacing: explicit option, else the `fc.streamPace` localStorage flag, else real time. Clamped to 0.5-4. */
@@ -236,8 +239,9 @@ export async function mintStreamingToken({ headers = {}, sourceLanguage, resumeS
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Translate one batch of lines; transient failures (network, 429, 5xx) are retried once with a backoff. */
-async function translateBatch(lines, { targetLanguage, sourceLanguage, context, headers, fetchImpl, sleep, signal }) {
+async function translateBatch(lines, { targetLanguage, sourceLanguage, context, sessionId, headers, fetchImpl, sleep, signal }) {
   const payload = JSON.stringify({
+    ...(sessionId ? { sessionId } : {}), // the captions job: the server charges the edit once per job, at its first translated batch
     target_language: targetLanguage,
     source_language: sourceLanguage || 'auto',
     segments: lines.map((l, k) => ({ i: k, start: l.start, end: l.end, text: l.text })),
@@ -409,7 +413,8 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
   const {
     headers = {}, signal, fetchImpl = fetch, WebSocketImpl = globalThis.WebSocket,
     sleep = wait, pace = getStreamPace(), onProgress = () => {}, confirmContinue = async () => false,
-    mint = mintStreamingToken, idleTimeoutMs, connectTimeoutMs, maxSessions = 4, rangeAttempts = 2,
+    mint = mintStreamingToken, idleTimeoutMs, connectTimeoutMs, maxSessions = 20, rangeAttempts = 2,
+    autoResumes = AUTO_RESUMES, resumeBackoffMs = RESUME_BACKOFF_MS,
   } = deps;
   const targetLanguage = args.target_language;
   const sourceLanguage = args.source_language || 'auto';
@@ -454,7 +459,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
         const out = [];
         for (let at = 0; at < lines.length; at += TRANSLATE_BATCH) {
           const batch = lines.slice(at, at + TRANSLATE_BATCH);
-          const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), headers, fetchImpl, sleep, signal });
+          const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal });
           const byIndex = new Map(translated.map(t => [t.i, t]));
           batch.forEach((l, k) => {
             const t = byIndex.get(k);
@@ -501,6 +506,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
 
   const startedAt = Date.now();
   let sessions = 0;
+  let resumesUsed = 0;
   for (;;) {
     if (signal?.aborted) throw cancelled();
     const todo = todoRanges();
@@ -551,15 +557,27 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
     const cause = result.ended === 'dropped' ? 'dropped' : (result.ended === 'error' ? (SESSION_ERRORS[kind] || (kind === 'timeout' || kind === 'connect' ? 'dropped' : 'failed')) : null);
     const failed = ranges.filter(r => r.status === 'failed' && !r.raw);
 
-    if ((cause === 'dropped' || cause === 'time_limit') && failed.length && progressed()) {
-      const atSec = coveredEnd();
-      // Keep what is finished and ask whether to resume from the first unfinished range with a fresh token.
-      const resume = await confirmContinue({ atSec, keptLines: allLines(), reason: cause });
-      if (!resume) {
-        throw new StreamingCaptionsError(cause === 'time_limit' ? STREAMING_MESSAGES.timeLimit(atSec) : STREAMING_MESSAGES.connectionDropped(atSec), { code: 'declined_continue', lines: allLines(), atSec });
+    if ((cause === 'dropped' || cause === 'time_limit') && failed.length) {
+      const unfinished = () => { failed.forEach(r => { r.status = 'pending'; r.attempts = Math.max(0, r.attempts - 1); }); }; // a resume is not a per-range retry
+      if (resumesUsed < autoResumes) {
+        // The budget belongs to the session (the whole job), not to a range: a few quiet reconnects first.
+        await sleep(resumeBackoffMs[Math.min(resumesUsed, resumeBackoffMs.length - 1)] ?? 0);
+        resumesUsed += 1;
+        if (signal?.aborted) throw cancelled();
+        unfinished();
+        continue;
       }
-      failed.forEach(r => { r.status = 'pending'; r.attempts = Math.max(0, r.attempts - 1); }); // a user-approved resume is not a retry
-      continue;
+      if (progressed()) {
+        const atSec = coveredEnd();
+        // Keep what is finished and ask whether to resume from the first unfinished range with a fresh token.
+        const resume = await confirmContinue({ atSec, keptLines: allLines(), reason: cause });
+        if (!resume) {
+          throw new StreamingCaptionsError(cause === 'time_limit' ? STREAMING_MESSAGES.timeLimit(atSec) : STREAMING_MESSAGES.connectionDropped(atSec), { code: 'declined_continue', lines: allLines(), atSec });
+        }
+        resumesUsed = 0; // Continue grants a fresh budget
+        unfinished();
+        continue;
+      }
     }
     if (cause === 'auth' && failed.length) {
       // A token that expired or was already used: one silent retry with a fresh one.
