@@ -2037,3 +2037,22 @@ body {
 .caption-card { margin-top: 6px; }
 .export-status { font-size: 14px; margin: 0 0 14px; }
 .chip-btn.on { border-color: #7c6cf6; box-shadow: inset 0 0 0 1px #7c6cf6; }
+
+/* ---------- touch surfaces: a long press on iPhone Safari must not select them like text ----------
+   The video preview (player, scrubber, controls, live caption overlay), the media/clip rail and its
+   thumbnails, and the media area of result cards. Chat messages, the composer and every input or
+   textarea are deliberately NOT here: people copy text from chat and type in those. */
+.vp, .vp *,
+.rc-media, .rc-media *,
+.clip, .clip *,
+.thumb, .thumb *,
+.cap-overlay, .cap-overlay *,
+.media-x {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.vp, .vp button, .vp input[type="range"],
+.rc-media, .clip, .media-x, .rc-badge {
+  -webkit-tap-highlight-color: transparent;
+}

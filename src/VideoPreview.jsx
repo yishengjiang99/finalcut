@@ -506,6 +506,7 @@ export default function VideoPreview({ captionTrack = null, videoUrl, title = 'V
     return (
       <button
         type="button"
+        className="vp"
         onClick={() => { playAfterExpandRef.current = true; setShowThumb(false); }}
         aria-label={`Open video: ${title}`}
         title="Open video"
@@ -559,7 +560,7 @@ export default function VideoPreview({ captionTrack = null, videoUrl, title = 'V
   // ---- Collapsed: 64px mini bar ----
   if (isCollapsed) {
     return (
-      <div style={{
+      <div className="vp" style={{
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
@@ -604,7 +605,7 @@ export default function VideoPreview({ captionTrack = null, videoUrl, title = 'V
   }
 
   return (
-    <div style={{
+    <div className="vp" style={{
       backgroundColor: '#0b0e13',
       borderRadius: '8px',
       overflow: 'hidden',
