@@ -11,6 +11,7 @@ import { ffmpegCliRouter } from './server/tools/ffmpeg-cli-tool.js';
 import { chatRouter } from './src/server/chat.js';
 import { jobsRouter, pendingJobCount, waitForJobsToSettle } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
+import { streamingCaptionsRouter } from './src/server/streamingCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { iosSuggestionsAdminRouter } from './src/server/iosSuggestionsAdmin.js';
@@ -71,6 +72,7 @@ app.use(ffmpegCliRouter);
 app.use(chatRouter);
 app.use(jobsRouter);
 app.use(lyricCaptionsRouter);
+app.use(streamingCaptionsRouter);
 app.use(v2Router);
 // Push notifications (token registration, lifecycle; dry-run by default). See docs/push-lifecycle.md.
 app.use(pushRouter);
