@@ -170,7 +170,6 @@ router.post('/api/streaming-captions/token', tokenLimiter, requireAuthenticatedU
     audio_format: 'pcm_16000',
     include_timestamps: 'true',
     commit_strategy: 'manual',
-    keepalive_interval_ms: '3000',
     ...(language && language !== 'auto' ? { language_code: language } : {}),
   };
   res.set('Cache-Control', 'no-store');

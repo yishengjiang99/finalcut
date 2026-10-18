@@ -221,7 +221,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const jobIdCounterRef = useRef(1);
   const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
-  const [, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
+  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
   const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
   // Which clip the next edit applies to. Bytes are kept per media message so any
@@ -940,7 +940,23 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
   return (
     <div className="fc editor">
-      {uploadConsent && (
+      {uploadConsent && (uploadConsent.kind === 'streaming_audio' || uploadConsent.kind === 'connection_dropped') && (
+        // Streaming captions: the wording comes with the request (asked every time, never remembered).
+        <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby={uploadConsent.title ? 'consent-title' : undefined}>
+          <div className="consent">
+            {uploadConsent.title && <h3 id="consent-title">{uploadConsent.title}</h3>}
+            <p>
+              {uploadConsent.body}
+              {uploadConsent.privacyHref && (<> <a href={uploadConsent.privacyHref} target="_blank" rel="noopener noreferrer">{uploadConsent.privacyLabel || 'Privacy details'}</a></>)}
+            </p>
+            <div className="consent-actions">
+              <button className="jbtn open" autoFocus={uploadConsent.kind === 'streaming_audio'} onClick={() => answerUploadConsent(false)}>{uploadConsent.declineLabel}</button>
+              <button className="jbtn" autoFocus={uploadConsent.kind === 'connection_dropped'} onClick={() => answerUploadConsent(true)}>{uploadConsent.confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {uploadConsent && uploadConsent.kind !== 'streaming_audio' && uploadConsent.kind !== 'connection_dropped' && (
         <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consent-title">
           <div className="consent">
             <h3 id="consent-title">This step uploads {UPLOAD_NOUN[uploadConsent.uploads] || 'your file'}</h3>
@@ -1032,7 +1048,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                 <div className="msg assistant">
                   <div className="bubble typing" aria-live="polite">
                     <span></span><span></span><span></span>
-                    <span className="typing-stage">{toolStage || 'Working\u2026'}</span>
+                    <span className="typing-stage">{(Number.isFinite(turnStatus?.progress) && turnStatus.text) || toolStage || 'Working\u2026'}</span>
                   </div>
                 </div>
               )}

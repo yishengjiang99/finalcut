@@ -15,7 +15,7 @@ import { LYRIC_CAPTIONS_MESSAGES } from './lyricCaptionsClient.js';
 
 export const SAMPLE_RATE = 16000;
 export const MAX_AUDIO_SECONDS = 600;
-/** Audio seconds sent per wall-clock second. 1 = real time. Try 2-4 with `fc.streamPace` once tested with a real key. */
+/** Audio seconds sent per wall-clock second. 1 = real time. 2x and 4x were accepted by the service in a real-key test (see docs/api/STREAMING_CAPTIONS.md); default stays 1x. */
 export const STREAM_PACE_DEFAULT = 1;
 export const STREAM_PACE_MIN = 0.5;
 export const STREAM_PACE_MAX = 4;
@@ -102,6 +102,7 @@ const SESSION_ERRORS = {
 export function friendlyStreamingError(error) {
   if (error?.name === 'UploadDeclinedError') return error.message;
   const code = error?.code;
+  if (code === 'declined_continue' && error.message) return error.message;
   if (code === 'job_lost' || code === 'job_expired') return STREAMING_MESSAGES.restarted;
   if (code === 'audio_too_long' || (error?.status === 413 && code !== 'batch_too_large')) return STREAMING_MESSAGES.tooLong;
   if (code === 'busy' || code === 'streaming_captions_busy' || code === 'rate_limited' || error?.status === 429) return STREAMING_MESSAGES.busy;

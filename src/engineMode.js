@@ -43,8 +43,8 @@ export async function requestUploadConsent(request) {
 }
 
 export class UploadDeclinedError extends Error {
-  constructor(tool) {
-    super(`"${tool}" was skipped: it cannot run in this browser and you chose not to upload the file.`);
+  constructor(tool, message) {
+    super(message || `"${tool}" was skipped: it cannot run in this browser and you chose not to upload the file.`);
     this.name = 'UploadDeclinedError';
     this.code = 'skipped_by_user';
   }
