@@ -2,8 +2,10 @@
 // STT (Scribe v2 Realtime) and burns the captions itself. This server's part is small and stateless:
 //
 //   GET  /api/streaming-captions/status      → { available }              (is the flow configured?)
-//   POST /api/streaming-captions/token       → { token, wsUrl, query, … } (mint a single-use token)
-//   POST /api/streaming-captions/translate   → { lines:[{i,text,translation}] } (Grok, text only)
+//   POST /api/streaming-captions/token       → { token, wsUrl, query, … } (mint a single-use token; not charged)
+//   POST /api/streaming-captions/translate   → { lines:[{i,text,translation}] } (Grok, text only; the
+//                                              edit is charged here, once per captions job, after the
+//                                              first batch that produced a translated line)
 //   POST /api/streaming-captions/burn        → video/mp4                  (consented server fallback)
 //
 // The ElevenLabs key never leaves this process: only the 15-minute single-use token goes to the
@@ -91,7 +93,8 @@ export function _setStreamingCaptionsHooks(overrides) {
   hooks = overrides ? { ...defaultHooks, ...overrides } : { ...defaultHooks };
 }
 
-// userId → recent sessions: a resumed session (new token after a dropped connection) is the same edit.
+// sessionId → { userId, at, charged, charging }: one captions job. A resumed session (a new token after a
+// dropped connection, same sessionId) is the same job, so the edit is counted once however many tokens it uses.
 const sessions = new Map();
 function pruneSessions(now = Date.now()) {
   for (const [id, s] of sessions) if (now - s.at > SESSION_TTL_MS) sessions.delete(id);
@@ -135,19 +138,41 @@ async function mintStep(req, res, next) {
   }
 }
 
+/** The session a request belongs to: same user and still fresh, otherwise none. */
+function sessionFor(req, id) {
+  if (typeof id !== 'string' || !id) return null;
+  const s = sessions.get(id);
+  if (!s || s.userId !== (req.user?.id ?? null) || Date.now() - s.at >= SESSION_TTL_MS) return null;
+  return s;
+}
+
+/** Run the quota/charge middleware outside the request pipeline: resolves { ok } or the refusal it would have sent. */
+function runCharge(req) {
+  return new Promise((resolve) => {
+    const headers = {};
+    const fake = {
+      statusCode: 200,
+      set(k, v) { if (typeof k === 'string') headers[k] = v; else Object.assign(headers, k); return this; },
+      status(c) { this.statusCode = c; return this; },
+      json(body) { resolve({ ok: false, status: this.statusCode, body, headers }); return this; },
+    };
+    Promise.resolve(hooks.charge(req, fake, () => resolve({ ok: true, headers })))
+      .catch(() => resolve({ ok: false, status: 500, body: { error: 'Unable to check daily inference limit' }, headers }));
+  });
+}
+
 /**
- * The edit is counted when the token is issued (the same rule as every other tool: when the work
- * starts), but only after ElevenLabs actually issued one. A resumed session (same user, the
- * session id of a recent token) is the same edit and is not counted again.
+ * Charge the edit for this captions job, once. Called only after a batch produced a translated line,
+ * so a job that never gets one is never counted and a resume (same sessionId) never re-charges. A request
+ * without a known session is its own job. Returns { ok:true, headers } or the refusal to send.
  */
-function chargeUnlessResume(req, res, next) {
-  const id = typeof req.body?.resumeSessionId === 'string' ? req.body.resumeSessionId : null;
-  const prior = id ? sessions.get(id) : null;
-  if (prior && prior.userId === (req.user?.id ?? null) && Date.now() - prior.at < SESSION_TTL_MS) {
-    req.streamResume = id;
-    return next();
+async function chargeJobOnce(req, session) {
+  if (session?.charged) return { ok: true, headers: {} };
+  if (!session) return runCharge(req);
+  if (!session.charging) {
+    session.charging = runCharge(req).then((r) => { if (r.ok) session.charged = true; session.charging = null; return r; });
   }
-  return hooks.charge(req, res, next);
+  return session.charging;
 }
 
 const router = express.Router();
@@ -159,10 +184,12 @@ router.get('/api/streaming-captions/status', apiLimiter, requireAuthenticatedUse
   return res.json({ available: Boolean(hooks.isConfigured() && translate), provider: 'elevenlabs', model: SCRIBE_MODEL_ID });
 });
 
-router.post('/api/streaming-captions/token', tokenLimiter, requireAuthenticatedUser, requireActiveSubscription, requireConfigured, mintStep, chargeUnlessResume, (req, res) => {
+router.post('/api/streaming-captions/token', tokenLimiter, requireAuthenticatedUser, requireActiveSubscription, requireConfigured, mintStep, (req, res) => {
   pruneSessions();
-  const sessionId = req.streamResume || randomUUID();
-  sessions.set(sessionId, { userId: req.user?.id ?? null, at: Date.now() });
+  // The same sessionId continues the same job: it keeps its charged flag, and its token costs no new edit.
+  const prior = sessionFor(req, req.body?.resumeSessionId);
+  const sessionId = prior ? req.body.resumeSessionId : randomUUID();
+  sessions.set(sessionId, { userId: req.user?.id ?? null, at: Date.now(), charged: Boolean(prior?.charged), charging: prior?.charging || null });
   const source = req.body?.source_language ?? req.body?.sourceLanguage;
   const language = source == null || source === '' ? 'auto' : normalizeLanguageCode(source, { allowAuto: true });
   const query = {
@@ -191,6 +218,13 @@ router.post('/api/streaming-captions/translate', translateLimiter, requireAuthen
     assertTranslateAvailable();
     const parsed = parseTranslateRequest(req.body || {});
     const out = await translateSpeechSegments(parsed);
+    if ((out.lines || []).some(l => String(l?.translation || '').trim())) {
+      const session = sessionFor(req, req.body?.sessionId);
+      if (session) session.at = Date.now();
+      const charge = await chargeJobOnce(req, session);
+      for (const [k, v] of Object.entries(charge.headers || {})) res.set(k, v);
+      if (!charge.ok) return res.status(charge.status).json(charge.body);
+    }
     return res.json({ ...out, targetLanguage: parsed.targetLanguage, operation: 'streaming_captions' });
   } catch (err) {
     if (err instanceof LyricCaptionsError) return sendStreamingError(res, err);

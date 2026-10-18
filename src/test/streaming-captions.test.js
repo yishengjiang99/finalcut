@@ -75,7 +75,7 @@ describe('POST /api/streaming-captions/token', () => {
     });
     expect(typeof body.sessionId).toBe('string');
     expect(JSON.stringify(body)).not.toContain(SECRET);
-    expect(charges).toBe(1);
+    expect(charges).toBe(0); // the edit is charged at the first translated batch, not at the token
   });
 
   it('503 streaming_captions_unavailable when ELEVENLABS_API_KEY is not set: nothing minted, nothing charged', async () => {
@@ -93,7 +93,7 @@ describe('POST /api/streaming-captions/token', () => {
     expect(minted).toBe(0);
   });
 
-  it('an unexpected mint failure is not charged (the edit is counted only after a token exists)', async () => {
+  it('an unexpected mint failure is not charged', async () => {
     _setStreamingCaptionsHooks({
       isConfigured: () => true,
       mintToken: async () => { throw Object.assign(new Error('x'), { status: 503 }); },
@@ -104,16 +104,17 @@ describe('POST /api/streaming-captions/token', () => {
     expect(charges).toBe(0);
   });
 
-  it('a resumed session (same user, previous sessionId) is the same edit: new token, not charged again', async () => {
+  it('a resumed session (same user, previous sessionId) keeps its id and its charged flag: a new token, no new charge', async () => {
     const first = await (await post('/api/streaming-captions/token', {})).json();
+    await post('/api/streaming-captions/translate', { target_language: 'es', sessionId: first.sessionId, segments: [{ i: 0, start: 0, end: 1, text: 'Hello' }] });
     expect(charges).toBe(1);
     const second = await (await post('/api/streaming-captions/token', { resumeSessionId: first.sessionId })).json();
     expect(second.sessionId).toBe(first.sessionId);
     expect(second.token).not.toBe(first.token);
+    await post('/api/streaming-captions/translate', { target_language: 'es', sessionId: second.sessionId, segments: [{ i: 0, start: 1, end: 2, text: 'again' }] });
     expect(charges).toBe(1);
     const other = await (await post('/api/streaming-captions/token', { resumeSessionId: 'unknown-session' })).json();
     expect(other.sessionId).not.toBe('unknown-session');
-    expect(charges).toBe(2);
   });
 
   it('rate limits the token route', async () => {
@@ -158,7 +159,58 @@ describe('POST /api/streaming-captions/translate', () => {
     expect(corrected).toHaveLength(1);
     expect(corrected[0].mode).toBe('speech'); // "speech" never searches the web
     expect(corrected[0].context).toEqual(['Earlier line']);
-    expect(charges).toBe(0); // counted once at the token, not per batch
+    expect(charges).toBe(1); // no session: this request is its own job, charged after it produced a translation
+  });
+
+  describe('charging: once per captions job, at the first batch that produced a translated line', () => {
+    const seg = (i, text) => ({ i, start: i, end: i + 1, text });
+    it('the first translated batch charges; later batches and resumes of the same job do not', async () => {
+      const { sessionId } = await (await post('/api/streaming-captions/token', {})).json();
+      expect(charges).toBe(0);
+      for (const text of ['one', 'two', 'three']) {
+        const r = await post('/api/streaming-captions/translate', { target_language: 'es', sessionId, segments: [seg(0, text)] });
+        expect(r.status).toBe(200);
+      }
+      expect(charges).toBe(1);
+    });
+
+    it('a job whose batches never produce a translated line is not counted (failed model call, or a translation that repeats the original)', async () => {
+      const { sessionId } = await (await post('/api/streaming-captions/token', {})).json();
+      _setLyricCaptionsHooks({ hasTranslateKey: () => true, correct: async () => { throw new Error('model down'); } });
+      expect((await post('/api/streaming-captions/translate', { target_language: 'es', sessionId, segments: [seg(0, 'x')] })).status).toBe(502);
+      _setLyricCaptionsHooks({ hasTranslateKey: () => true, correct: async (a) => ({ parsed: { language: 'en', lines: a.lines.map((l, i) => ({ i, text: l.text, translation: l.text })) }, usedWebSearch: false, model: 'm' }) });
+      expect((await post('/api/streaming-captions/translate', { target_language: 'en', sessionId, segments: [seg(0, 'same')] })).status).toBe(200);
+      expect(charges).toBe(0);
+    });
+
+    it('concurrent first batches of one job charge once', async () => {
+      const { sessionId } = await (await post('/api/streaming-captions/token', {})).json();
+      const rs = await Promise.all([1, 2, 3].map(n => post('/api/streaming-captions/translate', { target_language: 'es', sessionId, segments: [seg(0, `t${n}`)] })));
+      expect(rs.map(r => r.status)).toEqual([200, 200, 200]);
+      expect(charges).toBe(1);
+    });
+
+    it("another user's or an unknown sessionId is not a free pass: that request is its own job", async () => {
+      await post('/api/streaming-captions/translate', { target_language: 'es', sessionId: 'nope', segments: [seg(0, 'a')] });
+      await post('/api/streaming-captions/translate', { target_language: 'es', sessionId: 'nope', segments: [seg(0, 'b')] });
+      expect(charges).toBe(2);
+    });
+
+    it('a refused charge (daily limit) answers with the refusal and no translated lines; the job can try again', async () => {
+      const { sessionId } = await (await post('/api/streaming-captions/token', {})).json();
+      let deny = true;
+      _setStreamingCaptionsHooks({
+        isConfigured: () => true, mintToken: async () => 't',
+        charge: (q, s, n) => { if (deny) { s.set('X-Inference-Daily-Remaining', '0'); return s.status(429).json({ code: 'daily_limit_reached' }); } charges += 1; return n(); },
+      });
+      const denied = await post('/api/streaming-captions/translate', { target_language: 'es', sessionId, segments: [seg(0, 'a')] });
+      expect(denied.status).toBe(429);
+      expect(denied.headers.get('x-inference-daily-remaining')).toBe('0');
+      expect(await denied.json()).toEqual({ code: 'daily_limit_reached' });
+      deny = false;
+      expect((await post('/api/streaming-captions/translate', { target_language: 'es', sessionId, segments: [seg(0, 'a')] })).status).toBe(200);
+      expect(charges).toBe(1);
+    });
   });
 
   it('ignores a client-sent mode: it cannot ask for lyrics/web search', async () => {
