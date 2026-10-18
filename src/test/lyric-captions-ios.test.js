@@ -55,7 +55,6 @@ const hooks = {
   extractAudioToWav: async (_in, out) => fs.writeFile(out, 'wav'),
   transcribe: async () => TRANSCRIPT,
   correct: async () => ({ parsed: MODEL_REPLY, usedWebSearch: true, model: 'grok-test' }),
-  burnAss: async ({ outputPath }) => fs.writeFile(outputPath, 'BURNED'),
 };
 
 beforeAll(async () => {

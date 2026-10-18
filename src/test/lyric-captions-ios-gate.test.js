@@ -207,16 +207,13 @@ describe('every iOS build', () => {
 });
 
 describe('the server never runs it for iOS', () => {
-  it('POST /api/lyric-captions/:jobId/burn from an iOS client: 400 not_available_on_server (before any upload or job lookup)', async () => {
+  it('POST /api/lyric-captions/:jobId/burn is gone for every client (404, no upload handled)', async () => {
     const form = new FormData();
     form.append('video', new Blob([readFileSync(path.join(here, 'fixtures', 'silent-2s.mp4'))], { type: 'video/mp4' }), 'clip.mp4');
-    const res = await realFetch(`${base}/api/lyric-captions/any-job/burn`, { method: 'POST', headers: { 'sample-access-token': token, 'User-Agent': ios(12) }, body: form });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: 'not_available_on_server', operation: 'lyric_captions' });
-    // Web (no iOS UA) still reaches the job lookup.
-    const web = await realFetch(`${base}/api/lyric-captions/any-job/burn`, { method: 'POST', headers: { 'sample-access-token': token }, body: form });
-    expect(web.status).toBe(404);
-    expect((await web.json()).code).toBe('job_not_found');
+    for (const headers of [{ 'sample-access-token': token, 'User-Agent': ios(12) }, { 'sample-access-token': token }]) {
+      const res = await realFetch(`${base}/api/lyric-captions/any-job/burn`, { method: 'POST', headers, body: form });
+      expect(res.status).toBe(404);
+    }
   });
 
   it('process-video (job and sync): 400 not_available_on_server for a video, unsupported_for_photo for a photo', async () => {

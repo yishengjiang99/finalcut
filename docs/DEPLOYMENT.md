@@ -246,10 +246,11 @@ Replace:
 `lyric_captions` (bilingual lyric/speech captions, see [`docs/api/LYRIC_CAPTIONS.md`](api/LYRIC_CAPTIONS.md))
 needs no Python, model download, or GPU on the server. Speech-to-text is OpenAI `whisper-1` (word
 timestamps) and lyric correction/translation is Grok, so the only new requirements are an API key
-and, for the web's server-side burn-in, a CJK font. Run once on the droplet:
+and nothing else for captions: the video is never processed on the server. (The CJK font and libass below
+serve the ASS text the job can return and the iOS `burn_subtitles` operation.) Run once on the droplet:
 
 ```bash
-# 1. Font for the burned captions: one family (Noto Sans CJK SC, Bold) for Latin and Chinese lines.
+# 1. Font for ASS output and the iOS burn_subtitles operation: one family (Noto Sans CJK SC, Bold) for Latin and Chinese lines.
 sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
 fc-match "Noto Sans CJK SC:bold"
 #   expect: NotoSansCJK-Bold.ttc: "Noto Sans CJK SC" "Bold"
@@ -269,7 +270,7 @@ sudo systemctl restart finalcut
 
 Optional `.env` settings: `LYRIC_CAPTIONS_MODEL` (Grok model used with the `web_search` tool,
 default `grok-4.7`) and `LYRIC_CAPTIONS_FALLBACK_MODEL` (used without search, default `XAI_UTILITY_MODEL`).
-When a dependency is missing, `POST /api/lyric-captions` and the burn endpoint return
+When a dependency is missing, `POST /api/lyric-captions` returns
 `503 {"code":"lyric_captions_unavailable"}` naming what's missing, before any edit is charged.
 
 #### Build the Frontend

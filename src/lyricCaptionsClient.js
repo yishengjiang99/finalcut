@@ -1,7 +1,7 @@
 // Browser side of lyric_captions: pull the audio track out of the video (WebAudio, no upload of
 // the video for transcription), send 16 kHz mono WAV to POST /api/lyric-captions, poll the job,
-// then burn. The web app has no client-side ffmpeg (all edits run on the server), so the burn uses
-// the server fallback POST /api/lyric-captions/:jobId/burn. See docs/api/LYRIC_CAPTIONS.md.
+// then return the lines. Nothing is burned: the caller shows them as a live overlay and adds a caption
+// track on export, and the video never leaves the browser. See docs/api/LYRIC_CAPTIONS.md.
 
 import { abortableFetch as fetch } from './abortableFetch.js';
 
@@ -168,10 +168,10 @@ async function transcribeOnce(args, wav, { headers, size, poll }) {
 
 /**
  * Whole web flow. `deps` lets tests replace the WebAudio extraction.
- * Returns { burned: Uint8Array, summary, result } — result.lines stay in the browser.
+ * Returns { summary, result, audioBytes } — result.lines stay in the browser.
  */
 export async function runLyricCaptionsWeb(args, videoBytes, deps = {}) {
-  const { headers = {}, extract = extractAudioWav, poll = pollJob, size = null, burn = null } = deps;
+  const { headers = {}, extract = extractAudioWav, poll = pollJob, size = null } = deps;
   const wav = await extract(videoBytes);
   // The audio is tiny, and the web app has no per-edit charge, so when the server restarted
   // mid-job (every deploy does) the whole request is simply sent once more.
@@ -187,18 +187,5 @@ export async function runLyricCaptionsWeb(args, videoBytes, deps = {}) {
     }
   }
 
-  // Server burn: uploads the video. In-browser editing passes `burn` and only falls back to this
-  // after the user agrees.
-  const burnOnServer = async () => {
-    const burnForm = new FormData();
-    burnForm.append('video', new Blob([videoBytes], { type: 'video/mp4' }), 'input.mp4');
-    const burnRes = await fetch(`/api/lyric-captions/${encodeURIComponent(started.jobId)}/burn`, { method: 'POST', headers, body: burnForm });
-    if (!burnRes.ok) {
-      const body = await burnRes.json().catch(() => ({}));
-      throw httpError(body, burnRes, `Burn-in failed (${burnRes.status})`);
-    }
-    return new Uint8Array(await burnRes.arrayBuffer());
-  };
-  const burned = burn ? await burn(result, burnOnServer) : await burnOnServer();
-  return { burned, summary: job.summary || null, result, audioBytes: wav.byteLength };
+  return { summary: job.summary || null, result, audioBytes: wav.byteLength };
 }

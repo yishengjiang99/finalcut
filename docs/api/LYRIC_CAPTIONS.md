@@ -151,12 +151,12 @@ with no raw text. Successful results and `skipped_by_user` pass through. This is
 does not change which tools are offered (an `unsupported_on_device` result still stops that tool being
 offered for the rest of the turn, as for any tool).
 
-`POST /api/lyric-captions/:jobId/burn` from an iOS client (Bearer, or a `FinalCap-iOS/*` UA) and
-`lyric_captions` sent to `/api/process-video` or `/api/jobs/process-video` answer **400**
+There is no server burn route (`POST /api/lyric-captions/:jobId/burn` was removed and answers 404 for every
+client): the video is never sent to the server for captions. `lyric_captions` sent to `/api/process-video` or `/api/jobs/process-video` answer **400**
 `{"code":"not_available_on_server","operation":"lyric_captions"}` (`unsupported_for_photo` for a
 photo on the process-video routes). iOS draws the captions itself.
 
-Results live in server memory for 30 minutes (for the burn fallback), then the job is dropped.
+Results live in server memory for 30 minutes so the client can fetch the result, then the job is dropped.
 The uploaded audio and the converted WAV are deleted as soon as transcription finishes.
 
 ## Pipeline (server)
@@ -208,17 +208,10 @@ become spaces. Fonts: `sudo apt-get install -y fonts-noto-cjk` (prod and the dev
 1. Decode the video's audio in the browser (`AudioContext.decodeAudioData`), then resample and
    down-mix to 16 kHz mono with `OfflineAudioContext`, and encode a WAV (1.9 MB per minute).
 2. `POST /api/lyric-captions` with the WAV only, then poll and fetch the result.
-3. Burn-in: **server fallback**. The web app has no client-side ffmpeg (every web edit already
-   runs on the server), so it calls `POST /api/lyric-captions/:jobId/burn`.
-   - multipart `video`, plus optional `args` JSON `{position_from_bottom_pct, font_size}`.
-   - Returns `video/mp4` with `X-Lyric-Captions-Burn: server`.
-   - The server builds the ASS from the finished job's lines, sized to the uploaded video (rotation
-     aware), and burns it with `ass=` + `libx264 -preset medium -crf 20`, audio copied when
-     AAC/MP3/ALAC, `+faststart`.
-   - Not charged again. Returns 404 `job_lost` / `job_expired` (`job_not_found` for an unknown id), 409 `job_not_ready`
-     before success, and 503 `lyric_captions_unavailable` without libass or the CJK font.
-   - Transcription still needs only the audio. The video goes up for the burn step, as it does for
-     every other web edit.
+3. No burn: `runLyricCaptionsWeb` returns `{ summary, result, audioBytes }`. The browser shows the lines
+   as a live overlay and, on Export, muxes them into the mp4 as a `mov_text` track with `-c copy`
+   (docs/api/STREAMING_CAPTIONS.md). The video never leaves the browser for captions; there is no
+   server burn route.
 
 Upload size, measured on a 12 s 1080x1920 sample (10 Mbit/s H.264, typical of phone video):
 video 16.0 MB, 16 kHz mono WAV 384 KB (2.4%, about 42× smaller), mono AAC m4a at 48 kbit/s
@@ -272,7 +265,7 @@ The tool call arrives as `{ "id": "call_…", "name": "lyric_captions", "argumen
 6. **Result:** `GET resultUrl` (= `/api/jobs/<jobId>/result`) → the JSON above. It is kept 30 minutes;
    fetch it once and keep it on device. The audio is already deleted on the server by then.
 7. **Draw** the captions locally from `lines` (see "Rendering"). Never call
-   `/api/lyric-captions/:jobId/burn` (400 `not_available_on_server` for iOS).
+   `/api/lyric-captions/:jobId/burn` (the route no longer exists).
 8. **Tool result** for the chat continuation, short and lyric-free:
    `{"ok":true,"executedOn":"device","output":{"duration":…,"width":…,"height":…,"song":{"title":…,"artist":…,"url":…},"lineCount":14,"language":"de","targetLanguage":"zh-Hans"}}`
    (the poll `summary` has these fields). On failure: `{"ok":false,"error":"<code>","executedOn":"device"}`
@@ -379,8 +372,7 @@ Use `AVVideoCompositionCoreAnimationTool`, one caption block per `lines[]` entry
   about 40 tokens per line. A 40-line song is roughly 2k input and 2k output tokens.
 - `lyrics`/`auto` add the `web_search` tool's per-search charges and the tokens of the pages Grok
   reads, which usually cost more than the model tokens. `speech` mode skips search.
-- Server burn-in (web only) costs one x264 re-encode of the video in server CPU time. iOS draws on
-  device, so an iOS call costs only speech-to-text and Grok.
+- Nothing is burned on the server, so a call costs only speech-to-text and Grok.
 
 ## Restarts and lost jobs
 

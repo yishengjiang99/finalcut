@@ -221,12 +221,11 @@ describe('Grok calls (fetch mocked)', () => {
   });
 });
 
-describe('HTTP: POST /api/lyric-captions + jobs + burn', () => {
+describe('HTTP: POST /api/lyric-captions + jobs', () => {
   let server;
   let base;
   let token;
   let correctCalls;
-  let burnCalls;
   let hostTools;
   let hasKeys;
   let transcript;
@@ -247,10 +246,6 @@ describe('HTTP: POST /api/lyric-captions + jobs + burn', () => {
     extractAudioToWav: async (_in, out) => fs.writeFile(out, 'wav'),
     transcribe: async () => transcript,
     correct: async (args) => { correctCalls.push(args); return { parsed: MODEL_REPLY, usedWebSearch: true, model: 'grok-test' }; },
-    burnAss: async ({ assPath, outputPath, copyAudio }) => {
-      burnCalls.push({ ass: await fs.readFile(assPath, 'utf8'), copyAudio });
-      await fs.writeFile(outputPath, 'BURNED');
-    },
   });
 
   beforeAll(async () => {
@@ -272,7 +267,6 @@ describe('HTTP: POST /api/lyric-captions + jobs + burn', () => {
     }
     token = issueSampleAccessToken();
     correctCalls = [];
-    burnCalls = [];
     hasKeys = true;
     transcript = TRANSCRIPT;
     hostTools = { ffmpeg: true, ffprobe: true, assFilter: true, fontFamilies: new Set(['Noto Sans CJK SC']) };
@@ -371,46 +365,17 @@ describe('HTTP: POST /api/lyric-captions + jobs + burn', () => {
     expect((await get(`/api/jobs/${started.jobId}/result`)).status).toBe(404);
   });
 
-  it('burn fallback: ASS sized to the uploaded (rotated) video; 503 without libass; 404 unknown job', async () => {
-    const started = await (await post({ target_language: 'zh-Hans', position_from_bottom_pct: 25 })).json();
+  it('there is no server burn route: POST /api/lyric-captions/:jobId/burn is gone', async () => {
+    const started = await (await post({ target_language: 'zh-Hans' })).json();
     await waitJob(started.jobId);
-    const burn = (content, args) => {
-      const form = new FormData();
-      form.append('video', new Blob([content], { type: 'video/mp4' }), 'in.mp4');
-      if (args) form.append('args', JSON.stringify(args));
-      return fetch(`${base}/api/lyric-captions/${started.jobId}/burn`, { method: 'POST', headers: { 'sample-access-token': token }, body: form });
-    };
-    let res = await burn('VIDEO ROT');
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('video/mp4');
-    expect(res.headers.get('x-lyric-captions-burn')).toBe('server');
-    expect(await res.text()).toBe('BURNED');
-    expect(burnCalls[0].ass).toContain('PlayResX: 720\nPlayResY: 1280'); // rotated portrait
-    expect(burnCalls[0].ass).toMatch(/,2,48,48,320,1$/m); // 25% of 1280
-    expect(burnCalls[0].copyAudio).toBe(true);
-
-    res = await burn('VIDEO', { position_from_bottom_pct: 10 });
-    expect(res.status, await res.clone().text()).toBe(200);
-    expect(burnCalls[1].ass).toContain('PlayResX: 1280\nPlayResY: 720');
-    expect(burnCalls[1].ass).toMatch(/,72,1$/m);
-
-    hostTools = { ...hostTools, assFilter: false };
-    _setLyricCaptionsHooks(hooks());
-    res = await burn('VIDEO');
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toMatch(/libass/);
-
-    hostTools = { ...hostTools, assFilter: true, fontFamilies: new Set() };
-    _setLyricCaptionsHooks(hooks());
-    res = await burn('VIDEO');
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toMatch(/fonts-noto-cjk/);
-
     const form = new FormData();
-    form.append('video', new Blob(['VIDEO']), 'in.mp4');
-    res = await fetch(`${base}/api/lyric-captions/nope/burn`, { method: 'POST', headers: { 'sample-access-token': token }, body: form });
-    expect(res.status).toBe(404);
+    form.append('video', new Blob(['VIDEO'], { type: 'video/mp4' }), 'in.mp4');
+    for (const id of [started.jobId, 'nope']) {
+      const res = await fetch(`${base}/api/lyric-captions/${id}/burn`, { method: 'POST', headers: { 'sample-access-token': token }, body: form });
+      expect(res.status).toBe(404);
+    }
   });
+
 });
 
 describe('tool schema and clients', () => {
@@ -436,14 +401,13 @@ describe('tool schema and clients', () => {
     expect(v.getInt16(46, true)).toBe(32767);
   });
 
-  it('web flow uploads only audio for transcription, then uses the server burn fallback', async () => {
+  it('web flow uploads only audio for transcription and never sends the video', async () => {
     const realFetch = globalThis.fetch;
     const seen = [];
     globalThis.fetch = vi.fn(async (url, init = {}) => {
       seen.push({ url: String(url), fields: init.body instanceof FormData ? [...init.body.keys()] : [] });
       if (url === '/api/lyric-captions') return new Response(JSON.stringify({ jobId: 'j1', pollUrl: '/api/jobs/j1', resultUrl: '/api/jobs/j1/result' }), { status: 202 });
       if (url === '/api/jobs/j1/result') return new Response(JSON.stringify({ lines: [{ text: 'a' }], song: null, targetLanguage: 'es' }));
-      if (url === '/api/lyric-captions/j1/burn') return new Response(new Uint8Array([1, 2, 3]));
       throw new Error(`unexpected ${url}`);
     });
     try {
@@ -452,8 +416,8 @@ describe('tool schema and clients', () => {
         poll: async () => ({ status: 'succeeded', summary: { lineCount: 1 } }),
       });
       expect(seen[0]).toEqual({ url: '/api/lyric-captions', fields: ['audio', 'target_language', 'mode'] });
-      expect(seen[2]).toEqual({ url: '/api/lyric-captions/j1/burn', fields: ['video'] });
-      expect([...out.burned]).toEqual([1, 2, 3]);
+      expect(seen.every((r) => !r.fields.includes('video') && !r.url.includes('burn'))).toBe(true);
+      expect(out).not.toHaveProperty('burned');
       expect(out.audioBytes).toBe(44);
     } finally {
       globalThis.fetch = realFetch;

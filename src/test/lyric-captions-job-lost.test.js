@@ -25,7 +25,6 @@ const hooks = () => ({
   extractAudioToWav: async (_in, out) => fs.writeFile(out, 'wav'),
   transcribe: async () => TRANSCRIPT,
   correct: async () => { if (gate) await gate; return { parsed: MODEL_REPLY, usedWebSearch: false, model: 'test' }; },
-  burnAss: async ({ outputPath }) => fs.writeFile(outputPath, 'BURNED'),
 });
 
 beforeAll(async () => {
@@ -64,7 +63,7 @@ async function waitStatus(jobId, want = ['succeeded', 'failed']) {
 }
 
 describe('server: a restart is told apart from an unknown id', () => {
-  it('create → poll works; after a restart poll, result and burn answer 404 job_lost (retryable)', async () => {
+  it('create → poll works; after a restart poll, and result answer 404 job_lost (retryable)', async () => {
     const { jobId, pollUrl } = await (await start()).json();
     expect(jobId).toMatch(/^j[0-9a-f]{8}_[0-9a-f-]{36}$/);
     expect(pollUrl).toContain(jobId);
@@ -79,11 +78,6 @@ describe('server: a restart is told apart from an unknown id', () => {
     const result = await get(`/api/jobs/${jobId}/result`);
     expect(result.status).toBe(404);
     expect(await result.json()).toEqual({ error: 'Result not available', code: 'job_lost', retryable: true });
-    const burn = new FormData();
-    burn.append('video', new Blob(['VIDEO']), 'v.mp4');
-    const burned = await fetch(`${base}/api/lyric-captions/${jobId}/burn`, { method: 'POST', headers: headers(), body: burn });
-    expect(burned.status).toBe(404);
-    expect(await burned.json()).toMatchObject({ code: 'job_lost', retryable: true, operation: 'lyric_captions' });
   });
 
   it('a job dropped by this process (TTL) is job_expired; an arbitrary id stays a plain 404', async () => {
@@ -158,14 +152,14 @@ describe('web client', () => {
       const poll = vi.fn()
         .mockRejectedValueOnce(Object.assign(new Error('Job not found'), { code: 'job_lost', status: 404 }))
         .mockResolvedValueOnce({ status: 'succeeded', summary: {} });
-      const out = await runLyricCaptionsWeb({ target_language: 'zh-Hans', mode: 'speech' }, new Uint8Array(10), { extract, poll, burn: async () => new Uint8Array([9]) });
+      const out = await runLyricCaptionsWeb({ target_language: 'zh-Hans', mode: 'speech' }, new Uint8Array(10), { extract, poll });
       expect(posts).toHaveLength(2);
       expect(extract).toHaveBeenCalledTimes(1); // audio extracted once, uploaded twice
-      expect([...out.burned]).toEqual([9]);
+      expect(out.result.lines).toHaveLength(1);
 
       posts.length = 0;
       const alwaysLost = vi.fn().mockRejectedValue(Object.assign(new Error('Job not found'), { code: 'job_lost', status: 404 }));
-      await expect(runLyricCaptionsWeb({ target_language: 'zh-Hans' }, new Uint8Array(10), { extract, poll: alwaysLost, burn: async () => new Uint8Array() })).rejects.toMatchObject({ code: 'job_lost' });
+      await expect(runLyricCaptionsWeb({ target_language: 'zh-Hans' }, new Uint8Array(10), { extract, poll: alwaysLost })).rejects.toMatchObject({ code: 'job_lost' });
       expect(posts).toHaveLength(2); // one retry, then stop
     } finally { globalThis.fetch = realFetch; }
   });

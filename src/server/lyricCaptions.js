@@ -1,4 +1,5 @@
-// lyric_captions: audio in, timed bilingual captions out. The client burns them in.
+// lyric_captions: audio in, timed bilingual captions out. The client shows them (overlay, caption track);
+// no video ever reaches this server for captions.
 //
 // POST /api/lyric-captions takes an audio file only (WAV, m4a/aac, opus/ogg, mp3, ≤ 25 MB and
 // ≤ 10 min), never the video. The server:
@@ -12,8 +13,7 @@
 //   3. returns { song, mode, language, targetLanguage, lines:[{start,end,text,translation,words}],
 //      ass? } as an async job result. The ASS is generated only when width/height are given.
 // The uploaded audio and the WAV are deleted as soon as transcription finishes. The lines live in
-// memory for LYRIC_RESULT_TTL_MS so the web fallback burn (POST /api/lyric-captions/:jobId/burn)
-// can use them, then the job is dropped. See docs/api/LYRIC_CAPTIONS.md.
+// memory for LYRIC_RESULT_TTL_MS so the client can fetch the result, then the job is dropped. See docs/api/LYRIC_CAPTIONS.md.
 import express from 'express';
 import multer from 'multer';
 import ffmpeg from 'fluent-ffmpeg';
@@ -29,13 +29,10 @@ import {
   videoProcessLimiter,
   requireAuthenticatedUser,
   requireInferenceAccess,
-  uploadSingle,
   getBaseUrlFromRequest,
   isValidSampleModeRequest,
 } from './middleware.js';
 import { extractAudioToWav } from './captions.js';
-import { isIosClient } from './clientInfo.js';
-import { notAvailableOnServerError } from './ffmpegOps.js';
 import { normalizeLanguageCode, stripLlmFences, normalizeCaptionText } from './captionHelpers.js';
 import {
   DEFAULT_POSITION_FROM_BOTTOM_PCT, isCjkText, sameText, buildLines, assTime, escapeAssText, LYRIC_FONT, fontForLanguages,
@@ -45,7 +42,7 @@ export {
   DEFAULT_POSITION_FROM_BOTTOM_PCT, buildLines, assTime, escapeAssText, LYRIC_FONT, fontForLanguages, needsCjkFont,
   REFERENCE_SIZE, assStyleFor, translationToShow, buildAss,
 };
-import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs, missingJobCode } from './jobs.js';
+import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs } from './jobs.js';
 
 export const LYRIC_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI audio limit; 10 min of 16 kHz WAV is 19.2 MB
 export const LYRIC_AUDIO_MAX_SECONDS = 10 * 60;
@@ -77,7 +74,7 @@ export function parseTargetLanguage(raw) {
   return /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})+$/.test(trimmed) ? trimmed : base;
 }
 
-/** Validate and default the request options shared by the endpoint, the burn, and the tool. */
+/** Validate and default the request options shared by the endpoint and the tool. */
 export function parseLyricOptions(raw = {}) {
   const targetLanguage = parseTargetLanguage(raw.target_language ?? raw.targetLanguage);
   if (!targetLanguage) {
@@ -325,23 +322,6 @@ function probeMedia(filePath) {
   });
 }
 
-async function burnAss({ inputPath, assPath, outputPath, copyAudio }) {
-  const escaped = assPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
-  await new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .videoFilters(`ass='${escaped}'`)
-      .outputOptions([
-        '-map 0:v:0', '-map 0:a?',
-        '-c:v libx264', '-preset medium', '-crf 20', '-pix_fmt yuv420p',
-        copyAudio ? '-c:a copy' : '-c:a aac',
-        '-movflags +faststart',
-      ])
-      .on('error', reject)
-      .on('end', resolve)
-      .save(outputPath);
-  });
-}
-
 const defaultHooks = {
   hasApiKeys: () => Boolean(OPENAI_API_KEY && XAI_API_TOKEN),
   hasTranslateKey: () => Boolean(XAI_API_TOKEN),
@@ -350,7 +330,6 @@ const defaultHooks = {
   extractAudioToWav,
   transcribe: transcribeWordsOpenAI,
   correct: correctWithGrok,
-  burnAss,
 };
 let hooks = { ...defaultHooks };
 /** Tests: replace STT, model, probes, or ffmpeg steps. Call with no argument to reset. */
@@ -362,14 +341,12 @@ export function _setLyricCaptionsHooks(overrides) {
 // ── Pipeline ────────────────────────────────────────────────────────────────
 
 /** Checks before accepting work. Throws a 503 lyric_captions_unavailable naming what is missing. */
-export async function assertLyricCaptionsAvailable({ forBurn = false, fontName = null } = {}) {
+export async function assertLyricCaptionsAvailable() {
   const missing = [];
-  if (!forBurn && !hooks.hasApiKeys()) missing.push('OPENAI_API_KEY and XAI_API_TOKEN');
+  if (!hooks.hasApiKeys()) missing.push('OPENAI_API_KEY and XAI_API_TOKEN');
   const host = await hooks.probeHostTools();
   if (!host.ffmpeg) missing.push('ffmpeg');
   if (!host.ffprobe) missing.push('ffprobe');
-  if (forBurn && !host.assFilter) missing.push('an ffmpeg build with libass (the "ass" filter)');
-  if (forBurn && fontName && !host.fontFamilies.has(fontName)) missing.push(`the "${fontName}" font (apt install fonts-noto-cjk)`);
   if (missing.length) {
     throw new LyricCaptionsError(`Lyric captions are unavailable on this server: missing ${missing.join(', ')}.`, { status: 503, code: UNAVAILABLE });
   }
@@ -501,50 +478,6 @@ export async function translateSpeechSegments({ segments, targetLanguage, source
   };
 }
 
-/** Parse the lines a client sends for a server burn (the streaming flow keeps its lines in the browser). */
-export function parseBurnLines(raw) {
-  let lines = raw;
-  if (typeof raw === 'string') {
-    try { lines = JSON.parse(raw); } catch { throw new LyricCaptionsError('lines must be valid JSON'); }
-  }
-  if (!Array.isArray(lines) || !lines.length) throw new LyricCaptionsError('lines must be a non-empty array');
-  if (lines.length > 3000) throw new LyricCaptionsError('Too many caption lines', { status: 413, code: 'batch_too_large' });
-  return lines.map((l, k) => {
-    const start = Number(l?.start);
-    const end = Number(l?.end);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || end > 86_400) throw new LyricCaptionsError(`lines[${k}] needs numeric start <= end (seconds)`);
-    return {
-      start, end,
-      text: typeof l?.text === 'string' ? l.text.slice(0, TRANSLATE_MAX_TEXT) : '',
-      translation: typeof l?.translation === 'string' ? l.translation.slice(0, TRANSLATE_MAX_TEXT) : '',
-    };
-  });
-}
-
-/** Burn caption lines into an uploaded video with ffmpeg (ass filter). Returns the mp4 bytes. */
-export async function burnLinesOnServer({ videoBuffer, lines, language, targetLanguage, style }) {
-  const id = randomUUID();
-  const inputPath = path.join(JOBS_DIR, `lyric-burn-${id}.in`);
-  const assPath = path.join(JOBS_DIR, `lyric-burn-${id}.ass`);
-  const outputPath = path.join(JOBS_DIR, `lyric-burn-${id}.mp4`);
-  try {
-    const fontName = fontForLanguages(language, targetLanguage);
-    await assertLyricCaptionsAvailable({ forBurn: true, fontName: needsCjkFont(lines, language, targetLanguage) ? fontName : null });
-    await fs.mkdir(JOBS_DIR, { recursive: true });
-    await fs.writeFile(inputPath, videoBuffer);
-    let meta;
-    try { meta = await hooks.probeMedia(inputPath); } catch { meta = null; }
-    const size = videoDisplaySize(meta);
-    if (!size) throw new LyricCaptionsError('Lyric captions need a video', { code: 'unsupported_for_photo' });
-    const audio = (meta.streams || []).find(s => s.codec_type === 'audio');
-    await fs.writeFile(assPath, buildAss({ lines, width: size.width, height: size.height, fontName, ...style }), 'utf8');
-    await hooks.burnAss({ inputPath, assPath, outputPath, copyAudio: !audio || ['aac', 'mp3', 'alac'].includes(audio.codec_name) });
-    return await fs.readFile(outputPath);
-  } finally {
-    await Promise.all([inputPath, assPath, outputPath].map(p => fs.unlink(p).catch(() => {})));
-  }
-}
-
 /** Short, lyric-free summary for job polling and the chat tool result. */
 export function summarizeResult(result) {
   return {
@@ -556,14 +489,6 @@ export function summarizeResult(result) {
     translatedCount: result.lines.filter(l => l.translation).length,
     webSearch: result.webSearch,
   };
-}
-
-function videoDisplaySize(meta) {
-  const v = (meta?.streams || []).find(s => s.codec_type === 'video' && !s.disposition?.attached_pic);
-  if (!v?.width || !v?.height) return null;
-  const sideRot = (v.side_data_list || []).find(d => d.rotation != null)?.rotation;
-  const rot = Math.abs(Number(sideRot ?? v.tags?.rotate ?? 0)) % 180;
-  return rot === 90 ? { width: v.height, height: v.width } : { width: v.width, height: v.height };
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
@@ -597,13 +522,6 @@ async function requireAvailable(req, res, next) {
   } catch (err) {
     return sendError(res, err, 'Lyric captions are unavailable');
   }
-}
-
-function jobFor(req) {
-  const job = jobs.get(req.params.jobId);
-  if (!job || job.operation !== 'lyric_captions') return null;
-  if (!isValidSampleModeRequest(req) && job.userId != null && req.user?.id != null && job.userId !== req.user.id) return null;
-  return job;
 }
 
 const router = express.Router();
@@ -679,50 +597,6 @@ router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser
   } catch (err) {
     fs.unlink(owned).catch(() => {});
     return sendError(res, err, 'Failed to start lyric captions');
-  }
-});
-
-/**
- * Web fallback burn-in (the web app has no client-side ffmpeg): POST /api/lyric-captions/:jobId/burn
- * multipart video (+ optional args JSON { position_from_bottom_pct, font_size }) → video/mp4.
- * Uses the finished job's lines, sized to the uploaded video. Not charged again (same edit).
- */
-/**
- * The iOS app draws the captions itself from the job's `lines` (it never uploads the video), so
- * the burn fallback answers 400 not_available_on_server to iOS clients, before reading any upload,
- * like the grouped tools on the process-video routes.
- */
-export function refuseIosBurn(req, res, next) {
-  if (!isIosClient(req)) return next();
-  const err = notAvailableOnServerError('lyric_captions',
-    'The FinalCap iOS app draws lyric captions on the device from the job result\'s lines; the server burn-in is for the web app only');
-  return res.status(err.statusCode).json(err.toJSON());
-}
-
-router.post('/api/lyric-captions/:jobId/burn', videoProcessLimiter, requireAuthenticatedUser, refuseIosBurn, uploadSingle('video'), async (req, res) => {
-  const job = jobFor(req);
-  if (!job) {
-    // job_lost = the server restarted since the job was made; job_expired = past the 30-minute TTL.
-    const code = missingJobCode(req.params.jobId) || 'job_not_found';
-    return res.status(404).json({ error: 'Lyric caption job not found or expired', code, retryable: code !== 'job_not_found', operation: 'lyric_captions' });
-  }
-  if (job.status !== 'succeeded' || !job.resultJson) {
-    return res.status(409).json({ error: `Lyric caption job is ${job.status}`, code: 'job_not_ready', operation: 'lyric_captions' });
-  }
-  if (!req.file?.buffer?.length) return res.status(400).json({ error: 'No video file provided (multipart field "video")', operation: 'lyric_captions' });
-  try {
-    let args = {};
-    if (req.body?.args) {
-      try { args = JSON.parse(req.body.args); } catch { throw new LyricCaptionsError('args must be valid JSON'); }
-    }
-    const style = parseStyleOptions({ ...job.lyricOptions, ...args });
-    const result = job.resultJson;
-    const out = await burnLinesOnServer({ videoBuffer: req.file.buffer, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, style });
-    res.set('Content-Type', 'video/mp4');
-    res.set('X-Lyric-Captions-Burn', 'server');
-    return res.send(out);
-  } catch (err) {
-    return sendError(res, err, 'Failed to burn lyric captions');
   }
 });
 

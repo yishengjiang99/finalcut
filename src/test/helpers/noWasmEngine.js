@@ -3,7 +3,7 @@
 // only run in the browser get small stand-in results.
 import { vi } from 'vitest';
 
-const FALLS_BACK_TO_SERVER = ['loadEngine', 'processMedia', 'burnSubtitles', 'burnAss', 'runCliCommand'];
+const FALLS_BACK_TO_SERVER = ['loadEngine', 'processMedia', 'runCliCommand'];
 
 export const STUB_METADATA = {
   format: { duration: 10, size: 1024 * 1024 },
@@ -19,6 +19,8 @@ export async function noWasmEngine(importOriginal) {
     ...real,
     ...Object.fromEntries(FALLS_BACK_TO_SERVER.map((name) => [name, fail])),
     probeMedia: async () => STUB_METADATA,
+    // Caption burn-in only ever runs in the browser; tests make it fail with mockRejectedValueOnce.
+    burnSubtitles: vi.fn(async (_options, bytes) => new Uint8Array(10 + (bytes?.byteLength ?? bytes?.length ?? 0))),
     addAudioTrack: vi.fn(async () => new Uint8Array([7, 7, 7])),
     joinClips: vi.fn(async (_options, clips) => new Uint8Array(clips.length)),
     extractSpeechAudio: vi.fn(async () => new Uint8Array([82, 73, 70, 70])),

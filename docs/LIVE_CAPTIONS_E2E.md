@@ -17,6 +17,6 @@ Flow covered:
 1. `GET /api/sample-access-token`
 2. Silent fixture → `POST /api/generate-captions` expects **422**
 3. Speech fixture → generate → `POST /api/translate-captions` (`srtContent` / `targetLanguage: es`) → timestamps preserved
-4. Sync multipart `POST /api/process-video` `burn_subtitles` (not `/api/jobs/...`)
+4. Sync multipart `POST /api/process-video` `burn_subtitles` (not `/api/jobs/...`): kept only for the shipped iOS app; the web client burns in the browser and never calls it for captions
 
 Requires prod `ALLOW_UNAUTH_SAMPLE_MODE` and OpenAI/xAI keys on the box.

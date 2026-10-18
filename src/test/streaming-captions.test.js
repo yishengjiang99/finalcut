@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Server side of streaming captions: single-use token mint (key never leaves the server), text-only
-// translate batches (speech: no web search), and the consented server-burn fallback.
+// translate batches (speech: no web search).
 import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest';
 import express from 'express';
 import { promises as fs } from 'fs';
@@ -43,7 +43,6 @@ beforeEach(async () => {
     hasTranslateKey: () => true,
     probeHostTools: async () => ({ ffmpeg: true, ffprobe: true, assFilter: true, fontFamilies: new Set(['Noto Sans CJK SC']) }),
     probeMedia: async () => ({ format: { duration: 5 }, streams: [{ codec_type: 'video', width: 720, height: 1280 }, { codec_type: 'audio', codec_name: 'aac' }] }),
-    burnAss: async ({ assPath, outputPath }) => { burnedAss = await fs.readFile(assPath, 'utf8'); await fs.writeFile(outputPath, 'BURNED'); },
     correct: async (args) => {
       corrected.push(args);
       return {
@@ -54,7 +53,6 @@ beforeEach(async () => {
     },
   });
 });
-let burnedAss = '';
 
 const headers = (extra = {}) => ({ 'sample-access-token': sampleToken, 'Content-Type': 'application/json', ...extra });
 const post = (p, body, h = headers()) => fetch(`${base}${p}`, { method: 'POST', headers: h, body: JSON.stringify(body ?? {}) });

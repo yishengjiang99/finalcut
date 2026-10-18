@@ -7,7 +7,7 @@ FinalCut implements a multi-layered transcription system that converts spoken au
 1. **Standard Caption Generation** — via the xAI Grok Realtime WebSocket API
 2. **Speaker Diarization** — via the OpenAI Batch Audio Transcription HTTP API
 
-Both pipelines produce SRT and VTT subtitle files and optionally burn the subtitles permanently into the video. An optional third step translates the generated captions using the Grok-3 chat API.
+Both pipelines produce SRT and VTT subtitle files. (Web: `generate_captions` burns in the browser with ffmpeg.wasm and never uploads the video for captions; the server `POST /api/process-video` `burn_subtitles` operation described below remains for the shipped iOS app only.) An optional third step translates the generated captions using the Grok-3 chat API.
 
 ---
 

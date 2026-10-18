@@ -321,21 +321,6 @@ function describeMediaInfo(metadata, sizeBytes) {
 - Frame Rate: ${videoStream.r_frame_rate || 'Unknown'}`;
 }
 
-// Burn SRT tracks on the server (legacy path, and the agreed fallback). Uploads the video.
-async function burnSubtitlesOnServer(videoFileData, fileMimeType, burnArgs) {
-  const formData = new FormData();
-  formData.append('video', new Blob([videoFileData], { type: fileMimeType }), 'input.mp4');
-  formData.append('operation', 'burn_subtitles');
-  formData.append('args', JSON.stringify(burnArgs));
-  const response = await fetch('/api/process-video', { method: 'POST', headers: sampleAuthHeaders(), body: formData });
-  if (!response.ok) {
-    let errorData = {};
-    try { errorData = await response.json(); } catch (_) {}
-    throw new Error(errorData.error || `Burn-in failed (${response.status})`);
-  }
-  return collectStreamChunks(response.body.getReader());
-}
-
 // Speech to SRT/VTT without uploading the video: on this device by default, or in the cloud
 // (audio only) when the user turned that on. Returns { srt, vtt, how }.
 async function transcribeSpeech(videoFileData, fileMimeType, language) {
@@ -360,7 +345,7 @@ async function transcribeSpeech(videoFileData, fileMimeType, language) {
 }
 
 // generate_captions in the browser: transcribe locally (or cloud audio-only if opted in),
-// translate as text, burn with ffmpeg.wasm.
+// translate as text, burn with ffmpeg.wasm (never on the server).
 async function generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileData, addMessage) {
   const { bytes: videoFileData, replacing } = captionSourceFor(inputVideoFileData);
   const fileMimeType = currentFileMimeType || 'video/mp4';
@@ -412,11 +397,10 @@ async function generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileD
   toolStatus('Burning captions into the video…');
   let burned;
   try {
-    burned = await browserFirst(
-      'generate_captions',
-      () => engine.burnSubtitles({ srt: primary, translatedSrt: translatedTrack || null, style, position }, videoFileData, fileMimeType),
-      () => burnSubtitlesOnServer(videoFileData, fileMimeType, { srtContent: srt, style, position, ...(translatedSrt ? { translatedSrtContent: translatedSrt } : {}) }),
-    );
+    // In the browser only: the video is never uploaded for captions. If the engine cannot burn, the
+    // captions are shown as soft subtitles below.
+    burned = await engine.burnSubtitles({ srt: primary, translatedSrt: translatedTrack || null, style, position }, videoFileData, fileMimeType);
+    lastExecution.executedOn = 'browser';
   } catch (error) {
     if (error.code === 'cancelled') throw error;
     // The captions exist; show them as a soft track instead of failing the whole step.
@@ -430,13 +414,12 @@ async function generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileD
   addMessage({ text: `Captions burned in (${langDesc}).${dual}`, videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })), mimeType: 'video/mp4' });
   addMessage({ text: 'SRT download:', videoUrl: srtUrl, videoType: 'subtitle-srt', mimeType: 'text/plain' });
   if (translatedSrt) addMessage({ text: `Translated SRT (${translateLanguage}):`, videoUrl: URL.createObjectURL(new Blob([translatedSrt], { type: 'text/plain' })), videoType: 'subtitle-srt', mimeType: 'text/plain' });
-  const where = lastExecution.executedOn === 'server' ? 'burn-in ran on the server (you agreed to the upload)' : 'burned in on this device';
-  return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in; ${how}; ${where}.${replacing ? ' Replaced the captions burned earlier (re-burned from the uncaptioned video).' : ''}`;
+  return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in; ${how}; burned in on this device.${replacing ? ' Replaced the captions burned earlier (re-burned from the uncaptioned video).' : ''}`;
 }
 
 // lyric_captions in the browser. Song lookup and translation need the audio on the server, so the
 // audio (never the video) is uploaded, and only after the user agrees (or has turned on cloud
-// captions). The burn-in runs in ffmpeg.wasm.
+// captions). Shows a live overlay; the caption track is added on export.
 async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage) {
   const fileMimeType = currentFileMimeType || 'video/mp4';
   if (!getCloudCaptions() && !(await requestUploadConsent({ tool: 'lyric_captions', uploads: 'audio', reason: 'Lyric captions identify the song and translate the lyrics on the server.' }))) {
@@ -450,8 +433,6 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
     headers,
     size: width && height ? { width, height } : null,
     extract: (bytes) => engine.extractSpeechAudio(bytes, fileMimeType),
-    // No burn at caption time: the lines become a live overlay and are burned in on export.
-    burn: async () => null,
   });
   const lines = result.lines?.length || 0;
   const songText = describeSong(result.song);
