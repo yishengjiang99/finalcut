@@ -146,7 +146,12 @@ describe('every iOS build', () => {
       expect(names(at(build))).toContain('lyric_captions');
     }
     // The iOS copy is a separate object; the shared web definition is not mutated.
-    expect(WEB_DEF.function.description).toMatch(/burns two-line captions into the video/);
+    expect(WEB_DEF.function.description).toMatch(/exports them as a subtitle track in the video file \(not burned into the picture\)/);
+    expect(WEB_DEF.function.description).not.toMatch(/burns (the original|two-line)|are burned in when/);
+    const gen = offeredToolsFor({}).find(t => t.function.name === 'generate_captions').function;
+    expect(gen.description).toMatch(/exports them as a subtitle track in the video file \(not burned in\)/);
+    expect(gen.description).toMatch(/frames in the browser/);
+    expect(gen.description).not.toMatch(/call lyric_captions instead, which burns/);
   });
 
   it('generate_captions says "same-language only, translation goes to lyric_captions" on every build', () => {

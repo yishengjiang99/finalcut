@@ -91,7 +91,7 @@ describe('lyric_captions in /api/chat', () => {
     const d = tools.find(t => t.function.name === 'lyric_captions').function.description;
     for (const phrase of ['add captions in Chinese', 'add Chinese captions', 'Chinese subtitles',
       'translate the video into Chinese and burn the captions', 'mode "speech"', 'zh-Hans', 'detected automatically',
-      'replaced, not doubled', 'generate_captions only for same-language']) expect(d).toContain(phrase);
+      'replaces the earlier captions, not doubles them', 'generate_captions only for same-language']) expect(d).toContain(phrase);
     const gen = tools.find(t => t.function.name === 'generate_captions').function;
     expect(gen.description).toMatch(/same-language/);
     expect(gen.description).toMatch(/call lyric_captions instead/);
