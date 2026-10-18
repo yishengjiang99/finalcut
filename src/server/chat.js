@@ -334,7 +334,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   try {
     media = validateMedia(req.body.media);
     thumbnails = parseThumbnails(req.body.thumbnails);
-    conversation = normalizeClientMessages(req.body.messages);
+    conversation = normalizeClientMessages(req.body.messages, { ios: parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
   } catch (error) {
     if (error instanceof ClientRequestError) {
       return res.status(error.status).json({ error: error.message, schemaVersion: CLIENT_SCHEMA_VERSION });

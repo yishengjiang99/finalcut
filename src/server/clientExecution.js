@@ -152,7 +152,7 @@ function contentToString(content) {
  * Normalize client-supplied conversation for the model. Drops client "system"
  * messages (the server owns the system prompt) and coerces tool results to strings.
  */
-export function normalizeClientMessages(messages) {
+export function normalizeClientMessages(messages, { ios = false } = {}) {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new ClientRequestError('messages must be a non-empty array');
   }
@@ -197,7 +197,7 @@ export function normalizeClientMessages(messages) {
         out.push({
           role: 'tool',
           tool_call_id: msg.tool_call_id,
-          content: annotateToolResult(contentToString(msg.content), toolNameForCall(out, msg.tool_call_id)),
+          content: annotateToolResult(contentToString(msg.content), toolNameForCall(out, msg.tool_call_id), { ios }),
         });
         break;
       }
@@ -238,12 +238,49 @@ export function isUnsupportedOnDevice(result) {
     && [result.code, result.reason, result.error].includes(UNSUPPORTED_ON_DEVICE);
 }
 
+export const LYRIC_CAPTIONS_NOT_AVAILABLE =
+  'lyric_captions is not available in this version of the app. Tell the user Chinese captions need the latest app update, and offer captions in the video\'s own language.';
+export const LYRIC_CAPTIONS_FAILED = 'Captions couldn\'t finish. Nothing was changed. Try again.';
+const UNKNOWN_TOOL_CODES = new Set([UNSUPPORTED_ON_DEVICE, 'unknown_tool', 'unsupported_tool', 'tool_not_found', 'tool_not_supported', 'unsupported']);
+const UNKNOWN_TOOL_TEXT = /unknown tool|unsupported|not (supported|available|found|implemented)|no such tool/i;
+
+/**
+ * FinalCap-iOS builds without the lyric_captions executor answer it with an error or an "unknown
+ * tool" result. Before it reaches the model, an unknown/unsupported result is replaced by one fixed
+ * message (so the model says the app needs the latest update and offers same-language captions) and
+ * any other error by a short generic line, so no raw error text can be repeated to the user.
+ * A successful result and `skipped_by_user` (a user decision) are left alone. Does not touch which
+ * tools are offered. Returns the content unchanged for other tools and non-iOS clients.
+ */
+export function rewriteLyricCaptionsResult(content, { ios = false } = {}) {
+  if (!ios) return content;
+  const result = parseToolResult(content);
+  if (result) {
+    if (result.ok === true || isSkippedByUser(result)) return content;
+    const failed = result.ok === false || (result.ok === undefined && (result.error || result.code || result.reason));
+    if (!failed) return content;
+    const unknown = [result.code, result.reason, result.error].some(v => typeof v === 'string' && UNKNOWN_TOOL_CODES.has(v));
+    if (unknown) {
+      return JSON.stringify({ ok: false, executedOn: 'device', code: UNSUPPORTED_ON_DEVICE, error: LYRIC_CAPTIONS_NOT_AVAILABLE, unsupportedOnDevice: true });
+    }
+    return JSON.stringify({ ok: false, executedOn: 'device', error: LYRIC_CAPTIONS_FAILED });
+  }
+  const text = String(content ?? '');
+  if (UNKNOWN_TOOL_TEXT.test(text)) return JSON.stringify({ ok: false, executedOn: 'device', code: UNSUPPORTED_ON_DEVICE, error: LYRIC_CAPTIONS_NOT_AVAILABLE, unsupportedOnDevice: true });
+  if (/error|fail|couldn'?t|unable|exception|timed? ?out/i.test(text)) return JSON.stringify({ ok: false, executedOn: 'device', error: LYRIC_CAPTIONS_FAILED });
+  return content;
+}
+
 /**
  * Rewrite a `skipped_by_user` / `unsupported_on_device` tool result so the model reads it
  * correctly (a user decision / a device limitation, not a failure) and does not retry the
  * same tool this turn. Other results pass through unchanged.
  */
-export function annotateToolResult(content, toolName) {
+export function annotateToolResult(content, toolName, { ios = false } = {}) {
+  if (toolName === 'lyric_captions') {
+    const rewritten = rewriteLyricCaptionsResult(content, { ios });
+    if (rewritten !== content) return rewritten;
+  }
   const result = parseToolResult(content);
   const name = toolName || 'this tool';
   if (isSkippedByUser(result)) {
