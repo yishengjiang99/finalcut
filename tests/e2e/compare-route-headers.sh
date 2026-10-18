@@ -4,7 +4,9 @@
 # labelled "<main-asset>" so a rebuilt-but-identical bundle compares equal). Transport-level
 # differences are normalised so the gate survives the HTTP/1.1 -> HTTP/2 switch: the status line is
 # reduced to its code, header names are lower-cased, and Connection / Strict-Transport-Security /
-# Vary (HSTS and gzip_vary are added site-wide on purpose) are dropped. /success is the SPA's only
+# Vary (HSTS and gzip_vary are added site-wide on purpose) are dropped, and so is exactly
+# `cache-control: no-cache` (the HTML shell revalidates on purpose: / , /index.html, /success and the
+# 404 pages; tests/e2e/check-site-seo.sh asserts it on / and /index.html). /success is the SPA's only
 # client-side route (Stripe checkout return); other unknown paths are real 404s by design.
 #   tests/e2e/compare-route-headers.sh http://127.0.0.1:8081 http://127.0.0.1:8080   # live vs live
 #   tests/e2e/compare-route-headers.sh --dump https://grepawk.com > before.txt         # snapshot
@@ -19,7 +21,7 @@ dump() {
     [[ "$p" == "$asset" ]] && echo "== <main-asset>" || echo "== $p"
     curl -s -o /dev/null -D - "$base$p" | tr -d '\r' \
       | sed -E 's#^HTTP/[0-9.]+ ([0-9]{3}).*#STATUS \1#; s#^([A-Za-z0-9-]+):#\L\1:#' \
-      | grep -viE '^(date|etag|last-modified|content-length|server|expires|connection|strict-transport-security|vary):' | grep -v '^$' | sort
+      | grep -viE '^cache-control: no-cache$' | grep -viE '^(date|etag|last-modified|content-length|server|expires|connection|strict-transport-security|vary):' | grep -v '^$' | sort
   done
 }
 side() { if [[ -f "$1" ]]; then cat "$1"; else dump "$1"; fi; }
