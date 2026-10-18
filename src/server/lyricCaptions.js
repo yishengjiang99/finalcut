@@ -37,7 +37,7 @@ import { extractAudioToWav } from './captions.js';
 import { isIosClient } from './clientInfo.js';
 import { notAvailableOnServerError } from './ffmpegOps.js';
 import { normalizeLanguageCode, stripLlmFences, normalizeCaptionText } from './captionHelpers.js';
-import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs } from './jobs.js';
+import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs, missingJobCode } from './jobs.js';
 
 export const LYRIC_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI audio limit; 10 min of 16 kHz WAV is 19.2 MB
 export const LYRIC_AUDIO_MAX_SECONDS = 10 * 60;
@@ -771,7 +771,11 @@ function refuseIosBurn(req, res, next) {
 
 router.post('/api/lyric-captions/:jobId/burn', videoProcessLimiter, requireAuthenticatedUser, refuseIosBurn, uploadSingle('video'), async (req, res) => {
   const job = jobFor(req);
-  if (!job) return res.status(404).json({ error: 'Lyric caption job not found or expired', code: 'job_not_found', operation: 'lyric_captions' });
+  if (!job) {
+    // job_lost = the server restarted since the job was made; job_expired = past the 30-minute TTL.
+    const code = missingJobCode(req.params.jobId) || 'job_not_found';
+    return res.status(404).json({ error: 'Lyric caption job not found or expired', code, retryable: code !== 'job_not_found', operation: 'lyric_captions' });
+  }
   if (job.status !== 'succeeded' || !job.resultJson) {
     return res.status(409).json({ error: `Lyric caption job is ${job.status}`, code: 'job_not_ready', operation: 'lyric_captions' });
   }

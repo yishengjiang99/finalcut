@@ -56,20 +56,74 @@ export async function extractAudioWav(videoBytes, { AudioCtx = globalThis.AudioC
   return encodeWavMono16(rendered.getChannelData(0), TARGET_SAMPLE_RATE);
 }
 
-/** Poll GET /api/jobs/:id until it finishes; returns the final job body. */
-export async function pollJob(pollUrl, { headers = {}, intervalMs = 3000, timeoutMs = 10 * 60 * 1000, sleep = (ms) => new Promise(r => setTimeout(r, ms)) } = {}) {
+// What the user sees (Design wording). The raw server text ("Job not found") never reaches the chat.
+export const LYRIC_CAPTIONS_MESSAGES = Object.freeze({
+  couldntFinish: "Captions couldn't finish. Nothing was changed. Try again.",
+  tooLong: "This video's audio is too long for translated captions. Try a clip under 10 minutes.",
+  unavailable: "Translated captions aren't available right now. Try again later.",
+});
+
+const TOO_LONG_CODES = new Set(['audio_too_long', 'audio_too_large']);
+// The server told us exactly what is wrong and the user can act on it: keep its words.
+const SPECIFIC_CODES = new Set(['captions_already_burned', 'no_speech', 'no_audio', 'audio_only', 'unsupported_for_photo', 'daily_limit_reached', 'invalid_arguments', 'unsupported_audio_format']);
+
+/** Retryable "the job is gone" errors: the server restarted (deploy) or dropped the job. */
+export const isJobGone = (error) => error?.code === 'job_lost' || error?.code === 'job_expired';
+
+/** Map any failure of the web flow to one short message. */
+export function friendlyLyricCaptionsError(error) {
+  if (error?.name === 'UploadDeclinedError') return error.message;
+  const code = error?.code;
+  if (TOO_LONG_CODES.has(code) || error?.status === 413 || /support up to \d+ minutes/i.test(error?.message || '')) return LYRIC_CAPTIONS_MESSAGES.tooLong;
+  if (code === 'lyric_captions_unavailable' || error?.status === 503) return LYRIC_CAPTIONS_MESSAGES.unavailable;
+  if (SPECIFIC_CODES.has(code) && error?.message) return error.message;
+  return LYRIC_CAPTIONS_MESSAGES.couldntFinish;
+}
+
+function httpError(body, res, fallback) {
+  const err = new Error(body?.error || fallback);
+  if (body?.code) err.code = body.code;
+  err.status = res.status;
+  return err;
+}
+
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+
+/**
+ * Poll GET /api/jobs/:id until it finishes; returns the final job body.
+ * A restarting server (network error, 502/503/504) is retried for a while. A 404 means the job is
+ * gone: err.code is 'job_lost' (restart) or 'job_expired', so the caller can start over.
+ */
+export async function pollJob(pollUrl, { headers = {}, intervalMs = 3000, timeoutMs = 10 * 60 * 1000, transientRetries = 10, sleep = (ms) => new Promise(r => setTimeout(r, ms)) } = {}) {
   const deadline = Date.now() + timeoutMs;
+  let transient = 0;
   for (;;) {
-    const res = await fetch(pollUrl, { headers });
+    let res;
+    try {
+      res = await fetch(pollUrl, { headers });
+    } catch (cause) {
+      if (++transient > transientRetries) { const err = new Error('Network error while checking the job'); err.code = 'network'; throw err; }
+      await sleep(Math.min(intervalMs, 3000));
+      continue;
+    }
+    if (TRANSIENT_STATUSES.has(res.status) && ++transient <= transientRetries) {
+      await sleep(Math.min(intervalMs, 3000));
+      continue;
+    }
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `Job poll failed (${res.status})`);
+    if (!res.ok) {
+      const err = httpError(body, res, `Job poll failed (${res.status})`);
+      if (res.status === 404 && !err.code) err.code = 'job_lost';
+      throw err;
+    }
+    transient = 0;
     if (body.status === 'succeeded') return body;
     if (body.status === 'failed') {
       const err = new Error(body.error || 'Lyric captions failed');
       err.code = body.code;
       throw err;
     }
-    if (Date.now() > deadline) throw new Error('Lyric captions timed out');
+    if (Date.now() > deadline) { const err = new Error('Lyric captions timed out'); err.code = 'timeout'; throw err; }
     await sleep(intervalMs);
     intervalMs = Math.min(intervalMs * 1.5, 10_000); // stay well under the 100-per-15-min API budget
   }
@@ -83,12 +137,7 @@ export function describeSong(song) {
   return `Song: "${song.title}"${by} (${song.confidence} confidence, ${src})${song.url ? ` ${song.url}` : ''}.`;
 }
 
-/**
- * Whole web flow. `deps` lets tests replace the WebAudio extraction.
- * Returns { burned: Uint8Array, summary, result } — result.lines stay in the browser.
- */
-export async function runLyricCaptionsWeb(args, videoBytes, { headers = {}, extract = extractAudioWav, poll = pollJob, size = null, burn = null } = {}) {
-  const wav = await extract(videoBytes);
+async function transcribeOnce(args, wav, { headers, size, poll }) {
   const form = new FormData();
   form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
   // With the frame size the result carries a ready-made ASS script, which the browser can burn itself.
@@ -96,17 +145,47 @@ export async function runLyricCaptionsWeb(args, videoBytes, { headers = {}, extr
   for (const key of ['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size']) {
     if (args[key] !== undefined && args[key] !== null && args[key] !== '') form.append(key, String(args[key]));
   }
-  const start = await fetch('/api/lyric-captions', { method: 'POST', headers, body: form });
-  const started = await start.json().catch(() => ({}));
-  if (!start.ok) {
-    const err = new Error(started.error || `Lyric captions failed (${start.status})`);
-    err.code = started.code;
+  let start;
+  try {
+    start = await fetch('/api/lyric-captions', { method: 'POST', headers, body: form });
+  } catch {
+    const err = new Error('Network error while uploading the audio');
+    err.code = 'network';
     throw err;
   }
+  const started = await start.json().catch(() => ({}));
+  if (!start.ok) throw httpError(started, start, `Lyric captions failed (${start.status})`);
   const job = await poll(started.pollUrl || `/api/jobs/${started.jobId}`, { headers });
   const resultRes = await fetch(started.resultUrl || `/api/jobs/${started.jobId}/result`, { headers });
-  if (!resultRes.ok) throw new Error(`Could not fetch lyric captions (${resultRes.status})`);
-  const result = await resultRes.json();
+  if (!resultRes.ok) {
+    const body = await resultRes.json().catch(() => ({}));
+    const err = httpError(body, resultRes, `Could not fetch lyric captions (${resultRes.status})`);
+    if (resultRes.status === 404 && !err.code) err.code = 'job_lost';
+    throw err;
+  }
+  return { started, job, result: await resultRes.json() };
+}
+
+/**
+ * Whole web flow. `deps` lets tests replace the WebAudio extraction.
+ * Returns { burned: Uint8Array, summary, result } — result.lines stay in the browser.
+ */
+export async function runLyricCaptionsWeb(args, videoBytes, deps = {}) {
+  const { headers = {}, extract = extractAudioWav, poll = pollJob, size = null, burn = null } = deps;
+  const wav = await extract(videoBytes);
+  // The audio is tiny, and the web app has no per-edit charge, so when the server restarted
+  // mid-job (every deploy does) the whole request is simply sent once more.
+  let started;
+  let job;
+  let result;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      ({ started, job, result } = await transcribeOnce(args, wav, { headers, size, poll }));
+      break;
+    } catch (err) {
+      if (!(isJobGone(err) && attempt < 2)) throw err;
+    }
+  }
 
   // Server burn: uploads the video. In-browser editing passes `burn` and only falls back to this
   // after the user agrees.
@@ -116,9 +195,7 @@ export async function runLyricCaptionsWeb(args, videoBytes, { headers = {}, extr
     const burnRes = await fetch(`/api/lyric-captions/${encodeURIComponent(started.jobId)}/burn`, { method: 'POST', headers, body: burnForm });
     if (!burnRes.ok) {
       const body = await burnRes.json().catch(() => ({}));
-      const err = new Error(body.error || `Burn-in failed (${burnRes.status})`);
-      err.code = body.code;
-      throw err;
+      throw httpError(body, burnRes, `Burn-in failed (${burnRes.status})`);
     }
     return new Uint8Array(await burnRes.arrayBuffer());
   };

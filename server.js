@@ -9,7 +9,7 @@ import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
 import { ffmpegCliRouter } from './server/tools/ffmpeg-cli-tool.js';
 import { chatRouter } from './src/server/chat.js';
-import { jobsRouter } from './src/server/jobs.js';
+import { jobsRouter, pendingJobCount, waitForJobsToSettle } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
@@ -76,7 +76,7 @@ app.use(v2Router);
 app.use(pushRouter);
 scheduleLifecycle(getPushStore);
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);
   console.log('Configuration loaded successfully');
   console.log('FFmpeg video processing endpoint available at /api/process-video');
@@ -89,4 +89,19 @@ app.listen(PORT, () => {
   } else {
     console.log('Stripe payment endpoints are disabled (STRIPE_SECRET_KEY not set)');
   }
+});
+
+// Graceful stop (systemd sends SIGTERM on every deploy restart). Jobs live in this process's memory,
+// so keep serving until running jobs have finished and their results were picked up (at most 45 s),
+// then close. A second signal exits at once.
+let shuttingDown = false;
+process.on('SIGTERM', async () => {
+  if (shuttingDown) process.exit(0);
+  shuttingDown = true;
+  const pending = pendingJobCount();
+  if (pending) console.log(`SIGTERM: waiting up to 45s for ${pending} job(s) to finish before exit`);
+  const left = await waitForJobsToSettle({ maxMs: 45_000 });
+  console.log(left ? `SIGTERM: exiting with ${left} job(s) still pending` : 'SIGTERM: exiting');
+  setTimeout(() => process.exit(0), 5_000).unref();
+  httpServer.close(() => process.exit(0));
 });

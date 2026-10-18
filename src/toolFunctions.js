@@ -4,7 +4,7 @@
 // the user agrees to the upload. In "server" engine mode every edit goes to the server API.
 
 import { captionSourceFor, recordCaptionBurn } from './captionLineage.js';
-import { runLyricCaptionsWeb, describeSong } from './lyricCaptionsClient.js';
+import { runLyricCaptionsWeb, describeSong, friendlyLyricCaptionsError } from './lyricCaptionsClient.js';
 import { abortableFetch as fetch } from './abortableFetch.js';
 import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
@@ -1225,8 +1225,10 @@ export const toolFunctions = {
       if (!args?.target_language) throw new Error('target_language is required');
       return await lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage);
     } catch (error) {
-      addMessage({ text: 'Error creating lyric captions: ' + error.message });
-      return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}: ${error.message}`;
+      // One short message for the user (never "Job not found"); the model is told to say just that.
+      const friendly = friendlyLyricCaptionsError(error);
+      addMessage({ text: friendly });
+      return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}. Nothing was changed. Reply to the user with exactly this message and nothing else (no apology, no extra explanation): "${friendly}"`;
     }
   },
 

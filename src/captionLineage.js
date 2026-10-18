@@ -20,7 +20,7 @@ export function captionSourceFor(videoBytes) {
     return { bytes: burnSources.get(videoBytes), replacing: true };
   }
   if (isObject(videoBytes) && captionedDescendants.has(videoBytes)) {
-    throw new Error(CAPTIONS_ALREADY_BURNED);
+    throw Object.assign(new Error(CAPTIONS_ALREADY_BURNED), { code: 'captions_already_burned' });
   }
   return { bytes: videoBytes, replacing: false };
 }
