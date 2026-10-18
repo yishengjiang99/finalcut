@@ -39,6 +39,7 @@ BLOG_SITE="${NGINX_DIR}/sites-enabled/finalcut-blog.conf"
 BLOG_CERT="${FINALCUT_BLOG_CERT:-/etc/letsencrypt/live/${BLOG_HOST}/fullchain.pem}"
 SMOKE="${FINALCUT_SITE_SMOKE:-1}"            # test harness sets 0
 MARK='# finalcut site (managed by deploy-grepawk.yml)'
+MARK_NC='# finalcut spa no-cache (managed by deploy-grepawk.yml)'
 BEGIN_WWW="# BEGIN finalcut www-redirect (managed by deploy-grepawk.yml)"
 END_WWW="# END finalcut www-redirect"
 SUDO=""; [[ $(id -u) -eq 0 ]] || SUDO="sudo -n"
@@ -149,6 +150,23 @@ smoke_new() { # $1 = file with the pre-change snapshot
   return $fail
 }
 
+# `location /` (the SPA fallback) sets Cache-Control: no-cache. add_header in a location replaces the
+# inherited server-level headers, so the shared header snippet is re-included. Idempotent (MARK_NC);
+# runs on every install, so servers that already carry the MARK edits get it too. Inserted right after
+# the `error_page 404 /404.html;` line that the MARK edit (5) leaves inside `location /`.
+ensure_spa_nocache() {
+  local target="$1" ep='        error_page 404 /404.html;'
+  if $SUDO grep -qF "$MARK_NC" "$target"; then log "spa no-cache already present in ${target}"; return 0; fi
+  [[ "$(count "$ep" "$target")" == 1 ]] || die "expected one '${ep}' line (inside location /) in ${target}"
+  $SUDO awk -v ep="$ep" -v mk="$MARK_NC" -v hdr="include ${SNIPPET_DIR}/finalcut-site-headers.conf;" '
+    { print }
+    $0 == ep { print "        " mk; print "        add_header Cache-Control \"no-cache\" always;"; print "        " hdr }
+  ' "$target" | $SUDO tee "${target}.finalcut-site-new" >/dev/null
+  $SUDO sh -c 'cat "$1" > "$2"' sh "${target}.finalcut-site-new" "$target"   # in place: keeps inode/owner/mode
+  $SUDO rm -f "${target}.finalcut-site-new"
+  log "added no-cache to location / in ${target}"
+}
+
 do_install() {
   local app_dir="${1:?app_dir}" target bk snap
   do_preflight "$app_dir"
@@ -203,6 +221,7 @@ do_install() {
     log "edited ${target}:"
     $SUDO diff -u "$bk/target.conf" "$target" || true
   fi
+  ensure_spa_nocache "$target"
   if [[ -f "${app_dir}/nginx/blog-site.conf" ]] && $SUDO test -f "$BLOG_CERT"; then
     $SUDO install -m 0644 "${app_dir}/nginx/blog-site.conf" "$BLOG_SITE"
     log "installed ${BLOG_SITE}"

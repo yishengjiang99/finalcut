@@ -89,6 +89,17 @@ grep -qi 'immutable' <<<"$h" || fail "js not immutable"
 mp4="$(ls dist/assets/*.mp4 | head -1)"; mp4="/assets/$(basename "$mp4")"
 h="$(H grepawk.com "$mp4")"; grep -qi '^cache-control: public, max-age=31536000, immutable' <<<"$h" || fail "mp4 cache"
 grep -qi '^strict-transport-security' <<<"$h" || fail "mp4 lost HSTS"; grep -qi '^x-content-type-options: nosniff' <<<"$h" || fail "mp4 lost nosniff"
+# Cache-Control: no-cache on the HTML shell ("/" via the index redirect, /index.html, and location /),
+# with the shared security headers still present (add_header in a location resets inherited ones).
+for v in / /index.html /nope; do
+  h="$(H grepawk.com "$v")"; grep -qi '^cache-control: no-cache$' <<<"$h" || fail "$v missing Cache-Control: no-cache"
+  [[ "$(grep -ci '^cache-control:' <<<"$h")" == 1 ]] || fail "$v has more than one Cache-Control"
+  for hd in strict-transport-security x-frame-options x-content-type-options cross-origin-opener-policy cross-origin-embedder-policy; do
+    grep -qi "^$hd:" <<<"$h" || fail "$v lost $hd"
+  done
+done
+grep -q 'finalcut spa no-cache' "$E/sites-enabled/finalcut" || fail "spa no-cache mark missing"
+[[ "$(grep -c 'finalcut spa no-cache' "$E/sites-enabled/finalcut")" == 1 ]] || fail "spa no-cache not exactly once"
 [[ "$(C grepawk.com /nope)" == 404 ]] || fail "unknown path not 404"
 curl -sk --resolve grepawk.com:443:127.0.0.1 https://grepawk.com/nope | grep -q 'noindex' || fail "custom 404 page"
 [[ "$(C grepawk.com /success)" == 200 ]] || fail "/success"
