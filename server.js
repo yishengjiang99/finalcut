@@ -13,6 +13,7 @@ import { jobsRouter } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
+import { iosSuggestionsAdminRouter } from './src/server/iosSuggestionsAdmin.js';
 import { v2Router } from './src/server/v2.js';
 import { telemetryRouter, scheduleTelemetryPurge } from './src/server/telemetry.js';
 import { pushRouter, getPushStore } from './src/server/push/router.js';
@@ -35,6 +36,8 @@ app.use(createHealthRouter());
 
 // iOS suggestion pills: public, pre-login, no session/DB (own rate limiter).
 app.use(iosSuggestionsRouter);
+// Admin API for the pills (404 while ADMIN_API_TOKEN is unset; own small JSON parser, rate limits).
+app.use(iosSuggestionsAdminRouter);
 
 // Anonymous first-party telemetry: before the session middleware so it never sets a cookie
 // (own small JSON parser + rate limiter; stores no IP). See src/server/telemetry.js.

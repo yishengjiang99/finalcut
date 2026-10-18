@@ -176,28 +176,42 @@ export function createSuggestionsStore({
     return entry;
   }
 
+  // Returns { config, source: 'override' | 'default' | 'none', file }.
   function load() {
     const override = overridePath();
     if (override) {
       const result = readFile(override);
-      if (result.config) return result.config;
+      if (result.config) return { config: result.config, source: 'override', file: override };
       warnOnce(`${override}:${result.key || result.error}`, `[ios-suggestions] override ${override} unusable (${result.error}); using ${defaultPath}`);
     }
     const fallback = readFile(defaultPath);
-    if (fallback.config) return fallback.config;
+    if (fallback.config) return { config: fallback.config, source: 'default', file: defaultPath };
     warnOnce(`${defaultPath}:${fallback.key || fallback.error}`, `[ios-suggestions] default ${defaultPath} unusable (${fallback.error}); serving no suggestions`);
-    return { ttl: DEFAULT_TTL, video: [], photo: [] };
+    return { config: { ttl: DEFAULT_TTL, video: [], photo: [] }, source: 'none', file: defaultPath };
   }
 
   return {
     get() {
       const t = now();
       if (!current || t - lastCheck >= checkIntervalMs) {
-        current = load();
+        current = load().config;
         lastCheck = t;
       }
       return current;
     },
+    /** Fresh read (bypasses the check interval): what is being served, and from where. */
+    info() {
+      const result = load();
+      current = result.config;
+      lastCheck = now();
+      return result;
+    },
+    /** Re-read on the next get() (used after the admin API writes the override). */
+    invalidate() {
+      lastCheck = -Infinity;
+    },
+    overridePath,
+    defaultPath,
   };
 }
 
@@ -226,4 +240,6 @@ export function createIosSuggestionsRouter({ store = createSuggestionsStore(), l
   return router;
 }
 
-export const iosSuggestionsRouter = createIosSuggestionsRouter();
+/** The one store shared by the public endpoint and the admin API (src/server/iosSuggestionsAdmin.js). */
+export const suggestionsStore = createSuggestionsStore();
+export const iosSuggestionsRouter = createIosSuggestionsRouter({ store: suggestionsStore });
