@@ -1,5 +1,7 @@
 # lyric_captions: bilingual lyric/speech captions
 
+> **Web, plain speech:** "add captions in Chinese" now streams the audio to ElevenLabs realtime STT and burns in the browser; see [STREAMING_CAPTIONS.md](STREAMING_CAPTIONS.md). This upload-based flow remains for songs (`mode: "lyrics"`), for iOS, and as the fallback when `ELEVENLABS_API_KEY` is not set.
+
 Audio in, captions out. The client sends only the audio track. The server transcribes it with
 word timestamps, identifies the song and corrects misheard lyrics, translates each line, and
 returns timed lines (plus an ASS file when the video size is given). The client burns the captions
