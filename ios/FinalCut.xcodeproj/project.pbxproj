@@ -77,8 +77,11 @@
 		029FF0AD96E5E8AE02A9809F /* NoUploadWordingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */; };
 		4E77610641663D2135888EC3 /* LyricCaptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A61B5306740F87D05343E981 /* LyricCaptions.swift */; };
 		58BAB178419FF46FAD3EB825 /* LyricCaptionRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F4814E5C7EF36E70E3F950 /* LyricCaptionRenderer.swift */; };
-		26B0A0B79B3CEAAE26865DCF /* LyricAudioExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7018E24C2A5C14681BBA67F4 /* LyricAudioExporter.swift */; };
+		BED9FBA643CE4FCBE7016260 /* StreamingCaptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE84FB2551AEA06B0E75B181 /* StreamingCaptions.swift */; };
+		13ABEC16D81257201E584557 /* StreamingCaptionsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BC92EB69CD2348800BFE35 /* StreamingCaptionsEngine.swift */; };
+		8ADB8E423855BAB8EDBF8EDE /* StreamingCaptionsIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E67014DA89DA9D07B39CD21 /* StreamingCaptionsIO.swift */; };
 		A4A948B2DC9987C0B4D9FECF /* LyricCaptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2815353AC354A20653821C60 /* LyricCaptionsTests.swift */; };
+		79D5A1BE0373C14BAFA8C2B8 /* StreamingCaptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */; };
 		1A5E8B986C681D4767E46AFF /* NotoSansCJKsc-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */; };
 		2B94E44A19E58365E3E10DF4 /* NotoSansCJK-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */; };
 /* End PBXBuildFile section */
@@ -177,8 +180,11 @@
 		8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoUploadWordingUITests.swift; sourceTree = "<group>"; };
 		A61B5306740F87D05343E981 /* LyricCaptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricCaptions.swift; sourceTree = "<group>"; };
 		A1F4814E5C7EF36E70E3F950 /* LyricCaptionRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricCaptionRenderer.swift; sourceTree = "<group>"; };
-		7018E24C2A5C14681BBA67F4 /* LyricAudioExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricAudioExporter.swift; sourceTree = "<group>"; };
+		EE84FB2551AEA06B0E75B181 /* StreamingCaptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCaptions.swift; sourceTree = "<group>"; };
+		46BC92EB69CD2348800BFE35 /* StreamingCaptionsEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCaptionsEngine.swift; sourceTree = "<group>"; };
+		2E67014DA89DA9D07B39CD21 /* StreamingCaptionsIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCaptionsIO.swift; sourceTree = "<group>"; };
 		2815353AC354A20653821C60 /* LyricCaptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricCaptionsTests.swift; sourceTree = "<group>"; };
+		FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCaptionsTests.swift; sourceTree = "<group>"; };
 		5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = NotoSansCJKsc-Bold.otf; sourceTree = "<group>"; };
 		5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = NotoSansCJK-OFL.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -252,7 +258,9 @@
 			isa = PBXGroup;
 			children = (
 				9F5E3892807B2986C6B3BE2F /* OnDeviceCaptioner.swift */,
-				7018E24C2A5C14681BBA67F4 /* LyricAudioExporter.swift */,
+				EE84FB2551AEA06B0E75B181 /* StreamingCaptions.swift */,
+				46BC92EB69CD2348800BFE35 /* StreamingCaptionsEngine.swift */,
+				2E67014DA89DA9D07B39CD21 /* StreamingCaptionsIO.swift */,
 				A1F4814E5C7EF36E70E3F950 /* LyricCaptionRenderer.swift */,
 				A61B5306740F87D05343E981 /* LyricCaptions.swift */,
 				AAF61874E48A7AF7AEB14D5E /* Captions.swift */,
@@ -363,6 +371,7 @@
 				E1B7CC300E884817E3927F56 /* ComposerMicTests.swift */,
 				A43650E5D658EE45A21B0D32 /* OnDeviceCaptionsTests.swift */,
 				2815353AC354A20653821C60 /* LyricCaptionsTests.swift */,
+				FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */,
 				697C9B433CDD481962E9C53A /* NoUploadAndHeadersTests.swift */,
 				F3F70B4C1048A11E132B7D1E /* NativeToolTests.swift */,
 				4E8C3EA03F6E7577F5BC9738 /* NativeToolParserTests.swift */,
@@ -536,7 +545,9 @@
 				63140D2471FF1CAB65DAA5AB /* SuggestionService.swift in Sources */,
 				E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */,
 				CC08D05CFDF3ACE561E2143F /* OnDeviceCaptioner.swift in Sources */,
-				26B0A0B79B3CEAAE26865DCF /* LyricAudioExporter.swift in Sources */,
+				BED9FBA643CE4FCBE7016260 /* StreamingCaptions.swift in Sources */,
+				13ABEC16D81257201E584557 /* StreamingCaptionsEngine.swift in Sources */,
+				8ADB8E423855BAB8EDBF8EDE /* StreamingCaptionsIO.swift in Sources */,
 				58BAB178419FF46FAD3EB825 /* LyricCaptionRenderer.swift in Sources */,
 				4E77610641663D2135888EC3 /* LyricCaptions.swift in Sources */,
 				1AFF213883107B65DCD2E72B /* Captions.swift in Sources */,
@@ -594,6 +605,7 @@
 				956F0715A88A64099000EB31 /* ComposerMicTests.swift in Sources */,
 				3AF5E94FF5A7B888CA053E40 /* OnDeviceCaptionsTests.swift in Sources */,
 				A4A948B2DC9987C0B4D9FECF /* LyricCaptionsTests.swift in Sources */,
+				79D5A1BE0373C14BAFA8C2B8 /* StreamingCaptionsTests.swift in Sources */,
 				F3AEEBB2787D7FACC1822FF8 /* NoUploadAndHeadersTests.swift in Sources */,
 				C3E3CC33FE21D6291D0C91E1 /* NativeToolTests.swift in Sources */,
 				4F96A17ADA941170D4D4E555 /* NativeToolParserTests.swift in Sources */,

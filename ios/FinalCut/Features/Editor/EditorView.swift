@@ -50,6 +50,7 @@ struct EditorView: View {
                     state: model.state,
                     videoURL: model.localVideoURL,
                     processingMessage: model.lyricStatus ?? model.processingOverlay.message,
+                    onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil,
                     playerItem: model.previewItem,
                     photo: model.previewPhoto,
                     showsDimmer: model.isCloudStepRunning
@@ -255,14 +256,21 @@ final class EditorViewModel: ObservableObject {
     private var promptContinuation: CheckedContinuation<Bool, Never>?
     /// Latest `turnToken` of the running client-mode chat turn (sent with the lyric captions upload).
     var currentTurnToken: String?
-    /// Wait between retries when the first poll says 404 (tests shorten it).
-    var lyricPollNotFoundDelay: TimeInterval = 2
-    private var lyricTracker = LyricProgressTracker()
-    private var lyricUploadDone = false
+    /// Tests inject the socket, pacing, sleeping and watchdog timings.
+    var streamingDepsTweak: ((inout StreamingDeps) -> Void)?
+    var captionSocketFactory: (URL) -> CaptionSocket = { URLSessionCaptionSocket(url: $0) }
 
-    private func showLyricUpload(_ fraction: Double) {
-        guard !lyricUploadDone, lyricStatus != nil else { return }
-        lyricStatus = lyricTracker.uploadText(fraction: fraction)
+    /// Stop translated captions in flight: closes the socket and stops the translate calls
+    /// (the cancelled task tears the engine down); nothing is applied.
+    func cancelStreamingCaptions() {
+        guard lyricStatus != nil else { return }
+        processingTask?.cancel()
+        lyricStatus = nil
+        isCloudStepRunning = false
+        processingOverlay = .editing
+        activeJobId = nil
+        state = localVideoURL == nil ? .empty : .ready
+        messages.append(ChatMessage(role: .assistant, content: "Captions cancelled. Nothing was changed."))
     }
 
     /// Photos and videos (photo mode, NATIVE_EDIT_UX.md §7).
@@ -1010,6 +1018,7 @@ final class EditorViewModel: ObservableObject {
                 for call in response.toolCalls {
                     if Task.isCancelled { return }
                     let result = await executeToolCall(call)
+                    if Task.isCancelled { return }
                     results.append((call.id, result))
                     if importError != nil, localVideoURL == nil { break }
                 }
@@ -1037,6 +1046,7 @@ final class EditorViewModel: ObservableObject {
         } catch is CancellationError {
             // User sent another message or view torn down.
         } catch {
+            if Task.isCancelled { return }
             finishChatFailure(error)
         }
     }
@@ -1277,21 +1287,22 @@ final class EditorViewModel: ObservableObject {
         continuation?.resume(returning: primary)
     }
 
-    // MARK: - lyric_captions (cloud transcription + translation, audio only)
+    // MARK: - lyric_captions (streamed transcription + translation, audio only)
 
     /// `lyric_captions`: with Cloud processing off nothing is ever sent (a notice offers the
-    /// setting). With it on, the user confirms every time, only the audio is uploaded, and the
-    /// timed lines come back as an undoable overlay burned in on preview and export.
+    /// setting). With it on, the user confirms every time; only the audio is decoded on the
+    /// device and streamed to ElevenLabs, the text goes to FinalCap to be translated, and the
+    /// timed lines become an undoable overlay burned in on preview and export.
     private func runLyricCaptions(call: ClientToolCall, stack: EditStack, request: LyricCaptionRequest) async -> ClientToolResult {
         func fail(_ code: String, copy: String? = nil) -> ClientToolResult {
             if let copy { messages.append(ChatMessage(role: .assistant, content: copy)) }
             return record(.failure(code, on: .device), kind: nil)
         }
-        if stack.canvas.duration > LyricCaptionsLimits.maxSeconds {
+        if stack.canvas.duration > StreamingConstants.maxAudioSeconds {
             return fail("audio_too_long", copy: LyricCaptionsCopy.tooLong)
         }
         guard cloudProcessingEnabled else {
-            // Default: nothing is uploaded. Offer the setting; the model explains in one line.
+            // Default: nothing is sent. Offer the setting; the model explains in one line.
             if await confirm(LyricCaptionsCopy.cloudOffPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) {
                 onOpenSettings?()
             }
@@ -1305,10 +1316,10 @@ final class EditorViewModel: ObservableObject {
 
         state = .processing
         isCloudStepRunning = true
-        lyricTracker = LyricProgressTracker()
-        lyricUploadDone = false
-        lyricStatus = lyricTracker.uploadText(fraction: nil)
+        lyricStatus = StreamingPercent.text(stage: .connecting, percent: nil)
+        UIApplication.shared.isIdleTimerDisabled = true
         defer {
+            UIApplication.shared.isIdleTimerDisabled = false
             isCloudStepRunning = false
             lyricStatus = nil
             activeJobId = nil
@@ -1322,50 +1333,57 @@ final class EditorViewModel: ObservableObject {
             }
             composed = fresh
         }
-        let audioURL: URL
+        let pcm: [Int16]
         do {
-            audioURL = try await LyricAudioExporter.exportM4A(composed)
+            pcm = try await CaptionAudioDecoder.pcm16kMono(composed)
+        } catch CaptionAudioDecoder.DecodeError.noAudio {
+            return fail("no_audio", copy: LyricCaptionsCopy.noAudio)
         } catch {
             return fail("lyric_captions_failed", copy: LyricCaptionsCopy.generic)
         }
-        defer { try? FileManager.default.removeItem(at: audioURL) }
-        let bytes = (try? audioURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        if bytes > LyricCaptionsLimits.maxBytes {
-            return fail("audio_too_large", copy: LyricCaptionsCopy.tooLong)
+        if Task.isCancelled { return .failure("cancelled", on: .server) }
+
+        let turnToken = currentTurnToken
+        var deps = StreamingDeps(
+            mint: { source, resume in
+                do {
+                    try await self.prepareAuth(client)
+                    return try await client.mintStreamingCaptionsToken(sourceLanguage: source, resumeSessionId: resume, turnToken: turnToken, toolCallId: call.id)
+                } catch {
+                    throw APIClient.streamingError(from: error)
+                }
+            },
+            translate: { batch in
+                do {
+                    return try await client.translateStreamingCaptions(batch, turnToken: turnToken, toolCallId: call.id)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch let error as URLError where error.code == .cancelled {
+                    throw CancellationError()
+                } catch {
+                    throw APIClient.streamingError(from: error)
+                }
+            },
+            makeSocket: captionSocketFactory
+        )
+        deps.confirmContinue = { [weak self] atSec, reason in
+            guard let self else { return false }
+            let message = reason == "time_limit" ? StreamingCopy.timeLimit(at: atSec) : StreamingCopy.connectionDropped(at: atSec)
+            return await self.confirm(LyricCaptionsCopy.continuePrompt(message: message))
         }
+        deps.onProgress = { [weak self] progress in
+            // Monotonic and never above 99: 100 is only shown once the overlay is ready.
+            self?.lyricStatus = progress.text
+        }
+        streamingDepsTweak?(&deps)
 
         do {
-            try await prepareAuth(client)
-            let audio = try Data(contentsOf: audioURL)
-            let canvas = composed.renderSize
-            let enqueue = try await client.submitLyricCaptions(
-                audio: audio,
-                fileName: "audio.m4a",
-                mimeType: "audio/mp4",
-                request: request,
-                width: Int(canvas.width.rounded()),
-                height: Int(canvas.height.rounded()),
-                turnToken: currentTurnToken,
-                toolCallId: call.id,
-                onUploadProgress: { [weak self] fraction in
-                    Task { @MainActor in self?.showLyricUpload(fraction) }
-                }
-            )
-            activeJobId = enqueue.jobId
-            let mode = request.mode
-            lyricUploadDone = true
-            lyricTracker = LyricProgressTracker()
-            lyricStatus = lyricTracker.jobText(progress: 0, mode: mode)
-            let final = try await client.pollLyricCaptionsJob(id: enqueue.jobId, notFoundDelay: lyricPollNotFoundDelay) { [weak self] status in
-                guard let self else { return }
-                self.lyricStatus = self.lyricTracker.jobText(progress: status.progress, mode: mode)
-            }
-            guard final.status == .succeeded else {
-                return lyricFailure(code: final.code, status: nil)
-            }
-            let result = try await client.fetchLyricCaptionsResult(id: enqueue.jobId, resultUrl: final.resultUrl)
-            let lines = result.lines.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start && !$0.displayText.isEmpty }
-            guard !lines.isEmpty else { return lyricFailure(code: "no_speech", status: nil) }
+            let engine = StreamingCaptionsEngine(deps: deps)
+            let result = try await engine.run(pcm: pcm, targetLanguage: request.targetLanguage, sourceLanguage: request.sourceLanguage)
+            let lines = result.lines
+                .map { LyricLine(start: $0.start, end: $0.end, text: $0.text, translation: $0.translation) }
+                .filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start && !$0.displayText.isEmpty }
+            guard !lines.isEmpty else { return lyricFailure(StreamingError(code: "no_speech")) }
 
             lyricStatus = LyricCaptionsCopy.addingCaptions
             let track = LyricCaptionTrack(
@@ -1377,51 +1395,46 @@ final class EditorViewModel: ObservableObject {
             current.push(EditEntry(tool: "lyric_captions", op: .lyricCaptions(track), toolCallId: call.id, executedOn: .server))
             commitEdit(current)
             await refreshPreview()
-            let target = result.targetLanguage ?? request.targetLanguage
+            let canvas = composed.renderSize
             messages.append(ChatMessage(
                 role: .system,
-                content: LyricCaptionsCopy.appliedLabel(song: result.song, language: result.language, targetLanguage: target)
+                content: LyricCaptionsCopy.appliedLabel(song: nil, language: result.language, targetLanguage: request.targetLanguage)
             ))
-            // Short result for the model: never the lyric text.
+            // Short result for the model: never the caption text.
             var output: [String: JSONValue] = [
                 "lineCount": .number(Double(lines.count)),
-                "targetLanguage": .string(target),
-                "mode": .string(result.mode ?? request.mode.rawValue),
+                "targetLanguage": .string(request.targetLanguage),
+                "mode": .string("speech"),
                 "burnedIn": .bool(true),
                 "width": .number(Double(canvas.width.rounded())),
                 "height": .number(Double(canvas.height.rounded())),
                 "duration": .number((composed.duration * 1000).rounded() / 1000),
             ]
             if let language = result.language { output["language"] = .string(language) }
-            if let song = result.song {
-                var info: [String: JSONValue] = [:]
-                if let title = song.title { info["title"] = .string(title) }
-                if let artist = song.artist { info["artist"] = .string(artist) }
-                if let url = song.url { info["url"] = .string(url) }
-                if let confidence = song.confidence { info["confidence"] = .string(confidence) }
-                output["song"] = .object(info)
-            }
             return record(.success(on: .server, output: output), kind: nil)
         } catch is CancellationError {
             return .failure("cancelled", on: .server)
-        } catch let error as APIError {
-            if error.isPaywall {
-                handlePaywallIfNeeded(error)
+        } catch {
+            let streaming = APIClient.streamingError(from: error)
+            if streaming.code == "paywall" {
+                handlePaywallIfNeeded(APIError.paywallRequired(nil))
                 return record(.failure("paywall", on: .server), kind: nil)
             }
-            return lyricFailure(code: error.serverCode, status: error.httpStatusCode)
-        } catch {
-            return lyricFailure(code: nil, status: nil)
+            return lyricFailure(streaming)
         }
     }
 
-    /// Friendly chat card for a lyric-captions error; nothing was applied.
-    private func lyricFailure(code: String?, status: Int?) -> ClientToolResult {
-        messages.append(ChatMessage(role: .assistant, content: LyricCaptionsCopy.failureCopy(code: code, status: status)))
-        let known: Set<String> = ["lyric_captions_unavailable", "no_speech", "lyric_captions_model_error", "audio_too_long",
-                                  "audio_too_large", "no_audio", "unsupported_audio_format", "audio_only", "invalid_arguments"]
-        let stable = code.flatMap { known.contains($0.lowercased()) ? $0.lowercased() : nil }
-            ?? (status == 503 ? "lyric_captions_unavailable" : "lyric_captions_failed")
+    /// Friendly chat card for a streaming-captions error; nothing was applied.
+    private func lyricFailure(_ error: StreamingError) -> ClientToolResult {
+        messages.append(ChatMessage(role: .assistant, content: StreamingCopy.friendly(error)))
+        let known: Set<String> = ["no_speech", "audio_too_long", "no_audio", "streaming_captions_unavailable", "streaming_captions_busy"]
+        let stable: String
+        switch error.code {
+        case _ where known.contains(error.code): stable = error.code
+        case "unavailable": stable = "streaming_captions_unavailable"
+        case "busy", "rate_limited": stable = "streaming_captions_busy"
+        default: stable = error.status == 503 ? "streaming_captions_unavailable" : "lyric_captions_failed"
+        }
         return record(.failure(stable, on: .server), kind: nil)
     }
 

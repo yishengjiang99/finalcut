@@ -74,6 +74,7 @@ private struct StubCaptioner: CaptionTranscribing {
 
 final class LyricCaptionsTests: XCTestCase {
     private let base = URL(string: "https://stub.finalcap.test")!
+    fileprivate var socketsMade = 0
 
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: NativeSettings.cloudProcessingKey)
@@ -81,57 +82,6 @@ final class LyricCaptionsTests: XCTestCase {
     }
 
     // MARK: - Pure logic
-
-    func testProgressTextMapping() {
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: nil, mode: .auto, uploadFinished: false), "Uploading audio…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.9, mode: .lyrics, uploadFinished: false), "Uploading audio…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0, mode: .auto, uploadFinished: true), "Listening to the song…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.2, mode: .lyrics, uploadFinished: true), "Listening to the song…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.5, mode: .lyrics, uploadFinished: true), "Finding lyrics and translating…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.9, mode: .auto, uploadFinished: true), "Finding lyrics and translating…")
-        // Speech never mentions songs or lyrics.
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.49, mode: .speech, uploadFinished: true), "Listening to the audio…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.5, mode: .speech, uploadFinished: true), "Translating…")
-        XCTAssertEqual(LyricCaptionsCopy.addingCaptions, "Adding captions…")
-    }
-
-    func testProgressPercentageIsExactMonotonicAndNeverHundred() {
-        var t = LyricProgressTracker()
-        XCTAssertEqual(t.uploadText(fraction: nil), "Uploading audio…")
-        XCTAssertEqual(t.uploadText(fraction: 0.45), "Uploading audio… 45%")
-        XCTAssertEqual(t.uploadText(fraction: 0.30), "Uploading audio… 45%", "never backwards")
-        XCTAssertEqual(t.uploadText(fraction: 1), "Uploading audio… 99%", "100% waits for the local burn-in")
-
-        var job = LyricProgressTracker()
-        XCTAssertEqual(job.jobText(progress: nil, mode: .lyrics), "Listening to the song… 0%")
-        XCTAssertEqual(job.jobText(progress: 0.2, mode: .lyrics), "Listening to the song… 20%")
-        XCTAssertEqual(job.jobText(progress: 0.34, mode: .lyrics), "Listening to the song… 34%")
-        XCTAssertEqual(job.jobText(progress: 0.5, mode: .lyrics), "Finding lyrics and translating… 50%")
-        XCTAssertEqual(job.jobText(progress: 0.72, mode: .lyrics), "Finding lyrics and translating… 72%")
-        XCTAssertEqual(job.jobText(progress: 0.6, mode: .lyrics), "Finding lyrics and translating… 72%", "never backwards")
-        XCTAssertEqual(job.jobText(progress: 1, mode: .lyrics), "Finding lyrics and translating… 99%")
-        XCTAssertEqual(job.jobText(progress: 5, mode: .lyrics), "Finding lyrics and translating… 99%")
-
-        var speech = LyricProgressTracker()
-        XCTAssertEqual(speech.jobText(progress: 0.34, mode: .speech), "Listening to the audio… 34%")
-        XCTAssertEqual(speech.jobText(progress: 0.72, mode: .speech), "Translating… 72%")
-
-        XCTAssertEqual(LyricProgressTracker.percent(-1), 0)
-        XCTAssertEqual(LyricProgressTracker.percent(.nan), 0)
-        XCTAssertEqual(LyricProgressTracker.percent(0.999), 99)
-        XCTAssertEqual(LyricProgressTracker.percent(0.2), 20)
-        XCTAssertEqual(LyricProgressTracker.percent(0.9), 90)
-        // Monotonic over a whole run of server values.
-        var run = LyricProgressTracker()
-        var last = -1
-        for p in [0.0, 0.2, 0.2, 0.5, 0.45, 0.9, 1.0] {
-            let text = run.jobText(progress: p, mode: .lyrics)
-            let value = Int(text.split(separator: " ").last!.dropLast())!
-            XCTAssertGreaterThanOrEqual(value, last)
-            XCTAssertLessThanOrEqual(value, 99)
-            last = value
-        }
-    }
 
     func testFontSizeScalesWithVideoHeight() {
         XCTAssertEqual(LyricCaptionStyle.fontSize(canvasHeight: 1280), 48, accuracy: 0.001)
@@ -158,56 +108,6 @@ final class LyricCaptionsTests: XCTestCase {
         XCTAssertEqual(LyricCaptionsCopy.appliedLabel(song: nil, language: "ko", targetLanguage: "Japanese"), "Captions · Korean → Japanese")
         XCTAssertEqual(LyricCaptionsCopy.languageName("zh-Hant"), "Chinese")
         XCTAssertNil(LyricCaptionsCopy.languageName(" "))
-    }
-
-    func testPromptWording() {
-        let off = LyricCaptionsCopy.cloudOffPrompt(mode: .lyrics, targetLanguage: "zh-Hans")
-        XCTAssertEqual(off.title, "Lyric captions use the cloud")
-        XCTAssertEqual(off.message, "To caption a song, FinalCap uploads this video's audio to transcribe and translate it. Turn on Cloud processing to use lyric captions.")
-        XCTAssertEqual([off.primary, off.secondary], ["Open Settings", "Not now"])
-        XCTAssertEqual(LyricCaptionsCopy.cloudOffPrompt(mode: .auto, targetLanguage: "es"), LyricCaptionsCopy.cloudOffPrompt(mode: .lyrics, targetLanguage: "es"))
-
-        let speechOff = LyricCaptionsCopy.cloudOffPrompt(mode: .speech, targetLanguage: "zh-Hans")
-        XCTAssertEqual(speechOff.title, "Translated captions use the cloud")
-        XCTAssertEqual(speechOff.message, "FinalCap will upload this video's audio, but not the picture, to transcribe it and translate it into Chinese. The audio is deleted after transcription. Turn on Cloud processing to use translated captions.")
-        XCTAssertEqual([speechOff.primary, speechOff.secondary], ["Open Settings", "Not now"])
-
-        let lyrics = LyricCaptionsCopy.uploadPrompt(mode: .lyrics, targetLanguage: "zh-Hans")
-        XCTAssertEqual(lyrics.title, "Upload the audio?")
-        XCTAssertEqual(lyrics.message, "FinalCap will upload this video's audio, but not the picture, to transcribe it, look up the song's lyrics, and translate them. The audio is deleted after transcription.")
-        XCTAssertEqual([lyrics.primary, lyrics.secondary], ["Upload audio", "Not now"])
-        XCTAssertEqual(LyricCaptionsCopy.uploadPrompt(mode: .auto, targetLanguage: "es").message, lyrics.message)
-
-        let speech = LyricCaptionsCopy.uploadPrompt(mode: .speech, targetLanguage: "zh-Hans")
-        XCTAssertEqual(speech.title, "Upload the audio?")
-        XCTAssertEqual(speech.message, "FinalCap will upload this video's audio, but not the picture, to transcribe it and translate it into Chinese. The audio is deleted after transcription.")
-
-        let server = LyricCaptionsCopy.serverCaptionsPrompt
-        XCTAssertEqual(server.message, "Captions need to upload this video's audio to transcribe it. Upload and continue?")
-        XCTAssertEqual([server.primary, server.secondary], ["Upload", "Not now"])
-    }
-
-    func testErrorToMessageMapping() {
-        let unavailable = "Translated captions aren't available right now. Try again later."
-        let tooLong = "This video's audio is too long for translated captions. Try a clip under 10 minutes."
-        let couldntFinish = "Captions couldn't finish. Nothing was changed. Try again."
-        let noSpeech = "No speech found in this video."
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "lyric_captions_unavailable", status: 503), unavailable)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 503), unavailable)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "no_speech"), noSpeech)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 422), noSpeech)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "audio_too_long", status: 413), tooLong)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "audio_too_large", status: 413), tooLong)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 413), tooLong)
-        for code in ["lyric_captions_model_error", "job_not_found", "weird", nil] {
-            XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: code), couldntFinish, "\(code ?? "nil")")
-        }
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 404), couldntFinish)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 500), couldntFinish)
-        for text in [unavailable, tooLong, couldntFinish, noSpeech] {
-            XCTAssertFalse(text.localizedCaseInsensitiveContains("job not found"))
-            XCTAssertFalse(text.localizedCaseInsensitiveContains("counted"))
-        }
     }
 
     func testToolPlanValidation() {
@@ -240,16 +140,6 @@ final class LyricCaptionsTests: XCTestCase {
                 return XCTFail("expected invalid: \(bad)")
             }
         }
-    }
-
-    func testRequestFields() {
-        let request = LyricCaptionRequest(targetLanguage: "zh-Hans", sourceLanguage: "de", mode: .lyrics, positionFromBottomPct: 25, fontSize: 54)
-        let fields = APIClient.lyricCaptionsFields(request, width: 720, height: 1280)
-        XCTAssertEqual(fields.map(\.name), ["target_language", "source_language", "mode", "position_from_bottom_pct", "font_size", "width", "height"])
-        XCTAssertEqual(fields.map(\.value), ["zh-Hans", "de", "lyrics", "25.0", "54", "720", "1280"])
-        let minimal = APIClient.lyricCaptionsFields(LyricCaptionRequest(targetLanguage: "es", sourceLanguage: nil, mode: .auto,
-                                                                        positionFromBottomPct: nil, fontSize: nil), width: nil, height: nil)
-        XCTAssertEqual(minimal.map(\.name), ["target_language", "mode"])
     }
 
     func testResultDecodingAndDisplayText() throws {
@@ -334,7 +224,6 @@ final class LyricCaptionsTests: XCTestCase {
         UserDefaults.standard.set(cloud, forKey: NativeSettings.cloudProcessingKey)
         LyricStubProtocol.reset(routes: routes, sequences: sequences)
         let model = EditorViewModel()
-        model.lyricPollNotFoundDelay = 0.01
         model.localVideoURL = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
         let client = APIClient(config: APIConfig(baseURL: base), session: LyricStubProtocol.session())
         client.sampleModeEnabled = false
@@ -342,6 +231,10 @@ final class LyricCaptionsTests: XCTestCase {
         client.accessTokenExpiresAt = Date().addingTimeInterval(3600)
         model.apiClient = client
         model.captioner = StubCaptioner()
+        model.captionSocketFactory = { [unowned self] url in
+            self.socketsMade += 1
+            return MockCaptionSocket(url: url) { _, _ in }
+        }
         model.state = .processing
         return model
     }
@@ -362,10 +255,11 @@ final class LyricCaptionsTests: XCTestCase {
         let result = await model.executeToolCall(lyricCall())
         XCTAssertFalse(result.ok)
         XCTAssertEqual(result.error, "skipped_by_user")
-        XCTAssertEqual(prompts.map(\.title), ["Lyric captions use the cloud"])
+        XCTAssertEqual(prompts.map(\.title), ["Translated captions use the cloud"])
         XCTAssertEqual(prompts.first?.primary, "Open Settings")
         XCTAssertEqual(openedSettings, 1)
         XCTAssertEqual(LyricStubProtocol.recorded.count, 0, "zero requests with Cloud processing off")
+        XCTAssertEqual(socketsMade, 0, "no socket with Cloud processing off")
         XCTAssertEqual(model.editStack?.entries.count, 0)
 
         // Not now: same, but Settings stays closed.
@@ -427,9 +321,10 @@ final class LyricCaptionsTests: XCTestCase {
             XCTAssertEqual(result.error, "skipped_by_user")
         }
         XCTAssertEqual(prompts.count, 2, "asked every time")
-        XCTAssertEqual(prompts.first?.title, "Upload the audio?")
-        XCTAssertEqual(prompts.first?.primary, "Upload audio")
+        XCTAssertEqual(prompts.first?.title, "Send the audio?")
+        XCTAssertEqual(prompts.first?.primary, "Send audio")
         XCTAssertEqual(LyricStubProtocol.recorded.count, 0)
+        XCTAssertEqual(socketsMade, 0, "declined: no socket, no request")
         XCTAssertEqual(model.editStack?.entries.count, 0)
     }
 
@@ -446,55 +341,89 @@ final class LyricCaptionsTests: XCTestCase {
         await model.runGenerateCaptions()
         XCTAssertTrue(LyricStubProtocol.paths.contains("/api/generate-captions"), "Upload proceeds to the server")
     }
+}
 
-    private let resultURL = "https://stub.finalcap.test/api/jobs/j1/result"
+// MARK: - Streaming transport through the editor (stubbed HTTP + scripted socket)
 
-    private func successRoutes(resultJSON: String) -> [String: (Int, String)] {
-        [
-            "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","operation":"lyric_captions","durationSec":4,"pollUrl":"/api/jobs/j1","resultUrl":"\#(resultURL)"}"#),
-            "/api/jobs/j1": (200, #"{"jobId":"j1","status":"succeeded","progress":1,"operation":"lyric_captions","resultUrl":"\#(resultURL)"}"#),
-            "/api/jobs/j1/result": (200, resultJSON),
-        ]
+extension LyricCaptionsTests {
+    private static let tokenJSON = #"{"token":"sutkn_x","expiresInSec":900,"sessionId":"sess1","wsUrl":"wss://api.elevenlabs.io/v1/speech-to-text/realtime","query":{"model_id":"scribe_v2_realtime","audio_format":"pcm_16000","include_timestamps":"true","commit_strategy":"manual"},"sampleRate":16000,"maxAudioSeconds":600,"operation":"streaming_captions"}"#
+    private static let translateJSON = #"{"lines":[{"i":0,"text":"Hello there.","translation":"你好。"},{"i":1,"text":"How are you?","translation":"你好吗？"}],"language":"en","targetLanguage":"zh-Hans"}"#
+
+    @MainActor
+    private func makeStreamingModel(cloud: Bool, routes: [String: (Int, String)]? = nil) throws -> (EditorViewModel, SocketLog) {
+        let log = SocketLog()
+        let model = try makeModel(cloud: cloud, routes: routes ?? [
+            "/api/streaming-captions/token": (200, Self.tokenJSON),
+            "/api/streaming-captions/translate": (200, Self.translateJSON),
+        ])
+        model.captionSocketFactory = { url in
+            let socket = MockCaptionSocket(url: url) { sock, chunk in
+                guard chunk["commit"] as? Bool == true else { return }
+                sock.committed(text: "Hello there. How are you?", words: [("Hello", 0.5, 0.9), ("there.", 1.0, 1.4), ("How", 3.0, 3.2), ("are", 3.3, 3.4), ("you?", 3.5, 3.9)])
+            }
+            log.sockets.append(socket)
+            return socket
+        }
+        model.streamingDepsTweak = { deps in
+            deps.pace = 4
+            deps.sleep = { _ in try await Task.sleep(nanoseconds: 100_000) }
+        }
+        model.promptHandler = { log.prompts.append($0); return true }
+        return (model, log)
     }
 
     @MainActor
-    func testCloudOnUploadsAudioOnlyAndAppliesCaptions() async throws {
-        let json = #"""
-        {"song":{"title":"Lied","artist":"Band","url":"https://example.com","confidence":"high"},"mode":"lyrics","language":"de","targetLanguage":"zh-Hans",
-         "lines":[{"start":0.5,"end":2.0,"text":"Hallo Welt","translation":"你好世界"},{"start":2.5,"end":4,"text":"Zweite Zeile","translation":"第二行"}]}
-        """#
-        let model = try makeModel(cloud: true, routes: successRoutes(resultJSON: json))
-        var prompts: [CloudPrompt] = []
-        model.promptHandler = { prompts.append($0); return true }
-        let result = await model.executeToolCall(lyricCall(["mode": .string("lyrics")]))
+    func testCloudOnStreamsAudioOnlyAndAppliesCaptions() async throws {
+        let (model, log) = try makeStreamingModel(cloud: true)
+        let result = await model.executeToolCall(lyricCall(["mode": .string("speech")]))
         XCTAssertTrue(result.ok, "\(String(describing: result.error)) \(LyricStubProtocol.paths)")
         XCTAssertEqual(result.executedOn, .server)
         XCTAssertEqual(result.output?["lineCount"], .number(2))
-        XCTAssertEqual(result.output?["language"], .string("de"))
+        XCTAssertEqual(result.output?["language"], .string("en"))
         XCTAssertEqual(result.output?["targetLanguage"], .string("zh-Hans"))
-        XCTAssertNotNil(result.output?["song"])
-        XCTAssertFalse(result.content.jsonString().contains("Hallo Welt"), "lyric text never goes back to the model")
-        XCTAssertEqual(prompts.first?.message, LyricCaptionsCopy.lyricsUploadBody)
-
-        let upload = try XCTUnwrap(LyricStubProtocol.recorded.first { $0.path == "/api/lyric-captions" })
-        XCTAssertEqual(upload.method, "POST")
-        XCTAssertEqual(upload.headers["Authorization"], "Bearer tok")
-        XCTAssertTrue((upload.headers["Content-Type"] ?? "").hasPrefix("multipart/form-data; boundary="))
-        let body = String(decoding: upload.body, as: UTF8.self)
-        XCTAssertTrue(body.contains("name=\"audio\"; filename=\"audio.m4a\""))
-        XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
-        for (name, value) in [("target_language", "zh-Hans"), ("mode", "lyrics"), ("width", "1280"), ("height", "720")] {
-            XCTAssertTrue(body.contains("name=\"\(name)\"\r\n\r\n\(value)\r\n"), "\(name)=\(value)")
-        }
-        XCTAssertFalse(body.contains("name=\"video\""), "never the picture")
-        XCTAssertGreaterThan(upload.body.count, 4000, "real audio went up")
-        XCTAssertNil(upload.headers["X-Turn-Token"], "no chat turn, no turn token")
         XCTAssertEqual(result.output?["width"], .number(1280))
+        XCTAssertFalse(result.content.jsonString().contains("Hello there"), "caption text never goes back to the model")
+
+        // Copy: audio goes to ElevenLabs, the text to FinalCap; it never claims deletion.
+        let prompt = try XCTUnwrap(log.prompts.first)
+        XCTAssertEqual(prompt.title, "Send the audio?")
+        XCTAssertEqual(prompt.message, "FinalCap will send this video's audio, but not the picture, to ElevenLabs to transcribe it. The transcribed text then goes to FinalCap to be translated into Chinese.")
+        XCTAssertFalse(prompt.message.localizedCaseInsensitiveContains("delete"))
+        XCTAssertEqual([prompt.primary, prompt.secondary], ["Send audio", "Not now"])
+
+        // HTTP: a token, then translate batches. No upload of any kind.
+        let appPaths = LyricStubProtocol.paths.filter { $0.hasPrefix("/api/") && !$0.hasPrefix("/api/auth/") }
+        XCTAssertEqual(appPaths, ["/api/streaming-captions/token", "/api/streaming-captions/translate"])
+        let token = try XCTUnwrap(LyricStubProtocol.recorded.first { $0.path == "/api/streaming-captions/token" })
+        XCTAssertEqual(token.method, "POST")
+        XCTAssertEqual(token.headers["Authorization"], "Bearer tok")
+        let tokenBody = try XCTUnwrap(JSONSerialization.jsonObject(with: token.body) as? [String: Any])
+        XCTAssertNil(tokenBody["source_language"], "auto is left to the service")
+        XCTAssertNil(tokenBody["resumeSessionId"])
+        let translate = try XCTUnwrap(LyricStubProtocol.recorded.first { $0.path == "/api/streaming-captions/translate" })
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: translate.body) as? [String: Any])
+        XCTAssertEqual(body["target_language"] as? String, "zh-Hans")
+        XCTAssertEqual(body["source_language"] as? String, "auto")
+        XCTAssertEqual(body["sessionId"] as? String, "sess1")
+        XCTAssertEqual((body["segments"] as? [[String: Any]])?.count, 2)
+        XCTAssertNil(translate.headers["X-Turn-Token"], "no chat turn, no turn token")
+
+        // Socket: ElevenLabs with the minted token; only 16 kHz PCM audio chunks (no video).
+        XCTAssertEqual(log.sockets.count, 1)
+        let socket = log.sockets[0]
+        XCTAssertEqual(socket.url.host, "api.elevenlabs.io")
+        XCTAssertTrue(socket.url.absoluteString.contains("token=sutkn_x"))
+        XCTAssertTrue(socket.url.absoluteString.contains("commit_strategy=manual"))
+        XCTAssertGreaterThanOrEqual(socket.chunks.count, 12, "6 s of audio in 0.5 s chunks")
+        XCTAssertTrue(socket.chunks.allSatisfy { ($0["sample_rate"] as? Int) == 16000 && ($0["message_type"] as? String) == "input_audio_chunk" })
+        XCTAssertEqual(socket.chunks.last?["commit"] as? Bool, true)
+        XCTAssertEqual(socket.chunks.filter { $0["commit"] as? Bool == true }.count, 1)
+        XCTAssertEqual(Double(socket.audioBytes) / 32_000, 6, accuracy: 0.6, "the edited clip's audio, 16-bit mono")
 
         guard case .lyricCaptions(let track)? = model.editStack?.entries.last?.op else { return XCTFail("lyric captions entry") }
-        XCTAssertEqual(track.lines.count, 2)
-        XCTAssertEqual(model.messages.last?.content, "Lyrics · German + Chinese")
-        XCTAssertEqual(model.editStack?.canUndo, true)
+        XCTAssertEqual(track.lines.map(\.text), ["Hello there.", "How are you?"])
+        XCTAssertEqual(track.lines.map(\.translation), ["你好。", "你好吗？"])
+        XCTAssertEqual(model.messages.last?.content, "Captions · English → Chinese")
         XCTAssertNil(model.lyricStatus)
         model.undoLastEdit(registering: false)
         XCTAssertEqual(model.editStack?.entries.count, 0)
@@ -503,111 +432,113 @@ final class LyricCaptionsTests: XCTestCase {
     }
 
     @MainActor
-    func testSpeechResultShowsSourceArrowTarget() async throws {
-        let json = #"{"song":null,"mode":"speech","language":"en","targetLanguage":"zh-Hans","lines":[{"start":0.5,"end":2.0,"text":"Hello","translation":"你好"}]}"#
-        let model = try makeModel(cloud: true, routes: successRoutes(resultJSON: json))
-        model.promptHandler = { _ in true }
-        model.currentTurnToken = "tt_1"
-        let result = await model.executeToolCall(lyricCall(["mode": .string("speech")]))
-        XCTAssertTrue(result.ok)
-        XCTAssertEqual(model.messages.last?.content, "Captions · English → Chinese")
-        let upload = try XCTUnwrap(LyricStubProtocol.recorded.first { $0.path == "/api/lyric-captions" })
-        XCTAssertEqual(upload.headers["X-Turn-Token"], "tt_1")
-        XCTAssertEqual(upload.headers["X-Tool-Call-Id"], "ly1")
-        XCTAssertFalse(String(decoding: upload.body, as: UTF8.self).contains("name=\"source_language\""), "source language left to the server")
+    func testStreamingProgressShowsStagesWithMonotonicPercentUpTo99() async throws {
+        let (model, _) = try makeStreamingModel(cloud: true)
+        var seen: [String] = []
+        let tweak = model.streamingDepsTweak
+        model.streamingDepsTweak = { deps in
+            tweak?(&deps)
+            let previous = deps.onProgress
+            deps.onProgress = { progress in previous(progress); seen.append(progress.text) }
+        }
+        _ = await model.executeToolCall(lyricCall())
+        XCTAssertEqual(seen.first, "Connecting… 5%")
+        let percents = seen.compactMap { Int($0.split(separator: " ").last?.dropLast() ?? "") }
+        XCTAssertEqual(percents, percents.sorted())
+        XCTAssertLessThanOrEqual(percents.max() ?? 0, 99)
+        XCTAssertTrue(seen.contains { $0.hasPrefix("Listening to the audio…") })
     }
 
     @MainActor
-    func testServerErrorsShowFriendlyCardAndApplyNothing() async throws {
-        // 503 on submit.
-        var model = try makeModel(cloud: true, routes: [
-            "/api/lyric-captions": (503, #"{"error":"missing OPENAI_API_KEY","code":"lyric_captions_unavailable","operation":"lyric_captions"}"#),
+    func testStreamingErrorsShowFriendlyCardAndApplyNothing() async throws {
+        // 503 unavailable on the token.
+        var (model, log) = try makeStreamingModel(cloud: true, routes: [
+            "/api/streaming-captions/token": (503, #"{"error":"missing ELEVENLABS_API_KEY","code":"streaming_captions_unavailable"}"#),
         ])
-        model.promptHandler = { _ in true }
         var result = await model.executeToolCall(lyricCall())
-        XCTAssertEqual(result.error, "lyric_captions_unavailable")
+        XCTAssertEqual(result.error, "streaming_captions_unavailable")
         XCTAssertEqual(model.messages.last?.content, LyricCaptionsCopy.unavailable)
-        XCTAssertFalse(model.messages.last?.content.contains("OPENAI") ?? true)
+        XCTAssertFalse(model.messages.last?.content.contains("ELEVENLABS") ?? true)
+        XCTAssertEqual(log.sockets.count, 0)
         XCTAssertEqual(model.editStack?.entries.count, 0)
 
-        // Failed jobs carry the code on the poll body.
-        for (code, copy) in [("no_speech", LyricCaptionsCopy.noSpeech), ("lyric_captions_model_error", LyricCaptionsCopy.couldntFinish), ("weird", LyricCaptionsCopy.couldntFinish)] {
-            model = try makeModel(cloud: true, routes: [
-                "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","pollUrl":"/api/jobs/j1"}"#),
-                "/api/jobs/j1": (200, #"{"jobId":"j1","status":"failed","error":"raw server text","code":"\#(code)"}"#),
-            ])
-            model.promptHandler = { _ in true }
-            result = await model.executeToolCall(lyricCall())
-            XCTAssertFalse(result.ok)
-            XCTAssertEqual(model.messages.last?.content, copy, code)
-            XCTAssertEqual(model.editStack?.entries.count, 0)
-        }
-
-        // 429 daily limit → paywall, not a failure card.
-        model = try makeModel(cloud: true, routes: [
-            "/api/lyric-captions": (429, #"{"error":"limit","code":"daily_limit_reached"}"#),
+        // Busy (retried once, then the busy copy).
+        (model, log) = try makeStreamingModel(cloud: true, routes: [
+            "/api/streaming-captions/token": (503, #"{"error":"busy","code":"streaming_captions_busy"}"#),
         ])
-        model.promptHandler = { _ in true }
+        result = await model.executeToolCall(lyricCall())
+        XCTAssertEqual(result.error, "streaming_captions_busy")
+        XCTAssertEqual(model.messages.last?.content, "The transcription service is busy. Try again in a moment.")
+        XCTAssertEqual(LyricStubProtocol.paths.filter { $0 == "/api/streaming-captions/token" }.count, 2)
+
+        // 429 rate limit.
+        (model, _) = try makeStreamingModel(cloud: true, routes: [
+            "/api/streaming-captions/token": (429, #"{"error":"slow down","code":"rate_limited"}"#),
+        ])
+        result = await model.executeToolCall(lyricCall())
+        XCTAssertEqual(result.error, "streaming_captions_busy")
+
+        // No active subscription / free limit → paywall, not a failure card.
+        (model, _) = try makeStreamingModel(cloud: true, routes: [
+            "/api/streaming-captions/token": (403, #"{"error":"Active subscription required"}"#),
+        ])
         var paywalls = 0
         model.onPaywallRequired = { paywalls += 1 }
         result = await model.executeToolCall(lyricCall())
         XCTAssertEqual(result.error, "paywall")
         XCTAssertEqual(paywalls, 1)
-    }
-}
 
-extension LyricCaptionsTests {
-    @MainActor
-    func testFirstPollNotFoundIsRetried() async throws {
-        let json = #"{"song":null,"mode":"speech","language":"en","targetLanguage":"zh-Hans","lines":[{"start":0.5,"end":2.0,"text":"Hello","translation":"你好"}]}"#
-        let url = "https://stub.finalcap.test/api/jobs/j1/result"
-        let model = try makeModelForRetry(
-            routes: [
-                "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","pollUrl":"/api/jobs/j1"}"#),
-                "/api/jobs/j1": (200, #"{"jobId":"j1","status":"succeeded","progress":1,"resultUrl":"\#(url)"}"#),
-                "/api/jobs/j1/result": (200, json),
-            ],
-            sequences: ["/api/jobs/j1": [(404, #"{"error":"Job not found"}"#), (404, #"{"error":"Job not found"}"#)]]
-        )
-        let result = await model.executeToolCall(ClientToolCall(id: "ly1", name: "lyric_captions",
-                                                                arguments: ["target_language": .string("zh-Hans"), "mode": .string("speech")]))
-        XCTAssertTrue(result.ok, "\(String(describing: result.error))")
-        XCTAssertEqual(LyricStubProtocol.paths.filter { $0 == "/api/jobs/j1" }.count, 3, "two 404s then success")
-    }
-
-    @MainActor
-    func testPersistentNotFoundShowsFriendlyCopyNotServerText() async throws {
-        let model = try makeModelForRetry(
-            routes: [
-                "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","pollUrl":"/api/jobs/j1"}"#),
-                "/api/jobs/j1": (404, #"{"error":"Job not found"}"#),
-            ],
-            sequences: [:]
-        )
-        let result = await model.executeToolCall(ClientToolCall(id: "ly1", name: "lyric_captions", arguments: ["target_language": .string("zh-Hans")]))
-        XCTAssertFalse(result.ok)
-        XCTAssertEqual(LyricStubProtocol.paths.filter { $0 == "/api/jobs/j1" }.count, 3, "gives up after 3 tries")
-        XCTAssertEqual(model.messages.last?.content, "Captions couldn't finish. Nothing was changed. Try again.")
-        XCTAssertFalse(model.messages.contains { $0.content.contains("Job not found") })
+        // Translate answers 429 daily limit → paywall too.
+        (model, _) = try makeStreamingModel(cloud: true, routes: [
+            "/api/streaming-captions/token": (200, Self.tokenJSON),
+            "/api/streaming-captions/translate": (429, #"{"error":"limit","code":"daily_limit_reached"}"#),
+        ])
+        model.onPaywallRequired = { paywalls += 1 }
+        result = await model.executeToolCall(lyricCall())
+        XCTAssertEqual(result.error, "paywall")
+        XCTAssertEqual(paywalls, 2)
         XCTAssertEqual(model.editStack?.entries.count, 0)
     }
 
     @MainActor
-    private func makeModelForRetry(routes: [String: (Int, String)], sequences: [String: [(Int, String)]]) throws -> EditorViewModel {
-        UserDefaults.standard.set(true, forKey: NativeSettings.cloudProcessingKey)
-        LyricStubProtocol.reset(routes: routes, sequences: sequences)
-        let model = EditorViewModel()
-        model.lyricPollNotFoundDelay = 0.01
-        model.localVideoURL = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
-        let client = APIClient(config: APIConfig(baseURL: URL(string: "https://stub.finalcap.test")!), session: LyricStubProtocol.session())
-        client.sampleModeEnabled = false
-        client.accessToken = "tok"
-        client.accessTokenExpiresAt = Date().addingTimeInterval(3600)
-        model.apiClient = client
-        model.promptHandler = { _ in true }
-        model.state = .processing
-        return model
+    func testDroppedConnectionWithNothingFinishedEndsWithCouldntFinish() async throws {
+        let (model, log) = try makeStreamingModel(cloud: true)
+        // Every socket delivers nothing and drops; nothing is finished, so there is nothing to keep.
+        model.captionSocketFactory = { url in
+            let socket = MockCaptionSocket(url: url) { sock, _ in sock.drop() }
+            log.sockets.append(socket)
+            return socket
+        }
+        let result = await model.executeToolCall(lyricCall())
+        XCTAssertEqual(result.error, "lyric_captions_failed")
+        XCTAssertEqual(model.messages.last?.content, LyricCaptionsCopy.couldntFinish)
+        XCTAssertEqual(log.prompts.filter { $0.title == "Connection dropped" }.count, 0)
+        XCTAssertEqual(model.editStack?.entries.count, 0)
     }
+
+    @MainActor
+    func testCancelWhileStreamingStopsTheWorkAndAppliesNothing() async throws {
+        let (model, log) = try makeStreamingModel(cloud: true)
+        model.streamingDepsTweak = { deps in
+            deps.pace = 0.5
+            deps.sleep = { _ in try await Task.sleep(nanoseconds: 5_000_000) }
+        }
+        let task = Task { await model.executeToolCall(self.lyricCall()) }
+        while (log.sockets.first?.chunks.count ?? 0) < 3 { try await Task.sleep(nanoseconds: 2_000_000) }
+        XCTAssertNotNil(model.lyricStatus)
+        task.cancel()
+        let result = await task.value
+        XCTAssertEqual(result.error, "cancelled")
+        XCTAssertEqual(log.sockets.first?.closed, true)
+        XCTAssertEqual(model.editStack?.entries.count, 0)
+        XCTAssertNil(model.lyricStatus)
+    }
+}
+
+/// Sockets created and prompts shown during one editor test.
+final class SocketLog {
+    var sockets: [MockCaptionSocket] = []
+    var prompts: [CloudPrompt] = []
 }
 
 /// Opt-in (iOS Screenshots workflow, job `lyric`): renders one frame of Chinese captions on a

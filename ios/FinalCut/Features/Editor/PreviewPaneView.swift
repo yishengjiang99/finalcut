@@ -18,6 +18,8 @@ struct PreviewPaneView: View {
     var showsDimmer: Bool = false
     var canUndo: Bool = false
     var onUndo: () -> Void = {}
+    /// Stops a cloud step in flight (translated captions); nil hides the button.
+    var onCancel: (() -> Void)? = nil
 
     @State private var player = AVPlayer()
 
@@ -53,6 +55,12 @@ struct PreviewPaneView: View {
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(AppTheme.textPrimary)
                         .multilineTextAlignment(.center)
+                    if let onCancel {
+                        Button("Cancel", action: onCancel)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .accessibilityIdentifier("CancelCaptions")
+                    }
                 }
                 .padding(16)
                 .background(AppTheme.surfaceElevated.opacity(0.9))

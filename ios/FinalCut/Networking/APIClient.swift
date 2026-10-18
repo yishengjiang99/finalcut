@@ -71,7 +71,8 @@ final class APIClient {
     var generateCaptionsURL: URL { url(for: APIEndpoints.generateCaptions) }
     var generateCaptionsDiarizedURL: URL { url(for: APIEndpoints.generateCaptionsDiarized) }
     var translateCaptionsURL: URL { url(for: APIEndpoints.translateCaptions) }
-    var lyricCaptionsURL: URL { url(for: APIEndpoints.lyricCaptions) }
+    var streamingCaptionsTokenURL: URL { url(for: APIEndpoints.streamingCaptionsToken) }
+    var streamingCaptionsTranslateURL: URL { url(for: APIEndpoints.streamingCaptionsTranslate) }
     var createCheckoutSessionURL: URL { url(for: APIEndpoints.createCheckoutSession) }
     var verifyCheckoutSessionURL: URL { url(for: APIEndpoints.verifyCheckoutSession) }
     var ffmpegCliURL: URL { url(for: APIEndpoints.ffmpegCli) }
@@ -602,123 +603,85 @@ final class APIClient {
         }
     }
 
-    // MARK: - Lyric captions (POST /api/lyric-captions, audio only)
+    // MARK: - Streaming captions (docs/api/STREAMING_CAPTIONS.md)
 
-    /// Multipart body for `/api/lyric-captions`: the `audio` file plus the text fields.
-    static func makeLyricCaptionsBody(
-        audio: Data,
-        fileName: String,
-        mimeType: String,
-        fields: [(name: String, value: String)]
-    ) -> (data: Data, boundary: String) {
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var body = Data()
-        let crlf = "\r\n"
-        func append(_ string: String) { body.append(Data(string.utf8)) }
-        for field in fields {
-            append("--\(boundary)\(crlf)")
-            append("Content-Disposition: form-data; name=\"\(field.name)\"\(crlf)\(crlf)")
-            append("\(field.value)\(crlf)")
-        }
-        append("--\(boundary)\(crlf)")
-        append("Content-Disposition: form-data; name=\"audio\"; filename=\"\(fileName)\"\(crlf)")
-        append("Content-Type: \(mimeType)\(crlf)\(crlf)")
-        body.append(audio)
-        append(crlf)
-        append("--\(boundary)--\(crlf)")
-        return (body, boundary)
-    }
-
-    /// Text fields sent with the audio. `width`/`height` are both sent or neither.
-    static func lyricCaptionsFields(_ request: LyricCaptionRequest, width: Int?, height: Int?) -> [(name: String, value: String)] {
-        var fields: [(name: String, value: String)] = [("target_language", request.targetLanguage)]
-        if let source = request.sourceLanguage, !source.isEmpty { fields.append(("source_language", source)) }
-        fields.append(("mode", request.mode.rawValue))
-        if let pct = request.positionFromBottomPct { fields.append(("position_from_bottom_pct", String(pct))) }
-        if let size = request.fontSize { fields.append(("font_size", String(size))) }
-        if let width, let height, width > 0, height > 0 {
-            fields.append(("width", String(width)))
-            fields.append(("height", String(height)))
-        }
-        return fields
-    }
-
-    /// POST /api/lyric-captions → 202 `{ jobId, status, pollUrl, resultUrl }`.
-    func submitLyricCaptions(
-        audio: Data,
-        fileName: String,
-        mimeType: String,
-        request: LyricCaptionRequest,
-        width: Int?,
-        height: Int?,
+    /// POST /api/streaming-captions/token: a single-use ElevenLabs realtime token, minted right
+    /// before connecting. `resumeSessionId` keeps a resumed socket the same job (charged once).
+    func mintStreamingCaptionsToken(
+        sourceLanguage: String?,
+        resumeSessionId: String?,
         turnToken: String? = nil,
-        toolCallId: String? = nil,
-        onUploadProgress: (@Sendable (Double) -> Void)? = nil
-    ) async throws -> JobEnqueueResponse {
-        let multipart = Self.makeLyricCaptionsBody(
-            audio: audio, fileName: fileName, mimeType: mimeType,
-            fields: Self.lyricCaptionsFields(request, width: width, height: height)
-        )
-        var urlRequest = makeRequest(
-            url: lyricCaptionsURL, method: "POST", auth: .bearerPreferred,
-            body: multipart.data, contentType: "multipart/form-data; boundary=\(multipart.boundary)"
-        )
-        urlRequest.timeoutInterval = 120
+        toolCallId: String? = nil
+    ) async throws -> StreamingToken {
+        var payload: [String: String] = [:]
+        if let sourceLanguage, !sourceLanguage.isEmpty, sourceLanguage.lowercased() != "auto" { payload["source_language"] = sourceLanguage }
+        if let resumeSessionId, !resumeSessionId.isEmpty { payload["resumeSessionId"] = resumeSessionId }
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        var request = makeRequest(url: streamingCaptionsTokenURL, method: "POST", auth: .bearerPreferred, body: body)
+        request.timeoutInterval = 20
+        Self.attachTurn(&request, turnToken: turnToken, toolCallId: toolCallId)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        guard let token = try? decoder.decode(StreamingToken.self, from: data) else { throw APIError.decoding }
+        return token
+    }
+
+    /// POST /api/streaming-captions/translate: one ordered batch (≤ 20 lines here; the server
+    /// accepts 40 segments, 400 characters each, 8000 in total).
+    func translateStreamingCaptions(
+        _ batch: TranslateRequest,
+        turnToken: String? = nil,
+        toolCallId: String? = nil
+    ) async throws -> StreamingTranslateResponse {
+        var payload: [String: Any] = [
+            "target_language": batch.targetLanguage,
+            "source_language": batch.sourceLanguage,
+            "segments": batch.segments.map { ["i": $0.i, "start": $0.start, "end": $0.end, "text": $0.text] as [String: Any] },
+            "context": batch.context,
+        ]
+        if let id = batch.sessionId, !id.isEmpty { payload["sessionId"] = id }
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        var request = makeRequest(url: streamingCaptionsTranslateURL, method: "POST", auth: .bearerPreferred, body: body)
+        request.timeoutInterval = 45
+        Self.attachTurn(&request, turnToken: turnToken, toolCallId: toolCallId)
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        guard let result = try? decoder.decode(StreamingTranslateResponse.self, from: data) else { throw APIError.decoding }
+        return result
+    }
+
+    private static func attachTurn(_ request: inout URLRequest, turnToken: String?, toolCallId: String?) {
         // From a client-mode chat tool call: the server doesn't charge it on top of the chat turn.
         if let turnToken, !turnToken.isEmpty, let toolCallId, !toolCallId.isEmpty {
-            urlRequest.setValue(turnToken, forHTTPHeaderField: "X-Turn-Token")
-            urlRequest.setValue(toolCallId, forHTTPHeaderField: "X-Tool-Call-Id")
-        }
-        let delegate = onUploadProgress.map { UploadProgressDelegate(onProgress: $0) }
-        let (data, response) = try await session.data(for: urlRequest, delegate: delegate)
-        try Self.throwIfNeeded(response: response, data: data)
-        do {
-            return try decoder.decode(JobEnqueueResponse.self, from: data)
-        } catch {
-            throw APIError.decoding
+            request.setValue(turnToken, forHTTPHeaderField: "X-Turn-Token")
+            request.setValue(toolCallId, forHTTPHeaderField: "X-Tool-Call-Id")
         }
     }
 
-    /// Poll like the web client: 3 s × 1.5, capped at 10 s (the poll endpoint shares the general limiter).
-    func pollLyricCaptionsJob(
-        id: String,
-        initialInterval: TimeInterval = 3,
-        maxInterval: TimeInterval = 10,
-        maxWait: TimeInterval = 600,
-        notFoundRetries: Int = 3,
-        notFoundDelay: TimeInterval = 2,
-        onUpdate: (@MainActor (JobPollResponse) -> Void)? = nil
-    ) async throws -> JobPollResponse {
-        var interval = initialInterval
-        var waited: TimeInterval = 0
-        var notFound = 0
-        while true {
-            let status: JobPollResponse
-            do {
-                status = try await fetchJobStatus(id: id)
-            } catch let error as APIError where error.httpStatusCode == 404 && notFound < notFoundRetries - 1 {
-                // The job may not be visible yet: retry a few times before giving up.
-                notFound += 1
-                try await Task.sleep(nanoseconds: UInt64(notFoundDelay * 1_000_000_000))
-                continue
+    /// Maps any error of the two streaming calls to a `StreamingError` (stable code + status).
+    static func streamingError(from error: Error) -> StreamingError {
+        if let streaming = error as? StreamingError { return streaming }
+        if let api = error as? APIError {
+            if api.isPaywall { return StreamingError(code: "paywall") }
+            let status = api.httpStatusCode
+            var code = api.serverCode ?? ""
+            var retryable = false
+            if case .httpStatus(_, let body) = api, let body, let data = body.data(using: .utf8),
+               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+                retryable = (object["retryable"] as? Bool) == true
             }
-            await onUpdate?(status)
-            if status.status.isTerminal { return status }
-            guard waited < maxWait else { throw APIError.message("Lyric captions timed out") }
-            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            waited += interval
-            interval = min(interval * 1.5, maxInterval)
+            if code.isEmpty {
+                switch status {
+                case 401: code = "unauthorized"
+                case 403: code = "forbidden"
+                case 429: code = "rate_limited"
+                case 503: code = "streaming_captions_unavailable"
+                default: code = status == nil ? "network" : "streaming_failed"
+                }
+            }
+            return StreamingError(code: code, status: status, retryable: retryable)
         }
-    }
-
-    /// GET the finished job's `resultUrl` (JSON with the timed lines).
-    func fetchLyricCaptionsResult(id: String, resultUrl: String?) async throws -> LyricCaptionResult {
-        let data = try await downloadJobResult(id: id, resultUrl: resultUrl)
-        do {
-            return try decoder.decode(LyricCaptionResult.self, from: data)
-        } catch {
-            throw APIError.decoding
-        }
+        return StreamingError(code: "network")
     }
 
     /// Burn-in MUST be sync multipart `POST /api/process-video` with `operation=burn_subtitles`.
@@ -914,21 +877,5 @@ enum APIError: Error, LocalizedError, Equatable {
         default:
             return "Couldn't generate captions — try again"
         }
-    }
-}
-
-
-/// Reports upload progress (0...1) for one request.
-final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    private let onProgress: @Sendable (Double) -> Void
-
-    init(onProgress: @escaping @Sendable (Double) -> Void) {
-        self.onProgress = onProgress
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
-                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
-        guard totalBytesExpectedToSend > 0 else { return }
-        onProgress(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
     }
 }

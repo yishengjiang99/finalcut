@@ -148,74 +148,61 @@ enum LyricCaptionStyle {
     }
 }
 
-/// Fixed copy for lyric captions (Design).
+/// Fixed copy for translated captions (Design; the privacy wording follows the streaming transport).
 enum LyricCaptionsCopy {
-    static let uploadingAudio = "Uploading audio…"
-    static let listening = "Listening to the song…"
-    static let listeningSpeech = "Listening to the audio…"
-    static let findingLyrics = "Finding lyrics and translating…"
-    static let translating = "Translating…"
-    static let addingCaptions = "Adding captions…"
+    static let addingCaptions = StreamingCopy.addingCaptions
 
-    static let cloudOffTitle = "Lyric captions use the cloud"
-    static let cloudOffBody = "To caption a song, FinalCap uploads this video's audio to transcribe and translate it. Turn on Cloud processing to use lyric captions."
-    static let speechCloudOffTitle = "Translated captions use the cloud"
+    static let cloudOffTitle = "Translated captions use the cloud"
     static let openSettings = "Open Settings"
     static let notNow = "Not now"
-    static let uploadTitle = "Upload the audio?"
-    static let uploadAudio = "Upload audio"
-    static let lyricsUploadBody = "FinalCap will upload this video's audio, but not the picture, to transcribe it, look up the song's lyrics, and translate them. The audio is deleted after transcription."
+    static let uploadTitle = "Send the audio?"
+    static let uploadAudio = "Send audio"
 
     static let serverCaptionsMessage = "Captions need to upload this video's audio to transcribe it. Upload and continue?"
     static let serverCaptionsTitle = "Upload this video's audio?"
     static let upload = "Upload"
 
     // Friendly failure copy (nothing applied). Never raw server text.
-    static let unavailable = "Translated captions aren't available right now. Try again later."
-    static let noSpeech = "No speech found in this video."
-    static let tooLong = "This video's audio is too long for translated captions. Try a clip under 10 minutes."
-    static let couldntFinish = "Captions couldn't finish. Nothing was changed. Try again."
-    static let noAudio = "This video has no sound to caption."
-    /// Kept for older call sites: same as `couldntFinish`.
-    static let modelError = couldntFinish
+    static let unavailable = StreamingCopy.unavailable
+    static let noSpeech = StreamingCopy.noSpeech
+    static let tooLong = StreamingCopy.tooLong
+    static let couldntFinish = StreamingCopy.couldntFinish
+    static let noAudio = StreamingCopy.noAudio
     static let generic = couldntFinish
 
-    static func speechUploadBody(target: String) -> String {
-        "FinalCap will upload this video's audio, but not the picture, to transcribe it and translate it into \(target). The audio is deleted after transcription."
+    /// The audio (never the picture) streams to ElevenLabs for transcription; the text goes to
+    /// FinalCap to be translated. Nothing here promises the audio is deleted.
+    static func uploadBody(target: String) -> String {
+        "FinalCap will send this video's audio, but not the picture, to ElevenLabs to transcribe it. The transcribed text then goes to FinalCap to be translated into \(target)."
     }
 
-    static func speechCloudOffBody(target: String) -> String {
-        speechUploadBody(target: target) + " Turn on Cloud processing to use translated captions."
+    static func cloudOffBody(target: String) -> String {
+        uploadBody(target: target) + " Turn on Cloud processing to use translated captions."
     }
 
     /// Cloud processing is off: nothing is sent.
     static func cloudOffPrompt(mode: LyricMode, targetLanguage: String) -> CloudPrompt {
-        if mode == .speech {
-            return CloudPrompt(kind: .openSettings, title: speechCloudOffTitle,
-                               message: speechCloudOffBody(target: targetName(targetLanguage)),
-                               primary: openSettings, secondary: notNow)
-        }
-        return CloudPrompt(kind: .openSettings, title: cloudOffTitle, message: cloudOffBody,
-                           primary: openSettings, secondary: notNow)
+        CloudPrompt(kind: .openSettings, title: cloudOffTitle,
+                    message: cloudOffBody(target: targetName(targetLanguage)),
+                    primary: openSettings, secondary: notNow)
     }
 
     /// Cloud processing is on: asked every time.
     static func uploadPrompt(mode: LyricMode, targetLanguage: String) -> CloudPrompt {
-        let body = mode == .speech ? speechUploadBody(target: targetName(targetLanguage)) : lyricsUploadBody
-        return CloudPrompt(kind: .upload, title: uploadTitle, message: body, primary: uploadAudio, secondary: notNow)
+        CloudPrompt(kind: .upload, title: uploadTitle, message: uploadBody(target: targetName(targetLanguage)),
+                    primary: uploadAudio, secondary: notNow)
+    }
+
+    /// The connection dropped after the automatic resumes: Continue picks up from the first
+    /// unfinished range with a fresh token.
+    static func continuePrompt(message: String) -> CloudPrompt {
+        CloudPrompt(kind: .upload, title: StreamingCopy.continueTitle, message: message,
+                    primary: StreamingCopy.continueButton, secondary: StreamingCopy.cancelButton)
     }
 
     /// Server `generate_captions` / translate on the Cloud-ON path.
     static var serverCaptionsPrompt: CloudPrompt {
         CloudPrompt(kind: .upload, title: serverCaptionsTitle, message: serverCaptionsMessage, primary: upload, secondary: notNow)
-    }
-
-    /// Stage text without a percentage. Job `progress` goes 0.2 (decoded) → 0.5 (transcribed) →
-    /// 0.9 (corrected) → 1. Mode `speech` never mentions songs or lyrics.
-    static func progressText(progress: Double?, mode: LyricMode, uploadFinished: Bool) -> String {
-        guard uploadFinished else { return uploadingAudio }
-        if (progress ?? 0) < 0.5 { return mode == .speech ? listeningSpeech : listening }
-        return mode == .speech ? translating : findingLyrics
     }
 
     private static let codePattern = try! NSRegularExpression(pattern: "^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$")
@@ -255,21 +242,8 @@ enum LyricCaptionsCopy {
         return "Captions · Speech + \(target)"
     }
 
-    /// Chat copy for an error `code` (HTTP body or failed job) and/or HTTP status.
-    static func failureCopy(code: String?, status: Int? = nil) -> String {
-        switch code?.lowercased() {
-        case "lyric_captions_unavailable": return unavailable
-        case "no_speech": return noSpeech
-        case "audio_too_long", "audio_too_large": return tooLong
-        case "no_audio": return noAudio
-        default:
-            if status == 503 { return unavailable }
-            if status == 413 { return tooLong }
-            if status == 422 { return noSpeech }
-            // Job not found, poll/network failure, model error, unknown error.
-            return couldntFinish
-        }
-    }
+    /// Chat copy for a streaming failure.
+    static func failureCopy(_ error: StreamingError) -> String { StreamingCopy.friendly(error) }
 }
 
 /// A two-button confirmation shown by the editor (`.alert`).
@@ -281,31 +255,4 @@ struct CloudPrompt: Equatable, Identifiable {
     var primary: String
     var secondary: String
     var id: String { title + "|" + message }
-}
-
-/// Progress line with the percentage exactly as the server reports it (progress × 100): no
-/// smoothing, never backwards, and never 100% (clamped to 99) because the overlay still has to
-/// be drawn locally. Upload shows the upload percentage when known.
-struct LyricProgressTracker: Equatable {
-    private var uploadPercent = 0
-    private var jobPercent = 0
-
-    static func percent(_ fraction: Double?) -> Int {
-        guard let fraction, fraction.isFinite else { return 0 }
-        return min(99, max(0, Int((fraction * 100 + 1e-9).rounded(.down))))
-    }
-
-    /// Upload phase ("Uploading audio… 45%"; plain text until a percentage is known).
-    mutating func uploadText(fraction: Double?) -> String {
-        guard let fraction else { return LyricCaptionsCopy.uploadingAudio }
-        uploadPercent = max(uploadPercent, Self.percent(fraction))
-        return "\(LyricCaptionsCopy.uploadingAudio) \(uploadPercent)%"
-    }
-
-    /// Job phase ("Listening to the song… 34%").
-    mutating func jobText(progress: Double?, mode: LyricMode) -> String {
-        jobPercent = max(jobPercent, Self.percent(progress))
-        let text = LyricCaptionsCopy.progressText(progress: progress, mode: mode, uploadFinished: true)
-        return "\(text) \(jobPercent)%"
-    }
 }
