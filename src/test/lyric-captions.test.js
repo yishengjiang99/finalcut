@@ -318,6 +318,22 @@ describe('HTTP: POST /api/lyric-captions + jobs + burn', () => {
     expect(leftovers).toEqual([]);
   });
 
+  it('plain speech to Chinese: mode speech, zh-Hans, language auto-detected, original on top and Chinese below, one Dialogue per line', async () => {
+    const res = await post({ target_language: 'zh-Hans', mode: 'speech', width: 720, height: 1280 });
+    expect(res.status).toBe(202);
+    const started = await res.json();
+    const job = await waitJob(started.jobId);
+    expect(job.status).toBe('succeeded');
+    expect(correctCalls.at(-1)).toMatchObject({ targetLanguage: 'zh-Hans', sourceLanguage: 'auto', mode: 'speech' });
+    const result = await (await get(`/api/jobs/${started.jobId}/result`)).json();
+    expect(result.targetLanguage).toBe('zh-Hans');
+    const dialogues = result.ass.split('\n').filter(l => l.startsWith('Dialogue:'));
+    expect(dialogues).toHaveLength(result.lines.length);
+    expect(dialogues[0]).toContain('Zieh die Stiefel an\\N穿上靴子');
+    expect(result.ass.match(/穿上靴子/g)).toHaveLength(1); // the translation is drawn once
+    expect(result.ass).toContain('Style: Default,Noto Sans CJK SC,48,');
+  });
+
   it('503 lyric_captions_unavailable when API keys or ffmpeg are missing', async () => {
     hasKeys = false;
     let res = await post({ target_language: 'es' });

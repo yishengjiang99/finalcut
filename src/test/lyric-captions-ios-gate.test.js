@@ -38,6 +38,7 @@ import { buildToolsSchema, offeredToolsFor } from '../server/toolsSchema.js';
 import { tools } from '../tools.js';
 import {
   IOS_TOOL_ALLOWLIST,
+  GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION,
   LYRIC_CAPTIONS_IOS_DESCRIPTION,
   LYRIC_CAPTIONS_MIN_BUILD,
   isToolAllowedForIosBuild,
@@ -159,6 +160,28 @@ describe('builds at or past the cutoff', () => {
     }
     // The iOS copy is a separate object; the shared web definition is not mutated.
     expect(WEB_DEF.function.description).toMatch(/burns two-line captions into the video/);
+  });
+
+  it('generate_captions says "same-language only, translation goes to lyric_captions" from the cutoff; older builds keep their pinned text', () => {
+    const desc = (b) => offeredToolsFor({ userAgent: ios(b), mediaType: 'video' }).find(t => t.function.name === 'generate_captions').function;
+    for (const build of [CUTOFF, CUTOFF + 7]) {
+      expect(desc(build).description).toBe(GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION);
+      expect(desc(build).description).toMatch(/never translates/);
+      expect(desc(build).description).toMatch(/call lyric_captions instead/);
+      expect(desc(build).parameters.properties).not.toHaveProperty('translate_language');
+    }
+    for (const build of [10, 12, CUTOFF - 1]) {
+      expect(desc(build).description).toMatch(/Translation is not available\./);
+      expect(desc(build).description).not.toMatch(/lyric_captions/);
+    }
+  });
+
+  it('the iOS lyric_captions description covers plain speech and plain phrasing, in speech mode with zh-Hans', () => {
+    for (const phrase of ['add Chinese captions', 'add captions in Chinese', 'Chinese subtitles',
+      'translate the video into Chinese and burn the captions', 'mode "speech"', 'zh-Hans',
+      'detected automatically', 'Use generate_captions only for same-language']) {
+      expect(LYRIC_CAPTIONS_IOS_DESCRIPTION).toContain(phrase);
+    }
   });
 
   it('photo: not offered', () => {
