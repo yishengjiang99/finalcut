@@ -165,21 +165,23 @@ describe('lyric_captions in /api/chat', () => {
     expect(text).toContain('target_language');
   });
 
-  describe('style question inside the tool loop', () => {
-    const QUESTION = 'Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.';
+  describe('caption style inside the tool loop: no question first, an offer after, style_captions for the change', () => {
+    const OFFER = 'Want a different font or position?';
     const media = { type: 'video', width: 720, height: 1280, durationSec: 20 };
     const sys = { role: 'system', content: systemPrompt };
+    const callReply = (name, args, id) => json({ choices: [{ index: 0, finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] });
 
-    it('"caption in Chinese" (no style): the model is shown the rule and the style params, and its question reaches the user with no tool call', async () => {
-      // The mocked model behaves as the system prompt instructs: it asks the one question.
-      reply = () => json({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: QUESTION } }] });
+    it('"caption in Chinese" (no style): the model is told to call straight away, and its lyric_captions call goes through with no style params', async () => {
+      const args = { target_language: 'zh-Hans', mode: 'speech' };
+      reply = () => callReply('lyric_captions', args, 'st0');
       const res = await postChat({ execution: 'client', messages: [sys, { role: 'user', content: 'caption in Chinese' }], media });
       const body = await res.json();
-      expect(body.status).toBe('final');
-      expect(JSON.stringify(body)).toContain('Which font and where should the captions go?');
-      expect(body.toolCalls || []).toHaveLength(0);
+      expect(body).toMatchObject({ status: 'tool_calls', toolCalls: [{ id: 'st0', name: 'lyric_captions', arguments: args }] });
       const sent = xaiCalls[0];
-      expect(sent.messages[0].content).toContain(QUESTION);
+      expect(sent.messages[0].content).toContain('call it straight away. Never ask about font, size or position before captioning');
+      expect(sent.messages[0].content).not.toContain('Which font and where should the captions go?');
+      const names = sent.tools.map(t => t.function.name);
+      expect(names).toEqual(expect.arrayContaining(['lyric_captions', 'style_captions']));
       const props = sent.tools.find(t => t.function.name === 'lyric_captions').function.parameters.properties;
       expect(Object.keys(props)).toEqual(expect.arrayContaining(['font', 'size', 'position', 'position_from_bottom_pct']));
     });
@@ -188,19 +190,21 @@ describe('lyric_captions in /api/chat', () => {
       reply = () => json({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }] });
       const systemOf = (call) => call.messages.find(m => m.role === 'system').content;
       await postChat({ execution: 'client', messages: [{ role: 'user', content: 'caption in Chinese' }], media });
-      expect(systemOf(xaiCalls[0])).toContain(QUESTION);
+      expect(systemOf(xaiCalls[0])).toContain(OFFER);
       await postChat({ execution: 'client', messages: [{ role: 'user', content: 'caption in Chinese' }], media: { type: 'image', width: 10, height: 10 } });
-      expect(systemOf(xaiCalls[1])).not.toContain(QUESTION);
+      expect(systemOf(xaiCalls[1])).not.toContain(OFFER);
       await postChat({ execution: 'client', messages: [{ role: 'user', content: 'caption in Chinese' }], media }, { 'User-Agent': 'FinalCap-iOS/12' });
-      expect(systemOf(xaiCalls[2])).not.toContain(QUESTION);
+      expect(systemOf(xaiCalls[2])).not.toContain(OFFER);
+      expect(xaiCalls[2].tools.map(t => t.function.name)).not.toContain('style_captions');
     });
 
-    it('the answer "bottom, large" → the next turn calls lyric_captions with explicit style params, which pass through unchanged', async () => {
-      const args = { target_language: 'zh-Hans', mode: 'speech', font: 'Noto Sans CJK SC', size: 'large', position: 'bottom', position_from_bottom_pct: 20 };
-      reply = () => json({ choices: [{ index: 0, finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'st1', type: 'function', function: { name: 'lyric_captions', arguments: JSON.stringify(args) } }] } }] });
-      const res = await postChat({ execution: 'client', messages: [sys, { role: 'user', content: 'caption in Chinese' }, { role: 'assistant', content: QUESTION }, { role: 'user', content: 'bottom, large' }], media });
+    it('after captioning, a style request ("bigger, at the top") calls style_captions with only those parts; the earlier turn is in the history', async () => {
+      const args = { size: 'large', position: 'top' };
+      reply = () => callReply('style_captions', args, 'st1');
+      const res = await postChat({ execution: 'client', messages: [sys, { role: 'user', content: 'caption in Chinese' }, { role: 'assistant', content: `Added Chinese captions. ${OFFER}` }, { role: 'user', content: 'bigger, at the top' }], media });
       const body = await res.json();
-      expect(body).toMatchObject({ status: 'tool_calls', toolCalls: [{ id: 'st1', name: 'lyric_captions', arguments: args }] });
+      expect(body).toMatchObject({ status: 'tool_calls', toolCalls: [{ id: 'st1', name: 'style_captions', arguments: args }] });
+      expect(xaiCalls[0].messages.filter(m => m.role === 'user').map(m => m.content)).toEqual(['caption in Chinese', 'bigger, at the top']);
     });
 
     it('"caption in Chinese, bottom, large" (style already given) → straight to the tool call with the stated parts', async () => {

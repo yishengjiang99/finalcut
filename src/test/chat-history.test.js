@@ -1,7 +1,8 @@
 // @vitest-environment node
-// Follow-up turns keep the conversation: "Caption in Chinese", the model's style question, then "Default"
-// must still caption in Chinese. Before, each request carried only the latest user message, so the model
-// saw "Default" alone and the target language was lost.
+// Follow-up turns keep the conversation. "Caption in Chinese" captions straight away with the default style;
+// the reply offers a change in one line; the follow-up ("bigger, at the top") reaches the model with the
+// earlier turn and re-styles the existing captions (style_captions), without captioning again. Before, each
+// request carried only the latest user message, so a follow-up lost what it answered.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../server/config.js', () => ({
@@ -10,8 +11,12 @@ vi.mock('../server/config.js', () => ({
 }));
 vi.mock('../db.js', () => ({ enqueueChatInteraction: vi.fn(), findUserByApiToken: vi.fn(), consumeDailyInference: vi.fn() }));
 const toolRuns = vi.hoisted(() => []);
+const styleRuns = vi.hoisted(() => []);
 vi.mock('../toolFunctions.js', () => ({
-  toolFunctions: { lyric_captions: async (args) => { toolRuns.push(args); return 'lyric_captions done: 3 lines.'; } },
+  toolFunctions: {
+    lyric_captions: async (args) => { toolRuns.push(args); return 'lyric_captions done: 3 lines.'; },
+    style_captions: async (args) => { styleRuns.push(args); return 'Captions restyled.'; },
+  },
   getCurrentFileMimeType: () => 'video/mp4',
   resetLastExecution: () => {},
   getLastExecution: () => ({ executedOn: 'browser' }),
@@ -31,25 +36,29 @@ import { runClientTurn } from '../clientTurn.js';
 import { priorHistory, HISTORY_MAX_MESSAGES, HISTORY_MAX_CHARS, HISTORY_MAX_MESSAGE_CHARS } from '../chatHistory.js';
 import { messagesForCurrentTurn } from '../useCallAPI.js';
 
-const QUESTION = 'Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.';
+const OFFER = 'Added Chinese captions. Want a different font or position?';
 const realFetch = globalThis.fetch;
 const modelCalls = [];
 let server; let base; let token;
 
-// A model that behaves as the system prompt says: it asks the style question for a bare caption request,
-// and calls the tool once it has the language and the style (or "default").
+// A model that behaves as the system prompt says: it captions straight away (passing only a style the user
+// stated), offers a change in one line, and re-styles with style_captions when asked afterwards.
 function model(body) {
   modelCalls.push(body);
   const userTexts = body.messages.filter(m => m.role === 'user').map(m => String(m.content));
   const last = userTexts.at(-1) || '';
   const toolDone = body.messages.some(m => m.role === 'tool');
   const json = (message, finish) => new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: finish, message }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  if (toolDone) return json({ role: 'assistant', content: 'Added Chinese captions.' }, 'stop');
-  const wantsChinese = userTexts.some(t => /chinese/i.test(t));
-  const styled = /default|bottom|top|large|small/i.test(last);
-  if (/^caption/i.test(last) && !styled) return json({ role: 'assistant', content: QUESTION }, 'stop');
-  const args = { target_language: wantsChinese ? 'zh-Hans' : 'en', mode: 'speech', font: 'Noto Sans CJK SC', size: 'default', position: 'bottom' };
-  return json({ role: 'assistant', content: null, tool_calls: [{ id: 'lc1', type: 'function', function: { name: 'lyric_captions', arguments: JSON.stringify(args) } }] }, 'tool_calls');
+  const call = (name, args) => json({ role: 'assistant', content: null, tool_calls: [{ id: `c-${name}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, 'tool_calls');
+  if (toolDone) return json({ role: 'assistant', content: OFFER }, 'stop');
+  const captioned = body.messages.some(m => m.role === 'assistant' && m.content === OFFER);
+  if (captioned && /bigger|top|font|higher|position/i.test(last)) {
+    return call('style_captions', { ...(/bigger/i.test(last) ? { size: 'large' } : {}), ...(/top/i.test(last) ? { position: 'top' } : {}) });
+  }
+  const args = { target_language: userTexts.some(t => /chinese/i.test(t)) ? 'zh-Hans' : 'en', mode: 'speech' };
+  if (/large/i.test(last)) args.size = 'large';
+  if (/bottom/i.test(last)) args.position = 'bottom';
+  return call('lyric_captions', args);
 }
 
 beforeAll(async () => {
@@ -61,7 +70,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
 });
 afterAll(async () => { globalThis.fetch = realFetch; await new Promise((r) => server.close(r)); });
-beforeEach(() => { modelCalls.length = 0; toolRuns.length = 0; token = issueSampleAccessToken(); });
+beforeEach(() => { modelCalls.length = 0; toolRuns.length = 0; styleRuns.length = 0; token = issueSampleAccessToken(); });
 
 const post = async (body) => (await realFetch(`${base}/api/chat`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', 'sample-access-token': token }, body: JSON.stringify({ execution: 'client', ...body }),
@@ -82,16 +91,20 @@ async function turn(state, text) {
 }
 
 describe('the conversation reaches the model', () => {
-  it('"Caption in Chinese", the style question, then "Default": lyric_captions is called in Chinese with the default style', async () => {
-    let state = await turn([{ role: 'user', content: '', apiContent: 'A video file is available for editing.', excludeFromAPI: false, id: 0 }], 'Caption in Chinese');
-    expect(toolRuns).toEqual([]); // asked first
-    expect(state.at(-1)).toMatchObject({ role: 'assistant', content: QUESTION });
+  it('"Caption in Chinese" runs lyric_captions at once with the default style (no style question, no style params)', async () => {
+    const state = await turn([{ role: 'user', content: '', apiContent: 'A video file is available for editing.', excludeFromAPI: false, id: 0 }], 'Caption in Chinese');
+    expect(toolRuns).toEqual([{ target_language: 'zh-Hans', mode: 'speech' }]);
+    expect(state.at(-1)).toMatchObject({ role: 'assistant', content: OFFER });
+  });
 
-    state = await turn(state, 'Default');
-    expect(toolRuns).toEqual([{ target_language: 'zh-Hans', mode: 'speech', font: 'Noto Sans CJK SC', size: 'default', position: 'bottom' }]);
-    // The model was shown the whole exchange, as text only, before the tool call.
-    const seen = modelCalls.find(c => c.messages.some(m => m.content === 'Default')).messages.filter(m => m.role !== 'system');
-    expect(seen.map(m => [m.role, m.content])).toEqual([['user', 'Caption in Chinese'], ['assistant', QUESTION], ['user', 'Default']]);
+  it('"Caption in Chinese", then "bigger, at the top": the follow-up re-styles the existing captions, captioning is not run again', async () => {
+    let state = await turn([{ role: 'user', content: '', apiContent: 'A video file is available for editing.', excludeFromAPI: false, id: 0 }], 'Caption in Chinese');
+    state = await turn(state, 'Make it bigger and put it at the top');
+    expect(toolRuns).toHaveLength(1); // no second transcription or translation
+    expect(styleRuns).toEqual([{ size: 'large', position: 'top' }]);
+    // The model was shown the earlier exchange, as text only, before the style call.
+    const seen = modelCalls.find(c => c.messages.some(m => m.content === 'Make it bigger and put it at the top')).messages.filter(m => m.role !== 'system');
+    expect(seen.slice(0, 3).map(m => [m.role, m.content])).toEqual([['user', 'Caption in Chinese'], ['assistant', OFFER], ['user', 'Make it bigger and put it at the top']]);
   });
 
   it('without the history the language is lost (the bug): the model sees only "Default"', async () => {
@@ -104,7 +117,7 @@ describe('the conversation reaches the model', () => {
     expect(toolRuns).toHaveLength(1);
     const continuation = modelCalls.at(-1).messages.filter(m => m.role !== 'system');
     expect(continuation.map(m => m.role)).toEqual(['user', 'assistant', 'tool']);
-    const next = await turn(state, 'Now caption again, default');
+    const next = await turn(state, 'Now caption again');
     expect(toolRuns).toHaveLength(2); // exactly one more tool run
     const roles = modelCalls.at(-1).messages.filter(m => m.role !== 'system').map(m => m.role);
     // earlier turn: user + its final reply as text; this turn: user, assistant tool call, tool result
@@ -163,7 +176,7 @@ describe('priorHistory', () => {
   });
 
   it('messagesForCurrentTurn (the no-file chat request) carries the history too', () => {
-    const state = [u('Caption in Chinese'), a(QUESTION), u('Default')];
-    expect(messagesForCurrentTurn(state)).toEqual([{ role: 'user', content: 'Caption in Chinese' }, { role: 'assistant', content: QUESTION }, { role: 'user', content: 'Default' }]);
+    const state = [u('Caption in Chinese'), a(OFFER), u('bigger')];
+    expect(messagesForCurrentTurn(state)).toEqual([{ role: 'user', content: 'Caption in Chinese' }, { role: 'assistant', content: OFFER }, { role: 'user', content: 'bigger' }]);
   });
 });

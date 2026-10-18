@@ -938,7 +938,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'lyric_captions',
-      description: 'Translated captions: shows the original line plus a translation as live captions on the preview, and burns them into the video frames when the user exports (in the browser). This is THE tool whenever the user wants captions or subtitles in another language, for speech and for songs. Use it for "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the video into Chinese and burn the captions", "translate the speech to Spanish", and for songs: "add lyrics captions", "subtitle the song in Chinese", "subtitle the song in German and Chinese", "translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: fixes only obvious recognition errors, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the audio with word timestamps (only the audio track is sent to the server, never the video), translates each line into target_language, and builds two-line captions (original on top, translation below, about 20% up from the bottom; Chinese and other scripts render correctly). In lyrics mode it also identifies the song and corrects misheard lyrics against the published lyrics. Captions appear as a live overlay on the preview; font, size and position style that overlay. When the user exports, the captions are burned into the video frames in the browser, so they show in Photos and every player; the video never leaves the browser. Calling it again replaces the earlier captions, not doubles them. Use generate_captions only for same-language subtitles, soft SRT/VTT files, or style/position options. If the user has not said how the captions should look (font, size, position) and has not said "default", ask one short question first (see the system prompt), then call this tool with explicit font, size and position. Videos only — not supported for photos.',
+      description: 'Translated captions: shows the original line plus a translation as live captions on the preview, and burns them into the video frames when the user exports (in the browser). This is THE tool whenever the user wants captions or subtitles in another language, for speech and for songs. Use it for "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the video into Chinese and burn the captions", "translate the speech to Spanish", and for songs: "add lyrics captions", "subtitle the song in Chinese", "subtitle the song in German and Chinese", "translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: fixes only obvious recognition errors, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the audio with word timestamps (only the audio track is sent to the server, never the video), translates each line into target_language, and builds two-line captions (original on top, translation below, about 20% up from the bottom; Chinese and other scripts render correctly). In lyrics mode it also identifies the song and corrects misheard lyrics against the published lyrics. Captions appear as a live overlay on the preview; font, size and position style that overlay. When the user exports, the captions are burned into the video frames in the browser, so they show in Photos and every player; the video never leaves the browser. Calling it again replaces the earlier captions, not doubles them. Use generate_captions only for same-language subtitles, soft SRT/VTT files, or style/position options. Never ask about font, size or position first: call this tool straight away; pass font, size and position only when the user already stated them, otherwise omit them (the defaults apply). To change the look of captions that already exist, call style_captions, not this tool again. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -990,6 +990,46 @@ export const tools = [
           }
         },
         required: ['target_language']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'style_captions',
+      description: 'Change how the existing captions look (font, size, position) without transcribing or translating again: instant, nothing is uploaded and no new edit is used. Use it after lyric_captions or generate_captions when the user asks for a different font, a bigger or smaller size, higher or lower captions, or the top or middle of the picture. Send only the parts that change; everything else keeps its current value (the previous tool result states the current style). Do NOT call lyric_captions again for a style change. Videos only — not supported for photos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          font: {
+            type: 'string',
+            description: 'Caption font: "Noto Sans CJK SC" (Bold; draws Chinese, Japanese and Latin) or "Inter" (Latin only).',
+            enum: ['Noto Sans CJK SC', 'Inter']
+          },
+          size: {
+            type: 'string',
+            description: 'Caption size: "small", "default", "large" or "xl" (48 px on a 720x1280 video for "default", scaled).',
+            enum: ['small', 'default', 'large', 'xl']
+          },
+          position: {
+            type: 'string',
+            description: 'Where the captions go: "bottom", "middle" or "top".',
+            enum: ['bottom', 'middle', 'top']
+          },
+          position_from_bottom_pct: {
+            type: 'number',
+            description: 'For bottom captions: the baseline height above the bottom edge, as a percentage of the video height (0-45). Default 20.',
+            minimum: 0,
+            maximum: 45
+          },
+          font_size: {
+            type: 'integer',
+            description: 'Optional font size in video pixels. Prefer "size".',
+            minimum: 8,
+            maximum: 400
+          }
+        },
+        required: []
       }
     }
   },

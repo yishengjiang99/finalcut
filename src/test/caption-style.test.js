@@ -2,8 +2,10 @@
 // Alignment/MarginV, the defaults (the agreed style), and the question the system prompt asks.
 import { describe, it, expect } from 'vitest';
 import { tools, systemPrompt } from '../tools.js';
+import { offeredToolsFor } from '../server/toolsSchema.js';
+import { IOS_TOOL_ALLOWLIST } from '../server/iosToolAllowlist.js';
 import {
-  resolveCaptionStyle, CAPTION_FONTS, CAPTION_SIZE_PRESETS, marginVFor, assStyleFor, buildAss, LYRIC_FONT,
+  resolveCaptionStyle, resolveCaptionStylePatch, CAPTION_FONTS, CAPTION_SIZE_PRESETS, marginVFor, assStyleFor, buildAss, LYRIC_FONT,
 } from '../lyricShared.js';
 
 const lc = tools.find(t => t.function.name === 'lyric_captions').function;
@@ -19,19 +21,59 @@ describe('lyric_captions style schema', () => {
     expect(p.position_from_bottom_pct).toMatchObject({ minimum: 0, maximum: 45, default: 20 });
     expect(Object.keys(p)).toEqual(['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size', 'font', 'size', 'position']);
   });
-  it('the tool description tells the model to ask once when the look is unspecified', () => {
-    expect(lc.description).toMatch(/has not said how the captions should look/);
-    expect(lc.description).toMatch(/ask one short question first/);
+});
+
+describe('the system prompt: caption straight away, then offer a change', () => {
+  it('has no style question before captioning, passes only a stated style, offers a change after, and re-styles with style_captions', () => {
+    expect(systemPrompt).not.toMatch(/Which font and where should the captions go/);
+    expect(systemPrompt).not.toMatch(/ask exactly one short question|style question/i);
+    expect(systemPrompt).toMatch(/call it straight away\. Never ask about font, size or position before captioning/);
+    expect(systemPrompt).toMatch(/already stated a style/);
+    expect(systemPrompt).toMatch(/Want a different font or position\?/);
+    expect(systemPrompt).toMatch(/call style_captions with only the parts that change/);
+    expect(systemPrompt).toMatch(/without transcribing or translating again/);
+    expect(systemPrompt).toMatch(/Never call lyric_captions again just to change the look/);
+  });
+  it('lyric_captions tells the model not to ask first, and to use style_captions for a later change', () => {
+    expect(lc.description).toMatch(/Never ask about font, size or position first/);
+    expect(lc.description).toMatch(/call style_captions, not this tool again/);
+    expect(lc.description).not.toMatch(/ask one short question/);
   });
 });
 
-describe('the system prompt: one style question, then explicit params', () => {
-  it('has the exact question text, the skip rules and the never-twice rule', () => {
-    expect(systemPrompt).toContain('Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.');
-    expect(systemPrompt).toMatch(/has not said how they should look/);
-    expect(systemPrompt).toMatch(/"default", "just do it" or "any", call the tool straight away/);
-    expect(systemPrompt).toMatch(/call lyric_captions with explicit font, size and position/);
-    expect(systemPrompt).toMatch(/Never ask the style question twice/);
+describe('style_captions: the re-style tool', () => {
+  const sc = tools.find(t => t.function.name === 'style_captions').function;
+  it('has the style params only, none required, same enums as lyric_captions', () => {
+    expect(sc.parameters.required).toEqual([]);
+    expect(Object.keys(sc.parameters.properties)).toEqual(['font', 'size', 'position', 'position_from_bottom_pct', 'font_size']);
+    expect(sc.parameters.properties.font.enum).toEqual(CAPTION_FONTS);
+    expect(sc.parameters.properties.size.enum).toEqual(['small', 'default', 'large', 'xl']);
+    expect(sc.parameters.properties.position.enum).toEqual(['bottom', 'middle', 'top']);
+    expect(sc.description).toMatch(/without transcribing or translating again/);
+    expect(sc.description).toMatch(/no new edit is used/);
+  });
+  it('is web-only: the iOS allowlist never offers it', () => {
+    expect(IOS_TOOL_ALLOWLIST.style_captions).toBeUndefined();
+    expect(offeredToolsFor({ userAgent: 'FinalCap-iOS/12', mediaType: 'video' }).map(t => t.function.name)).not.toContain('style_captions');
+    expect(offeredToolsFor({ userAgent: 'FinalCap-iOS/10', mediaType: 'video' }).map(t => t.function.name)).not.toContain('style_captions');
+    expect(offeredToolsFor({ userAgent: 'Mozilla/5.0', mediaType: 'video' }).map(t => t.function.name)).toContain('style_captions');
+    expect(offeredToolsFor({ userAgent: 'Mozilla/5.0', mediaType: 'image' }).map(t => t.function.name)).not.toContain('style_captions');
+  });
+});
+
+describe('resolveCaptionStylePatch: only the named parts change', () => {
+  it('maps each named part and leaves the rest out', () => {
+    expect(resolveCaptionStylePatch({})).toEqual({ patch: {}, ignored: [] });
+    expect(resolveCaptionStylePatch({ size: 'large' }).patch).toEqual({ sizeScale: 1.4 });
+    expect(resolveCaptionStylePatch({ position: 'top' }).patch).toEqual({ alignment: 8 });
+    expect(resolveCaptionStylePatch({ position_from_bottom_pct: 30 }).patch).toEqual({ positionFromBottomPct: 30 });
+    expect(resolveCaptionStylePatch({ font: 'Inter', size: 'small', position: 'middle' }).patch).toEqual({ font: 'Inter', sizeScale: 0.75, alignment: 5 });
+    expect(resolveCaptionStylePatch({ font_size: 54 }, { videoHeight: 1280 }).patch).toEqual({ sizeScale: 1.13 });
+  });
+  it('drops a bad value and names it', () => {
+    expect(resolveCaptionStylePatch({ size: 'gigantic', position: 'top' })).toEqual({ patch: { alignment: 8 }, ignored: ['size'] });
+    expect(resolveCaptionStylePatch({ font: 'Comic Sans' })).toEqual({ patch: {}, ignored: ['font'] });
+    expect(resolveCaptionStylePatch({ position_from_bottom_pct: 99 }).patch).toEqual({ positionFromBottomPct: 45 });
   });
 });
 

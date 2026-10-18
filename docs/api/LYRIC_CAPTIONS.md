@@ -41,11 +41,13 @@ when the user names the spoken or sung language.
 | `position` | `bottom` \| `middle` \| `top` | `bottom` | ASS Alignment 2 / 5 / 8. Bottom uses `position_from_bottom_pct` as MarginV; middle has MarginV 0; top has MarginV 8 % of the height. |
 
 Style on the web: invalid values never fail the call; they fall back to the default and are clamped
-(`resolveCaptionStyle` in `src/lyricShared.js`). The web model asks one question first ("Which font and
-where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.") when the look is
-unspecified, then passes explicit `font`, `size` and `position`; a stated preference, "default" or
-"just do it" goes straight to the call. The same params are in the iOS schema, but the iOS app draws
-its own captions, its tool text and system message are unchanged, and it does not get the question.
+(`resolveCaptionStyle` in `src/lyricShared.js`). The web model captions straight away with the default style (or the parts the
+user already stated: `font`, `size`, `position`, `position_from_bottom_pct`), never asking about the look
+first; the reply ends with one short offer ("Want a different font or position?"), and a later style
+request calls the web-only `style_captions` tool, which re-styles the existing track without
+transcribing or translating again (docs/api/STREAMING_CAPTIONS.md). The same style params are in the iOS
+schema, but the iOS app draws its own captions, its tool text and system message are unchanged, and it
+neither gets the guidance nor `style_captions`.
 
 Who runs it:
 

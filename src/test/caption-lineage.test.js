@@ -123,3 +123,41 @@ describe('lyric_captions failures reach the user as one short message', () => {
     expect((await run(err('No singing or speech detected in the audio', { code: 'no_speech' }))).shown).toEqual(['No singing or speech detected in the audio']);
   });
 });
+
+describe('style_captions re-applies the style to the existing track, nothing is redone', () => {
+  it('changes only the named parts, keeps the lines, and makes no network or transcription call', async () => {
+    const original = new Uint8Array([7, 7, 7]);
+    await caption({ language: 'en', translate_language: 'es' }, original);
+    const linesBefore = getTrack(original).lines;
+    const fetchCalls = global.fetch.mock.calls.length;
+    const extractCalls = engine.extractSpeechAudio.mock.calls.length;
+    const set = vi.fn();
+    const add = vi.fn();
+
+    const r = await toolFunctions.style_captions({ size: 'large', position: 'top' }, original, set, add);
+    expect(r).toMatch(/Captions restyled/);
+    expect(r).toMatch(/no transcription or translation was redone/);
+    expect(r).toMatch(/size x1\.4, top/);
+    const t = getTrack(original);
+    expect(t.style).toMatchObject({ sizeScale: 1.4, alignment: 8, font: 'Noto Sans CJK SC', positionFromBottomPct: 20 });
+    expect(t.lines).toEqual(linesBefore); // same lines, translations included
+    expect(global.fetch.mock.calls.length).toBe(fetchCalls);
+    expect(engine.extractSpeechAudio.mock.calls.length).toBe(extractCalls);
+    expect(set).not.toHaveBeenCalled(); // the video is untouched
+    expect(add).not.toHaveBeenCalled();
+
+    // A second change keeps the first one.
+    await toolFunctions.style_captions({ position: 'bottom', position_from_bottom_pct: 30 }, original, set, add);
+    expect(getTrack(original).style).toMatchObject({ sizeScale: 1.4, alignment: 2, positionFromBottomPct: 30 });
+  });
+
+  it('tells the model when there are no captions yet, or nothing valid was asked', async () => {
+    const fresh = new Uint8Array([8, 8, 8]);
+    expect(await toolFunctions.style_captions({ size: 'large' }, fresh, vi.fn(), vi.fn())).toMatch(/no captions on this video yet/);
+    const withTrack = new Uint8Array([9, 9, 9]);
+    await caption({ language: 'en' }, withTrack);
+    const r = await toolFunctions.style_captions({ size: 'gigantic' }, withTrack, vi.fn(), vi.fn());
+    expect(r).toMatch(/No style change was applied \(could not use: size\)/);
+    expect(getTrack(withTrack).style.sizeScale).toBe(1);
+  });
+});

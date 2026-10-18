@@ -67,7 +67,7 @@ Each batch sent for translation carries the text of the previous 2 lines as cont
 
 ## Choosing the look in chat
 
-The captions are drawn over the preview from the video's current time. The look is chosen in the chat, not in a panel. The web assistant asks once, "Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up." If you already said what you want, or say "default" or "just do it", it skips the question.
+The captions are drawn over the preview from the video's current time. The look is chosen in the chat, not in a panel. The web assistant captions straight away with the default look (Noto Sans CJK SC Bold, bottom, 20% up), or the font, size and position you already named, and then offers a different font or position in one line. Ask for one and it re-styles the captions you already have, without transcribing or translating again.
 
 The tool accepts two fonts, Noto Sans CJK SC and Inter (Latin only), because those are the two the browser overlay can draw. Sizes are small, default, large and extra large, at 0.75, 1, 1.4 and 1.8 times the default. Position is bottom, middle or top. An unknown value falls back to the default, so a style request never fails the run (`resolveCaptionStyle`).
 

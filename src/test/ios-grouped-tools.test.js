@@ -108,10 +108,10 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     });
   }
 
-  it('counts: iOS/10 = 22 tools (21 + lyric_captions), web and FinalCap/11 CFNetwork = 47', () => {
+  it('counts: iOS/10 = 22 tools (21 + lyric_captions), web and FinalCap/11 CFNetwork = 48 (with style_captions)', () => {
     expect(JSON.parse(snapshotFile('ios-build10')).schema.tools).toHaveLength(22);
-    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(47);
-    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(47);
+    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(48);
+    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(48);
   });
 
   it('build cutoff-1 is the build-10 list plus the ffmpeg_cli fallback (no grouped tools leak)', () => {
@@ -181,7 +181,7 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
   it('non-iOS UAs never get grouped tools, whatever build they claim', () => {
     for (const ua of [undefined, 'Mozilla/5.0', `FinalCap/${CUTOFF} CFNetwork/1.0`, `finalcap-ios/${CUTOFF}`]) {
       const offered = names(offeredToolsFor({ userAgent: ua }));
-      expect(offered).toHaveLength(47);
+      expect(offered).toHaveLength(48);
       for (const g of GROUPED) expect(offered).not.toContain(g);
     }
   });

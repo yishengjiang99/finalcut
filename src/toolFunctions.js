@@ -4,7 +4,7 @@
 // the user agrees to the upload. In "server" engine mode every edit goes to the server API.
 
 import { captionSourceFor, videoHasBurnedCaptions } from './captionLineage.js';
-import { setTrack, trackToSrt } from './captionTrack.js';
+import { setTrack, getTrack, updateTrackStyle, trackToSrt } from './captionTrack.js';
 import { runLyricCaptionsWeb, describeSong, friendlyLyricCaptionsError } from './lyricCaptionsClient.js';
 import {
   streamingAvailable, runStreamingCaptions, friendlyStreamingError,
@@ -12,7 +12,7 @@ import {
 } from './streamingCaptions.js';
 import { createClientLog } from './clientLog.js';
 import { keepAwake } from './wakeLock.js';
-import { buildAss, LYRIC_FONT, resolveCaptionStyle } from './lyricShared.js';
+import { buildAss, LYRIC_FONT, resolveCaptionStyle, resolveCaptionStylePatch } from './lyricShared.js';
 import { abortableFetch as fetch, getFetchAbortSignal } from './abortableFetch.js';
 import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
@@ -402,7 +402,7 @@ async function generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileD
   });
   addMessage({ text: 'SRT download:', videoUrl: srtUrl, videoType: 'subtitle-srt', mimeType: 'text/plain' });
   if (translatedSrt) addMessage({ text: `Translated SRT (${translateLanguage}):`, videoUrl: URL.createObjectURL(new Blob([translatedSrt], { type: 'text/plain' })), videoType: 'subtitle-srt', mimeType: 'text/plain' });
-  return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in on export; ${how}. They are a live overlay on the video preview (style: ${styleSummary}); Export burns them into the video in the browser, so they show everywhere. Nothing was uploaded except the audio.${replacing ? ' Replaced the earlier captions.' : ''}`;
+  return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in on export; ${how}. They are a live overlay on the video preview (style: ${styleSummary}); Export burns them into the video in the browser, so they show everywhere. Nothing was uploaded except the audio. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning).${replacing ? ' Replaced the earlier captions.' : ''}`;
 }
 
 // lyric_captions in the browser. Song lookup and translation need the audio on the server, so the
@@ -425,7 +425,7 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
   const lines = result.lines?.length || 0;
   const songText = describeSong(result.song);
   const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines || [], language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, videoHeight: height });
-  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player.${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
+  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning).${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
 }
 
 // Streaming captions: the video's audio (never the picture) is streamed from this browser straight to
@@ -503,7 +503,7 @@ async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFi
   toolStatus('Captions ready', 1);
   const count = result.lines.length;
   const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, clog, videoHeight: height });
-  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. ${replacing ? 'They replace the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
+  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning). ${replacing ? 'They replace the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
 }
 
 const srtSeconds = (stamp) => {
@@ -533,8 +533,35 @@ function attachCaptionTrack({ source, lines, language, targetLanguage, args = {}
   const track = setTrack(source, { lines, language, targetLanguage, style });
   clog?.log('captions_attached', { lines: lines.length, replacing: Boolean(replacing) });
   addMessage({ text: `Captions · ${languageLabel(language)} \u2192 ${languageLabel(targetLanguage)}`, captions: { bytes: source, lines: lines.length } });
-  const where = { 2: 'bottom', 5: 'middle', 8: 'top' }[track.style.alignment];
-  return `${track.style.font}, size x${track.style.sizeScale}, ${where}${track.style.alignment === 2 ? `, ${track.style.positionFromBottomPct}% up` : ''}`;
+  return describeStyle(track.style);
+}
+
+/** "Noto Sans CJK SC, size x1, bottom, 20% up": what the model is told about the current look. */
+function describeStyle(style) {
+  const where = { 2: 'bottom', 5: 'middle', 8: 'top' }[style.alignment];
+  return `${style.font}, size x${style.sizeScale}, ${where}${style.alignment === 2 ? `, ${style.positionFromBottomPct}% up` : ''}`;
+}
+
+/**
+ * style_captions: re-apply font, size and position to the clip's existing caption track. Local only: no audio,
+ * no transcription, no translation, no network, so nothing is charged and nothing is redone. The lines stay.
+ */
+async function restyleCaptions(args, inputVideoFileData) {
+  if ((currentFileMimeType || '').startsWith('image/')) return 'Captions are not supported for photos.';
+  const { bytes: source } = captionSourceFor(inputVideoFileData);
+  const holder = getTrack(source) ? source : (getTrack(inputVideoFileData) ? inputVideoFileData : null);
+  if (!holder) return 'There are no captions on this video yet, so there is nothing to restyle. Add captions first (lyric_captions), passing the style the user wants.';
+  let videoHeight = 0;
+  if (args?.font_size != null && args.size == null) {
+    try { ({ height: videoHeight } = engine.summarizeProbe(await engine.probeMedia(source, currentFileMimeType || 'video/mp4'))); } catch { videoHeight = 0; }
+  }
+  const { patch, ignored } = resolveCaptionStylePatch(args, { videoHeight });
+  const before = getTrack(holder).style;
+  if (!Object.keys(patch).length) {
+    return `No style change was applied${ignored.length ? ` (could not use: ${ignored.join(', ')})` : ''}. The captions stay as they are (style: ${describeStyle(before)}).`;
+  }
+  const track = updateTrackStyle(holder, patch);
+  return `Captions restyled (style: ${describeStyle(track.style)}). The same caption lines were kept: no transcription or translation was redone and no audio was uploaded. The overlay shows the new look now, and Export burns it into the video.${ignored.length ? ` Could not use: ${ignored.join(', ')}.` : ''}`;
 }
 
 const LANGUAGE_NAMES = { en: 'English', 'zh-hans': 'Chinese', 'zh-hant': 'Chinese (Traditional)', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', ja: 'Japanese', ko: 'Korean', pt: 'Portuguese', it: 'Italian', ru: 'Russian', ar: 'Arabic', hi: 'Hindi' };
@@ -1329,7 +1356,10 @@ export const toolFunctions = {
     }
   },
 
-  // Audio-in, captions-out: transcription and burn-in run in the browser (ffmpeg.wasm).
+  // Re-style the existing captions (font, size, position) without redoing anything.
+  style_captions: async (args, inputVideoFileData) => restyleCaptions(args, inputVideoFileData),
+
+  // Audio-in, captions-out: transcription runs on the server or in the browser; the burn happens on export.
   lyric_captions: async (args, inputVideoFileData, setVideoFileData, addMessage) => {
     let streaming = false;
     // Plain speech is logged from its very first step (before the status check, consent and decode).

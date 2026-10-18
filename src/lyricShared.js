@@ -162,9 +162,8 @@ const SIZE_ALIASES = { small: 'small', smaller: 'small', tiny: 'small', default:
 const POSITION_ALIASES = { bottom: 'bottom', low: 'bottom', middle: 'middle', center: 'middle', centre: 'middle', top: 'top' };
 const clampNum = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
-export const CAPTION_STYLE_QUESTION = 'Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.';
-/** The rule the model follows for caption style, in the web system prompt (server-owned). */
-export const CAPTION_STYLE_GUIDANCE = 'Caption style: when the user asks for captions (lyric_captions) and has not said how they should look (font, size, position) and has not said "default" or "just do it", do not call the tool yet. Ask exactly one short question: "Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up." Then call lyric_captions with explicit font, size and position (and position_from_bottom_pct) from their answer. If they already stated any style preference ("bottom, large", "at the top", "bigger"), or say "default", "just do it" or "any", call the tool straight away, with the stated parts as parameters and the defaults for the rest. Never ask the style question twice.';
+/** The rule the model follows for caption style, in the web system prompt (server-owned). No question first. */
+export const CAPTION_STYLE_GUIDANCE = 'Caption style: when the user asks for captions (lyric_captions), call it straight away. Never ask about font, size or position before captioning. If the user already stated a style ("bottom, large", "at the top", "bigger", "in Inter"), pass those parts as parameters (font, size, position, position_from_bottom_pct); leave the rest out so the defaults apply (Noto Sans CJK SC Bold, bottom, 20% up). When the captions are done, end your reply with one short line offering a change, for example "Want a different font or position?". If the user then asks for a different look, call style_captions with only the parts that change (read the current style in the earlier tool result; for "bigger" or "higher" pick the next step up from it): it re-applies the style to the existing captions instantly, without transcribing or translating again. Never call lyric_captions again just to change the look.';
 
 /**
  * Validate the style arguments of a lyric_captions call. Never throws: a bad value is dropped (the
@@ -202,6 +201,30 @@ export function resolveCaptionStyle(args = {}, { videoHeight = 0 } = {}) {
     else ignored.push('position_from_bottom_pct');
   }
   return { style, ignored };
+}
+
+/**
+ * Validate the style arguments of a style_captions call: only the parts the user named change.
+ * Same validation and clamping as resolveCaptionStyle; a bad value is dropped and named in `ignored`.
+ * @returns {{ patch: { font?: string, sizeScale?: number, alignment?: 2|5|8, positionFromBottomPct?: number }, ignored: string[] }}
+ */
+export function resolveCaptionStylePatch(args = {}, { videoHeight = 0 } = {}) {
+  const a = args && typeof args === 'object' ? args : {};
+  const given = (k) => a[k] != null && a[k] !== '';
+  const only = (keys) => resolveCaptionStyle(Object.fromEntries(keys.filter(given).map(k => [k, a[k]])), { videoHeight });
+  const patch = {};
+  const ignored = [];
+  const take = (keys, field, out) => {
+    if (!keys.some(given)) return;
+    const r = only(keys);
+    if (r.ignored.length) ignored.push(...r.ignored);
+    else patch[out] = r.style[field];
+  };
+  take(['font'], 'font', 'font');
+  take(given('size') ? ['size'] : ['font_size'], 'sizeScale', 'sizeScale');
+  take(['position'], 'alignment', 'alignment');
+  take(['position_from_bottom_pct'], 'positionFromBottomPct', 'positionFromBottomPct');
+  return { patch, ignored };
 }
 
 /** MarginV in px for an alignment: from the bottom (2), none (5, centered), or from the top (8). */
