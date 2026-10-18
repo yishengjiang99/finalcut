@@ -246,54 +246,6 @@ final class LyricCaptionsTests: XCTestCase {
     }
 
     @MainActor
-    func testCloudOffLyricCaptionsSendsNothingAndOffersSettings() async throws {
-        let model = try makeModel(cloud: false)
-        var prompts: [CloudPrompt] = []
-        var openedSettings = 0
-        model.promptHandler = { prompts.append($0); return true }   // user taps "Open Settings"
-        model.onOpenSettings = { openedSettings += 1 }
-        let result = await model.executeToolCall(lyricCall())
-        XCTAssertFalse(result.ok)
-        XCTAssertEqual(result.error, "skipped_by_user")
-        XCTAssertEqual(prompts.map(\.title), ["Translated captions use the cloud"])
-        XCTAssertEqual(prompts.first?.primary, "Open Settings")
-        XCTAssertEqual(openedSettings, 1)
-        XCTAssertEqual(LyricStubProtocol.recorded.count, 0, "zero requests with Cloud processing off")
-        XCTAssertEqual(socketsMade, 0, "no socket with Cloud processing off")
-        XCTAssertEqual(model.editStack?.entries.count, 0)
-
-        // Not now: same, but Settings stays closed.
-        model.promptHandler = { prompts.append($0); return false }
-        let again = await model.executeToolCall(lyricCall(["mode": .string("speech")]))
-        XCTAssertEqual(again.error, "skipped_by_user")
-        XCTAssertEqual(prompts.last?.title, "Translated captions use the cloud")
-        XCTAssertEqual(openedSettings, 1)
-        XCTAssertEqual(LyricStubProtocol.recorded.count, 0)
-    }
-
-    @MainActor
-    func testCloudOffModelTurnSendsOnlyChatRequests() async throws {
-        let model = try makeModel(cloud: false)
-        RecordingURLProtocol.reset(chatReplies: [
-            #"{"schemaVersion":"1","status":"tool_calls","toolCalls":[{"id":"call_1","name":"lyric_captions","arguments":{"target_language":"zh-Hans","mode":"speech"}}],"messages":[{"role":"user","content":"add Chinese captions"}],"round":1,"maxRounds":6}"#,
-            #"{"schemaVersion":"1","status":"final","message":"Turn on Cloud processing to translate captions."}"#,
-        ])
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [RecordingURLProtocol.self]
-        model.apiClient = APIClient(config: APIConfig(baseURL: base), session: URLSession(configuration: config))
-        var prompts: [CloudPrompt] = []
-        model.promptHandler = { prompts.append($0); return false }
-        await model.runChatTurn(prompt: "add Chinese captions")
-        let paths = RecordingURLProtocol.recorded.compactMap { $0.url?.path }
-        XCTAssertEqual(paths.filter { $0 == "/api/chat" }.count, 2, "\(paths)")
-        for path in paths {
-            XCTAssertTrue(path == "/api/chat" || path.hasPrefix("/api/auth/"), "unexpected request \(path)")
-        }
-        XCTAssertEqual(prompts.map(\.title), ["Translated captions use the cloud"])
-        XCTAssertEqual(model.editStack?.entries.count, 0)
-    }
-
-    @MainActor
     func testCloudOffCaptionsStayOnDevice() async throws {
         let model = try makeModel(cloud: false)
         var asked = 0
@@ -310,23 +262,6 @@ final class LyricCaptionsTests: XCTestCase {
     }
 
     // MARK: - Cloud processing on
-
-    @MainActor
-    func testCloudOnPromptsEveryTimeAndNotNowSendsNothing() async throws {
-        let model = try makeModel(cloud: true)
-        var prompts: [CloudPrompt] = []
-        model.promptHandler = { prompts.append($0); return false }
-        for _ in 0..<2 {
-            let result = await model.executeToolCall(lyricCall())
-            XCTAssertEqual(result.error, "skipped_by_user")
-        }
-        XCTAssertEqual(prompts.count, 2, "asked every time")
-        XCTAssertEqual(prompts.first?.title, "Send the audio?")
-        XCTAssertEqual(prompts.first?.primary, "Send audio")
-        XCTAssertEqual(LyricStubProtocol.recorded.count, 0)
-        XCTAssertEqual(socketsMade, 0, "declined: no socket, no request")
-        XCTAssertEqual(model.editStack?.entries.count, 0)
-    }
 
     @MainActor
     func testServerCaptionsAskToUploadWhenCloudIsOn() async throws {
@@ -384,12 +319,11 @@ extension LyricCaptionsTests {
         XCTAssertEqual(result.output?["width"], .number(1280))
         XCTAssertFalse(result.content.jsonString().contains("Hello there"), "caption text never goes back to the model")
 
-        // Copy: audio goes to ElevenLabs, the text to FinalCap; it never claims deletion.
-        let prompt = try XCTUnwrap(log.prompts.first)
-        XCTAssertEqual(prompt.title, "Send the audio?")
-        XCTAssertEqual(prompt.message, "FinalCap will send this video's audio, but not the picture, to ElevenLabs to transcribe it. The transcribed text then goes to FinalCap to be translated into Chinese.")
-        XCTAssertFalse(prompt.message.localizedCaseInsensitiveContains("delete"))
-        XCTAssertEqual([prompt.primary, prompt.secondary], ["Send audio", "Not now"])
+        // No consent dialog: a non-blocking note says the audio (not the video) goes to ElevenLabs.
+        XCTAssertEqual(log.prompts.count, 0, "no prompt, nothing blocks")
+        let note = try XCTUnwrap(model.messages.first { $0.role == .system && $0.content.hasPrefix("Sending this video's audio") })
+        XCTAssertEqual(note.content, "Sending this video's audio (not the video) to ElevenLabs to transcribe it. The text goes to FinalCap to be translated into Chinese.")
+        XCTAssertFalse(note.content.localizedCaseInsensitiveContains("delete"))
 
         // HTTP: a token, then translate batches. No upload of any kind.
         let appPaths = LyricStubProtocol.paths.filter { $0.hasPrefix("/api/") && !$0.hasPrefix("/api/auth/") }
@@ -429,6 +363,29 @@ extension LyricCaptionsTests {
         XCTAssertEqual(model.editStack?.entries.count, 0)
         model.redoLastEdit(registering: false)
         XCTAssertEqual(model.editStack?.entries.count, 1)
+    }
+
+    @MainActor
+    func testCloudOffStillStreamsAndOnlyAudioIsSent() async throws {
+        let (model, log) = try makeStreamingModel(cloud: false)
+        XCTAssertFalse(model.cloudProcessingEnabled)
+        let result = await model.executeToolCall(lyricCall())
+        XCTAssertTrue(result.ok, "\(String(describing: result.error)) \(LyricStubProtocol.paths)")
+        XCTAssertEqual(log.prompts.count, 0, "no Cloud-off notice and no consent prompt")
+        XCTAssertEqual(log.sockets.count, 1, "the streaming path runs with Cloud processing off")
+        let appPaths = LyricStubProtocol.paths.filter { $0.hasPrefix("/api/") && !$0.hasPrefix("/api/auth/") }
+        XCTAssertEqual(appPaths, ["/api/streaming-captions/token", "/api/streaming-captions/translate"])
+        // Only audio is ever sent: HTTP carries a few hundred bytes of JSON (no video, no audio file),
+        // and the socket carries 16 kHz PCM chunks of ~6 s.
+        for request in LyricStubProtocol.recorded where request.path.hasPrefix("/api/streaming-captions") {
+            XCTAssertLessThan(request.body.count, 4000, request.path)
+            XCTAssertFalse((request.headers["Content-Type"] ?? "").contains("multipart"), request.path)
+        }
+        let socket = log.sockets[0]
+        XCTAssertTrue(socket.chunks.allSatisfy { Set($0.keys) == ["message_type", "audio_base_64", "commit", "sample_rate"] })
+        XCTAssertEqual(Double(socket.audioBytes) / 32_000, 6, accuracy: 0.6)
+        XCTAssertEqual(model.editStack?.entries.last?.tool, "lyric_captions")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("ElevenLabs") && $0.role == .system })
     }
 
     @MainActor

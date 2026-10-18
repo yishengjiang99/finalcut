@@ -80,7 +80,7 @@ Export is the only step with a progress sheet (section 4).
 
 The model receives the user's text, clip metadata, and (when a vision model is configured) up to 4 still frames. It never receives the video.
 
-- First-run line under the composer (once): "Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip."
+- First-run line under the composer (once): "Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. Translated captions send only the audio, never the video, to ElevenLabs to transcribe it."
 - Export success footnote when no cloud step was used: "Rendered on your iPhone."
 
 **ASC:** `docs/asc/PRIVACY_NUTRITION.md` and `public/legal/privacy.html` need to cover the still frames and metadata, plus full-video uploads only when Cloud processing is turned on (FinalCut iOS owns that update).
@@ -212,7 +212,7 @@ These apply only when a step actually goes to the server. Map the `code` field t
 | `paywall.subhead.unlimitedPeriod` | Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return. |
 | `dictation.queued` | Queued |
 | `edit.updated` | Updated |
-| `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. |
+| `privacy.firstRun` | Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. Translated captions send only the audio, never the video, to ElevenLabs to transcribe it. |
 
 ## 11. Out of scope for this slice
 

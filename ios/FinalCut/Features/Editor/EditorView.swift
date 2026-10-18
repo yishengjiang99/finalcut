@@ -1289,10 +1289,9 @@ final class EditorViewModel: ObservableObject {
 
     // MARK: - lyric_captions (streamed transcription + translation, audio only)
 
-    /// `lyric_captions`: with Cloud processing off nothing is ever sent (a notice offers the
-    /// setting). With it on, the user confirms every time; only the audio is decoded on the
-    /// device and streamed to ElevenLabs, the text goes to FinalCap to be translated, and the
-    /// timed lines become an undoable overlay burned in on preview and export.
+    /// `lyric_captions`: the audio is decoded on the device and streamed to ElevenLabs (never the
+    /// video), the text goes to FinalCap to be translated, and the timed lines become an undoable
+    /// overlay burned in on preview and export. Not gated by Cloud processing.
     private func runLyricCaptions(call: ClientToolCall, stack: EditStack, request: LyricCaptionRequest) async -> ClientToolResult {
         func fail(_ code: String, copy: String? = nil) -> ClientToolResult {
             if let copy { messages.append(ChatMessage(role: .assistant, content: copy)) }
@@ -1301,17 +1300,9 @@ final class EditorViewModel: ObservableObject {
         if stack.canvas.duration > StreamingConstants.maxAudioSeconds {
             return fail("audio_too_long", copy: LyricCaptionsCopy.tooLong)
         }
-        guard cloudProcessingEnabled else {
-            // Default: nothing is sent. Offer the setting; the model explains in one line.
-            if await confirm(LyricCaptionsCopy.cloudOffPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) {
-                onOpenSettings?()
-            }
-            return fail("skipped_by_user")
-        }
-        // Asked every time, no "don't ask again".
-        guard await confirm(LyricCaptionsCopy.uploadPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) else {
-            return fail("skipped_by_user")
-        }
+        // No Cloud-processing gate and no consent dialog: this runs whatever the setting. A short,
+        // non-blocking note says what is sent (the audio, not the video).
+        messages.append(ChatMessage(role: .system, content: LyricCaptionsCopy.audioNote(target: LyricCaptionsCopy.targetName(request.targetLanguage))))
         guard let client = apiClient else { return fail("lyric_captions_failed", copy: LyricCaptionsCopy.generic) }
 
         state = .processing

@@ -46,7 +46,7 @@ enum UXCopy {
     static let dictationPermissionDenied = "Turn on Microphone and Speech Recognition for FinalCap in Settings." // dictation.permissionDenied
     static let dictationQueued = "Queued"                                      // dictation.queued
     static let paywallSubheadUnlimited = "Editing is free while FinalCap is new. Subscribe to support it and keep unlimited edits when free limits return." // paywall.subhead.unlimitedPeriod
-    static let privacyFirstRun = "Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip." // privacy.firstRun
+    static let privacyFirstRun = "Your video stays on your iPhone. FinalCap sends your request and a few still frames to the AI so it understands your clip. Translated captions send only the audio, never the video, to ElevenLabs to transcribe it." // privacy.firstRun
 
     static let saveToPhotos = "Save to Photos"                                // export.saveToPhotos
     static let saveToFiles = "Save to Files"                                  // export.saveToFiles

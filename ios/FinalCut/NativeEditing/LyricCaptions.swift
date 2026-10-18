@@ -152,11 +152,8 @@ enum LyricCaptionStyle {
 enum LyricCaptionsCopy {
     static let addingCaptions = StreamingCopy.addingCaptions
 
-    static let cloudOffTitle = "Translated captions use the cloud"
     static let openSettings = "Open Settings"
     static let notNow = "Not now"
-    static let uploadTitle = "Send the audio?"
-    static let uploadAudio = "Send audio"
 
     static let serverCaptionsMessage = "Captions need to upload this video's audio to transcribe it. Upload and continue?"
     static let serverCaptionsTitle = "Upload this video's audio?"
@@ -170,27 +167,11 @@ enum LyricCaptionsCopy {
     static let noAudio = StreamingCopy.noAudio
     static let generic = couldntFinish
 
-    /// The audio (never the picture) streams to ElevenLabs for transcription; the text goes to
-    /// FinalCap to be translated. Nothing here promises the audio is deleted.
-    static func uploadBody(target: String) -> String {
-        "FinalCap will send this video's audio, but not the picture, to ElevenLabs to transcribe it. The transcribed text then goes to FinalCap to be translated into \(target)."
-    }
-
-    static func cloudOffBody(target: String) -> String {
-        uploadBody(target: target) + " Turn on Cloud processing to use translated captions."
-    }
-
-    /// Cloud processing is off: nothing is sent.
-    static func cloudOffPrompt(mode: LyricMode, targetLanguage: String) -> CloudPrompt {
-        CloudPrompt(kind: .openSettings, title: cloudOffTitle,
-                    message: cloudOffBody(target: targetName(targetLanguage)),
-                    primary: openSettings, secondary: notNow)
-    }
-
-    /// Cloud processing is on: asked every time.
-    static func uploadPrompt(mode: LyricMode, targetLanguage: String) -> CloudPrompt {
-        CloudPrompt(kind: .upload, title: uploadTitle, message: uploadBody(target: targetName(targetLanguage)),
-                    primary: uploadAudio, secondary: notNow)
+    /// Shown (not blocking) when translated captions start: the audio, not the video, goes to
+    /// ElevenLabs to be transcribed and the text to FinalCap to be translated. It does not claim
+    /// the audio is deleted.
+    static func audioNote(target: String) -> String {
+        "Sending this video's audio (not the video) to ElevenLabs to transcribe it. The text goes to FinalCap to be translated into \(target)."
     }
 
     /// The connection dropped after the automatic resumes: Continue picks up from the first
