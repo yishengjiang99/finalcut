@@ -779,12 +779,13 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
 }
 
 /** Consented server fallback: upload the video and the final lines; the server burns with the same ASS style. */
-export async function burnStreamingCaptionsOnServer({ videoBytes, lines, language, targetLanguage, headers = {}, fetchImpl = fetch }) {
+export async function burnStreamingCaptionsOnServer({ videoBytes, lines, language, targetLanguage, args = null, headers = {}, fetchImpl = fetch }) {
   const form = new FormData();
   form.append('video', new Blob([videoBytes], { type: 'video/mp4' }), 'input.mp4');
   form.append('lines', JSON.stringify(lines));
   if (language) form.append('language', language);
   if (targetLanguage) form.append('target_language', targetLanguage);
+  if (args && Object.keys(args).length) form.append('args', JSON.stringify(args));
   const res = await fetchImpl('/api/streaming-captions/burn', { method: 'POST', headers, body: form });
   if (!res.ok) throw httpError(await res.json().catch(() => ({})), res, `Burn-in failed (${res.status})`);
   return new Uint8Array(await res.arrayBuffer());

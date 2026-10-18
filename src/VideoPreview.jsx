@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { activeLine, overlayFontPx } from './captionTrack.js';
 
 const FPS_STEPS = [24, 25, 30, 60];
 
-export default function VideoPreview({ videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
+export default function VideoPreview({ captionTrack = null, videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [viewH, setViewH] = useState(0); // rendered picture height, to size the caption overlay
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [fpsIdx, setFpsIdx] = useState(2); // index into FPS_STEPS; default 30
@@ -27,6 +29,18 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
   const chunksRef = useRef([]);
   const autoRecordStartedRef = useRef(false);
   const autoMutedRef = useRef(false);
+
+  // The live caption overlay is sized from the rendered picture height.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || !captionTrack) return undefined;
+    const measure = () => setViewH(el.clientHeight || el.getBoundingClientRect().height || 0);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [captionTrack, isCollapsed, showThumb]);
 
   const renderFrame = useCallback(() => {
     const video = videoRef.current;
@@ -649,6 +663,19 @@ export default function VideoPreview({ videoUrl, title = 'Video Preview', defaul
                 backgroundColor: '#000'
               }}
             />
+
+            {/* Live captions (not burned in): the active line, timed from the track, styled with its style */}
+            {captionTrack && (() => {
+              const line = activeLine(captionTrack, currentTime);
+              if (!line) return null;
+              const fontPx = overlayFontPx(captionTrack, viewH || 360);
+              return (
+                <div className="cap-overlay" data-testid="caption-overlay" aria-live="off" style={{ bottom: `${captionTrack.style.positionFromBottomPct}%`, fontSize: `${fontPx}px` }}>
+                  {line.text && <div className="cap-line">{line.text}</div>}
+                  {line.translation && <div className="cap-line cap-tr">{line.translation}</div>}
+                </div>
+              );
+            })()}
 
             {/* Top overlay: collapse + title */}
             <div style={{

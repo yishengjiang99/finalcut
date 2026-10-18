@@ -2025,3 +2025,15 @@ body {
 }
 
 .typing-hint { margin: 4px 4px 0; font-size: 12px; color: var(--text-dim); }
+
+/* ---------- live caption overlay (not burned in) and its panel ---------- */
+.cap-overlay { position: absolute; left: 0; right: 0; padding: 0 6%; text-align: center; pointer-events: none; z-index: 2; }
+.cap-overlay .cap-line { display: block; font-family: "Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif; font-weight: 700; line-height: 1.2; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000, 1px 1px 2px #000, -1px -1px 2px #000; overflow-wrap: anywhere; }
+.cap-panel { margin-top: 10px; display: grid; gap: 8px; }
+.cap-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.cap-row input[type="range"] { flex: 1; min-width: 120px; accent-color: #7c6cf6; }
+.cap-sizes { display: flex; gap: 6px; flex-wrap: wrap; }
+.cap-note { margin: 0; font-size: 12px; color: var(--text-dim, #8b96a8); }
+.caption-card { margin-top: 6px; }
+.export-status { font-size: 14px; margin: 0 0 14px; }
+.chip-btn.on { border-color: #7c6cf6; box-shadow: inset 0 0 0 1px #7c6cf6; }

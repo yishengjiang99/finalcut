@@ -99,11 +99,11 @@ describe('lyric_captions follows the same rule', () => {
     const set = (d) => { noteDerivedVideo(out, d); out = d; };
     const r1 = await toolFunctions.lyric_captions({ target_language: 'zh-Hans' }, captioned, set, vi.fn());
     expect(lyricWeb.inputs.at(-1)).toBe(original);
-    expect(r1).toMatch(/Replaced the captions burned earlier/);
+    expect(r1).toMatch(/replace the captions burned earlier/);
     expect(r1).toMatch(/1 lines, de → zh-Hans/);
     const r2 = await toolFunctions.lyric_captions({ target_language: 'es' }, out, set, vi.fn());
     expect(lyricWeb.inputs.at(-1)).toBe(original);
-    expect(r2).toMatch(/Replaced/);
+    expect(r2).toMatch(/replace the captions burned earlier/);
     const edited = new Uint8Array([2]);
     noteDerivedVideo(out, edited);
     const r3 = await toolFunctions.lyric_captions({ target_language: 'es' }, edited, set, vi.fn());
