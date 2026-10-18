@@ -683,12 +683,23 @@ final class APIClient {
         initialInterval: TimeInterval = 3,
         maxInterval: TimeInterval = 10,
         maxWait: TimeInterval = 600,
+        notFoundRetries: Int = 3,
+        notFoundDelay: TimeInterval = 2,
         onUpdate: (@MainActor (JobPollResponse) -> Void)? = nil
     ) async throws -> JobPollResponse {
         var interval = initialInterval
         var waited: TimeInterval = 0
+        var notFound = 0
         while true {
-            let status = try await fetchJobStatus(id: id)
+            let status: JobPollResponse
+            do {
+                status = try await fetchJobStatus(id: id)
+            } catch let error as APIError where error.httpStatusCode == 404 && notFound < notFoundRetries - 1 {
+                // The job may not be visible yet: retry a few times before giving up.
+                notFound += 1
+                try await Task.sleep(nanoseconds: UInt64(notFoundDelay * 1_000_000_000))
+                continue
+            }
             await onUpdate?(status)
             if status.status.isTerminal { return status }
             guard waited < maxWait else { throw APIError.message("Lyric captions timed out") }

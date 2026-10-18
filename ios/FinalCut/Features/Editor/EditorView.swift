@@ -255,6 +255,8 @@ final class EditorViewModel: ObservableObject {
     private var promptContinuation: CheckedContinuation<Bool, Never>?
     /// Latest `turnToken` of the running client-mode chat turn (sent with the lyric captions upload).
     var currentTurnToken: String?
+    /// Wait between retries when the first poll says 404 (tests shorten it).
+    var lyricPollNotFoundDelay: TimeInterval = 2
 
     /// Photos and videos (photo mode, NATIVE_EDIT_UX.md §7).
     nonisolated static var pickerFilter: PHPickerFilter { .any(of: [.images, .videos]) }
@@ -1340,7 +1342,7 @@ final class EditorViewModel: ObservableObject {
             activeJobId = enqueue.jobId
             let mode = request.mode
             lyricStatus = LyricCaptionsCopy.progressText(progress: 0, mode: mode, uploadFinished: true)
-            let final = try await client.pollLyricCaptionsJob(id: enqueue.jobId) { [weak self] status in
+            let final = try await client.pollLyricCaptionsJob(id: enqueue.jobId, notFoundDelay: lyricPollNotFoundDelay) { [weak self] status in
                 self?.lyricStatus = LyricCaptionsCopy.progressText(progress: status.progress, mode: mode, uploadFinished: true)
             }
             guard final.status == .succeeded else {

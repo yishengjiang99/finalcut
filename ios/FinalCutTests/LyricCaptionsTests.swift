@@ -9,11 +9,14 @@ final class LyricStubProtocol: URLProtocol {
     static var recorded: [Recorded] = []
     /// path → (status, body). Missing paths answer 500.
     static var routes: [String: (Int, String)] = [:]
+    /// path → answers consumed first, one per request, before `routes`.
+    static var sequences: [String: [(Int, String)]] = [:]
 
-    static func reset(routes: [String: (Int, String)] = [:]) {
+    static func reset(routes: [String: (Int, String)] = [:], sequences: [String: [(Int, String)]] = [:]) {
         lock.lock(); defer { lock.unlock() }
         recorded = []
         self.routes = routes
+        self.sequences = sequences
     }
 
     static var paths: [String] {
@@ -46,7 +49,11 @@ final class LyricStubProtocol: URLProtocol {
         Self.lock.lock()
         Self.recorded.append(Recorded(method: request.httpMethod ?? "GET", path: path,
                                       headers: request.allHTTPHeaderFields ?? [:], body: body))
-        let route = Self.routes[path]
+        var route = Self.routes[path]
+        if var queue = Self.sequences[path], !queue.isEmpty {
+            route = queue.removeFirst()
+            Self.sequences[path] = queue
+        }
         Self.lock.unlock()
         let (status, text) = route ?? (500, #"{"error":"stub"}"#)
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1",
@@ -141,13 +148,27 @@ final class LyricCaptionsTests: XCTestCase {
         XCTAssertEqual([server.primary, server.secondary], ["Upload", "Not now"])
     }
 
-    func testFailureCopyByCode() {
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "lyric_captions_unavailable"), LyricCaptionsCopy.unavailable)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 503), LyricCaptionsCopy.unavailable)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "no_speech"), LyricCaptionsCopy.noSpeech)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "lyric_captions_model_error"), LyricCaptionsCopy.modelError)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "audio_too_long"), LyricCaptionsCopy.tooLong)
-        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "boom"), LyricCaptionsCopy.generic)
+    func testErrorToMessageMapping() {
+        let unavailable = "Translated captions aren't available right now. Try again later."
+        let tooLong = "This video's audio is too long for translated captions. Try a clip under 10 minutes."
+        let couldntFinish = "Captions couldn't finish. Nothing was changed. Try again."
+        let noSpeech = "No speech found in this video."
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "lyric_captions_unavailable", status: 503), unavailable)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 503), unavailable)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "no_speech"), noSpeech)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 422), noSpeech)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "audio_too_long", status: 413), tooLong)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: "audio_too_large", status: 413), tooLong)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 413), tooLong)
+        for code in ["lyric_captions_model_error", "job_not_found", "weird", nil] {
+            XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: code), couldntFinish, "\(code ?? "nil")")
+        }
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 404), couldntFinish)
+        XCTAssertEqual(LyricCaptionsCopy.failureCopy(code: nil, status: 500), couldntFinish)
+        for text in [unavailable, tooLong, couldntFinish, noSpeech] {
+            XCTAssertFalse(text.localizedCaseInsensitiveContains("job not found"))
+            XCTAssertFalse(text.localizedCaseInsensitiveContains("counted"))
+        }
     }
 
     func testToolPlanValidation() {
@@ -270,10 +291,11 @@ final class LyricCaptionsTests: XCTestCase {
     // MARK: - Cloud processing off: nothing reaches the network
 
     @MainActor
-    private func makeModel(cloud: Bool, routes: [String: (Int, String)] = [:]) throws -> EditorViewModel {
+    private func makeModel(cloud: Bool, routes: [String: (Int, String)] = [:], sequences: [String: [(Int, String)]] = [:]) throws -> EditorViewModel {
         UserDefaults.standard.set(cloud, forKey: NativeSettings.cloudProcessingKey)
-        LyricStubProtocol.reset(routes: routes)
+        LyricStubProtocol.reset(routes: routes, sequences: sequences)
         let model = EditorViewModel()
+        model.lyricPollNotFoundDelay = 0.01
         model.localVideoURL = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
         let client = APIClient(config: APIConfig(baseURL: base), session: LyricStubProtocol.session())
         client.sampleModeEnabled = false
@@ -470,7 +492,7 @@ final class LyricCaptionsTests: XCTestCase {
         XCTAssertEqual(model.editStack?.entries.count, 0)
 
         // Failed jobs carry the code on the poll body.
-        for (code, copy) in [("no_speech", LyricCaptionsCopy.noSpeech), ("lyric_captions_model_error", LyricCaptionsCopy.modelError), ("weird", LyricCaptionsCopy.generic)] {
+        for (code, copy) in [("no_speech", LyricCaptionsCopy.noSpeech), ("lyric_captions_model_error", LyricCaptionsCopy.couldntFinish), ("weird", LyricCaptionsCopy.couldntFinish)] {
             model = try makeModel(cloud: true, routes: [
                 "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","pollUrl":"/api/jobs/j1"}"#),
                 "/api/jobs/j1": (200, #"{"jobId":"j1","status":"failed","error":"raw server text","code":"\#(code)"}"#),
@@ -492,6 +514,60 @@ final class LyricCaptionsTests: XCTestCase {
         result = await model.executeToolCall(lyricCall())
         XCTAssertEqual(result.error, "paywall")
         XCTAssertEqual(paywalls, 1)
+    }
+}
+
+extension LyricCaptionsTests {
+    @MainActor
+    func testFirstPollNotFoundIsRetried() async throws {
+        let json = #"{"song":null,"mode":"speech","language":"en","targetLanguage":"zh-Hans","lines":[{"start":0.5,"end":2.0,"text":"Hello","translation":"你好"}]}"#
+        let url = "https://stub.finalcap.test/api/jobs/j1/result"
+        let model = try makeModelForRetry(
+            routes: [
+                "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","pollUrl":"/api/jobs/j1"}"#),
+                "/api/jobs/j1": (200, #"{"jobId":"j1","status":"succeeded","progress":1,"resultUrl":"\#(url)"}"#),
+                "/api/jobs/j1/result": (200, json),
+            ],
+            sequences: ["/api/jobs/j1": [(404, #"{"error":"Job not found"}"#), (404, #"{"error":"Job not found"}"#)]]
+        )
+        let result = await model.executeToolCall(ClientToolCall(id: "ly1", name: "lyric_captions",
+                                                                arguments: ["target_language": .string("zh-Hans"), "mode": .string("speech")]))
+        XCTAssertTrue(result.ok, "\(String(describing: result.error))")
+        XCTAssertEqual(LyricStubProtocol.paths.filter { $0 == "/api/jobs/j1" }.count, 3, "two 404s then success")
+    }
+
+    @MainActor
+    func testPersistentNotFoundShowsFriendlyCopyNotServerText() async throws {
+        let model = try makeModelForRetry(
+            routes: [
+                "/api/lyric-captions": (202, #"{"jobId":"j1","status":"queued","pollUrl":"/api/jobs/j1"}"#),
+                "/api/jobs/j1": (404, #"{"error":"Job not found"}"#),
+            ],
+            sequences: [:]
+        )
+        let result = await model.executeToolCall(ClientToolCall(id: "ly1", name: "lyric_captions", arguments: ["target_language": .string("zh-Hans")]))
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(LyricStubProtocol.paths.filter { $0 == "/api/jobs/j1" }.count, 3, "gives up after 3 tries")
+        XCTAssertEqual(model.messages.last?.content, "Captions couldn't finish. Nothing was changed. Try again.")
+        XCTAssertFalse(model.messages.contains { $0.content.contains("Job not found") })
+        XCTAssertEqual(model.editStack?.entries.count, 0)
+    }
+
+    @MainActor
+    private func makeModelForRetry(routes: [String: (Int, String)], sequences: [String: [(Int, String)]]) throws -> EditorViewModel {
+        UserDefaults.standard.set(true, forKey: NativeSettings.cloudProcessingKey)
+        LyricStubProtocol.reset(routes: routes, sequences: sequences)
+        let model = EditorViewModel()
+        model.lyricPollNotFoundDelay = 0.01
+        model.localVideoURL = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
+        let client = APIClient(config: APIConfig(baseURL: URL(string: "https://stub.finalcap.test")!), session: LyricStubProtocol.session())
+        client.sampleModeEnabled = false
+        client.accessToken = "tok"
+        client.accessTokenExpiresAt = Date().addingTimeInterval(3600)
+        model.apiClient = client
+        model.promptHandler = { _ in true }
+        model.state = .processing
+        return model
     }
 }
 

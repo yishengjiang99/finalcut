@@ -169,13 +169,15 @@ enum LyricCaptionsCopy {
     static let serverCaptionsTitle = "Upload this video's audio?"
     static let upload = "Upload"
 
-    // Friendly failure copy (nothing applied).
-    static let unavailable = "Lyric captions aren't available right now. Try again in a bit."
-    static let noSpeech = "Couldn't find any singing or speech to caption."
-    static let modelError = "Couldn't turn that audio into captions. Try again."
-    static let tooLong = "Lyric captions work on videos up to 10 minutes. Trim the video and try again."
+    // Friendly failure copy (nothing applied). Never raw server text.
+    static let unavailable = "Translated captions aren't available right now. Try again later."
+    static let noSpeech = "No speech found in this video."
+    static let tooLong = "This video's audio is too long for translated captions. Try a clip under 10 minutes."
+    static let couldntFinish = "Captions couldn't finish. Nothing was changed. Try again."
     static let noAudio = "This video has no sound to caption."
-    static let generic = "Couldn't add lyric captions. Try again."
+    /// Kept for older call sites: same as `couldntFinish`.
+    static let modelError = couldntFinish
+    static let generic = couldntFinish
 
     static func speechUploadBody(target: String) -> String {
         "FinalCap will upload this video's audio, but not the picture, to transcribe it and translate it into \(target). The audio is deleted after transcription."
@@ -251,18 +253,19 @@ enum LyricCaptionsCopy {
         return "Captions · Speech + \(target)"
     }
 
-    /// Chat copy for an error `code` (HTTP body or failed job).
+    /// Chat copy for an error `code` (HTTP body or failed job) and/or HTTP status.
     static func failureCopy(code: String?, status: Int? = nil) -> String {
         switch code?.lowercased() {
         case "lyric_captions_unavailable": return unavailable
         case "no_speech": return noSpeech
-        case "lyric_captions_model_error": return modelError
         case "audio_too_long", "audio_too_large": return tooLong
         case "no_audio": return noAudio
         default:
             if status == 503 { return unavailable }
+            if status == 413 { return tooLong }
             if status == 422 { return noSpeech }
-            return generic
+            // Job not found, poll/network failure, model error, unknown error.
+            return couldntFinish
         }
     }
 }
