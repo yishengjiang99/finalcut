@@ -34,6 +34,8 @@ import {
   isValidSampleModeRequest,
 } from './middleware.js';
 import { extractAudioToWav } from './captions.js';
+import { isIosClient } from './clientInfo.js';
+import { notAvailableOnServerError } from './ffmpegOps.js';
 import { normalizeLanguageCode, stripLlmFences, normalizeCaptionText } from './captionHelpers.js';
 import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs } from './jobs.js';
 
@@ -682,21 +684,41 @@ const router = express.Router();
  * → 202 { jobId, status, pollUrl, resultUrl }. Poll GET /api/jobs/:id (summary = song info);
  *   GET /api/jobs/:id/result → caption JSON.
  */
-router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser, requireAvailable, uploadAudio, async (req, res, next) => {
-  // Validate before charging the edit.
+/**
+ * Validate the request and probe the audio BEFORE the quota middleware, so a bad upload
+ * (missing audio, video file, over 10 min, unreadable) is never charged as an edit. The probed
+ * file is owned by the request until the job takes it, and is deleted when the response closes
+ * otherwise (validation error, quota refusal, crash).
+ */
+async function validateLyricRequest(req, res, next) {
   try {
     if (!req.file?.buffer?.length) throw new LyricCaptionsError('No audio file provided (multipart field "audio")');
     req.lyricOptions = parseLyricOptions(req.body || {});
+  } catch (err) {
+    return sendError(res, err, 'Invalid request');
+  }
+  const audioPath = path.join(JOBS_DIR, `lyric-${randomUUID()}.audio`);
+  req.lyricAudio = { path: audioPath, durationSec: null };
+  res.on('close', () => {
+    if (req.lyricAudio?.path) fs.unlink(req.lyricAudio.path).catch(() => {});
+  });
+  try {
+    await fs.mkdir(JOBS_DIR, { recursive: true });
+    await fs.writeFile(audioPath, req.file.buffer);
+    req.file.buffer = null;
+    req.lyricAudio.durationSec = await validateAudioUpload(audioPath);
     return next();
   } catch (err) {
     return sendError(res, err, 'Invalid request');
   }
-}, requireInferenceAccess, async (req, res) => {
-  let audioPath = path.join(JOBS_DIR, `lyric-${randomUUID()}.audio`);
+}
+
+router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser, requireAvailable, uploadAudio, validateLyricRequest, requireInferenceAccess, async (req, res) => {
+  // The job owns the audio from here (runLyricCaptions deletes it after transcription).
+  const owned = req.lyricAudio.path;
+  req.lyricAudio.path = null;
   try {
-    await fs.mkdir(JOBS_DIR, { recursive: true });
-    await fs.writeFile(audioPath, req.file.buffer);
-    const durationSec = await validateAudioUpload(audioPath);
+    const { durationSec } = req.lyricAudio;
     const baseUrl = getBaseUrlFromRequest(req);
     const options = req.lyricOptions;
     const job = await enqueueCustomJob({
@@ -706,8 +728,6 @@ router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser
       sampleMode: isValidSampleModeRequest(req),
       baseUrl,
     }, async (j) => {
-      const owned = audioPath;
-      audioPath = null;
       try {
         const result = await runLyricCaptions({ audioPath: owned, options, onProgress: (p) => { j.progress = p; j.updatedAt = new Date().toISOString(); } });
         j.resultJson = result;
@@ -727,7 +747,7 @@ router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser
       resultUrl: `${baseUrl}/api/jobs/${job.id}/result`,
     });
   } catch (err) {
-    if (audioPath) fs.unlink(audioPath).catch(() => {});
+    fs.unlink(owned).catch(() => {});
     return sendError(res, err, 'Failed to start lyric captions');
   }
 });
@@ -737,7 +757,19 @@ router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser
  * multipart video (+ optional args JSON { position_from_bottom_pct, font_size }) → video/mp4.
  * Uses the finished job's lines, sized to the uploaded video. Not charged again (same edit).
  */
-router.post('/api/lyric-captions/:jobId/burn', videoProcessLimiter, requireAuthenticatedUser, uploadSingle('video'), async (req, res) => {
+/**
+ * The iOS app draws the captions itself from the job's `lines` (it never uploads the video), so
+ * the burn fallback answers 400 not_available_on_server to iOS clients, before reading any upload,
+ * like the grouped tools on the process-video routes.
+ */
+function refuseIosBurn(req, res, next) {
+  if (!isIosClient(req)) return next();
+  const err = notAvailableOnServerError('lyric_captions',
+    'The FinalCap iOS app draws lyric captions on the device from the job result\'s lines; the server burn-in is for the web app only');
+  return res.status(err.statusCode).json(err.toJSON());
+}
+
+router.post('/api/lyric-captions/:jobId/burn', videoProcessLimiter, requireAuthenticatedUser, refuseIosBurn, uploadSingle('video'), async (req, res) => {
   const job = jobFor(req);
   if (!job) return res.status(404).json({ error: 'Lyric caption job not found or expired', code: 'job_not_found', operation: 'lyric_captions' });
   if (job.status !== 'succeeded' || !job.resultJson) {

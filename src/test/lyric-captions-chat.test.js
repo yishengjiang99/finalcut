@@ -25,7 +25,7 @@ vi.mock('../db.js', () => ({
 import express from 'express';
 import { chatRouter } from '../server/chat.js';
 import { issueSampleAccessToken } from '../server/middleware.js';
-import { tools } from '../tools.js';
+import { tools, systemPrompt } from '../tools.js';
 
 const realFetch = globalThis.fetch;
 const xaiCalls = [];
@@ -38,6 +38,13 @@ const PROMPTS = [
   { text: 'add lyrics captions in Chinese', args: { target_language: 'zh-Hans' } },
   { text: 'subtitle the song in German and Chinese', args: { target_language: 'zh-Hans', source_language: 'de' } },
   { text: 'translate the lyrics on the video to Spanish', args: { target_language: 'es' } },
+];
+// Plain speech: no song, the user just wants captions in another language.
+const SPEECH_PROMPTS = [
+  { text: 'add captions in Chinese', args: { target_language: 'zh-Hans', mode: 'speech' } },
+  { text: 'translate the video into Chinese and burn the captions', args: { target_language: 'zh-Hans', mode: 'speech' } },
+  { text: 'Chinese subtitles', args: { target_language: 'zh-Hans', mode: 'speech' } },
+  { text: 'Add caption in Chinese', args: { target_language: 'zh-Hans', mode: 'speech' } },
 ];
 
 beforeAll(async () => {
@@ -77,8 +84,40 @@ describe('lyric_captions in /api/chat', () => {
     const d = tools.find(t => t.function.name === 'lyric_captions').function.description;
     for (const phrase of ['add lyrics captions', 'subtitle the song in Chinese', 'translate the lyrics on the video']) expect(d).toContain(phrase);
     expect(d).toMatch(/Fill target_language/);
-    expect(d).toMatch(/source_language only if they name the sung language/);
+    expect(d).toMatch(/set source_language only if they name it/);
   });
+
+  it('description covers plain speech and Chinese phrasings, and sends same-language captions to generate_captions', () => {
+    const d = tools.find(t => t.function.name === 'lyric_captions').function.description;
+    for (const phrase of ['add captions in Chinese', 'add Chinese captions', 'Chinese subtitles',
+      'translate the video into Chinese and burn the captions', 'mode "speech"', 'zh-Hans', 'detected automatically',
+      'replaced, not doubled', 'generate_captions only for same-language']) expect(d).toContain(phrase);
+    const gen = tools.find(t => t.function.name === 'generate_captions').function;
+    expect(gen.description).toMatch(/same-language/);
+    expect(gen.description).toMatch(/call lyric_captions instead/);
+    expect(gen.parameters.properties.translate_language.description).toMatch(/lyric_captions/);
+  });
+
+  it('the web system prompt routes other-language captions to lyric_captions and same-language ones to generate_captions', () => {
+    expect(systemPrompt).toMatch(/call lyric_captions with target_language \(mode speech for ordinary talking, lyrics for songs\)/);
+    expect(systemPrompt).toMatch(/generate_captions is for same-language captions/);
+  });
+
+  for (const { text, args } of SPEECH_PROMPTS) {
+    it(`client mode: "${text}" → lyric_captions in speech mode (no generate_captions, language auto-detected)`, async () => {
+      // The mocked model behaves as the description instructs; assert what it was shown and that the call passes through.
+      reply = () => json({ choices: [{ index: 0, finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'lc9', type: 'function', function: { name: 'lyric_captions', arguments: JSON.stringify(args) } }] } }] });
+      const res = await postChat({ execution: 'client', messages: [{ role: 'user', content: text }], media: { type: 'video', width: 720, height: 1280, durationSec: 20 } });
+      const body = await res.json();
+      expect(body).toMatchObject({ status: 'tool_calls', toolCalls: [{ id: 'lc9', name: 'lyric_captions', arguments: args }] });
+      expect(body.toolCalls[0].arguments.source_language).toBeUndefined();
+      const sent = xaiCalls[0];
+      const lc = sent.tools.find(t => t.function.name === 'lyric_captions').function;
+      expect(lc.description).toContain('Chinese subtitles');
+      expect(lc.parameters.required).toEqual(['target_language']);
+      expect(lc.parameters.properties.mode.enum).toContain('speech');
+    });
+  }
 
   for (const { text, args } of PROMPTS) {
     it(`client mode: "${text}" → lyric_captions ${JSON.stringify(args)}`, async () => {
@@ -109,7 +148,7 @@ describe('lyric_captions in /api/chat', () => {
     expect(JSON.parse(sentTool.content)).toMatchObject({ ok: true, output: { lineCount: 12, song: { title: 'T' } } });
   });
 
-  it('photos are not offered lyric_captions; FinalCap-iOS builds are not offered it (needs Cloud processing)', async () => {
+  it('photos are not offered lyric_captions; FinalCap-iOS builds below LYRIC_CAPTIONS_MIN_BUILD are not offered it', async () => {
     reply = () => json({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '- Answer:\n  ok\n- Lesson:\n  x' } }] });
     await postChat({ execution: 'client', messages: [{ role: 'user', content: 'add lyrics captions' }], media: { type: 'image', width: 100, height: 100 } });
     expect(offeredNames(xaiCalls[0])).not.toContain('lyric_captions');

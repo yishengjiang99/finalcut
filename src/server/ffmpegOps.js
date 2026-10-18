@@ -51,25 +51,41 @@ export function unsupportedForPhotoError(operation, message) {
   );
 }
 
+/** Why lyric_captions never runs as a process-video operation. */
+export const LYRIC_CAPTIONS_SERVER_MESSAGE = 'lyric_captions is not a process-video operation: send the audio to ' +
+  'POST /api/lyric-captions and draw the returned lines on the device (the FinalCap iOS app draws them itself)';
+
 /** Error for an on-device-only tool (the iOS grouped effect tools have no FFmpeg implementation). */
-export function notAvailableOnServerError(operation) {
+export function notAvailableOnServerError(operation, message) {
   return new OpValidationError(
-    `Operation "${operation}" runs only on the FinalCap iOS device and is not available on the server`,
+    message || `Operation "${operation}" runs only on the FinalCap iOS device and is not available on the server`,
     400,
     { code: ERROR_CODES.NOT_AVAILABLE_ON_SERVER, details: { operation } }
   );
 }
 
+/** Operations the process-video routes never run: the iOS grouped tools and lyric_captions. */
+export function isServerUnavailableOperation(operation) {
+  return isIosGroupedTool(operation) || operation === 'lyric_captions';
+}
+
+/** The not_available_on_server error for one of isServerUnavailableOperation's operations. */
+export function serverUnavailableError(operation) {
+  return notAvailableOnServerError(operation, operation === 'lyric_captions' ? LYRIC_CAPTIONS_SERVER_MESSAGE : undefined);
+}
+
 /**
- * Throw for iOS-only grouped tools: unsupported_for_photo when the tool is video-only and the
- * input is a photo (audio_effect), otherwise not_available_on_server. No-op for other operations.
+ * Throw for operations the server can't run as process-video: unsupported_for_photo when the
+ * tool is video-only and the input is a photo (audio_effect, lyric_captions), otherwise
+ * not_available_on_server. No-op for other operations.
  */
 export function assertServerCanRun(operation, mediaType) {
-  if (!isIosGroupedTool(operation)) return;
-  if (mediaType === MEDIA_TYPE_IMAGE && !IOS_GROUPED_TOOL_MEDIA_TYPES[operation].includes('image')) {
+  if (!isServerUnavailableOperation(operation)) return;
+  const photoOk = isIosGroupedTool(operation) && IOS_GROUPED_TOOL_MEDIA_TYPES[operation].includes('image');
+  if (mediaType === MEDIA_TYPE_IMAGE && !photoOk) {
     throw unsupportedForPhotoError(operation);
   }
-  throw notAvailableOnServerError(operation);
+  throw serverUnavailableError(operation);
 }
 
 // ─── Time parsing / trim (guards against `-ss undefined`) ────────────────────

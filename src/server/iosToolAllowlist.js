@@ -14,7 +14,8 @@
 // To ship a tool natively in a new build, add `tool_name: <that build>` here. An entry is either
 // a number (minBuild) or `{ minBuild, maxBuild }` (both inclusive) to retire a tool in later builds.
 // The grouped effect tools (iOS-only definitions in iosGroupedTools.js) are gated on
-// GROUPED_EFFECTS_MIN_BUILD; see docs/api/IOS_GROUPED_TOOLS.md.
+// GROUPED_EFFECTS_MIN_BUILD; see docs/api/IOS_GROUPED_TOOLS.md. lyric_captions (shared definition,
+// iOS description below) is gated on LYRIC_CAPTIONS_MIN_BUILD; see docs/api/LYRIC_CAPTIONS.md.
 
 import { parseFinalCapIosUserAgent } from './clientInfo.js';
 import { APPLY_COLOR_FILTER_GROUPED_DESCRIPTION } from './iosGroupedTools.js';
@@ -26,6 +27,15 @@ import { APPLY_COLOR_FILTER_GROUPED_DESCRIPTION } from './iosGroupedTools.js';
  * Enabling is this one line: replace the placeholder with that build number.
  */
 export const GROUPED_EFFECTS_MIN_BUILD = 1_000_000_000;
+
+/**
+ * First FinalCap-iOS build that runs lyric_captions (consent prompt, audio upload to
+ * POST /api/lyric-captions, job polling, captions drawn on device from the result's `lines`).
+ * Same placeholder as GROUPED_EFFECTS_MIN_BUILD: no real build reaches it yet.
+ * Enabling is this one line: replace the placeholder with that build number.
+ * See docs/api/LYRIC_CAPTIONS.md ("iOS").
+ */
+export const LYRIC_CAPTIONS_MIN_BUILD = 1_000_000_000;
 
 /**
  * First FinalCap-iOS build with the server-side ffmpeg_cli fallback executor: when no
@@ -64,6 +74,8 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   convert_video_format: 10, // mp4/mov only on device (narrowed below)
   convert_image_format: 10, // jpg/png only on device (narrowed below)
   generate_captions: 10, // on-device speech → SRT/VTT + burn-in; no translation (narrowed below)
+  // Audio upload (with consent) → POST /api/lyric-captions → captions drawn on device (described below).
+  lyric_captions: LYRIC_CAPTIONS_MIN_BUILD,
   // Grouped effect tools (iOS-only definitions, iosGroupedTools.js).
   channel_mixer: GROUPED_EFFECTS_MIN_BUILD,
   color_adjust: GROUPED_EFFECTS_MIN_BUILD,
@@ -77,6 +89,35 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   // Server-side last resort: no AVFoundation tool can do it → upload, process, download.
   ffmpeg_cli: FFMPEG_CLI_MIN_BUILD,
 });
+
+/** iOS description of lyric_captions: same routing rules as the web one, plus the on-device flow. */
+export const LYRIC_CAPTIONS_IOS_DESCRIPTION = 'Translated captions, run by the app: the original line plus a translation, for speech and for songs. ' +
+  'This is the tool for any request to caption or subtitle the video in another language, e.g. "add Chinese captions", ' +
+  '"add captions in Chinese", "Chinese subtitles", "translate the video into Chinese and burn the captions", ' +
+  '"translate the speech to Spanish", and for music: "add lyrics captions", "subtitle the song in Chinese", ' +
+  '"translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: ' +
+  'only obvious recognition errors are fixed, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" ' +
+  'if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask ' +
+  'for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if ' +
+  'they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is ' +
+  'target_language. If they name no translation language, ask which one they want. The app asks the user before uploading ' +
+  'anything, then sends only this video\'s audio (never the picture) to FinalCap, which transcribes it, translates each line ' +
+  '(for songs it also identifies the song and checks the words against the published lyrics); the app then draws two-line ' +
+  'captions on the video (original on top, translation below, about 20% up from the bottom). If Cloud processing is off or the ' +
+  'user says Not now, nothing is uploaded and the step is skipped: do not call it again this turn. The result names the ' +
+  'language(s) and, for songs, the song, never the lyrics or the speech text; do not quote lines back. Use generate_captions only for same-language ' +
+  'subtitles without translation. Videos only — not supported for photos.';
+
+/**
+ * generate_captions description for builds that also have lyric_captions: it is same-language only and
+ * translation goes to lyric_captions. Older builds keep the unchanged description above (their tool text is pinned).
+ */
+export const GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION = 'Generate same-language subtitles from the video audio with on-device speech ' +
+  'recognition (SRT/VTT). Use ISO language codes when possible (en, es, fr, de, ja, zh). When burn_in is true (default), burns the ' +
+  'captions into the video; when false, adds a soft subtitle track only. This tool never translates: for captions in another ' +
+  'language ("add Chinese captions", "translate the video into Chinese") call lyric_captions instead. ' +
+  'Use for accessibility or social content in the spoken language. Videos only — not supported for photos.';
+
 /**
  * Definition narrowing for the FinalCap-iOS schema (device limits from native-tools.md).
  * Per tool: `params` patches (merged into a property), `removeParams` (dropped, and removed
@@ -101,6 +142,7 @@ export const IOS_TOOL_OVERRIDES = Object.freeze({
       'Use ISO language codes when possible (en, es, fr, de, ja, zh). When burn_in is true (default), burns the ' +
       'captions into the video; when false, adds a soft subtitle track only. Translation is not available. ' +
       'Use for accessibility or social content. Videos only — not supported for photos.',
+    descriptionFromBuild: { minBuild: LYRIC_CAPTIONS_MIN_BUILD, description: GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION },
     params: {
       position: {
         description: 'Burn-in position for the captions: "bottom" (default) or "top".',
@@ -109,6 +151,10 @@ export const IOS_TOOL_OVERRIDES = Object.freeze({
         description: 'If true (default), burn subtitles into the video frames. If false, only a soft SRT/VTT track (no re-render).',
       },
     },
+  },
+  lyric_captions: {
+    // The app runs it (client mode), not the server: the description says what the user will see.
+    description: LYRIC_CAPTIONS_IOS_DESCRIPTION,
   },
   apply_color_filter: {
     // Points film looks to lut, styles to stylize, amounts to color_adjust (grouped builds only).
@@ -133,6 +179,8 @@ function applyIosOverrides(tool, build) {
     if (Array.isArray(parameters.required)) parameters.required = parameters.required.filter(r => r !== param);
   }
   if (override.description) copy.function.description = override.description;
+  const from = override.descriptionFromBuild;
+  if (from && build >= from.minBuild) copy.function.description = from.description;
   return copy;
 }
 

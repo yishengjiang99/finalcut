@@ -145,8 +145,14 @@ describe('lifecycle engine', () => {
     await store.recordEvent(2, 'marketing_opt_out', null, new Date(+NOW - 3600_000));
     let g = await autoGuard(store, { now: NOW, env: {} });
     expect(g.optOuts).toBe(1); expect(g.tripped).toBe(false);
-    await store.disableUserDevices(3, 'app_unregistered');
-    g = await autoGuard(store, { now: new Date(), env: {} });
+    // The memory store stamps disabledAt with Date.now(): pin the clock near NOW so this does not
+    // depend on the wall clock (the 7-day opt-out window moves out from under the fixed NOW otherwise).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(+NOW + 2 * 3600_000));
+    try {
+      await store.disableUserDevices(3, 'app_unregistered');
+      g = await autoGuard(store, { now: new Date(), env: {} });
+    } finally { vi.useRealTimers(); }
     expect(g.optOuts).toBe(2); expect(g.tripped).toBe(true);
     expect((await effectiveMode(store, { PUSH_LIFECYCLE_MODE: 'live' })).mode).toBe('off');
     expect((await store.getOps()).auto_kill).toMatch(/opt_out_rate/);
