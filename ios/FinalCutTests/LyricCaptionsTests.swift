@@ -87,11 +87,50 @@ final class LyricCaptionsTests: XCTestCase {
         XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.9, mode: .lyrics, uploadFinished: false), "Uploading audio…")
         XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0, mode: .auto, uploadFinished: true), "Listening to the song…")
         XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.2, mode: .lyrics, uploadFinished: true), "Listening to the song…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.49, mode: .speech, uploadFinished: true), "Listening to the song…")
         XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.5, mode: .lyrics, uploadFinished: true), "Finding lyrics and translating…")
         XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.9, mode: .auto, uploadFinished: true), "Finding lyrics and translating…")
-        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.5, mode: .speech, uploadFinished: true), "Checking the words and translating…")
+        // Speech never mentions songs or lyrics.
+        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.49, mode: .speech, uploadFinished: true), "Listening to the audio…")
+        XCTAssertEqual(LyricCaptionsCopy.progressText(progress: 0.5, mode: .speech, uploadFinished: true), "Translating…")
         XCTAssertEqual(LyricCaptionsCopy.addingCaptions, "Adding captions…")
+    }
+
+    func testProgressPercentageIsExactMonotonicAndNeverHundred() {
+        var t = LyricProgressTracker()
+        XCTAssertEqual(t.uploadText(fraction: nil), "Uploading audio…")
+        XCTAssertEqual(t.uploadText(fraction: 0.45), "Uploading audio… 45%")
+        XCTAssertEqual(t.uploadText(fraction: 0.30), "Uploading audio… 45%", "never backwards")
+        XCTAssertEqual(t.uploadText(fraction: 1), "Uploading audio… 99%", "100% waits for the local burn-in")
+
+        var job = LyricProgressTracker()
+        XCTAssertEqual(job.jobText(progress: nil, mode: .lyrics), "Listening to the song… 0%")
+        XCTAssertEqual(job.jobText(progress: 0.2, mode: .lyrics), "Listening to the song… 20%")
+        XCTAssertEqual(job.jobText(progress: 0.34, mode: .lyrics), "Listening to the song… 34%")
+        XCTAssertEqual(job.jobText(progress: 0.5, mode: .lyrics), "Finding lyrics and translating… 50%")
+        XCTAssertEqual(job.jobText(progress: 0.72, mode: .lyrics), "Finding lyrics and translating… 72%")
+        XCTAssertEqual(job.jobText(progress: 0.6, mode: .lyrics), "Finding lyrics and translating… 72%", "never backwards")
+        XCTAssertEqual(job.jobText(progress: 1, mode: .lyrics), "Finding lyrics and translating… 99%")
+        XCTAssertEqual(job.jobText(progress: 5, mode: .lyrics), "Finding lyrics and translating… 99%")
+
+        var speech = LyricProgressTracker()
+        XCTAssertEqual(speech.jobText(progress: 0.34, mode: .speech), "Listening to the audio… 34%")
+        XCTAssertEqual(speech.jobText(progress: 0.72, mode: .speech), "Translating… 72%")
+
+        XCTAssertEqual(LyricProgressTracker.percent(-1), 0)
+        XCTAssertEqual(LyricProgressTracker.percent(.nan), 0)
+        XCTAssertEqual(LyricProgressTracker.percent(0.999), 99)
+        XCTAssertEqual(LyricProgressTracker.percent(0.2), 20)
+        XCTAssertEqual(LyricProgressTracker.percent(0.9), 90)
+        // Monotonic over a whole run of server values.
+        var run = LyricProgressTracker()
+        var last = -1
+        for p in [0.0, 0.2, 0.2, 0.5, 0.45, 0.9, 1.0] {
+            let text = run.jobText(progress: p, mode: .lyrics)
+            let value = Int(text.split(separator: " ").last!.dropLast())!
+            XCTAssertGreaterThanOrEqual(value, last)
+            XCTAssertLessThanOrEqual(value, 99)
+            last = value
+        }
     }
 
     func testFontSizeScalesWithVideoHeight() {

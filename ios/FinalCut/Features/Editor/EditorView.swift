@@ -257,6 +257,13 @@ final class EditorViewModel: ObservableObject {
     var currentTurnToken: String?
     /// Wait between retries when the first poll says 404 (tests shorten it).
     var lyricPollNotFoundDelay: TimeInterval = 2
+    private var lyricTracker = LyricProgressTracker()
+    private var lyricUploadDone = false
+
+    private func showLyricUpload(_ fraction: Double) {
+        guard !lyricUploadDone, lyricStatus != nil else { return }
+        lyricStatus = lyricTracker.uploadText(fraction: fraction)
+    }
 
     /// Photos and videos (photo mode, NATIVE_EDIT_UX.md §7).
     nonisolated static var pickerFilter: PHPickerFilter { .any(of: [.images, .videos]) }
@@ -1298,7 +1305,9 @@ final class EditorViewModel: ObservableObject {
 
         state = .processing
         isCloudStepRunning = true
-        lyricStatus = LyricCaptionsCopy.uploadingAudio
+        lyricTracker = LyricProgressTracker()
+        lyricUploadDone = false
+        lyricStatus = lyricTracker.uploadText(fraction: nil)
         defer {
             isCloudStepRunning = false
             lyricStatus = nil
@@ -1337,13 +1346,19 @@ final class EditorViewModel: ObservableObject {
                 width: Int(canvas.width.rounded()),
                 height: Int(canvas.height.rounded()),
                 turnToken: currentTurnToken,
-                toolCallId: call.id
+                toolCallId: call.id,
+                onUploadProgress: { [weak self] fraction in
+                    Task { @MainActor in self?.showLyricUpload(fraction) }
+                }
             )
             activeJobId = enqueue.jobId
             let mode = request.mode
-            lyricStatus = LyricCaptionsCopy.progressText(progress: 0, mode: mode, uploadFinished: true)
+            lyricUploadDone = true
+            lyricTracker = LyricProgressTracker()
+            lyricStatus = lyricTracker.jobText(progress: 0, mode: mode)
             let final = try await client.pollLyricCaptionsJob(id: enqueue.jobId, notFoundDelay: lyricPollNotFoundDelay) { [weak self] status in
-                self?.lyricStatus = LyricCaptionsCopy.progressText(progress: status.progress, mode: mode, uploadFinished: true)
+                guard let self else { return }
+                self.lyricStatus = self.lyricTracker.jobText(progress: status.progress, mode: mode)
             }
             guard final.status == .succeeded else {
                 return lyricFailure(code: final.code, status: nil)

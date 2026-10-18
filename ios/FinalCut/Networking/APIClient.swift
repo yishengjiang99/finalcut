@@ -652,7 +652,8 @@ final class APIClient {
         width: Int?,
         height: Int?,
         turnToken: String? = nil,
-        toolCallId: String? = nil
+        toolCallId: String? = nil,
+        onUploadProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> JobEnqueueResponse {
         let multipart = Self.makeLyricCaptionsBody(
             audio: audio, fileName: fileName, mimeType: mimeType,
@@ -668,7 +669,8 @@ final class APIClient {
             urlRequest.setValue(turnToken, forHTTPHeaderField: "X-Turn-Token")
             urlRequest.setValue(toolCallId, forHTTPHeaderField: "X-Tool-Call-Id")
         }
-        let (data, response) = try await session.data(for: urlRequest)
+        let delegate = onUploadProgress.map { UploadProgressDelegate(onProgress: $0) }
+        let (data, response) = try await session.data(for: urlRequest, delegate: delegate)
         try Self.throwIfNeeded(response: response, data: data)
         do {
             return try decoder.decode(JobEnqueueResponse.self, from: data)
@@ -912,5 +914,21 @@ enum APIError: Error, LocalizedError, Equatable {
         default:
             return "Couldn't generate captions — try again"
         }
+    }
+}
+
+
+/// Reports upload progress (0...1) for one request.
+final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        onProgress(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
     }
 }

@@ -152,8 +152,9 @@ enum LyricCaptionStyle {
 enum LyricCaptionsCopy {
     static let uploadingAudio = "Uploading audio…"
     static let listening = "Listening to the song…"
+    static let listeningSpeech = "Listening to the audio…"
     static let findingLyrics = "Finding lyrics and translating…"
-    static let checkingWords = "Checking the words and translating…"
+    static let translating = "Translating…"
     static let addingCaptions = "Adding captions…"
 
     static let cloudOffTitle = "Lyric captions use the cloud"
@@ -209,11 +210,12 @@ enum LyricCaptionsCopy {
         CloudPrompt(kind: .upload, title: serverCaptionsTitle, message: serverCaptionsMessage, primary: upload, secondary: notNow)
     }
 
-    /// Job `progress` (0.2 decoded → 0.5 transcribed → 0.9 corrected → 1).
+    /// Stage text without a percentage. Job `progress` goes 0.2 (decoded) → 0.5 (transcribed) →
+    /// 0.9 (corrected) → 1. Mode `speech` never mentions songs or lyrics.
     static func progressText(progress: Double?, mode: LyricMode, uploadFinished: Bool) -> String {
         guard uploadFinished else { return uploadingAudio }
-        if (progress ?? 0) < 0.5 { return listening }
-        return mode == .speech ? checkingWords : findingLyrics
+        if (progress ?? 0) < 0.5 { return mode == .speech ? listeningSpeech : listening }
+        return mode == .speech ? translating : findingLyrics
     }
 
     private static let codePattern = try! NSRegularExpression(pattern: "^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$")
@@ -279,4 +281,31 @@ struct CloudPrompt: Equatable, Identifiable {
     var primary: String
     var secondary: String
     var id: String { title + "|" + message }
+}
+
+/// Progress line with the percentage exactly as the server reports it (progress × 100): no
+/// smoothing, never backwards, and never 100% (clamped to 99) because the overlay still has to
+/// be drawn locally. Upload shows the upload percentage when known.
+struct LyricProgressTracker: Equatable {
+    private var uploadPercent = 0
+    private var jobPercent = 0
+
+    static func percent(_ fraction: Double?) -> Int {
+        guard let fraction, fraction.isFinite else { return 0 }
+        return min(99, max(0, Int((fraction * 100 + 1e-9).rounded(.down))))
+    }
+
+    /// Upload phase ("Uploading audio… 45%"; plain text until a percentage is known).
+    mutating func uploadText(fraction: Double?) -> String {
+        guard let fraction else { return LyricCaptionsCopy.uploadingAudio }
+        uploadPercent = max(uploadPercent, Self.percent(fraction))
+        return "\(LyricCaptionsCopy.uploadingAudio) \(uploadPercent)%"
+    }
+
+    /// Job phase ("Listening to the song… 34%").
+    mutating func jobText(progress: Double?, mode: LyricMode) -> String {
+        jobPercent = max(jobPercent, Self.percent(progress))
+        let text = LyricCaptionsCopy.progressText(progress: progress, mode: mode, uploadFinished: true)
+        return "\(text) \(jobPercent)%"
+    }
 }
