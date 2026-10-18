@@ -15,6 +15,7 @@ import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './tele
 import { takePendingPrompt } from './pendingPrompt.js';
 import { newBuildAvailable } from './buildInfo.js';
 import CaptionPanel from './CaptionPanel.jsx';
+import { makeShareFile, canShareFile, shareOrDownload } from './shareFile.js';
 import { subscribeTracks, tracksVersion, getTrack, updateTrackStyle, clearTrack, restoreTrack, trackToSrt, trackToAss } from './captionTrack.js';
 import { videoHasBurnedCaptions } from './captionLineage.js';
 import { createClientLog } from './clientLog.js';
@@ -862,10 +863,21 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     plainExport(activeMedia);
   };
 
+  // Phones: the share sheet ("Save Video" puts it in Photos). It must start inside the tap, so the file
+  // is built synchronously from the bytes we already hold. Everything else downloads, as before.
+  const shareLog = (event, data) => createClientLog({ headers: sampleAuthHeaders() }).log(event, data);
   const plainExport = (item) => {
-    downloadFile(item.url, mediaFilename(item));
+    const bytes = mediaBytesRef.current.get(item.id);
+    const file = bytes ? makeShareFile(bytes, mediaFilename(item), item.mimeType) : null;
+    if (file && canShareFile(file)) {
+      shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export' }).then((outcome) => {
+        if (outcome === 'shared') toast(`Exported “${item.label}”`);
+      });
+    } else {
+      downloadFile(item.url, mediaFilename(item));
+      toast(`Exported “${item.label}”`);
+    }
     track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
-    toast(`Exported “${item.label}”`);
   };
 
   // Export with the captions burned in: the only place they are re-encoded into the video.
@@ -889,10 +901,17 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       const id = addMessage({ text: 'Exported with captions burned in.', videoUrl: url, mimeType: 'video/mp4' });
       if (id !== null && id !== undefined) mediaBytesRef.current.set(id, burned); // keeps the no-double-burn guard on this clip
       const burnedItem = { ...item, url, mimeType: 'video/mp4', kind: 'result', label: `${item.label} (captions)` };
-      deliverExport(burnedItem, blob, clog);
-      setExportSheet(null);
-      toast('Exported with captions');
       track('export', { format: 'video/mp4', placement: 'export_burned' });
+      const file = makeShareFile(blob, `${captionFileBase(burnedItem)}.mp4`, 'video/mp4');
+      if (canShareFile(file)) {
+        // The render took a while, so the tap that started it is no longer a user activation: ask for a new one.
+        clog.log('share_ready', { bytes: file.size });
+        setExportSheet({ mediaId: item.id, phase: 'ready', text: 'Your video is ready.', file });
+      } else {
+        saveBlob(blob, file.name);
+        setExportSheet(null);
+        toast('Exported with captions');
+      }
     } catch (error) {
       const declined = error?.name === 'UploadDeclinedError';
       setExportSheet({ mediaId: item.id, phase: 'error', text: declined ? 'Not exported. You can download the captions as SRT or ASS instead.' : `Export failed: ${String(error?.message || error).slice(0, 200)} You can still download the captions as SRT or ASS.` });
@@ -901,8 +920,16 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     }
   };
 
-  // How a finished export reaches the user. (Phones get the share sheet in a follow-up.)
-  const deliverExport = (item, blob) => saveBlob(blob, `${captionFileBase(item)}.mp4`);
+  // The "Ready - Share" tap: a fresh user activation for navigator.share.
+  const shareReadyExport = () => {
+    const file = exportSheet?.file;
+    if (!file) return;
+    shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export_burned' }).then((outcome) => {
+      if (outcome === 'cancelled') return; // the sheet stays so they can share again
+      setExportSheet(null);
+      toast(outcome === 'shared' ? 'Exported with captions' : 'Saved to your downloads');
+    });
+  };
 
   const openFilePicker = () => fileInputRef.current?.click();
 
@@ -1141,12 +1168,14 @@ export default function App({ skipLanding = false, startWithSample = false } = {
               {exportSheet.phase === 'choose' && <p>Your captions are shown over the preview. Burning them into the video re-encodes it, so it takes a moment.</p>}
               {exportSheet.text && <p className="export-status" role="status">{exportSheet.text}</p>}
               <div className="consent-actions">
-                {exportSheet.phase !== 'burning' && (
+                {exportSheet.phase === 'ready' && <button className="jbtn" autoFocus onClick={shareReadyExport}>Ready – Share</button>}
+                {exportSheet.phase === 'ready' && exportSheet.file && <button className="jbtn open" onClick={() => { saveBlob(exportSheet.file, exportSheet.file.name); setExportSheet(null); }}>Download instead</button>}
+                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && (
                   <button className="jbtn" autoFocus onClick={exportBurned}>{exportSheet.phase === 'error' ? 'Try again' : 'Export with captions burned in'}</button>
                 )}
                 {exportSheet.phase === 'choose' && item && <button className="jbtn open" onClick={() => { setExportSheet(null); plainExport(item); }}>Export without captions</button>}
-                {exportSheet.phase !== 'burning' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'srt')}>Download SRT</button>}
-                {exportSheet.phase !== 'burning' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'ass')}>Download ASS</button>}
+                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'srt')}>Download SRT</button>}
+                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'ass')}>Download ASS</button>}
                 <button className="jbtn open" onClick={() => { setExportSheet(null); }}>{busy ? 'Hide' : 'Close'}</button>
               </div>
             </div>
