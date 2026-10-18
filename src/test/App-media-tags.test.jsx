@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App.jsx';
 
-// Mock ffmpeg module completely
 vi.mock('../ffmpeg.js', () => ({
   ffmpeg: {
     on: vi.fn(),
@@ -16,7 +15,6 @@ vi.mock('../ffmpeg.js', () => ({
   fetchFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
 }));
 
-// Mock fetch
 global.fetch = vi.fn();
 
 // Mock URL.createObjectURL to return unique URLs

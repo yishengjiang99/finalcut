@@ -246,3 +246,6 @@ For deeper technical and deployment details, see:
 ## License
 
 This project is part of the yishengjiang99/pages repository.
+
+## Live agentic eval (opt-in)
+After changing tools, the system prompt, the tool loop or the filter builders, run `XAI_API_KEY=... npm run eval:agentic` (see [docs/agentic-eval.md](docs/agentic-eval.md)). Not part of `npm test` or CI.

@@ -17,6 +17,8 @@
 		9B2C179F591C4BB683324FB6 /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */; };
 		3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA517631199041918C1F9701 /* APIEndpoints.swift */; };
 		317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADB /* APIClient.swift */; };
+		FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728301 /* PushManager.swift */; };
+		FC5A0B1C2D3E4F5061728304 /* PushManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */; };
 		317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */; };
 		B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30393A1FFA234AA49E7981C1 /* PaywallView.swift */; };
 		BE9592D7F57E46BAA68C3B35 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751EBD51C12C4CAA92EE20F6 /* EditorView.swift */; };
@@ -28,7 +30,10 @@
 		3DDB0D8C26BB4841980AFEB8 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A775571821445ABA7BF61C5 /* ExportSheet.swift */; };
 		3BFA0055043342C584FB23D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD12BBC329E457BBA7331E4 /* AppTheme.swift */; };
 		2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 01F8F90184F0448FAD35E158 /* Assets.xcassets */; };
+		FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */; };
 		7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */; };
+		FC0A11B2C3D4E5F601020301 /* PaywallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */; };
+		FC0A11B2C3D4E5F601020303 /* PaywallScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */; };
 		876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */; };
 		F0583706C16045F3940B2A01 /* ImportedVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0583706C16045F3940B2A02 /* ImportedVideo.swift */; };
 		F0583706C16045F3940B2A03 /* VideoImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0583706C16045F3940B2A04 /* VideoImportTests.swift */; };
@@ -100,6 +105,10 @@
 		D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
 		EA517631199041918C1F9701 /* APIEndpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpoints.swift; sourceTree = "<group>"; };
 		EC090C5F63F34E5687DD1ADB /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		FC5A0B1C2D3E4F5061728301 /* PushManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManager.swift; sourceTree = "<group>"; };
+		FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManagerTests.swift; sourceTree = "<group>"; };
+		FC5A0B1C2D3E4F5061728305 /* FinalCut.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinalCut.entitlements; sourceTree = "<group>"; };
+		FC5A0B1C2D3E4F5061728306 /* FinalCutRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinalCutRelease.entitlements; sourceTree = "<group>"; };
 		EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		30393A1FFA234AA49E7981C1 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		751EBD51C12C4CAA92EE20F6 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
@@ -111,7 +120,10 @@
 		2A775571821445ABA7BF61C5 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
 		1DD12BBC329E457BBA7331E4 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "finalcap-test-video.mp4"; sourceTree = "<group>"; };
 		59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "BigBuckBunny.mp4"; path = "../public/BigBuckBunny.mp4"; sourceTree = SOURCE_ROOT; };
+		FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallTests.swift; sourceTree = "<group>"; };
+		FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallScreenshotTests.swift; sourceTree = "<group>"; };
 		428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelsTests.swift; sourceTree = "<group>"; };
 		F0583706C16045F3940B2A02 /* ImportedVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedVideo.swift; sourceTree = "<group>"; };
 		F0583706C16045F3940B2A04 /* VideoImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoImportTests.swift; sourceTree = "<group>"; };
@@ -208,6 +220,8 @@
 			isa = PBXGroup;
 			children = (
 				FDF99BBA1B92461D91BDB465 /* FinalCutApp.swift */,
+				FC5A0B1C2D3E4F5061728305 /* FinalCut.entitlements */,
+				FC5A0B1C2D3E4F5061728306 /* FinalCutRelease.entitlements */,
 				B364855EAC084A2C921B51CA /* ContentView.swift */,
 				20C48E7C3E9344C696A60148 /* Models */,
 				4E1A7C0E5B2D4F6A8C9D0E1F /* NativeEditing */,
@@ -263,6 +277,7 @@
 				D05CA31ECA924EC3A6FF8EC5 /* APIConfig.swift */,
 				EA517631199041918C1F9701 /* APIEndpoints.swift */,
 				EC090C5F63F34E5687DD1ADB /* APIClient.swift */,
+				FC5A0B1C2D3E4F5061728301 /* PushManager.swift */,
 				EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */,
 			);
 			path = Networking;
@@ -339,6 +354,9 @@
 				30C06F8F02D7EFC142EE6F5A /* PhotoModeTests.swift */,
 				68C3D23240D4E22F930DAA98 /* EditRoutingAndMediaTypeTests.swift */,
 				428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */,
+				FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */,
+				FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */,
+				FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */,
 				F0583706C16045F3940B2A04 /* VideoImportTests.swift */,
 			);
 			path = FinalCutTests;
@@ -356,6 +374,7 @@
 			isa = PBXGroup;
 			children = (
 				59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */,
+				FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */,
 			);
 			path = SampleMedia;
 			sourceTree = "<group>";
@@ -474,6 +493,7 @@
 			files = (
 				2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */,
 				7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */,
+				FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -518,6 +538,7 @@
 				9B2C179F591C4BB683324FB6 /* APIConfig.swift in Sources */,
 				3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */,
 				317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */,
+				FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */,
 				317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */,
 				B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */,
 				BBE32E010B504F31BC957E8B /* StoreKitPurchaseStub.swift in Sources */,
@@ -549,6 +570,9 @@
 				28542D32807FA0E724E71D63 /* PhotoModeTests.swift in Sources */,
 				1C91E72D0BE8A8E76AD6FFD8 /* EditRoutingAndMediaTypeTests.swift in Sources */,
 				876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */,
+				FC5A0B1C2D3E4F5061728304 /* PushManagerTests.swift in Sources */,
+				FC0A11B2C3D4E5F601020303 /* PaywallScreenshotTests.swift in Sources */,
+				FC0A11B2C3D4E5F601020301 /* PaywallTests.swift in Sources */,
 				F0583706C16045F3940B2A03 /* VideoImportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -620,6 +644,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				CURRENT_PROJECT_VERSION = 10;
@@ -657,6 +682,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCutRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				CURRENT_PROJECT_VERSION = 10;

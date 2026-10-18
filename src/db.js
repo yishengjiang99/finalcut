@@ -26,7 +26,6 @@ function normalizeUserRow(user) {
   };
 }
 
-// Create connection pool
 export function getPool() {
   if (!pool) {
     pool = mysql.createPool(dbConfig);
@@ -34,7 +33,6 @@ export function getPool() {
   return pool;
 }
 
-// Initialize database and create tables
 export async function initDatabase() {
   try {
     const connection = await mysql.createConnection({
@@ -56,10 +54,8 @@ export async function initDatabase() {
       await connection.end();
     }
 
-    // Now create tables using the pool
     const pool = getPool();
     
-    // Create users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -114,17 +110,6 @@ export async function initDatabase() {
       )
     `);
 
-    // Create user_lessons table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_lessons (
-        id BIGINT PRIMARY KEY AUTO_INCREMENT,
-        user_id INT NOT NULL,
-        lesson VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX (user_id, created_at)
-      )
-    `);
-
     // Non-blocking audit log for chat text sent to and returned by the model.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_interactions (
@@ -157,6 +142,16 @@ export async function initDatabase() {
       )
     `);
 
+    // Web login sessions (express-session), so a server restart does not sign everyone out.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS web_sessions (
+        sid VARCHAR(128) PRIMARY KEY,
+        data MEDIUMTEXT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        INDEX idx_web_sessions_expires (expires_at)
+      )
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -164,7 +159,6 @@ export async function initDatabase() {
   }
 }
 
-// User operations
 export async function findUserByEmail(email) {
   const pool = getPool();
   const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -204,7 +198,6 @@ export async function createUser(userData) {
   // Fetch the complete user record from database to ensure consistency
   const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
   
-  // Verify the user was actually inserted
   if (!rows || !rows[0]) {
     throw new Error('Failed to fetch user record after insertion');
   }
@@ -397,25 +390,6 @@ export async function revokeApiToken(token) {
   return result.affectedRows > 0;
 }
 
-export async function saveLesson(userId, lesson) {
-  if (!lesson) return;
-  try {
-    const pool = getPool();
-    // De-dupe: skip if same as most recent lesson for this user
-    const [recent] = await pool.query(
-      'SELECT lesson FROM user_lessons WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-      [userId]
-    );
-    if (recent.length > 0 && recent[0].lesson === lesson) return;
-    await pool.query(
-      'INSERT INTO user_lessons (user_id, lesson) VALUES (?, ?)',
-      [userId, lesson]
-    );
-  } catch (err) {
-    console.error('Failed to save lesson:', err.message);
-  }
-}
-
 function normalizeChatContent(content) {
   if (typeof content === 'string') {
     return content.slice(0, CHAT_INTERACTION_MAX_TEXT_LENGTH);
@@ -498,7 +472,6 @@ export default {
   createApiToken,
   findUserByApiToken,
   revokeApiToken,
-  saveLesson,
   enqueueChatInteraction,
   flushChatInteractionQueue,
 };

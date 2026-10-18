@@ -65,7 +65,6 @@ export function stripLlmFences(text) {
   // ```srt ... ``` or ``` ... ```
   const fenced = /^```(?:srt|vtt|text)?\s*\n?([\s\S]*?)\n?```$/i.exec(t);
   if (fenced) t = fenced[1].trim();
-  // Drop leading prose before first cue index
   const idx = t.search(/(?:^|\n)\s*1\s*\n\s*\d{2}:\d{2}:\d{2}/);
   if (idx > 0) t = t.slice(idx).replace(/^\n/, '');
   return t.trim();
@@ -152,7 +151,6 @@ export function mergeTranslatedSrt(originalSrt, translatedRaw) {
     text: (translated[i].text || o.text || '').trim() || o.text,
   }));
 
-  // Verify timings unchanged
   for (let i = 0; i < merged.length; i++) {
     if (merged[i].timingLine !== original[i].timingLine) {
       merged[i].timingLine = original[i].timingLine;

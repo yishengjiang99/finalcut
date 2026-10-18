@@ -68,6 +68,12 @@ PREVIEW, THEN SAVE
 • Save the finished video to Photos or share it
 
 Your video stays on your iPhone. Only your chat messages go to FinalCap's AI service. See the privacy policy for details.
+
+SUBSCRIPTION
+FinalCap Pro Monthly: $9.99/month for unlimited AI edits, captions and translations. Payment is charged to your Apple Account when you confirm the purchase. The subscription auto-renews unless cancelled at least 24 hours before the end of the current period. Manage or cancel it in your Account Settings on the App Store.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy Policy: https://grepawk.com/legal/privacy.html
 ```
 
 ## What's New

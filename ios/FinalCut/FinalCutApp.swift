@@ -2,7 +2,9 @@ import SwiftUI
 
 @main
 struct FinalCutApp: App {
+    @UIApplicationDelegateAdaptor(FinalCutAppDelegate.self) private var appDelegate
     @StateObject private var appModel = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -10,6 +12,12 @@ struct FinalCutApp: App {
                 .environmentObject(appModel)
                 .preferredColorScheme(.dark)
                 .task { await appModel.bootstrap() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Picks up a change made in iOS Settings → Notifications while the app was away.
+            if phase == .active {
+                Task { await PushManager.shared.refreshAuthorizationAndRegister(reportOpen: true) }
+            }
         }
     }
 }
@@ -43,6 +51,11 @@ final class AppModel: ObservableObject {
     func bootstrap() async {
         guard !didBootstrap else { return }
         didBootstrap = true
+
+        // Push: token upload only if notifications are already allowed (never asks here).
+        PushManager.shared.configure(api: apiClient) { [weak self] in
+            self?.presentPaywall(reason: .upgradeTapped)
+        }
 
         #if DEBUG
         // DEBUG / demo: warm the sample token (`sample-access-token` header) in the background.

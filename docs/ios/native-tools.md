@@ -130,6 +130,20 @@ Per [`CLIENT_TOOL_EXECUTION.md`](../api/CLIENT_TOOL_EXECUTION.md):
 | Cloud processing allowed, server succeeded | `{ ok: true, executedOn: "server" }` |
 | Cloud processing allowed, server failed | `{ ok: false, error: "<stable code>", executedOn: "server" }` |
 
+## 5b. Server-side FFmpeg fallback (`ffmpeg_cli`, build 11+)
+
+When no on-device (AVFoundation) tool can handle the request, the model may call `ffmpeg_cli`
+as a last resort (it is offered after every other tool). The app uploads the flattened current
+video to `POST /api/ffmpeg-cli/run` (multipart `video` + `args` JSON); the server validates the
+command, runs FFmpeg, and returns the processed bytes with `X-Output-Format` /
+`X-FFmpeg-Command` / `X-FFmpeg-Explanation` headers. The result downloads back and is rebased
+onto the edit stack as the new base — seamless for the user, previous state stays undoable.
+The `discover` / `plan` actions are JSON-only (`POST /api/ffmpeg-cli`) and return their result
+to the model without uploading. Videos only; photos are rejected with `unsupported_for_photo`.
+Requires **Allow cloud processing**, like every other cloud step. Server gating:
+`FFMPEG_CLI_MIN_BUILD` in `src/server/iosToolAllowlist.js` — older builds are never offered
+the tool.
+
 ## 6. Privacy
 
 Media stays on the device. The model gets metadata and up to 4 thumbnails per chat turn. Full media is uploaded only when the user has turned on **Allow cloud processing** and a step needs it. See `docs/asc/PRIVACY_NUTRITION.md` and `public/legal/privacy.html`.

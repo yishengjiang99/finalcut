@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FinalCut v2 (preview): in-browser editing</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0 auto; max-width: 860px; padding: 16px; }
+    header h1 { font-size: 1.3rem; margin: 0 0 4px; }
+    .muted { opacity: .7; font-size: .9rem; }
+    fieldset { border: 1px solid #8884; border-radius: 8px; margin: 12px 0; }
+    video { width: 100%; max-height: 360px; background: #000; border-radius: 6px; }
+    label { margin-right: 12px; }
+    input[type=number] { width: 6em; }
+    #status { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .85rem; }
+    .warn { color: #b26b00; } .block { color: #c00; }
+    footer { margin-top: 32px; font-size: .8rem; opacity: .75; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FinalCut v2 preview</h1>
+    <div class="muted">Edits run in your browser with FFmpeg (WebAssembly). Your video is not uploaded.</div>
+  </header>
+
+  <fieldset>
+    <legend>1. Open a video</legend>
+    <input id="file" type="file" accept="video/*,audio/*" data-testid="file-input" />
+    <div id="clipNotice" role="status"></div>
+    <video id="inputPreview" controls playsinline muted></video>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Trim</legend>
+    <label>Start (s) <input id="start" type="number" min="0" step="0.1" value="0" /></label>
+    <label>End (s) <input id="end" type="number" min="0" step="0.1" value="1" /></label>
+    <label><input id="precise" type="checkbox" /> Precise (re-encode)</label>
+    <button id="trim" disabled data-testid="trim">Trim</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Result</legend>
+    <video id="output" controls playsinline data-testid="output"></video>
+    <p><a id="download" hidden download="trimmed.mp4" data-testid="download">Download trimmed.mp4</a></p>
+  </fieldset>
+
+  <div id="status" data-testid="status">Engine: not loaded (loads on first edit)</div>
+
+  <footer>
+    FinalCut v2 preview. Uses FFmpeg via ffmpeg.wasm (GPL).
+    <a href="/legal/licenses.html" data-testid="licenses-link">Open-source licenses</a> ·
+    <a href="/legal/privacy.html">Privacy</a> ·
+    <a href="/">Classic editor</a>
+  </footer>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

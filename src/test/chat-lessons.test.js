@@ -23,67 +23,99 @@ vi.mock('../server/config.js', () => ({
 
 // Stub out DB calls – not needed for unit-level filter tests
 vi.mock('../db.js', () => ({
-  saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   getPool: vi.fn(),
 }));
 
 import {
   buildSystemMessage,
-  extractLesson,
   createStreamFilter,
   applyStreamFilter,
   flushStreamFilter,
+  restrictStreamingToolsToMedia,
+  streamingMediaType,
 } from '../server/chat.js';
 
 describe('buildSystemMessage', () => {
-  it('always includes the output contract', () => {
+  it('always includes the role and the output contract', () => {
     const message = buildSystemMessage();
 
     expect(message).toEqual(expect.objectContaining({ role: 'system' }));
-    expect(message.content).toContain('Always end your FINAL response');
-    expect(message.content).toContain('- Answer:');
-    expect(message.content).toContain('- Lesson:');
+    expect(message.content).toContain('editing assistant in FinalCap');
+    expect(message.content).toContain('plain text, once, with no heading or label');
   });
 
+  it('does not ask for an Answer section (the model repeated its reply inside it)', () => {
+    expect(buildSystemMessage().content).not.toContain('Answer:');
+  });
+
+  it('does not ask for a Lesson line, but still hides one if the model writes it', () => {
+    expect(buildSystemMessage().content).not.toContain('Lesson');
+    const reply = 'Hello! How can I help?\nLesson: Greet briefly.';
+    const filter = createStreamFilter();
+    const shown = applyStreamFilter(filter, reply) + flushStreamFilter(filter);
+    expect(shown).toBe('Hello! How can I help?');
+  });
+
+  it('states the media type and sends photo rules only when they can apply', () => {
+    const video = buildSystemMessage({ mediaType: 'video' }).content;
+    expect(video).toContain('Current media: a video.');
+    expect(video).not.toContain('photo (');
+    expect(video).not.toContain('apply_color_filter');
+
+    expect(buildSystemMessage({ mediaType: 'audio' }).content).toContain('Current media: an audio file.');
+
+    const photo = buildSystemMessage({ mediaType: 'image' }).content;
+    expect(photo).toContain('Current media: a photo');
+    expect(photo).toContain('convert_image_format');
+    expect(photo).toContain('do not exist for a photo');
+  });
+
+  it('lists every photo-capable tool when the client did not say what the media is', () => {
+    const unknown = buildSystemMessage().content;
+    expect(unknown).toContain('may be a video or a photo');
+    for (const name of ['crop_video', 'resize_video_preset', 'get_video_dimensions', 'get_supported_formats', 'convert_image_format']) {
+      expect(unknown).toContain(name);
+    }
+    expect(unknown).not.toContain('trim_video');
+  });
+
+  it('never routes a photo to the FFmpeg fallback', () => {
+    expect(buildSystemMessage({ ffmpegFallback: true, mediaType: 'image' }).content).not.toContain('ffmpeg_cli');
+    expect(buildSystemMessage({ ffmpegFallback: true, mediaType: 'video' }).content).toContain('ffmpeg_cli');
+    expect(buildSystemMessage({ ffmpegFallback: true }).content).toContain('never call ffmpeg_cli on a photo');
+  });
+
+  it('skips media guidance when nothing is attached', () => {
+    const none = buildSystemMessage({ ffmpegFallback: true, mediaType: 'none' }).content;
+    expect(none).not.toContain('Current media');
+    expect(none).not.toContain('photo (');
+    expect(none).not.toContain('ffmpeg_cli');
+  });
+
+  it('explains that later edits act on the output of earlier ones', () => {
+    expect(buildSystemMessage().content).toContain('operates on the output of the one before it');
+  });
 });
 
-// ─── extractLesson ────────────────────────────────────────────────────────────
-
-describe('extractLesson', () => {
-  it('returns empty string when no Lesson marker is present', () => {
-    expect(extractLesson('Some answer text without a lesson.')).toBe('');
+describe('streaming media type', () => {
+  it('accepts only known media types', () => {
+    expect(streamingMediaType({ type: 'image' })).toBe('image');
+    expect(streamingMediaType({ type: 'audio' })).toBe('audio');
+    expect(streamingMediaType({ type: 'video' })).toBe('video');
+    expect(streamingMediaType({ type: 'pdf' })).toBeNull();
+    expect(streamingMediaType('image')).toBeNull();
+    expect(streamingMediaType(undefined)).toBeNull();
   });
 
-  it('extracts inline lesson text (same line as marker)', () => {
-    const text = 'Answer text.\nLesson: Always validate input before processing.';
-    expect(extractLesson(text)).toBe('Always validate input before processing.');
-  });
-
-  it('extracts lesson text from next line (indented format)', () => {
-    const text = '- Answer:\n  The answer.\n- Lesson:\n  Cache results to avoid repeated work.';
-    expect(extractLesson(text)).toBe('Cache results to avoid repeated work.');
-  });
-
-  it('strips "- " bullet prefix from the Lesson marker', () => {
-    const text = 'Explanation.\n- Lesson: Use typed parameters to prevent injection.';
-    expect(extractLesson(text)).toBe('Use typed parameters to prevent injection.');
-  });
-
-  it('truncates lesson text to 240 characters', () => {
-    const long = 'x'.repeat(300);
-    const text = `Answer.\nLesson: ${long}`;
-    expect(extractLesson(text)).toHaveLength(240);
-  });
-
-  it('returns empty string when Lesson section is present but empty', () => {
-    expect(extractLesson('Something.\nLesson:')).toBe('');
-  });
-
-  it('handles Lesson at the very start of text', () => {
-    expect(extractLesson('Lesson: Start with simplest possible test.')).toBe(
-      'Start with simplest possible test.'
-    );
+  it('offers only single-frame tools for a photo', () => {
+    const tool = name => ({ type: 'function', function: { name } });
+    const body = { tools: ['trim_video', 'crop_video', 'convert_image_format', 'ffmpeg_cli'].map(tool), tool_choice: 'auto' };
+    expect(restrictStreamingToolsToMedia(body, 'image').tools.map(t => t.function.name))
+      .toEqual(['crop_video', 'convert_image_format']);
+    expect(restrictStreamingToolsToMedia(body, 'video')).toBe(body);
+    expect(restrictStreamingToolsToMedia(body, null)).toBe(body);
+    expect(restrictStreamingToolsToMedia({ tools: [tool('trim_video')], tool_choice: 'auto' }, 'image')).toEqual({});
   });
 });
 
@@ -104,7 +136,6 @@ describe('applyStreamFilter', () => {
   });
 
   it('strips leading "Answer:\\n" prefix and does not forward it', () => {
-    // Feed the prefix in one go
     const chunk = 'Answer:\nThe real answer content.';
     const out = applyStreamFilter(filter, chunk);
     // The prefix itself should not appear in forwarded content
@@ -183,7 +214,6 @@ describe('applyStreamFilter', () => {
   });
 
   it('does not forward lesson content when "Lesson:" appears at buffer start', () => {
-    // Simulate first content chunk IS the lesson
     const out = applyStreamFilter(filter, 'Lesson: Immediate lesson with no answer prefix.');
     expect(out).toBe('');
     expect(filter.passThrough).toBe(false);

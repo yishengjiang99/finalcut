@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App.jsx';
 
-// Mock ffmpeg module
 vi.mock('../ffmpeg.js', () => ({
   ffmpeg: {
     on: vi.fn(),
@@ -16,7 +15,6 @@ vi.mock('../ffmpeg.js', () => ({
   fetchFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
 }));
 
-// Mock fetch
 global.fetch = vi.fn();
 
 // Mock URL.createObjectURL
@@ -31,7 +29,6 @@ describe('App Component - Video Alignment', () => {
   });
 
   it('displays uploaded video on the right side (user role)', async () => {
-    // Mock auth status to bypass landing page
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ authenticated: true, user: { hasSubscription: true } })
@@ -47,7 +44,6 @@ describe('App Component - Video Alignment', () => {
     const fileInput = container.querySelector('input[type="file"]');
     const file = new File(['video content'], 'test.mp4', { type: 'video/mp4' });
     
-    // Mock successful fetch response
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -61,7 +57,6 @@ describe('App Component - Video Alignment', () => {
     
     await waitFor(() => {
       const messages = container.querySelectorAll('[style*="marginBottom"]');
-      // Find message with video content
       const videoMessages = Array.from(messages).filter(msg => 
         msg.textContent.includes('Selected video') || 
         msg.textContent.includes('Selected audio')
@@ -77,7 +72,6 @@ describe('App Component - Video Alignment', () => {
   });
 
   it('displays processed video on the left side (assistant role)', async () => {
-    // Mock auth status to bypass landing page
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ authenticated: true, user: { hasSubscription: true } })
@@ -93,7 +87,6 @@ describe('App Component - Video Alignment', () => {
     const fileInput = container.querySelector('input[type="file"]');
     const file = new File(['video content'], 'test.mp4', { type: 'video/mp4' });
     
-    // Mock successful tool call response
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -112,7 +105,6 @@ describe('App Component - Video Alignment', () => {
       })
     });
 
-    // Mock second call after tool execution
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -126,7 +118,6 @@ describe('App Component - Video Alignment', () => {
     
     await waitFor(() => {
       const messages = container.querySelectorAll('[style*="marginBottom"]');
-      // Find message with processed video content
       const processedMessages = Array.from(messages).filter(msg => 
         msg.textContent.includes('Processed video') || 
         msg.textContent.includes('resized')

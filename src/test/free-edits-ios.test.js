@@ -8,7 +8,6 @@ const db = vi.hoisted(() => ({
   recordDailyInference: vi.fn(),
   getDailyInferenceUsage: vi.fn(),
   enqueueChatInteraction: vi.fn(),
-  saveLesson: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../db.js', () => db);
 
@@ -72,7 +71,6 @@ afterAll(async () => {
 
 beforeEach(() => {
   for (const fn of Object.values(db)) fn.mockReset?.();
-  db.saveLesson.mockResolvedValue(undefined);
   db.findUserByApiToken.mockImplementation(async (token) => ({
     'device-token': { ...DEVICE_USER },
     'google-token': { ...GOOGLE_MOBILE_USER },

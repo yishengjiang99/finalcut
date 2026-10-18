@@ -1,7 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { toolFunctions } from '../toolFunctions.js';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { setUploadConsentHandler } from '../engineMode.js';
 
-// Mock fetch for server API calls
+vi.mock('../wasm/ffmpegEngine.js', async (importOriginal) => (await import('./helpers/noWasmEngine.js')).noWasmEngine(importOriginal));
+beforeAll(() => setUploadConsentHandler(() => true));
+import { toolFunctions } from '../toolFunctions.js';
+import * as engine from '../wasm/ffmpegEngine.js';
+
 global.fetch = vi.fn();
 global.FormData = class FormData {
   constructor() {
@@ -31,7 +35,6 @@ describe('Video Transitions', () => {
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
     global.Blob = vi.fn();
     
-    // Mock successful server response by default
     global.fetch.mockResolvedValue({
       ok: true,
       arrayBuffer: async () => new ArrayBuffer(16)
@@ -85,10 +88,11 @@ describe('Video Transitions', () => {
           mimeType: 'video/mp4'
         })
       );
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/transition-videos',
-        expect.objectContaining({ method: 'POST' })
+      expect(engine.joinClips).toHaveBeenCalledWith(
+        { transition: 'crossfade', duration: 2 },
+        [mockVideoFileData1, mockVideoFileData2]
       );
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should successfully apply fade transition', async () => {
@@ -170,17 +174,11 @@ describe('Video Transitions', () => {
         mockAddMessage
       );
       
-      const fetchCall = global.fetch.mock.calls[0];
-      const formData = fetchCall[1].body;
-      // The FormData should contain duration
-      expect(formData.data.duration).toBeDefined();
+      expect(engine.joinClips.mock.calls[0][0]).toEqual({ transition: 'crossfade', duration: 1 });
     });
 
-    it('should handle server errors gracefully', async () => {
-      global.fetch.mockResolvedValue({
-        ok: false,
-        json: async () => ({ error: 'Processing failed' })
-      });
+    it('should handle engine errors gracefully', async () => {
+      engine.joinClips.mockRejectedValueOnce(new Error('Processing failed'));
 
       const result = await toolFunctions.add_video_transition(
         { 

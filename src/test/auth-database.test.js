@@ -3,7 +3,6 @@ import { initDatabase, createUser, findUserByEmail, findUserByGoogleId, updateUs
 
 describe('Authentication Database Operations', () => {
   // Note: These tests require a MySQL database to be available
-  // Skip tests if database is not configured
   let dbAvailable = false;
 
   beforeEach(async () => {
@@ -62,7 +61,6 @@ describe('Authentication Database Operations', () => {
 
       const user = await createUser(userData);
 
-      // Verify user object has all required fields
       expect(user).toBeDefined();
       expect(user.id).toBeDefined();
       expect(user.email).toBe(userData.email);
@@ -107,7 +105,6 @@ describe('Authentication Database Operations', () => {
 
       await createUser(userData);
 
-      // Try to create another user with same email
       const duplicateData = {
         email: 'test3@example.com',
         google_id: 'google_test_999',
@@ -242,7 +239,6 @@ describe('Authentication Database Operations', () => {
         displayName: 'New Test User'
       };
 
-      // Simulate OAuth flow
       let user = await findUserByGoogleId(googleProfile.id);
       expect(user).toBeNull();
 
@@ -250,7 +246,6 @@ describe('Authentication Database Operations', () => {
       user = await findUserByEmail(email);
       expect(user).toBeNull();
 
-      // Create new user
       user = await createUser({
         email: email,
         google_id: googleProfile.id,
@@ -258,7 +253,6 @@ describe('Authentication Database Operations', () => {
         has_subscription: false
       });
 
-      // Verify user was created with valid ID
       expect(user).toBeDefined();
       expect(user.id).toBeDefined();
       expect(user.id).toBeGreaterThan(0);
@@ -273,7 +267,6 @@ describe('Authentication Database Operations', () => {
         return;
       }
 
-      // Create existing user
       const existingUser = await createUser({
         email: 'test_existing@example.com',
         google_id: 'google_existing_123',
@@ -287,7 +280,6 @@ describe('Authentication Database Operations', () => {
         displayName: 'Existing User'
       };
 
-      // Simulate OAuth flow for returning user
       const user = await findUserByGoogleId(googleProfile.id);
       
       expect(user).toBeDefined();

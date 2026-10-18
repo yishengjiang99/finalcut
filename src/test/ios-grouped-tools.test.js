@@ -20,7 +20,6 @@ vi.mock('../server/config.js', () => ({
 }));
 
 const db = vi.hoisted(() => ({
-  saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   findUserByApiToken: vi.fn(),
   consumeDailyInference: vi.fn(),
@@ -127,11 +126,16 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(47);
   });
 
-  it('build cutoff-1 is still exactly the build-10 list', () => {
+  it('build cutoff-1 is the build-10 list plus the ffmpeg_cli fallback (no grouped tools leak)', () => {
     const at10 = JSON.parse(snapshotFile('ios-build10'));
-    expect(JSON.stringify(withoutLyricSchema(buildToolsSchema({ userAgent: ios(CUTOFF - 1) })))).toBe(JSON.stringify(at10.schema));
-    for (const mt of ['video', 'image']) {
-      expect(JSON.stringify(withoutLyricDefs(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt })))).toBe(JSON.stringify(at10.offered[mt]));
+    const schema = withoutLyricSchema(buildToolsSchema({ userAgent: ios(CUTOFF - 1) }));
+    expect(names(schema.tools)).toEqual([...names(at10.schema.tools), 'ffmpeg_cli']);
+    expect(schema.mediaTypes.ffmpeg_cli).toEqual(['video']);
+    for (const g of GROUPED) expect(names(schema.tools)).not.toContain(g);
+    for (const mt of ['any', 'video', 'image']) {
+      const expected = names(at10.offered[mt === 'any' ? 'any' : mt]);
+      expect(names(withoutLyricDefs(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt === 'any' ? undefined : mt }))))
+        .toEqual(mt === 'image' ? expected : [...expected, 'ffmpeg_cli']);
     }
   });
 
@@ -160,11 +164,11 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
     expect(IOS_TOOL_ALLOWLIST.apply_color_filter).toBe(10); // kept
   });
 
-  it('gets 26 tools: the 21 minus the four adjust_* plus the 9 grouped', () => {
+  it('gets 27 tools: the 21 minus the four adjust_* plus the 9 grouped plus ffmpeg_cli', () => {
     const offered = names(offeredToolsFor({ userAgent: ios(CUTOFF) }));
     expect(build10).toHaveLength(21);
-    expect(withoutLyric(offered)).toEqual([...build10.filter(n => !RETIRED.includes(n)), ...GROUPED]);
-    expect(offered).toHaveLength(26 + lyricAt(CUTOFF));
+    expect(withoutLyric(offered)).toEqual([...build10.filter(n => !RETIRED.includes(n)), ...GROUPED, 'ffmpeg_cli']);
+    expect(offered).toHaveLength(27 + lyricAt(CUTOFF));
     expect(withoutLyric(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) })))).toEqual(withoutLyric(offered));
   });
 
@@ -206,17 +210,19 @@ describe('GET /api/tools/schema applies the same filtering', () => {
     }
   });
 
-  it('cutoff build: 26 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
+  it('cutoff build: 27 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
     const body = await (await getSchema(ios(CUTOFF))).json();
     expect(body.schemaVersion).toBe('1');
     expect(body.tools).toEqual(JSON.parse(JSON.stringify(offeredToolsFor({ userAgent: ios(CUTOFF) }))));
-    expect(body.tools).toHaveLength(26 + lyricAt(CUTOFF));
+    expect(body.tools).toHaveLength(27 + lyricAt(CUTOFF));
     expect(Object.keys(body.mediaTypes)).toEqual(names(body.tools));
     expect(body.mediaTypes.audio_effect).toEqual(['video']);
+    expect(body.mediaTypes.ffmpeg_cli).toEqual(['video']);
     for (const g of GROUPED.filter(n => n !== 'audio_effect')) expect(body.mediaTypes[g]).toEqual(['video', 'image']);
     const before = await (await getSchema(ios(CUTOFF - 1))).json();
-    expect(names(before.tools)).toHaveLength(21 + lyricAt(CUTOFF - 1));
+    expect(names(before.tools)).toHaveLength(22 + lyricAt(CUTOFF - 1));
     expect(names(before.tools)).not.toContain('lut');
+    expect(names(before.tools)).toContain('ffmpeg_cli');
   });
 });
 

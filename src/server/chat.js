@@ -1,14 +1,15 @@
 import express from 'express';
 import { XAI_API_TOKEN } from './config.js';
+import { XAI_CHAT_MODEL, XAI_CHAT_COMPLETIONS_URL } from './xai.js';
 import {
   apiLimiter,
   requireAuthenticatedUser,
   requireActiveSubscription,
   requireInferenceAccess,
 } from './middleware.js';
-import { enqueueChatInteraction, saveLesson } from '../db.js';
+import { enqueueChatInteraction } from '../db.js';
 import { PHOTO_SUPPORTED_OPS, PHOTO_OUTPUT_FORMATS, COLOR_FILTER_PRESETS } from './ffmpegOps.js';
-import { buildToolsSchema, offeredToolsFor } from './toolsSchema.js';
+import { buildToolsSchema, mediaTypesForTool, offeredToolsFor, toolsForMediaType } from './toolsSchema.js';
 import {
   CLIENT_SCHEMA_VERSION,
   CLIENT_EXECUTION_INSTRUCTIONS,
@@ -27,39 +28,24 @@ import {
 } from './clientExecution.js';
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
-import { filterToolsForUserAgent } from './iosToolAllowlist.js';
+import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD } from './iosToolAllowlist.js';
+import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, FFMPEG_CLI_STRING_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 const router = express.Router();
+
+// Verbose request/response tracing for local debugging (DEBUG_CHAT=1 npm run dev).
+const DEBUG_CHAT = process.env.DEBUG_CHAT === '1';
+function debugChat(...args) {
+  if (DEBUG_CHAT) console.log('[chat]', ...args);
+}
 
 // ─── Streaming filter helpers (exported for unit tests) ──────────────────────
 
 /**
- * Extract the lesson text from a completed assistant message.
- * Handles both inline ("Lesson: text") and next-line ("Lesson:\n  text") formats,
- * with or without a leading "- " bullet.
- */
-export function extractLesson(text) {
-  const markerRe = /(?:^|\n)[- ]*Lesson:[ \t]*(.*)/;
-  const match = markerRe.exec(text);
-  if (!match) return '';
-
-  const sameLine = match[1].trim();
-  if (sameLine) return sameLine.slice(0, 240);
-
-  // Lesson text is on the next line(s)
-  const markerEnd = match.index + match[0].length;
-  const remaining = text.slice(markerEnd);
-  for (const line of remaining.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed) return trimmed.slice(0, 240);
-  }
-  return '';
-}
-
-/**
  * Create a new streaming filter state object.
- * The filter strips the "Answer:" heading and hides the "Lesson:" section
- * from the forwarded SSE stream while still accumulating the full text.
+ * The filter strips the "Answer:" heading and anything from a "Lesson:" line on
+ * from the forwarded SSE stream. The model is no longer asked for either; this only
+ * catches replies that still follow the old format.
  */
 export function createStreamFilter() {
   return {
@@ -146,23 +132,60 @@ export function flushStreamFilter(filter) {
 
 // ─── System prompt builder ───────────────────────────────────────────────────
 
-export function buildSystemMessage() {
-  const photoGuidance =
-    'The current media may be a video OR a photo (jpg, png, webp, heic). For a photo, only call frame edits (' +
-    PHOTO_SUPPORTED_OPS.join(', ') +
-    '); color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
-    'Never call trim, speed, audio, caption, or transition tools on a photo — explain they only apply to videos.\n\n';
-  const outputContract =
-    photoGuidance +
-    'When a request requires multiple edits, emit one tool call for each edit in the order they should be applied. The tool calls will be executed sequentially on the current media.\n\n' +
-    'Always end your FINAL response (after any tool use is complete) with exactly this format:\n' +
-    '- Answer:\n' +
-    '  <your answer here>\n' +
-    '- Lesson:\n' +
-    '  <1-2 sentences summarizing a key insight, max 240 chars, no private data>\n' +
-    'No third section.';
+const ROLE =
+  'You are the editing assistant in FinalCap, a chat-based video, photo and audio editor. ' +
+  'The user attaches a media file and describes edits in plain language; you carry them out by calling the provided tools, which run on the current media. ' +
+  'When the user asks a question or just chats, answer directly without calling tools.';
 
-  return { role: 'system', content: outputContract };
+const PHOTO_TOOL_HINTS =
+  'Tools with "video" in their name, such as crop_video and rotate_video, edit a photo the same way. ' +
+  'Color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
+  `To change the file format of a photo use convert_image_format (${PHOTO_OUTPUT_FORMATS.join(', ')}), never convert_video_format. ` +
+  'Trimming, speed changes, audio edits, captions and transitions need a timeline or a soundtrack, so they do not exist for a photo: ' +
+  'say so briefly instead of calling a tool or looking for a workaround.';
+
+/** Media type a streaming client declared ("video" | "image" | "audio"), or null when absent or unknown. */
+export function streamingMediaType(media) {
+  const type = media && typeof media === 'object' ? media.type : null;
+  return type === 'video' || type === 'image' || type === 'audio' ? type : null;
+}
+
+/**
+ * What the model is told about the current media. `mediaType` is "video" | "image" | "audio",
+ * "none" when nothing is attached, or null when the client did not say (older clients).
+ */
+function mediaGuidance(mediaType, { ffmpegFallback = false } = {}) {
+  if (mediaType === 'none') return '';
+  if (mediaType === 'video') return 'Current media: a video.';
+  if (mediaType === 'audio') return 'Current media: an audio file.';
+  if (mediaType === 'image') {
+    return 'Current media: a photo (still image). Only tools that work on a single frame are offered. ' + PHOTO_TOOL_HINTS;
+  }
+  return 'The current media may be a video or a photo (jpg, png, webp, heic); work out which from the conversation. ' +
+    `On a photo, call only these tools: ${toolsForMediaType('image').map(t => t.function.name).join(', ')}. ` +
+    PHOTO_TOOL_HINTS +
+    (ffmpegFallback === 'cli_string' ? ' These photo limits take priority over the routing rule below: FFmpeg is never used on a photo.'
+      : ffmpegFallback ? ` These photo limits take priority over the routing rule below: never call ${FFMPEG_CLI_TOOL_NAME} on a photo.` : '');
+}
+
+export function buildSystemMessage({ ffmpegFallback = false, mediaType = null } = {}) {
+  // The FFmpeg fallback handles videos and audio only, so it is never described for a photo.
+  const fallbackGuidance = mediaType === 'image' || mediaType === 'none' ? ''
+    : ffmpegFallback === 'ios' ? FFMPEG_FALLBACK_GUIDANCE_IOS
+    : ffmpegFallback === 'cli_string' ? FFMPEG_CLI_STRING_GUIDANCE
+    : ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE : '';
+  const sections = [
+    ROLE,
+    mediaGuidance(mediaType, { ffmpegFallback: fallbackGuidance ? ffmpegFallback : false }),
+    fallbackGuidance,
+    'When a request needs several edits, emit one tool call per edit, in the order they should be applied. ' +
+    'The calls run sequentially and each one operates on the output of the one before it, so work out the arguments of later calls ' +
+    'from the result you expect from earlier ones: after a crop to 800x600 the frame is 800x600 and later coordinates are relative to it; ' +
+    'after a trim, later timestamps are relative to the trimmed clip.',
+    'Write your reply to the user as plain text, once, with no heading or label.',
+  ];
+
+  return { role: 'system', content: sections.filter(Boolean).join('\n\n') };
 }
 
 function messageContentToText(content) {
@@ -232,9 +255,40 @@ export function restrictStreamingBodyForIos(body, userAgent) {
   return next;
 }
 
+/**
+ * Streaming mode: offer the server-side ffmpeg_cli fallback tool last, after the client's
+ * built-in tools, to FinalCap-iOS only; restrictStreamingBodyForIos (applied after this) strips
+ * it again via the build allowlist unless the build ships the fallback executor
+ * (FFMPEG_CLI_MIN_BUILD). The web app gets no fallback tool: when no tool is called it asks
+ * for the FFmpeg CLI string instead. Requests without tools are left as-is.
+ */
+export function addFfmpegFallbackTool(body, userAgent) {
+  if (!parseFinalCapIosUserAgent(userAgent).isFinalCapIos) return body;
+  if (!Array.isArray(body.tools) || !body.tools.length) return body;
+  if (body.tools.some(t => t?.function?.name === FFMPEG_CLI_TOOL_NAME)) return body;
+  return { ...body, tools: [...body.tools, ffmpegCliToolDefinition] };
+}
+
+/**
+ * Streaming mode: for a photo, keep only the tools that work on a single frame (this also drops
+ * the videos-only ffmpeg_cli fallback). Any other media type gets the body back untouched.
+ */
+export function restrictStreamingToolsToMedia(body, mediaType) {
+  if (mediaType !== 'image' || !Array.isArray(body.tools)) return body;
+  const next = { ...body };
+  const tools = body.tools.filter(t => mediaTypesForTool(t?.function?.name).includes('image'));
+  if (tools.length) {
+    next.tools = tools;
+  } else {
+    delete next.tools;
+    delete next.tool_choice;
+  }
+  return next;
+}
+
 // ─── Client-execution mode (tools run on the device) ─────────────────────────
 
-/** Strip the "Answer:" heading and hidden "Lesson:" section from a final reply. */
+/** Strip a legacy "Answer:" heading and "Lesson:" section from a final reply. */
 export function cleanFinalText(text) {
   const filter = createStreamFilter();
   const head = applyStreamFilter(filter, String(text || ''));
@@ -243,7 +297,20 @@ export function cleanFinalText(text) {
 
 /** Model for client-execution turns (defaults to the same model as the streaming chat). */
 export function getClientExecutionModel() {
-  return process.env.XAI_CLIENT_MODEL || 'grok-3';
+  return process.env.XAI_CLIENT_MODEL || XAI_CHAT_MODEL;
+}
+
+/** Server-answered lookup rounds (profile.serverTools) allowed inside one request. */
+const MAX_SERVER_LOOKUPS = 6;
+
+/** A non-streaming xAI call may take this long before the request is answered with a 504. */
+const XAI_REQUEST_TIMEOUT_MS = 120_000;
+
+/** Fields of a streaming /api/chat body that are passed on to xAI; anything else is dropped. */
+const FORWARDED_CHAT_FIELDS = ['tools', 'tool_choice', 'temperature', 'top_p'];
+
+export function forwardedChatFields(body) {
+  return Object.fromEntries(Object.entries(body || {}).filter(([key]) => FORWARDED_CHAT_FIELDS.includes(key)));
 }
 
 /**
@@ -251,7 +318,16 @@ export function getClientExecutionModel() {
  * One model call per request: returns either tool calls for the device to run or the final answer.
  * Never runs ffmpeg or touches uploaded media.
  */
-async function handleClientExecution(req, res, userId) {
+/**
+ * `profile` adapts the handler for another client that runs tools itself (the web app's
+ * /api/v2/chat). Without one, behaviour is exactly the iOS contract of POST /api/chat:
+ *   tools({ userAgent, mediaType })  the tools offered to the model
+ *   instructions                     replaces CLIENT_EXECUTION_INSTRUCTIONS
+ *   guidance                         extra system-prompt lines
+ *   serverTools                      { name: async (args) => result } answered on the server
+ *                                    (text lookups only), then the model is asked again
+ */
+export async function handleClientExecution(req, res, userId, profile = null) {
   let media;
   let thumbnails;
   let conversation;
@@ -280,29 +356,39 @@ async function handleClientExecution(req, res, userId) {
   });
 
   const model = getClientExecutionModel();
-  const thumbnailsAsImages = thumbnails.length > 0 && modelSupportsVision(model);
+  // Thumbnails leave the server only when XAI_CLIENT_MODEL names a vision model: the default
+  // model accepts images too, but forwarding frames stays an explicit choice.
+  const thumbnailsAsImages = thumbnails.length > 0 && Boolean(process.env.XAI_CLIENT_MODEL) && modelSupportsVision(model);
   const rounds = countToolRounds(conversation);
   const skippedTools = skippedToolsInTurn(conversation);
   const unsupportedTools = unsupportedToolsInTurn(conversation);
   const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
 
   // FinalCap-iOS UA → only allowlisted on-device tools (incl. iOS-only grouped tools); any other UA → unchanged.
-  const offeredTools = offeredToolsFor({ userAgent: req.get('user-agent'), mediaType: media?.type })
+  const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent: req.get('user-agent'), mediaType: media?.type })
     .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
   const contextLines = [
-    CLIENT_EXECUTION_INSTRUCTIONS,
+    profile?.instructions || CLIENT_EXECUTION_INSTRUCTIONS,
     mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
+    ...(profile?.guidance || []),
   ];
+  // The server-side ffmpeg_cli fallback is offered to iOS builds that ship its executor
+  // (see FFMPEG_CLI_MIN_BUILD): last resort when no on-device tool can handle the request.
+  if (offeredTools.some(t => t.function.name === FFMPEG_CLI_TOOL_NAME)) {
+    contextLines.push(FFMPEG_FALLBACK_GUIDANCE_IOS);
+  }
   if (skippedTools.length) {
     contextLines.push(`The user declined these steps this turn (not failures): ${skippedTools.join(', ')}. Do not call them again in this turn.`);
   }
-  if (unsupportedTools.length) {
+  if (unsupportedTools.length && profile) {
+    contextLines.push(`These edits could not run in this browser: ${unsupportedTools.join(', ')}. Do not call them again in this turn; briefly tell the user.`);
+  } else if (unsupportedTools.length) {
     contextLines.push(`These edits are not available on the phone yet: ${unsupportedTools.join(', ')}. Do not call them again in this turn; briefly tell the user they are not available on the phone yet.`);
   }
   if (roundCapReached) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
   }
-  const baseSystem = buildSystemMessage();
+  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null });
   const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
 
   const modelMessages = [systemMessage];
@@ -327,38 +413,95 @@ async function handleClientExecution(req, res, userId) {
     requestBody.tool_choice = 'auto';
   }
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${XAI_API_TOKEN}`
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    let errorBody = {};
+  // Server-answered lookups (profile.serverTools) are resolved here and the model is asked again;
+  // anything else goes back to the client. Without a profile this loop runs exactly once.
+  const serverTools = profile?.serverTools || {};
+  let choice = {};
+  let servedModel = null;
+  let modelToolCalls = [];
+  for (let lookups = 0; ; lookups += 1) {
+    requestBody.messages = modelMessages;
+    let response;
     try {
-      errorBody = await response.json();
-    } catch {
-      errorBody = { message: response.statusText };
+      response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
+        method: 'POST',
+        signal: AbortSignal.timeout(XAI_REQUEST_TIMEOUT_MS),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${XAI_API_TOKEN}`
+        },
+        body: JSON.stringify(requestBody),
+      });
+    } catch (error) {
+      if (error?.name !== 'TimeoutError') throw error;
+      enqueueChatError({
+        userId,
+        message: 'xAI API request timed out',
+        source: 'xai_api',
+        requestMessageCount: conversation.length,
+        metadata: { timeoutMs: XAI_REQUEST_TIMEOUT_MS, execution: 'client' },
+      });
+      return res.status(504).json({ error: 'The model took too long to answer. Try again.', schemaVersion: CLIENT_SCHEMA_VERSION });
     }
-    const message = errorBody.error?.message || errorBody.message || response.statusText || 'xAI API request failed';
-    enqueueChatError({
-      userId,
-      message,
-      source: 'xai_api',
-      requestMessageCount: conversation.length,
-      metadata: { status: response.status, statusText: response.statusText, execution: 'client' },
-    });
-    return res.status(response.status).json({ error: message, schemaVersion: CLIENT_SCHEMA_VERSION });
-  }
 
-  const data = await response.json();
-  const choice = data?.choices?.[0]?.message || {};
-  const allowedNames = new Set(offeredTools.map(t => t.function.name));
-  const modelToolCalls = (Array.isArray(choice.tool_calls) ? choice.tool_calls : [])
-    .filter(call => !roundCapReached && allowedNames.has(call?.function?.name));
+    if (!response.ok) {
+      let errorBody = {};
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = { message: response.statusText };
+      }
+      const message = errorBody.error?.message || errorBody.message || response.statusText || 'xAI API request failed';
+      enqueueChatError({
+        userId,
+        message,
+        source: 'xai_api',
+        requestMessageCount: conversation.length,
+        metadata: { status: response.status, statusText: response.statusText, execution: 'client' },
+      });
+      return res.status(response.status).json({ error: message, source: 'xai', schemaVersion: CLIENT_SCHEMA_VERSION });
+    }
+
+    const data = await response.json();
+    servedModel = data?.model || null;
+    choice = data?.choices?.[0]?.message || {};
+    const allowedNames = new Set(offeredTools.map(t => t.function.name));
+    modelToolCalls = (Array.isArray(choice.tool_calls) ? choice.tool_calls : [])
+      .filter(call => !roundCapReached && allowedNames.has(call?.function?.name));
+
+    const lookupCalls = modelToolCalls.filter(call => Object.hasOwn(serverTools, call.function.name));
+    if (!lookupCalls.length) break;
+    if (lookups >= MAX_SERVER_LOOKUPS) {
+      modelToolCalls = modelToolCalls.filter(call => !lookupCalls.includes(call));
+      break;
+    }
+    const lookupMessage = {
+      role: 'assistant',
+      content: typeof choice.content === 'string' ? choice.content : null,
+      tool_calls: lookupCalls.map(call => ({
+        id: call.id,
+        type: 'function',
+        function: { name: call.function.name, arguments: typeof call.function.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function.arguments ?? {}) },
+      })),
+    };
+    const lookupResults = [];
+    for (const call of lookupMessage.tool_calls) {
+      let result;
+      try {
+        result = await serverTools[call.function.name](JSON.parse(call.function.arguments || '{}'));
+      } catch (error) {
+        result = { ok: false, error: error?.message || 'lookup failed' };
+      }
+      lookupResults.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+    }
+    conversation.push(lookupMessage, ...lookupResults);
+    modelMessages.push(lookupMessage, ...lookupResults);
+    // After the last lookup the model has to act on what it found: the lookups are withdrawn.
+    if (lookups + 1 >= MAX_SERVER_LOOKUPS && requestBody.tools) {
+      requestBody.tools = requestBody.tools.filter(t => !Object.hasOwn(serverTools, t.function.name));
+      modelMessages.push({ role: 'system', content: 'Lookup limit reached for this request: do not search again. Run the command you worked out, or give the final answer.' });
+    }
+  }
 
   if (modelToolCalls.length) {
     const assistantMessage = {
@@ -396,7 +539,7 @@ async function handleClientExecution(req, res, userId) {
   const rawText = typeof choice.content === 'string' ? choice.content : '';
   const message = cleanFinalText(rawText)
     || (unsupportedTools.length
-      ? 'Sorry, that edit isn\'t available on the phone yet.'
+      ? (profile ? 'Sorry, that edit could not run in this browser.' : 'Sorry, that edit isn\'t available on the phone yet.')
       : (skippedTools.length ? 'Okay — I skipped the steps you declined.' : 'Done.'));
   enqueueChatInteraction({
     userId,
@@ -405,7 +548,7 @@ async function handleClientExecution(req, res, userId) {
     // Usage numbers for on-device edits: a completed edit turn is a final answer after
     // at least one tool result with ok:true (each request is also counted by the quota).
     metadata: {
-      model,
+      model: servedModel || model,
       streamed: false,
       execution: 'client',
       toolRounds: rounds,
@@ -414,10 +557,6 @@ async function handleClientExecution(req, res, userId) {
       iosClient: isIosClient(req),
     },
   });
-  if (userId) {
-    const lesson = extractLesson(rawText);
-    if (lesson) await saveLesson(userId, lesson);
-  }
   return res.json({
     schemaVersion: CLIENT_SCHEMA_VERSION,
     status: 'final',
@@ -433,7 +572,6 @@ async function handleClientExecution(req, res, userId) {
 router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
   const userId = req.user?.id ?? null;
   try {
-    // Basic request validation
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({ error: 'Invalid request body' });
     }
@@ -462,21 +600,40 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
 
     // Keep the client payload focused on the latest actionable request, but
     // always restore the server-owned system contract.
-    const systemMessage = buildSystemMessage();
+    const iosInfo = parseFinalCapIosUserAgent(req.get('user-agent'));
+    const fallbackMode = iosInfo.isFinalCapIos
+      ? (iosInfo.build >= FFMPEG_CLI_MIN_BUILD ? 'ios' : false)
+      : 'cli_string';
+    // `media` is the client's description of the attached file; it is not an xAI field.
+    const { media: clientMedia, ...clientBody } = req.body;
+    const hasTools = Array.isArray(clientBody.tools) && clientBody.tools.length > 0;
+    const mediaType = hasTools ? streamingMediaType(clientMedia) : 'none';
+    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType });
 
-    // Enable streaming for xAI API
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    debugChat('request', JSON.stringify({
+      userId,
+      user: latestUserText,
+      roles: req.body.messages.map(m => m?.role),
+      tools: Array.isArray(req.body.tools) ? req.body.tools.length : 0,
+    }));
+
+    // Stop the xAI request when the client goes away, so nothing is generated for nobody.
+    const upstream = new AbortController();
+    res.on('close', () => upstream.abort());
+
+    const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
       method: 'POST',
+      signal: upstream.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${XAI_API_TOKEN}`
       },
-      body: JSON.stringify(restrictStreamingBodyForIos({
-        ...req.body,
+      body: JSON.stringify(restrictStreamingBodyForIos(restrictStreamingToolsToMedia(addFfmpegFallbackTool({
         messages: [systemMessage, ...req.body.messages],
-        model: 'grok-3', // Specify the new model here
+        ...forwardedChatFields(clientBody),
+        model: XAI_CHAT_MODEL,
         stream: true // Enable streaming
-      }, req.get('user-agent')))
+      }, req.get('user-agent')), mediaType), req.get('user-agent')))
     });
 
     if (!response.ok) {
@@ -497,7 +654,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           statusText: response.statusText,
         },
       });
-      return res.status(response.status).json({ error: message });
+      return res.status(response.status).json({ error: message, source: 'xai' });
     }
 
     // Set headers for Server-Sent Events (SSE)
@@ -505,15 +662,18 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // Stream the response chunks to the client, filtering out the Lesson section
+    // Stream the response chunks to the client through the legacy Answer/Lesson filter
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
     let lineBuffer = '';
     let assistantText = '';
+    let servedModel = null; // the model xAI reports, which can differ from the one requested
     const filter = createStreamFilter();
     let doneFlushed = false;
     let lastParsed = null; // keep reference for flush emit
+    const debugToolCalls = {}; // index → { name, arguments }, only filled when DEBUG_CHAT
+    let debugFinishReason = null;
 
     // Emit a synthetic SSE data line with the given content, reusing parsed event structure
     function emitContent(parsed, content) {
@@ -564,12 +724,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
           try {
             parsed = JSON.parse(data);
           } catch {
-            // Unparseable line – forward as-is
             res.write(`${line}\n\n`);
             continue;
           }
 
           const delta = parsed.choices?.[0]?.delta;
+          if (parsed.model) servedModel = parsed.model;
 
           if (delta?.content) {
             assistantText += delta.content;
@@ -579,20 +739,36 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
               emitContent(parsed, toForward);
             }
           } else {
+            if (DEBUG_CHAT) {
+              for (const call of delta?.tool_calls || []) {
+                const entry = debugToolCalls[call.index] ||= { name: '', arguments: '' };
+                if (call.function?.name) entry.name = call.function.name;
+                if (call.function?.arguments) entry.arguments += call.function.arguments;
+              }
+              debugFinishReason = parsed.choices?.[0]?.finish_reason || debugFinishReason;
+            }
             // Non-content delta (role, tool_calls, finish_reason, etc.) – forward as-is
             res.write(`${line}\n\n`);
           }
         }
       }
       res.end();
+      debugChat('response', JSON.stringify({
+        finishReason: debugFinishReason,
+        toolCalls: Object.values(debugToolCalls),
+        text: assistantText,
+      }));
     } catch (streamError) {
-      console.error('Error streaming response:', streamError);
-      enqueueChatError({
-        userId,
-        message: serializeError(streamError),
-        source: 'xai_stream',
-        requestMessageCount: req.body.messages.length,
-      });
+      // An aborted read means the client left; that is not a stream failure.
+      if (!upstream.signal.aborted) {
+        console.error('Error streaming response:', streamError);
+        enqueueChatError({
+          userId,
+          message: serializeError(streamError),
+          source: 'xai_stream',
+          requestMessageCount: req.body.messages.length,
+        });
+      }
       res.end();
     }
 
@@ -602,19 +778,12 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       interactionType: 'ai2human',
       content: assistantText,
       metadata: {
-        model: 'grok-3',
+        model: servedModel || XAI_CHAT_MODEL,
         streamed: true,
       },
     });
-
-    // Persist lesson after stream ends (errors are logged inside saveLesson)
-    if (userId) {
-      const lesson = extractLesson(assistantText);
-      if (lesson) {
-        await saveLesson(userId, lesson);
-      }
-    }
   } catch (error) {
+    if (error?.name === 'AbortError') return; // the client left before xAI answered
     console.error('Error in /api/chat:', error);
     enqueueChatError({
       userId,
@@ -655,7 +824,6 @@ router.get('/api/tools/schema', apiLimiter, (req, res) => {
   res.json(buildToolsSchema({ userAgent: req.get('user-agent') }));
 });
 
-// Supported formats introspection endpoint
 router.get('/api/supported-formats', apiLimiter, requireAuthenticatedUser, requireActiveSubscription, (req, res) => {
   res.json({
     video: {

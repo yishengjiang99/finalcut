@@ -5,6 +5,7 @@ import { tools } from '../tools.js';
 import { parseFinalCapIosUserAgent } from './clientInfo.js';
 import { IOS_GROUPED_TOOLS, IOS_GROUPED_TOOL_MEDIA_TYPES } from './iosGroupedTools.js';
 import { filterToolsForUserAgent } from './iosToolAllowlist.js';
+import { ffmpegCliToolDefinition } from '../ffmpegFallback.js';
 
 export const TOOLS_SCHEMA_VERSION = '1';
 
@@ -44,10 +45,13 @@ function restrictToMediaType(list, mediaType) {
 /**
  * Tools offered to a client: web/other UAs get src/tools.js (for a media type when given), the
  * same array/objects as before. FinalCap-iOS UAs pick from src/tools.js plus the iOS-only grouped
- * tools, filtered by the build allowlist (iosToolAllowlist.js).
+ * tools, filtered by the build allowlist (iosToolAllowlist.js). The server-side ffmpeg_cli
+ * fallback is appended last for iOS so the model treats it as the last resort; the allowlist
+ * (FFMPEG_CLI_MIN_BUILD) keeps it away from builds that can't execute it.
  */
 export function offeredToolsFor({ userAgent, mediaType } = {}) {
-  const candidates = parseFinalCapIosUserAgent(userAgent).isFinalCapIos ? [...tools, ...IOS_GROUPED_TOOLS] : tools;
+  const isIos = parseFinalCapIosUserAgent(userAgent).isFinalCapIos;
+  const candidates = isIos ? [...tools, ...IOS_GROUPED_TOOLS, ffmpegCliToolDefinition] : tools;
   return filterToolsForUserAgent(restrictToMediaType(candidates, mediaType), userAgent);
 }
 

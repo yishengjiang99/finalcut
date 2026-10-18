@@ -1,0 +1,103 @@
+WEBVTT
+
+00:00.400 --> 00:04.262
+Here is the engine inside our browser video editor, and what makes it faster.
+
+00:04.612 --> 00:09.416
+FFmpeg is the standard open-source tool for decoding, filtering and encoding video.
+
+00:09.466 --> 00:14.072
+ffmpeg.wasm compiles it to WebAssembly, so it runs inside the browser tab.
+
+00:14.122 --> 00:15.938
+The video never has to be uploaded.
+
+00:16.288 --> 00:20.441
+But the upstream release is unmaintained. It was built in early 2025.
+
+00:20.491 --> 00:26.096
+Our fork rebuilds it with a current Emscripten and FFmpeg 8, with every source pinned by commit and checksum.
+
+00:26.446 --> 00:28.814
+JavaScript runs one thread per context.
+
+00:28.864 --> 00:32.989
+WebAssembly threads are Web Workers that share one memory: a SharedArrayBuffer.
+
+00:33.039 --> 00:37.603
+That lets decoding, filtering and encoding run on several CPU cores at once.
+
+00:37.653 --> 00:43.317
+It requires a cross-origin isolated page. Otherwise, the editor falls back to a single thread.
+
+00:43.667 --> 00:48.037
+The key bug we found: FFmpeg ran on the module's main thread, and blocked it.
+
+00:48.087 --> 00:51.683
+But in the browser, a new thread needs that main thread to create its Worker.
+
+00:51.733 --> 00:55.441
+Once a job needed more than the 32 pre-spawned threads, it deadlocked.
+
+00:55.491 --> 00:59.802
+Four-core cloud test machines never reproduced it. A 14-core laptop did.
+
+00:59.852 --> 01:04.724
+The fix: run each job on its own thread, so the main thread stays free to start Workers.
+
+01:05.074 --> 01:11.943
+On an Apple M4 Pro, in Chromium, joining three clips with a crossfade used to hang. Now it takes about three seconds.
+
+01:11.993 --> 01:20.825
+Re-encoding ten seconds of 1080p video: about 14 seconds single-threaded, 5.3 multithreaded on the old build, and 4.1 on the fork.
+
+01:21.175 --> 01:27.678
+Then we switched to upstream x264, and fixed a bug that made WebAssembly trap beyond about six encoder threads.
+
+01:27.728 --> 01:30.487
+Before, the editor had to cap the encoder at four.
+
+01:30.537 --> 01:38.102
+Now it scales: 9.8 seconds on one thread, 3.9 on four, 2.3 on eight, 1.6 on fourteen.
+
+01:38.152 --> 01:40.876
+Early, single-run numbers, on one machine.
+
+01:41.226 --> 01:46.323
+The old multithreaded core reserved a fixed one-gigabyte heap, which iOS Safari refuses.
+
+01:46.373 --> 01:51.370
+The fork starts at 256 megabytes and grows on demand, up to four gigabytes.
+
+01:51.420 --> 01:55.945
+And 60 jobs in a row now pass, on Chromium, WebKit and Firefox.
+
+01:56.295 --> 01:59.679
+SIMD means one instruction processes several values at once.
+
+01:59.729 --> 02:03.680
+Today, the compiler auto-vectorizes loops into WebAssembly SIMD.
+
+02:03.730 --> 02:09.137
+But the hand-written assembly that makes native builds fast is x86 and ARM only, so it is off here.
+
+02:09.187 --> 02:16.436
+We turned on FFmpeg's own WebAssembly SIMD code. Today it covers only HEVC decoding, and it gained about three percent.
+
+02:16.486 --> 02:19.474
+So the speed here comes from threads, not from SIMD.
+
+02:19.824 --> 02:22.302
+So, for you: no upload round trip.
+
+02:22.352 --> 02:23.972
+All the cores your device has.
+
+02:24.022 --> 02:25.040
+Bigger clips fit.
+
+02:25.090 --> 02:26.573
+And jobs no longer hang.
+
+02:26.623 --> 02:32.038
+One caveat: these numbers come from one machine, and Safari on real iPhones still needs testing.

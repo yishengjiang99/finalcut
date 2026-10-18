@@ -1,8 +1,10 @@
 # Client tool execution (`POST /api/chat` with `execution: "client"`)
 
 Lets a native client (iOS) plan edits with Grok and **execute the tool calls on the
-device**. The server never runs ffmpeg in this mode and never receives the media;
-it only sees metadata and (optionally) up to 4 small thumbnails.
+device**. The server never runs ffmpeg for the turn itself; it only sees metadata and
+(optionally) up to 4 small thumbnails — unless the app uploads media to a metered media
+route (`/api/jobs/process-video`, or the `ffmpeg_cli` fallback's `/api/ffmpeg-cli/run`)
+because no on-device tool can handle the request.
 
 Omitting `execution` keeps the existing streaming (SSE) behaviour exactly as before.
 Any other value than `"client"` is rejected with 400.
@@ -231,9 +233,9 @@ stops device retry loops.
 
 ## Thumbnails and vision
 
-Thumbnails are sent to the model as `image_url` inputs (`detail: "low"`) only when the
-configured model accepts images. By default this mode uses the same model as the
-streaming chat (`grok-3`), which has no image input, so only the metadata is used
-and `thumbnailsSentAsImages` is `false`. Set `XAI_CLIENT_MODEL` to a vision-capable
-Grok model (for example a `grok-4.x` model) to forward the thumbnails. The response
-then reports `thumbnailsSentAsImages: true`.
+Thumbnails are sent to the model as `image_url` inputs (`detail: "low"`) only when
+`XAI_CLIENT_MODEL` is set to a model that accepts images. By default this mode uses the
+same model as the streaming chat (`XAI_CHAT_MODEL`, default `grok-4.3`) and thumbnails
+stay on the server: only the metadata is used and `thumbnailsSentAsImages` is `false`.
+Set `XAI_CLIENT_MODEL` to a vision-capable Grok model (for example `grok-4.3`) to
+forward the thumbnails. The response then reports `thumbnailsSentAsImages: true`.

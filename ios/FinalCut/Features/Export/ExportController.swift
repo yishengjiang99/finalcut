@@ -66,6 +66,7 @@ final class ExportController: ObservableObject {
         toast = nil
         photosPermissionDenied = false
         let isPhoto = Self.isPhoto(stack: stack, fallbackURL: fallbackURL)
+        offerNotificationsIfNeeded()
         task = Task { [weak self] in
             guard let self else { return }
             do {
@@ -81,9 +82,11 @@ final class ExportController: ObservableObject {
                     self.phase = .idle
                     self.toast = UXCopy.savedToPhotos
                     self.notifyIfInactive(success: true, isPhoto: isPhoto, savedToPhotos: true)
+                    PushManager.shared.track("export_done")
                 case .files:
                     self.phase = .idle
                     self.filesPickerURL = url
+                    PushManager.shared.track("export_done")
                 }
             } catch NativeExporter.ExportError.cancelled {
                 self.phase = .idle
@@ -113,7 +116,6 @@ final class ExportController: ObservableObject {
         let url: URL
         if let stack, !stack.entries.isEmpty {
             beginBackground()
-            offerNotificationsIfFirstExport(isPhoto: isPhoto)
             if isPhoto {
                 phase = .saving
                 url = try await Task.detached(priority: .userInitiated) { try PhotoRenderer.exportFile(stack) }.value
@@ -139,16 +141,26 @@ final class ExportController: ObservableObject {
 
     // MARK: - Notifications (Design §6)
 
-    /// The first video export shows "Notify me when it's done" once; permission only on tap.
-    private func offerNotificationsIfFirstExport(isPhoto: Bool) {
-        guard !isPhoto, !defaults.bool(forKey: NativeSettings.notifyOfferShownKey) else { return }
-        defaults.set(true, forKey: NativeSettings.notifyOfferShownKey)
-        showNotifyOffer = true
+    /// Every export (photo or video, edited or not) offers "Notify me when it's done" while iOS
+    /// has never asked for notification permission. It stays visible after the export finishes
+    /// until tapped or dismissed with "Not now" (snoozed 7 days). The iOS alert only follows a tap.
+    private func offerNotificationsIfNeeded() {
+        guard !showNotifyOffer else { return }
+        Task { [weak self] in
+            let offer = await PushManager.shared.shouldOfferNotifications()
+            guard let self, offer else { return }
+            self.showNotifyOffer = true
+        }
     }
 
     func requestNotifications() {
         showNotifyOffer = false
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        PushManager.shared.requestPermission()
+    }
+
+    func dismissNotifyOffer() {
+        showNotifyOffer = false
+        PushManager.shared.snoozeNotifyOffer()
     }
 
     private func notifyIfInactive(success: Bool, isPhoto: Bool, savedToPhotos: Bool) {

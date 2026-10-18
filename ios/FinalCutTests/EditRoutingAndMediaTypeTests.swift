@@ -135,7 +135,7 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
     }
 
     func testCatalogCoversAllSchemaV1Tools() {
-        XCTAssertEqual(ToolCatalog.requiredArgs.count, 46)
+        XCTAssertEqual(ToolCatalog.requiredArgs.count, 47)  // + lyric captions tool
         XCTAssertEqual(ToolCatalog.requiredArgs["crop_video"], ["x", "y", "width", "height"])
         XCTAssertEqual(ToolCatalog.requiredArgs["adjust_contrast"], ["contrast"])
     }
@@ -278,5 +278,37 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
         XCTAssertEqual(result.executedOn, .device)
         XCTAssertEqual(result.output?["width"], .number(1280))
         XCTAssertEqual(result.output?["height"], .number(720))
+    }
+
+    // MARK: - ffmpeg_cli server-side fallback
+
+    func testFfmpegCliIsKnownButNotNative() {
+        // Known to the planner (no longer "unknown_tool") and deliberately absent from
+        // the AVFoundation toolset, so the native parser reports unsupported-on-device
+        // and the cloud fallback path is taken.
+        XCTAssertTrue(ToolCatalog.isKnown("ffmpeg_cli"))
+        XCTAssertFalse(NativeToolParser.isSupported("ffmpeg_cli"))
+    }
+
+    func testFfmpegCliPlansServerSideFallback() {
+        // Missing action → rejected before anything is uploaded.
+        XCTAssertEqual(
+            ToolCatalog.plan(tool: "ffmpeg_cli", arguments: [:]),
+            .reject(error: "missing_required_args: action")
+        )
+        // discover / plan / run all route to the server-side FFmpeg executor.
+        let runArgs: [String: JSONValue] = ["action": .string("run"), "video_filters": .string("vignette")]
+        XCTAssertEqual(ToolCatalog.plan(tool: "ffmpeg_cli", arguments: runArgs), .ffmpegCli(arguments: runArgs))
+        let discoverArgs: [String: JSONValue] = ["action": .string("discover"), "query": .string("vignette")]
+        XCTAssertEqual(ToolCatalog.plan(tool: "ffmpeg_cli", arguments: discoverArgs), .ffmpegCli(arguments: discoverArgs))
+    }
+
+    func testFfmpegCliRejectedForPhotos() {
+        // Photos never upload for server processing.
+        let args: [String: JSONValue] = ["action": .string("run"), "video_filters": .string("vignette")]
+        XCTAssertEqual(
+            ToolCatalog.plan(tool: "ffmpeg_cli", arguments: args, isPhoto: true),
+            .reject(error: ServerErrorCode.unsupportedForPhoto)
+        )
     }
 }

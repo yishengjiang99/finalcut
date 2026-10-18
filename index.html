@@ -2,11 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>FinalCap: AI Video Editor in Your Browser, No Upload</title>
+    <meta name="description" content="FinalCap is a chat-to-edit AI video editor: trim, caption, crop to 9:16, fix color and convert. FFmpeg runs in your browser, so your video file isn't uploaded.">
+    <link rel="canonical" href="https://grepawk.com/">
+    <meta name="theme-color" content="#0b0e13">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FinalCap">
-    <title>FinalCap - AI Video Editor</title>
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="FinalCap">
+    <meta property="og:url" content="https://grepawk.com/">
+    <meta property="og:title" content="FinalCap: edit video by describing it">
+    <meta property="og:description" content="FinalCap, a chat-to-edit AI video editor. Trim, caption, resize to 9:16 and convert, with FFmpeg running in your browser. Your video file is not uploaded to edit.">
+    <meta property="og:image" content="https://grepawk.com/og/finalcap-og-1200x630.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="FinalCap logo with the tagline: Edit video by describing it.">
+    <meta property="og:locale" content="en_US">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@YishengJiang">
+    <meta name="twitter:title" content="FinalCap: edit video by describing it">
+    <meta name="twitter:description" content="FinalCap, a chat-to-edit AI video editor. FFmpeg runs in your browser, so your video file is not uploaded to edit.">
+    <meta name="twitter:image" content="https://grepawk.com/og/finalcap-og-1200x630.jpg">
+    <meta name="twitter:image:alt" content="FinalCap logo with the tagline: Edit video by describing it.">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://grepawk.com/#website",
+          "url": "https://grepawk.com/",
+          "name": "FinalCap",
+          "inLanguage": "en"
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://grepawk.com/#webapp",
+          "name": "FinalCap",
+          "alternateName": "FinalCap AI Video Editor",
+          "url": "https://grepawk.com/",
+          "description": "Chat-to-edit AI video editor. Describe an edit (trim, captions, resize to 9:16, color, speed, format) and FFmpeg runs it in your browser, so your video file is not uploaded to edit. Caption translation and lyric captions use the FinalCap server.",
+          "applicationCategory": "MultimediaApplication",
+          "operatingSystem": "Any",
+          "browserRequirements": "Requires a modern browser with JavaScript and WebAssembly",
+          "image": "https://grepawk.com/og/finalcap-og-1200x630.jpg",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free to try" },
+          "author": { "@type": "Person", "name": "Yisheng Jiang" },
+          "isPartOf": { "@id": "https://grepawk.com/#website" },
+          "isRelatedTo": { "@id": "https://grepawk.com/#ios-app" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://grepawk.com/#ios-app",
+          "name": "FinalCap - AI Video Editor",
+          "description": "FinalCap for iPhone, coming soon to the App Store: edit video by describing it, with edits applied on your iPhone.",
+          "applicationCategory": "MultimediaApplication",
+          "operatingSystem": "iOS",
+          "author": { "@type": "Person", "name": "Yisheng Jiang" }
+        }
+      ]
+    }
+    </script>
     <style>
         body {
             margin: 0;
@@ -16,11 +81,12 @@
             -webkit-tap-highlight-color: transparent;
         }
     </style>
+    <noscript><style>.landing .reveal { opacity: 1 !important; transform: none !important; }</style></noscript>
 </head>
 <body>
     <div id="root"></div>
     <script>
-      window.__FINALCUT_SAMPLE_TOKEN_PROMISE__ = fetch('https://grepawk.com/api/sample-access-token')
+      window.__FINALCUT_SAMPLE_TOKEN_PROMISE__ = fetch('/api/sample-access-token')
         .then((response) => (response.ok ? response.json() : null))
         .then((data) => data && data.token ? data.token : null)
         .catch(() => null);

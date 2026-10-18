@@ -44,7 +44,6 @@ describe('Duplicate Message Fix - Logic Verification', () => {
       }]
     };
     
-    // Use the helper to apply the NEW LOGIC
     const currentMessages = createAssistantMessage(msg, 1);
     
     // Verify: Should have exactly ONE assistant message
@@ -58,12 +57,10 @@ describe('Duplicate Message Fix - Logic Verification', () => {
   });
 
   it('should create a single assistant message with content when response has only content', () => {
-    // Simulated API response with ONLY content
     const msg = {
       content: "Video processed successfully."
     };
     
-    // Use the helper to apply the NEW LOGIC
     const currentMessages = createAssistantMessage(msg, 1);
     
     // Verify: Should have exactly ONE assistant message
@@ -88,7 +85,6 @@ describe('Duplicate Message Fix - Logic Verification', () => {
       }]
     };
     
-    // Use the helper to apply the NEW LOGIC
     const currentMessages = createAssistantMessage(msg, 1);
     
     // Verify: Should have exactly ONE assistant message
@@ -138,12 +134,10 @@ describe('Duplicate Message Fix - Logic Verification', () => {
     // This demonstrates the BUG: TWO assistant messages were created
     expect(currentMessages.length).toBe(2);
     
-    // First message has content but no tool_calls
     expect(currentMessages[0].role).toBe('assistant');
     expect(currentMessages[0].content).toBe("I'll resize the video for you.");
     expect(currentMessages[0].tool_calls).toBeUndefined();
     
-    // Second message has tool_calls but null content
     expect(currentMessages[1].role).toBe('assistant');
     expect(currentMessages[1].content).toBeNull();
     expect(currentMessages[1].tool_calls).toBeDefined();

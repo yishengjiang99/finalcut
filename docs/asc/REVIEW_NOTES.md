@@ -21,7 +21,7 @@ FinalCap is a **video editor**: import a clip from Photos, request edits in a ch
 5. Optional: `Burn subtitles` / burn-in — wait for “Burning subtitles…” until the preview updates (sync process-video; no job poll).  
 6. Open **Export** and save/share.  
 
-If a Pro gate appears: use **Sandbox** IAP (`com.grepawk.finalcut.subscription.monthly`) or the review promo/comp account described below.
+If a Pro gate appears: use **Sandbox** IAP (`com.ragnus.w2.subscription.monthly`) or the review promo/comp account described below.
 
 ## Demo account (fill before submit)
 
@@ -33,7 +33,7 @@ If a Pro gate appears: use **Sandbox** IAP (`com.grepawk.finalcut.subscription.m
 
 ## In-App Purchase
 
-- Product: `com.grepawk.finalcut.subscription.monthly` (auto-renewable; confirm duration/price in ASC).  
+- Product: `com.ragnus.w2.subscription.monthly` (auto-renewable; confirm duration/price in ASC).  
 - Restore Purchases is available on the paywall.  
 - **No** Stripe / external checkout is used to unlock iOS features.  
 - Web subscriptions on grepawk.com are separate and do not replace StoreKit inside the app.

@@ -17,7 +17,6 @@ vi.mock('../server/config.js', () => ({
   IOS_FREE_DAILY_INFERENCE_LIMIT: 3,
 }));
 vi.mock('../db.js', () => ({
-  saveLesson: vi.fn().mockResolvedValue(undefined),
   enqueueChatInteraction: vi.fn(),
   findUserByApiToken: vi.fn(),
   consumeDailyInference: vi.fn(),

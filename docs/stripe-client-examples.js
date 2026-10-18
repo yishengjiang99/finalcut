@@ -27,7 +27,6 @@ async function handlePayment() {
 
     const { url } = await response.json();
     
-    // Redirect to Stripe Checkout
     window.location.href = url;
   } catch (error) {
     console.error('Payment error:', error);
@@ -39,13 +38,11 @@ async function handlePayment() {
  * Example 2: Handle success page after payment
  */
 function handlePaymentSuccess() {
-  // This runs on your success page
   const urlParams = new URLSearchParams(window.location.search);
   const sessionId = urlParams.get('session_id');
   
   if (sessionId) {
     console.log('Payment successful! Session ID:', sessionId);
-    // You can display a success message to the user
     // The webhook on the server will handle fulfillment
     document.getElementById('success-message').innerText = 
       'Thank you for your payment! Your order is being processed.';
@@ -154,7 +151,6 @@ async function createCheckoutWithErrorHandling(priceId) {
   }
 }
 
-// Export for use in modules
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     handlePayment,

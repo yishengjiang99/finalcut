@@ -1,0 +1,100 @@
+name: ASC cancel review (pull from review)
+
+# Pulls FinalCap (com.ragnus.w2) out of App Review by cancelling the open
+# reviewSubmission (PATCH canceled=true), then polls until the version is editable again
+# (DEVELOPER_REJECTED / PREPARE_FOR_SUBMISSION). Never submits anything.
+# By default only WAITING_FOR_REVIEW / UNRESOLVED_ISSUES submissions are cancelled; an
+# IN_REVIEW submission is reported and left alone unless allow_in_review is ticked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_in_review:
+        description: Also cancel a submission that is already IN_REVIEW
+        type: boolean
+        default: false
+
+concurrency:
+  group: asc-finalcap-upload
+  cancel-in-progress: false
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Cancel open review submission and wait for editable version
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUNDLE_ID: com.ragnus.w2
+          VERSION_STRING: "1.0"
+          ALLOW_IN_REVIEW: ${{ inputs.allow_in_review }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography requests
+          python3 <<'PY'
+          import os, sys, time
+          import jwt, requests
+          BASE = "https://api.appstoreconnect.apple.com"
+          allow_in_review = os.environ.get("ALLOW_IN_REVIEW", "false").lower() == "true"
+          ver_str = os.environ["VERSION_STRING"].strip()
+          def token():
+            now = int(time.time())
+            p8 = os.environ["APP_STORE_CONNECT_API_KEY_P8"].replace("\\n", "\n").strip()
+            return jwt.encode({"iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(), "iat": now, "exp": now + 1100,
+                               "aud": "appstoreconnect-v1"}, p8, algorithm="ES256",
+                              headers={"kid": os.environ["APP_STORE_CONNECT_KEY_ID"].strip()})
+          def api(method, path, body=None, ok=()):
+            r = requests.request(method, BASE + path, json=body, headers={"Authorization": "Bearer " + token()}, timeout=90)
+            if r.status_code >= 300 and r.status_code not in ok:
+              raise SystemExit(f"{method} {path} -> {r.status_code}: {r.text[:1500]}")
+            return r.status_code, (r.json() if r.text else {})
+          _, apps = api("GET", f"/v1/apps?filter[bundleId]={os.environ['BUNDLE_ID']}")
+          app_id = apps["data"][0]["id"]
+          _, vers = api("GET", f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&filter[versionString]={ver_str}")
+          ver = vers["data"][0]
+          vid = ver["id"]
+          vstate = ver["attributes"].get("appStoreState")
+          print("APP", app_id, "VERSION", vid, ver_str, vstate, ver["attributes"].get("appVersionState"))
+          if vstate in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"):
+            print("RESULT version already editable:", vstate); sys.exit(0)
+          if vstate in ("PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "PROCESSING_FOR_APP_STORE"):
+            raise SystemExit(f"RESULT version is {vstate} (approved/released); cannot pull from review")
+          # Submissions come back in no guaranteed order and the list is capped: page through all of them
+          subs, path = [], f"/v1/apps/{app_id}/reviewSubmissions?filter[platform]=IOS&limit=200"
+          while path:
+            _, page = api("GET", path)
+            subs += page.get("data", [])
+            nxt = (page.get("links") or {}).get("next")
+            path = nxt.replace(BASE, "") if nxt else None
+          for s in subs:
+            a = s["attributes"]
+            print("SUBMISSION", s["id"], a.get("state"), "submitted=", a.get("submittedDate"))
+          open_ = [s for s in subs if s["attributes"].get("state") in ("WAITING_FOR_REVIEW", "UNRESOLVED_ISSUES", "IN_REVIEW", "CANCELING")]
+          if not open_:
+            raise SystemExit(f"RESULT no open review submission found, version is {vstate}")
+          for s in open_:
+            st = s["attributes"]["state"]
+            if st == "IN_REVIEW" and not allow_in_review:
+              raise SystemExit(f"RESULT submission {s['id']} is IN_REVIEW; not cancelled (re-run with allow_in_review to force)")
+            if st != "CANCELING":
+              code, resp = api("PATCH", f"/v1/reviewSubmissions/{s['id']}",
+                               {"data": {"type": "reviewSubmissions", "id": s["id"], "attributes": {"canceled": True}}}, ok=(409, 422))
+              print("PATCH canceled=true", s["id"], "->", code, (resp.get("data") or {}).get("attributes") or resp.get("errors"))
+              if code >= 300:
+                raise SystemExit(f"RESULT cancel refused for {s['id']} ({st})")
+          for i in range(60):
+            time.sleep(10)
+            sst = []
+            for s in open_:  # a cancelled submission can vanish (404) once Apple finishes: count as done
+              code, resp = api("GET", f"/v1/reviewSubmissions/{s['id']}", ok=(404,))
+              sst.append("GONE(404)" if code == 404 else resp["data"]["attributes"].get("state"))
+            vstate = api("GET", f"/v1/appStoreVersions/{vid}")[1]["data"]["attributes"].get("appStoreState")
+            print(f"poll {i+1}: submissions={sst} version={vstate}")
+            if vstate in ("DEVELOPER_REJECTED", "PREPARE_FOR_SUBMISSION") and all(x not in ("CANCELING", "WAITING_FOR_REVIEW", "IN_REVIEW") for x in sst):
+              print("RESULT pulled from review; version now", vstate); sys.exit(0)
+          raise SystemExit(f"RESULT timed out; version={vstate} submissions={sst}")
+          PY

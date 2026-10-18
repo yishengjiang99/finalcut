@@ -9,24 +9,20 @@ describe('Stripe Payment Endpoints', () => {
     });
 
     it('should return 400 if required fields are missing', () => {
-      // Mock test to verify error handling
       const mockRequest = {
         body: {
           priceId: 'price_123'
-          // Missing successUrl and cancelUrl
         }
       };
       
       // Verify that at least one required field is present
       expect(mockRequest.body.priceId).toBe('price_123');
       
-      // Check that other required fields are missing
       expect(mockRequest.body.successUrl).toBeUndefined();
       expect(mockRequest.body.cancelUrl).toBeUndefined();
     });
 
     it('should return sessionId and url on successful creation', () => {
-      // Mock successful response structure
       const mockResponse = {
         sessionId: 'cs_test_123',
         url: 'https://checkout.stripe.com/pay/cs_test_123'
@@ -59,7 +55,6 @@ describe('Stripe Payment Endpoints', () => {
     });
 
     it('should return verified status on successful verification', () => {
-      // Mock successful verification response
       const mockResponse = {
         verified: true,
         paymentStatus: 'paid',

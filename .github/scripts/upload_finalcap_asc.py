@@ -117,15 +117,25 @@ def main():
     has_free = False
     if sched.get("data"):
         for inc in (sched.get("included") or []):
-            if inc.get("type") == "appPrices":
-                st2, full = api("GET", f"/v1/appPrices/{inc['id']}?include=appPricePoint")
-                pt = next((i for i in (full.get("included") or []) if i.get("type") == "appPricePoints"), {})
-                try:
-                    if float((pt.get("attributes") or {}).get("customerPrice") or "x") == 0:
-                        has_free = True
-                        break
-                except (ValueError, TypeError):
-                    continue
+            if inc.get("type") != "appPrices":
+                continue
+            # The manualPrices include carries composite ids (base64 of
+            # app+territory+price) that are NOT directly addressable:
+            # GET /v1/appPrices/{composite} 404s. Resolve the price point
+            # through the relationship instead.
+            rel = (inc.get("relationships") or {}).get("appPricePoint") or {}
+            pp_id = (rel.get("data") or {}).get("id")
+            if not pp_id:
+                continue
+            st2, pp = api("GET", f"/v1/appPricePoints/{pp_id}", ok404=True)
+            if st2 == 404:
+                continue
+            try:
+                if float((pp.get("data", {}).get("attributes") or {}).get("customerPrice") or "x") == 0:
+                    has_free = True
+                    break
+            except (ValueError, TypeError):
+                continue
     if has_free:
         print("free price already active")
     else:

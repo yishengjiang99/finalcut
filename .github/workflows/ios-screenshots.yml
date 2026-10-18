@@ -1,0 +1,86 @@
+name: iOS simulator screenshots (paywall review shot)
+
+# Job `paywall`: the real PaywallView with FinalCut.storekit prices (ios/FinalCutTests/PaywallScreenshotTests.swift,
+# SKTestSession) on an iPhone 6.9" simulator (1320x2868). Artifact only; copy into
+# docs/asc/review/subscription-paywall.png, then run "ASC create subscriptions" to upload it to the subscription.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  paywall:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          for app in /Applications/Xcode_16.4.app /Applications/Xcode_16.3.app /Applications/Xcode_16.2.app /Applications/Xcode_26.0.app /Applications/Xcode.app; do
+            if [[ -d "$app" ]]; then sudo xcode-select -s "$app"; break; fi
+          done
+          xcodebuild -version
+
+      - name: Boot iPhone 6.9" simulator (clean status bar)
+        run: |
+          set -euo pipefail
+          SDKV=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          echo "simulator SDK $SDKV"
+          # runtime matching the selected Xcode's SDK (a newer runtime fails with "No matching device")
+          RT=$(xcrun simctl list runtimes -j | SDKV="$SDKV" python3 -c 'import json,os,sys; v=[int(n) for n in os.environ["SDKV"].split(".")]; r=[x for x in json.load(sys.stdin)["runtimes"] if x["platform"]=="iOS" and x["isAvailable"]]; key=lambda x:[int(n) for n in x["version"].split(".")]; ok=[x for x in r if key(x)[:2]==v[:2]] or [x for x in r if key(x)<=v] or r; print(sorted(ok,key=key)[-1]["identifier"])')
+          DT=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys,re; d=[x for x in json.load(sys.stdin)['devicetypes'] if re.search(r'iPhone 1[6-9] Pro Max', x['name'])]; print(sorted(d,key=lambda x:x['name'])[0]['identifier'])")
+          echo "runtime=$RT devicetype=$DT"
+          SIM=$(xcrun simctl create paywall-shot "$DT" "$RT")
+          xcrun simctl boot "$SIM"
+          xcrun simctl bootstatus "$SIM" -b
+          xcrun simctl ui "$SIM" appearance dark || true
+          xcrun simctl status_bar "$SIM" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100 || true
+          echo "SIM=$SIM" >> "$GITHUB_ENV"
+
+      - name: Run PaywallScreenshotTests and capture the simulator screen
+        env:
+          TEST_RUNNER_FC_PAYWALL_SHOT: "1"
+          TEST_RUNNER_FC_PAYWALL_OUT: ${{ runner.temp }}/paywall
+        working-directory: ios
+        run: |
+          set -uo pipefail
+          OUT="$RUNNER_TEMP/paywall"; mkdir -p "$OUT" "$GITHUB_WORKSPACE/shots"
+          xcodebuild test \
+            -project FinalCut.xcodeproj -scheme FinalCut \
+            -destination "id=$SIM" \
+            -only-testing:FinalCutTests/PaywallScreenshotTests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/paywall.xcresult" \
+            CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/paywall-xcodebuild.log" 2>&1 &
+          XB=$!
+          for i in $(seq 1 3000); do
+            [[ -f "$OUT/paywall-ready" ]] && break
+            kill -0 $XB 2>/dev/null || break
+            sleep 1
+          done
+          if [[ -f "$OUT/paywall-ready" ]]; then
+            sleep 2
+            xcrun simctl io "$SIM" screenshot --type=png "$GITHUB_WORKSPACE/shots/subscription-paywall.png" || {
+              echo "::warning::simctl screenshot failed; using the in-process render"
+              rm -f "$GITHUB_WORKSPACE/shots/subscription-paywall.png"; }
+            touch "$OUT/paywall-done"
+          fi
+          wait $XB; rc=$?
+          grep -E "paywall-shot|error:|XCTAssert|Test Case|failed|passed|skipped" "$RUNNER_TEMP/paywall-xcodebuild.log" | tail -60
+          [[ $rc -eq 0 ]] || { tail -80 "$RUNNER_TEMP/paywall-xcodebuild.log"; exit $rc; }
+          cp "$OUT/paywall-render.png" "$GITHUB_WORKSPACE/shots/" || true
+          if [[ ! -s "$GITHUB_WORKSPACE/shots/subscription-paywall.png" ]]; then
+            cp "$GITHUB_WORKSPACE/shots/paywall-render.png" "$GITHUB_WORKSPACE/shots/subscription-paywall.png"
+          fi
+          test -s "$GITHUB_WORKSPACE/shots/subscription-paywall.png"
+          sips -g pixelWidth -g pixelHeight "$GITHUB_WORKSPACE"/shots/*.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paywall-screenshot
+          path: |
+            shots/
+            ${{ runner.temp }}/paywall-xcodebuild.log
+          if-no-files-found: ignore

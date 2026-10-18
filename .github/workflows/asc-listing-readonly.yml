@@ -1,0 +1,180 @@
+name: ASC listing snapshot (read-only)
+
+# GET-only dump of the live App Store Connect listing for version 1.0:
+# app name/subtitle, version localizations (description, promo, keywords)
+# and screenshot sets in display order. No writes. Secrets are only used
+# to sign the JWT and are never printed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "listing = listing snapshot; review = review/rejection state dump (artifact); list-apps = GET-only inventory of every app in the account; capabilities = GET-only bundle id capabilities + App Store profiles (push entitlement check); remove-from-sale = WRITES (allowlisted legacy apps only)"
+        type: choice
+        options: [listing, review, list-apps, capabilities, remove-from-sale]
+        default: listing
+      app_ids:
+        description: "remove-from-sale only: space/comma separated app ids (must be in the script's hard-coded allowlist; empty = all 6 allowlisted)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  capabilities:
+    if: ${{ inputs.mode == 'capabilities' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Bundle id capabilities + profiles (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import base64, json, os, re, time, urllib.request
+          import jwt
+          p8 = os.environ["APP_STORE_CONNECT_API_KEY_P8"].replace("\\n", "\n").strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(), "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
+                             p8, algorithm="ES256", headers={"kid": os.environ["APP_STORE_CONNECT_KEY_ID"].strip()})
+          def get(path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method="GET",
+                                           headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req, timeout=90) as r:
+                  return json.loads(r.read().decode() or "{}")
+          for ident in ("com.ragnus.w2", "com.ragnus.mvp"):
+              ids = get(f"/v1/bundleIds?filter[identifier]={ident}&limit=5")["data"]
+              for b in ids:
+                  if b["attributes"].get("identifier") != ident:
+                      continue
+                  caps = get(f"/v1/bundleIds/{b['id']}/bundleIdCapabilities")["data"]
+                  print(ident, "capabilities:", sorted(c["attributes"].get("capabilityType") for c in caps))
+                  profs = get(f"/v1/bundleIds/{b['id']}/profiles?limit=50")["data"]
+                  for pr in profs:
+                      a = pr["attributes"]
+                      content = base64.b64decode(a.get("profileContent") or "").decode("latin-1")
+                      aps = re.search(r"<key>aps-environment</key>\s*<string>([^<]+)</string>", content)
+                      print(f"  profile '{a.get('name')}' type={a.get('profileType')} state={a.get('profileState')} expires={a.get('expirationDate')} aps-environment={aps.group(1) if aps else 'ABSENT'}")
+          PY
+
+  snapshot:
+    if: ${{ inputs.mode == 'listing' || inputs.mode == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dump live listing (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_ID: "6815060815"
+          VERSION: "1.0"
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request
+          import jwt
+          p8 = os.environ["APP_STORE_CONNECT_API_KEY_P8"].replace("\\n", "\n").strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(), "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
+                             p8, algorithm="ES256", headers={"kid": os.environ["APP_STORE_CONNECT_KEY_ID"].strip()})
+          def get(path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method="GET",
+                                           headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req, timeout=90) as r:
+                  return json.loads(r.read().decode() or "{}")
+          app_id = os.environ["APP_ID"]
+          out = {"app": app_id}
+          infos = get(f"/v1/apps/{app_id}/appInfos")["data"]
+          out["appInfos"] = []
+          for info in infos:
+              locs = get(f"/v1/appInfos/{info['id']}/appInfoLocalizations")["data"]
+              out["appInfos"].append({"state": info["attributes"].get("state") or info["attributes"].get("appStoreState"),
+                                      "localizations": [{k: l["attributes"].get(k) for k in ("locale", "name", "subtitle", "privacyPolicyUrl")} for l in locs]})
+          vers = get(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&filter[versionString]={os.environ['VERSION']}")["data"]
+          v = vers[0]
+          out["version"] = {"id": v["id"], "versionString": v["attributes"]["versionString"], "state": v["attributes"].get("appStoreState")}
+          out["localizations"] = []
+          for loc in get(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations?limit=50")["data"]:
+              a = loc["attributes"]
+              entry = {k: a.get(k) for k in ("locale", "description", "promotionalText", "keywords", "whatsNew", "marketingUrl", "supportUrl")}
+              entry["screenshotSets"] = []
+              for st in get(f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets?limit=50")["data"]:
+                  shots = get(f"/v1/appScreenshotSets/{st['id']}/appScreenshots?limit=50")["data"]
+                  entry["screenshotSets"].append({
+                      "displayType": st["attributes"].get("screenshotDisplayType"),
+                      "shots": [{"order": i + 1, "fileName": s["attributes"].get("fileName"),
+                                 "sourceFileChecksum": s["attributes"].get("sourceFileChecksum"),
+                                 "width": (s["attributes"].get("imageAsset") or {}).get("width"),
+                                 "height": (s["attributes"].get("imageAsset") or {}).get("height"),
+                                 "templateUrl": (s["attributes"].get("imageAsset") or {}).get("templateUrl"),
+                                 "state": ((s["attributes"].get("assetDeliveryState") or {}).get("state"))} for i, s in enumerate(shots)]})
+              out["localizations"].append(entry)
+          print("LISTING_JSON_BEGIN")
+          print(json.dumps(out, indent=2, ensure_ascii=False))
+          print("LISTING_JSON_END")
+          PY
+
+  review:
+    if: ${{ inputs.mode == 'review' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump review state (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_ID: "6815060815"
+          OUT: asc-review-dump.json
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 .github/scripts/asc_review_dump.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asc-review-dump
+          path: asc-review-dump.json
+          retention-days: 7
+
+  list-apps:
+    if: ${{ inputs.mode == 'list-apps' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory all apps (GET only)
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 .github/scripts/asc_list_apps.py
+
+  remove-from-sale:
+    # Approved 2026-10-10: removes ONLY the 6 allowlisted legacy apps (+ their IAPs) from sale.
+    # Never deletes apps. The script refuses any id outside its hard-coded allowlist.
+    if: ${{ inputs.mode == 'remove-from-sale' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove allowlisted apps from sale
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_IDS: ${{ inputs.app_ids }}
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 .github/scripts/asc_remove_from_sale.py

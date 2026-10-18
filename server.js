@@ -3,14 +3,20 @@ import cors from 'cors';
 import { initDatabase } from './src/db.js';
 import { PORT, stripe, nodeEnvWarning } from './src/server/config.js';
 import { setupAuth, authRouter } from './src/server/auth.js';
+import { MySQLSessionStore } from './src/server/sessionStore.js';
 import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
+import { ffmpegCliRouter } from './server/tools/ffmpeg-cli-tool.js';
 import { chatRouter } from './src/server/chat.js';
 import { jobsRouter } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
+import { v2Router } from './src/server/v2.js';
+import { telemetryRouter, scheduleTelemetryPurge } from './src/server/telemetry.js';
+import { pushRouter, getPushStore } from './src/server/push/router.js';
+import { scheduleLifecycle } from './src/server/push/lifecycle.js';
 
 const app = express();
 
@@ -30,32 +36,42 @@ app.use(createHealthRouter());
 // iOS suggestion pills: public, pre-login, no session/DB (own rate limiter).
 app.use(iosSuggestionsRouter);
 
-// Initialize database
+// Anonymous first-party telemetry: before the session middleware so it never sets a cookie
+// (own small JSON parser + rate limiter; stores no IP). See src/server/telemetry.js.
+app.use(telemetryRouter);
+if (process.env.NODE_ENV !== 'test') scheduleTelemetryPurge();
+
+let sessionStore;
 try {
   await initDatabase();
+  sessionStore = new MySQLSessionStore();
 } catch (error) {
   console.warn('WARNING: Could not initialize database. Google login features may not work.');
   console.warn('Error:', error.message);
+  console.warn('WARNING: Login sessions are kept in memory and will not survive a restart.');
 }
 
 // Configure session middleware, Passport, and Google OAuth strategy
-setupAuth(app);
+setupAuth(app, { sessionStore });
 
 // Stripe webhook endpoint must be mounted before JSON body parsing
 // so Stripe signature verification receives the raw body.
 app.use(stripeWebhookRouter);
 
-// JSON body parsing
 app.use(express.json({ limit: '950mb' }));
 
-// Routes
 app.use(authRouter);
 app.use(stripeRouter);
 app.use(captionsRouter);
 app.use(videoRouter);
+app.use(ffmpegCliRouter);
 app.use(chatRouter);
 app.use(jobsRouter);
 app.use(lyricCaptionsRouter);
+app.use(v2Router);
+// Push notifications (token registration, lifecycle; dry-run by default). See docs/push-lifecycle.md.
+app.use(pushRouter);
+scheduleLifecycle(getPushStore);
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);

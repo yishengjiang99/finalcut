@@ -1,7 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { setUploadConsentHandler, setCloudCaptions } from '../engineMode.js';
+
+vi.mock('../wasm/ffmpegEngine.js', async (importOriginal) => (await import('./helpers/noWasmEngine.js')).noWasmEngine(importOriginal));
+beforeAll(() => {
+  setUploadConsentHandler(() => true);
+  setCloudCaptions(true);
+});
 import { toolFunctions } from '../toolFunctions.js';
 
-// Mock fetch for server API calls
 global.fetch = vi.fn();
 global.FormData = class FormData {
   constructor() {
@@ -47,7 +53,6 @@ describe('toolFunctions', () => {
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
     global.Blob = vi.fn();
     
-    // Mock successful server response by default
     global.fetch.mockResolvedValue(makeStreamResponse(new ArrayBuffer(8)));
   });
 
@@ -405,7 +410,6 @@ describe('toolFunctions', () => {
     });
 
     it('should handle base64 encoded audio data', async () => {
-      // Create a simple base64 encoded string
       const base64Audio = 'data:audio/mp3;base64,SGVsbG8gV29ybGQ=';
       const result = await toolFunctions.add_audio_track(
         { audioFile: base64Audio, mode: 'replace' },
@@ -1346,15 +1350,6 @@ describe('toolFunctions', () => {
 
   describe('get_supported_formats', () => {
     it('should return supported formats info', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          video: { formats: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'ogv'], codecs: ['libx264', 'libx265', 'auto'] },
-          audio: { formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'], bitrates: ['128k', '192k', '320k'] },
-          extract: { formats: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'] }
-        })
-      });
-
       const result = await toolFunctions.get_supported_formats(
         {},
         mockVideoFileData,
@@ -1366,21 +1361,16 @@ describe('toolFunctions', () => {
       expect(mockAddMessage).toHaveBeenCalled();
     });
 
-    it('should handle server error gracefully', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: 'Unauthorized' })
-      });
+    it('answers from the in-browser engine without asking the server', async () => {
+      global.fetch.mockRejectedValue(new Error('offline'));
       const result = await toolFunctions.get_supported_formats(
         {},
         mockVideoFileData,
         mockSetVideoFileData,
         mockAddMessage
       );
-      expect(result).toContain('Failed to fetch supported formats');
-      expect(mockAddMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ text: expect.stringContaining('Error fetching supported formats') })
-      );
+      expect(result).toContain('Supported conversion formats');
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 
@@ -1434,7 +1424,8 @@ describe('toolFunctions', () => {
       expect(result).toMatch(/burn_in=false|Soft subtitle/i);
       expect(mockSetVideoFileData).not.toHaveBeenCalled();
       expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(mockAddMessage).toHaveBeenCalledTimes(1);
+      // soft-subtitle preview + SRT download chip
+      expect(mockAddMessage).toHaveBeenCalledTimes(2);
     });
 
     it('should handle caption generation failure gracefully', async () => {

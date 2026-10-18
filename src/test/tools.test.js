@@ -296,3 +296,14 @@ describe('Tools Module', () => {
     });
   });
 });
+
+describe('tool coverage', async () => {
+  const { tools } = await import('../tools.js');
+  const { toolFunctions } = await import('../toolFunctions.js');
+  // Every tool offered to the model must have a runnable implementation, or the chat loop
+  // reports unknown_tool and spins until the round limit (audio_vibrato did exactly this).
+  it('every tool in tools.js has an implementation in toolFunctions.js', () => {
+    const missing = tools.map(t => t.function.name).filter(name => typeof toolFunctions[name] !== 'function');
+    expect(missing).toEqual([]);
+  });
+});
