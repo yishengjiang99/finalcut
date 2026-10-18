@@ -113,11 +113,20 @@ struct EditStack: Equatable, Sendable {
     var canUndo: Bool { !entries.isEmpty || !history.isEmpty }
     var canRedo: Bool { !redoStates.isEmpty }
 
+    /// Index of the latest captions entry (`generate_captions` or `lyric_captions`); the latest wins.
+    private var latestCaptionIndex: Int? {
+        entries.lastIndex { entry in
+            switch entry.op {
+            case .captions, .lyricCaptions: return true
+            default: return false
+            }
+        }
+    }
+
     /// Burned-in captions on the final timeline: the latest captions entry, remapped through
-    /// any trims/speed changes made after it.
+    /// any trims/speed changes made after it. Empty when the latest captions are lyric captions.
     var captionCues: [CaptionCue] {
-        guard let index = entries.lastIndex(where: { if case .captions = $0.op { return true }; return false }),
-              case .captions(var cues) = entries[index].op else { return [] }
+        guard let index = latestCaptionIndex, case .captions(var cues) = entries[index].op else { return [] }
         for entry in entries[(index + 1)...] {
             switch entry.op {
             case .trim(let start, let end): cues = CaptionFormatter.trimmed(cues, start: start, end: end)
@@ -126,5 +135,18 @@ struct EditStack: Equatable, Sendable {
             }
         }
         return cues
+    }
+
+    /// Lyric captions on the final timeline (when they are the latest captions), remapped the same way.
+    var lyricTrack: LyricCaptionTrack? {
+        guard let index = latestCaptionIndex, case .lyricCaptions(var track) = entries[index].op else { return nil }
+        for entry in entries[(index + 1)...] {
+            switch entry.op {
+            case .trim(let start, let end): track = track.trimmed(start: start, end: end)
+            case .speed(let factor): track = track.sped(factor: factor)
+            default: break
+            }
+        }
+        return track
     }
 }

@@ -27,6 +27,9 @@ enum NativeOp: Equatable, Sendable {
     /// Burned-in captions (on-device `generate_captions`), timed on the timeline at the
     /// moment they were made; later trims/speed changes remap them (`EditStack.captionCues`).
     case captions([CaptionCue])
+    /// Burned-in lyric / translated captions (`lyric_captions`, cloud transcription + translation),
+    /// drawn by `LyricCaptionRenderer`. Replaces earlier captions; follows later trims/speed changes.
+    case lyricCaptions(LyricCaptionTrack)
 
     var isTimeline: Bool {
         switch self { case .trim, .speed: return true; default: return false }
@@ -149,6 +152,8 @@ enum NativePlan: Equatable {
     case query(String)
     /// On-device captions: transcribe the edited clip's audio (async, not a plain op).
     case captions(language: String?, burnIn: Bool)
+    /// `lyric_captions`: cloud transcription + translation, burned in as an overlay.
+    case lyricCaptions(LyricCaptionRequest)
 }
 
 /// Maps schema tool calls (docs/api/tools-schema.v1.json) onto `NativeOp`s, validating
@@ -160,7 +165,7 @@ enum NativeToolParser {
         "flip_video_vertical", "resize_video", "resize_video_preset", "adjust_brightness",
         "adjust_contrast", "adjust_saturation", "adjust_hue", "apply_color_filter", "add_text",
         "adjust_audio_volume", "audio_fade", "get_video_dimensions", "get_supported_formats",
-        "convert_video_format", "convert_image_format", "generate_captions",
+        "convert_video_format", "convert_image_format", "generate_captions", "lyric_captions",
     ]
 
     static let photoTools: Set<String> = [
@@ -213,6 +218,34 @@ enum NativeToolParser {
             let burnIn = a["burn_in"]?.boolValue ?? (a["burn_in"]?.stringValue).map { $0.lowercased() != "false" } ?? true
             return .success(.captions(language: (language?.isEmpty ?? true) || language?.lowercased() == "auto" ? nil : language,
                                       burnIn: burnIn))
+
+        case "lyric_captions":
+            guard canvas.hasAudio else { return bad("no audio track") }
+            guard let target = a["target_language"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !target.isEmpty, target.count <= 64 else { return bad("target_language") }
+            var source: String?
+            if let raw = a["source_language"], raw != .null {
+                guard let s = raw.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), s.count <= 64 else { return bad("source_language") }
+                source = s.isEmpty || s.lowercased() == "auto" ? nil : s
+            }
+            var mode = LyricMode.auto
+            if let raw = a["mode"], raw != .null {
+                guard let m = raw.stringValue.flatMap({ LyricMode(rawValue: $0.lowercased()) }) else { return bad("mode") }
+                mode = m
+            }
+            var position: Double?
+            if a["position_from_bottom_pct"] != nil, a["position_from_bottom_pct"] != .null {
+                guard let p = num("position_from_bottom_pct"), p >= 0, p <= 45 else { return bad("position_from_bottom_pct 0..45") }
+                position = p
+            }
+            var fontSize: Int?
+            if a["font_size"] != nil, a["font_size"] != .null {
+                guard let f = num("font_size"), f >= 8, f <= 400 else { return bad("font_size 8..400") }
+                fontSize = Int(f.rounded())
+            }
+            return .success(.lyricCaptions(LyricCaptionRequest(
+                targetLanguage: target, sourceLanguage: source, mode: mode,
+                positionFromBottomPct: position, fontSize: fontSize)))
 
         case "trim_video":
             guard let start = parseTime(a["start"]), let end = parseTime(a["end"]) else { return bad("start/end") }

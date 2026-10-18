@@ -14,8 +14,11 @@ struct FrameRenderer: @unchecked Sendable {
     /// Burned-in captions (final timeline) and their pre-rendered lines.
     let captions: [CaptionCue]
     private let captionImages: [Int: CIImage]
+    /// Lyric / translated captions (cloud transcription), pre-rendered per line.
+    let lyric: LyricCaptionTrack?
+    private let lyricImages: [Int: LyricCaptionImage]
 
-    init(ops: [NativeOp], sourceSize: CGSize, captions: [CaptionCue] = []) {
+    init(ops: [NativeOp], sourceSize: CGSize, captions: [CaptionCue] = [], lyric: LyricCaptionTrack? = nil) {
         let frameOps = ops.filter(\.isFrame)
         self.ops = frameOps
         self.sourceSize = sourceSize
@@ -35,6 +38,14 @@ struct FrameRenderer: @unchecked Sendable {
             if let image = Self.renderCaption(cue.text, canvas: size) { lines[index] = image }
         }
         captionImages = lines
+        self.lyric = lyric
+        var lyricLines: [Int: LyricCaptionImage] = [:]
+        if let lyric {
+            for (index, line) in lyric.lines.enumerated() {
+                if let rendered = LyricCaptionRenderer.render(line, canvas: size, track: lyric) { lyricLines[index] = rendered }
+            }
+        }
+        lyricImages = lyricLines
     }
 
     /// Canvas size after all frame ops (even-rounded for H.264).
@@ -80,6 +91,12 @@ struct FrameRenderer: @unchecked Sendable {
     /// The chain plus the caption active at `time` (seconds on the final timeline).
     func apply(to input: CIImage, time: Double) -> CIImage {
         let image = apply(to: input)
+        if let lyric {
+            guard let index = lyric.lineIndex(at: time), let rendered = lyricImages[index] else { return image }
+            return rendered.image
+                .transformed(by: CGAffineTransform(translationX: rendered.origin.x, y: rendered.origin.y))
+                .composited(over: image)
+        }
         guard let index = CaptionFormatter.cue(at: time, in: captions), let line = captionImages[index] else { return image }
         let size = image.extent.size
         let x = (size.width - line.extent.width) / 2

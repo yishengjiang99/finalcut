@@ -71,6 +71,7 @@ final class APIClient {
     var generateCaptionsURL: URL { url(for: APIEndpoints.generateCaptions) }
     var generateCaptionsDiarizedURL: URL { url(for: APIEndpoints.generateCaptionsDiarized) }
     var translateCaptionsURL: URL { url(for: APIEndpoints.translateCaptions) }
+    var lyricCaptionsURL: URL { url(for: APIEndpoints.lyricCaptions) }
     var createCheckoutSessionURL: URL { url(for: APIEndpoints.createCheckoutSession) }
     var verifyCheckoutSessionURL: URL { url(for: APIEndpoints.verifyCheckoutSession) }
     var ffmpegCliURL: URL { url(for: APIEndpoints.ffmpegCli) }
@@ -596,6 +597,105 @@ final class APIClient {
         let data = try await postAuthorized(url: translateCaptionsURL, body: body)
         do {
             return try decoder.decode(TranslateCaptionsResponse.self, from: data)
+        } catch {
+            throw APIError.decoding
+        }
+    }
+
+    // MARK: - Lyric captions (POST /api/lyric-captions, audio only)
+
+    /// Multipart body for `/api/lyric-captions`: the `audio` file plus the text fields.
+    static func makeLyricCaptionsBody(
+        audio: Data,
+        fileName: String,
+        mimeType: String,
+        fields: [(name: String, value: String)]
+    ) -> (data: Data, boundary: String) {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let crlf = "\r\n"
+        func append(_ string: String) { body.append(Data(string.utf8)) }
+        for field in fields {
+            append("--\(boundary)\(crlf)")
+            append("Content-Disposition: form-data; name=\"\(field.name)\"\(crlf)\(crlf)")
+            append("\(field.value)\(crlf)")
+        }
+        append("--\(boundary)\(crlf)")
+        append("Content-Disposition: form-data; name=\"audio\"; filename=\"\(fileName)\"\(crlf)")
+        append("Content-Type: \(mimeType)\(crlf)\(crlf)")
+        body.append(audio)
+        append(crlf)
+        append("--\(boundary)--\(crlf)")
+        return (body, boundary)
+    }
+
+    /// Text fields sent with the audio. `width`/`height` are both sent or neither.
+    static func lyricCaptionsFields(_ request: LyricCaptionRequest, width: Int?, height: Int?) -> [(name: String, value: String)] {
+        var fields: [(name: String, value: String)] = [("target_language", request.targetLanguage)]
+        if let source = request.sourceLanguage, !source.isEmpty { fields.append(("source_language", source)) }
+        fields.append(("mode", request.mode.rawValue))
+        if let pct = request.positionFromBottomPct { fields.append(("position_from_bottom_pct", String(pct))) }
+        if let size = request.fontSize { fields.append(("font_size", String(size))) }
+        if let width, let height, width > 0, height > 0 {
+            fields.append(("width", String(width)))
+            fields.append(("height", String(height)))
+        }
+        return fields
+    }
+
+    /// POST /api/lyric-captions → 202 `{ jobId, status, pollUrl, resultUrl }`.
+    func submitLyricCaptions(
+        audio: Data,
+        fileName: String,
+        mimeType: String,
+        request: LyricCaptionRequest,
+        width: Int?,
+        height: Int?
+    ) async throws -> JobEnqueueResponse {
+        let multipart = Self.makeLyricCaptionsBody(
+            audio: audio, fileName: fileName, mimeType: mimeType,
+            fields: Self.lyricCaptionsFields(request, width: width, height: height)
+        )
+        var urlRequest = makeRequest(
+            url: lyricCaptionsURL, method: "POST", auth: .bearerPreferred,
+            body: multipart.data, contentType: "multipart/form-data; boundary=\(multipart.boundary)"
+        )
+        urlRequest.timeoutInterval = 120
+        let (data, response) = try await session.data(for: urlRequest)
+        try Self.throwIfNeeded(response: response, data: data)
+        do {
+            return try decoder.decode(JobEnqueueResponse.self, from: data)
+        } catch {
+            throw APIError.decoding
+        }
+    }
+
+    /// Poll like the web client: 3 s × 1.5, capped at 10 s (the poll endpoint shares the general limiter).
+    func pollLyricCaptionsJob(
+        id: String,
+        initialInterval: TimeInterval = 3,
+        maxInterval: TimeInterval = 10,
+        maxWait: TimeInterval = 600,
+        onUpdate: (@MainActor (JobPollResponse) -> Void)? = nil
+    ) async throws -> JobPollResponse {
+        var interval = initialInterval
+        var waited: TimeInterval = 0
+        while true {
+            let status = try await fetchJobStatus(id: id)
+            await onUpdate?(status)
+            if status.status.isTerminal { return status }
+            guard waited < maxWait else { throw APIError.message("Lyric captions timed out") }
+            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            waited += interval
+            interval = min(interval * 1.5, maxInterval)
+        }
+    }
+
+    /// GET the finished job's `resultUrl` (JSON with the timed lines).
+    func fetchLyricCaptionsResult(id: String, resultUrl: String?) async throws -> LyricCaptionResult {
+        let data = try await downloadJobResult(id: id, resultUrl: resultUrl)
+        do {
+            return try decoder.decode(LyricCaptionResult.self, from: data)
         } catch {
             throw APIError.decoding
         }

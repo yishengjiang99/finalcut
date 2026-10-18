@@ -50,6 +50,8 @@ enum ToolCatalog {
         "extract_audio": [],
         "get_supported_formats": [],
         "generate_captions": [],
+        // Cloud transcription + translation, audio-only upload (docs/api/LYRIC_CAPTIONS.md).
+        "lyric_captions": ["target_language"],
         // Server-side FFmpeg fallback (POST /api/ffmpeg-cli[/run]). Known to the planner so an
         // unhandled request falls through to the cloud path instead of "unknown_tool"; never in
         // NativeToolParser.supportedTools, so on-device planning yields unsupportedOnDevice.
@@ -199,6 +201,9 @@ enum ToolCatalog {
             return .serverJob(operation: "audio_fade", args: args)
         case "ffmpeg_cli":
             return .ffmpegCli(arguments: arguments)
+        case "lyric_captions":
+            // Runs through `NativeToolParser` → `EditorViewModel.runLyricCaptions` (never the video upload path).
+            return .reject(error: "unsupported_on_device")
         default:
             return .serverJob(operation: serverOperation[tool] ?? tool, args: arguments)
         }

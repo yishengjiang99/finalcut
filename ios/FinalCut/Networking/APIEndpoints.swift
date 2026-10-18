@@ -15,6 +15,8 @@ enum APIEndpoints {
     static let generateCaptions = "/api/generate-captions"
     static let generateCaptionsDiarized = "/api/generate-captions-diarized"
     static let translateCaptions = "/api/translate-captions"
+    /// Audio-only upload → job (docs/api/LYRIC_CAPTIONS.md). Cloud processing ON + user consent only.
+    static let lyricCaptions = "/api/lyric-captions"
     static let createCheckoutSession = "/api/create-checkout-session"
     static let verifyCheckoutSession = "/api/verify-checkout-session"
     static let authGoogle = "/auth/google"

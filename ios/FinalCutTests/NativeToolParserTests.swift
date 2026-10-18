@@ -20,7 +20,7 @@ final class NativeToolParserTests: XCTestCase {
     }
 
     func testAllowlistIsTheBuild10Twenty() {
-        XCTAssertEqual(NativeToolParser.supportedTools.count, 21)
+        XCTAssertEqual(NativeToolParser.supportedTools.count, 22)
         XCTAssertTrue(NativeToolParser.isSupported("generate_captions"))
         XCTAssertFalse(NativeToolParser.isSupported("translate_captions"))
         XCTAssertFalse(NativeToolParser.isSupported("burn_subtitles"))

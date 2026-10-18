@@ -49,7 +49,7 @@ struct EditorView: View {
                 PreviewPaneView(
                     state: model.state,
                     videoURL: model.localVideoURL,
-                    processingMessage: model.processingOverlay.message,
+                    processingMessage: model.lyricStatus ?? model.processingOverlay.message,
                     playerItem: model.previewItem,
                     photo: model.previewPhoto,
                     showsDimmer: model.isCloudStepRunning
@@ -93,6 +93,19 @@ struct EditorView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
+        .alert(
+            model.pendingPrompt?.title ?? "",
+            isPresented: Binding(
+                get: { model.pendingPrompt != nil },
+                set: { if !$0 { model.resolvePrompt(primary: false) } }
+            ),
+            presenting: model.pendingPrompt
+        ) { prompt in
+            Button(prompt.primary) { model.resolvePrompt(primary: true) }
+            Button(prompt.secondary, role: .cancel) { model.resolvePrompt(primary: false) }
+        } message: { prompt in
+            Text(prompt.message)
+        }
         .sheet(isPresented: $appModel.isPaywallPresented) {
             PaywallView()
                 .environmentObject(appModel)
@@ -104,6 +117,7 @@ struct EditorView: View {
             model.refreshSuggestions()
             model.undoManager = undoManager
             model.apiClient = appModel.apiClient
+            model.onOpenSettings = { showSettings = true }
             model.onPaywallRequired = { [weak appModel] in
                 appModel?.presentPaywall(reason: .usageLimitReached)
             }
@@ -230,6 +244,15 @@ final class EditorViewModel: ObservableObject {
     @Published var captionArtifacts = CaptionArtifacts()
     /// Import-step error (`import.failed.format`); never an edit card.
     @Published var importError: String?
+    /// Two-button confirmation currently on screen (cloud upload consent, Cloud-off notice).
+    @Published var pendingPrompt: CloudPrompt?
+    /// Progress line for lyric captions ("Uploading audio…", "Listening to the song…", …).
+    @Published var lyricStatus: String?
+    /// Tests answer prompts without UI (return true for the primary button).
+    var promptHandler: ((CloudPrompt) async -> Bool)?
+    /// "Open Settings" on the Cloud-off notice: shows the app's Cloud processing setting.
+    var onOpenSettings: (() -> Void)?
+    private var promptContinuation: CheckedContinuation<Bool, Never>?
 
     /// Photos and videos (photo mode, NATIVE_EDIT_UX.md §7).
     nonisolated static var pickerFilter: PHPickerFilter { .any(of: [.images, .videos]) }
@@ -727,7 +750,20 @@ final class EditorViewModel: ObservableObject {
         return (data, videoURL)
     }
 
-    private func runGenerateCaptions(language: String = "auto") async {
+    /// Server captions upload the clip, so they only run with Cloud processing on and after the
+    /// user confirms. (With it off captions stay on the device: `OnDeviceCaptioner`.)
+    private func confirmServerCaptionsUpload() async -> Bool {
+        guard cloudProcessingEnabled else { return false }
+        return await confirm(LyricCaptionsCopy.serverCaptionsPrompt)
+    }
+
+    func runGenerateCaptions(language: String = "auto", confirmed: Bool = false) async {
+        if !confirmed, !(await confirmServerCaptionsUpload()) {
+            // Not now (or Cloud processing off): nothing was sent.
+            state = localVideoURL == nil ? .empty : .ready
+            processingOverlay = .editing
+            return
+        }
         do {
             let client = try await ensureClientAndToken()
             let (videoData, videoURL) = try readLocalVideoData()
@@ -759,6 +795,10 @@ final class EditorViewModel: ObservableObject {
     }
 
     private func runTranslateCaptions(targetLanguage: String) async {
+        guard cloudProcessingEnabled else {
+            state = localVideoURL == nil ? .empty : .ready
+            return
+        }
         do {
             guard let srt = captionArtifacts.srt, !srt.isEmpty else {
                 state = .failed
@@ -810,6 +850,10 @@ final class EditorViewModel: ObservableObject {
 
     /// Sync burn-in via POST /api/process-video (never jobs).
     private func runBurnIn() async {
+        guard cloudProcessingEnabled else {
+            state = localVideoURL == nil ? .empty : .ready
+            return
+        }
         do {
             guard let srt = captionArtifacts.srt, !srt.isEmpty else {
                 state = .failed
@@ -1092,6 +1136,8 @@ final class EditorViewModel: ObservableObject {
             return record(localQueryResult(name, media: await currentMedia()), kind: nil)
         case .success(.captions(let language, let burnIn)):
             return await runOnDeviceCaptions(call: call, stack: stack, language: language, burnIn: burnIn)
+        case .success(.lyricCaptions(let request)):
+            return await runLyricCaptions(call: call, stack: stack, request: request)
         case .success(.apply(let op)):
             stack.push(EditEntry(tool: tool, op: op, toolCallId: call.id))
             commitEdit(stack)
@@ -1198,6 +1244,161 @@ final class EditorViewModel: ObservableObject {
         ]), kind: nil)
     }
 
+    // MARK: - Confirmation prompts
+
+    /// Shows a two-button prompt and waits for the answer (true = primary button).
+    func confirm(_ prompt: CloudPrompt) async -> Bool {
+        if let promptHandler { return await promptHandler(prompt) }
+        promptContinuation?.resume(returning: false)
+        promptContinuation = nil
+        return await withCheckedContinuation { continuation in
+            promptContinuation = continuation
+            pendingPrompt = prompt
+        }
+    }
+
+    func resolvePrompt(primary: Bool) {
+        let continuation = promptContinuation
+        promptContinuation = nil
+        pendingPrompt = nil
+        continuation?.resume(returning: primary)
+    }
+
+    // MARK: - lyric_captions (cloud transcription + translation, audio only)
+
+    /// `lyric_captions`: with Cloud processing off nothing is ever sent (a notice offers the
+    /// setting). With it on, the user confirms every time, only the audio is uploaded, and the
+    /// timed lines come back as an undoable overlay burned in on preview and export.
+    private func runLyricCaptions(call: ClientToolCall, stack: EditStack, request: LyricCaptionRequest) async -> ClientToolResult {
+        func fail(_ code: String, copy: String? = nil) -> ClientToolResult {
+            if let copy { messages.append(ChatMessage(role: .assistant, content: copy)) }
+            return record(.failure(code, on: .device), kind: nil)
+        }
+        if stack.canvas.duration > LyricCaptionsLimits.maxSeconds {
+            return fail("audio_too_long", copy: LyricCaptionsCopy.tooLong)
+        }
+        guard cloudProcessingEnabled else {
+            // Default: nothing is uploaded. Offer the setting; the model explains in one line.
+            if await confirm(LyricCaptionsCopy.cloudOffPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) {
+                onOpenSettings?()
+            }
+            return fail("cloud_processing_off")
+        }
+        // Asked every time, no "don't ask again".
+        guard await confirm(LyricCaptionsCopy.uploadPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) else {
+            return fail("user_declined")
+        }
+        guard let client = apiClient else { return fail("lyric_captions_failed", copy: LyricCaptionsCopy.generic) }
+
+        state = .processing
+        isCloudStepRunning = true
+        lyricStatus = LyricCaptionsCopy.uploadingAudio
+        defer {
+            isCloudStepRunning = false
+            lyricStatus = nil
+            activeJobId = nil
+        }
+        let composed: ComposedVideo
+        if let current = composedVideo, editStack == stack {
+            composed = current
+        } else {
+            guard let fresh = try? await NativeComposer.compose(stack) else {
+                return fail("lyric_captions_failed", copy: LyricCaptionsCopy.generic)
+            }
+            composed = fresh
+        }
+        let audioURL: URL
+        do {
+            audioURL = try await LyricAudioExporter.exportM4A(composed)
+        } catch {
+            return fail("lyric_captions_failed", copy: LyricCaptionsCopy.generic)
+        }
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+        let bytes = (try? audioURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if bytes > LyricCaptionsLimits.maxBytes {
+            return fail("audio_too_large", copy: LyricCaptionsCopy.tooLong)
+        }
+
+        do {
+            try await prepareAuth(client)
+            let audio = try Data(contentsOf: audioURL)
+            let canvas = composed.renderSize
+            let enqueue = try await client.submitLyricCaptions(
+                audio: audio,
+                fileName: "audio.m4a",
+                mimeType: "audio/mp4",
+                request: request,
+                width: Int(canvas.width.rounded()),
+                height: Int(canvas.height.rounded())
+            )
+            activeJobId = enqueue.jobId
+            let mode = request.mode
+            lyricStatus = LyricCaptionsCopy.progressText(progress: 0, mode: mode, uploadFinished: true)
+            let final = try await client.pollLyricCaptionsJob(id: enqueue.jobId) { [weak self] status in
+                self?.lyricStatus = LyricCaptionsCopy.progressText(progress: status.progress, mode: mode, uploadFinished: true)
+            }
+            guard final.status == .succeeded else {
+                return lyricFailure(code: final.code, status: nil)
+            }
+            let result = try await client.fetchLyricCaptionsResult(id: enqueue.jobId, resultUrl: final.resultUrl)
+            let lines = result.lines.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start && !$0.displayText.isEmpty }
+            guard !lines.isEmpty else { return lyricFailure(code: "no_speech", status: nil) }
+
+            lyricStatus = LyricCaptionsCopy.addingCaptions
+            let track = LyricCaptionTrack(
+                lines: lines,
+                positionFromBottomPct: request.positionFromBottomPct ?? LyricCaptionStyle.defaultPositionPct,
+                fontSize: request.fontSize
+            )
+            guard var current = editStack else { return fail("no_media") }
+            current.push(EditEntry(tool: "lyric_captions", op: .lyricCaptions(track), toolCallId: call.id, executedOn: .server))
+            commitEdit(current)
+            await refreshPreview()
+            let target = result.targetLanguage ?? request.targetLanguage
+            messages.append(ChatMessage(
+                role: .system,
+                content: LyricCaptionsCopy.appliedLabel(song: result.song, language: result.language, targetLanguage: target)
+            ))
+            // Short result for the model: never the lyric text.
+            var output: [String: JSONValue] = [
+                "lineCount": .number(Double(lines.count)),
+                "targetLanguage": .string(target),
+                "mode": .string(result.mode ?? request.mode.rawValue),
+                "burnedIn": .bool(true),
+            ]
+            if let language = result.language { output["language"] = .string(language) }
+            if let song = result.song {
+                var info: [String: JSONValue] = [:]
+                if let title = song.title { info["title"] = .string(title) }
+                if let artist = song.artist { info["artist"] = .string(artist) }
+                if let url = song.url { info["url"] = .string(url) }
+                if let confidence = song.confidence { info["confidence"] = .string(confidence) }
+                output["song"] = .object(info)
+            }
+            return record(.success(on: .server, output: output), kind: nil)
+        } catch is CancellationError {
+            return .failure("cancelled", on: .server)
+        } catch let error as APIError {
+            if error.isPaywall {
+                handlePaywallIfNeeded(error)
+                return record(.failure("paywall", on: .server), kind: nil)
+            }
+            return lyricFailure(code: error.serverCode, status: error.httpStatusCode)
+        } catch {
+            return lyricFailure(code: nil, status: nil)
+        }
+    }
+
+    /// Friendly chat card for a lyric-captions error; nothing was applied.
+    private func lyricFailure(code: String?, status: Int?) -> ClientToolResult {
+        messages.append(ChatMessage(role: .assistant, content: LyricCaptionsCopy.failureCopy(code: code, status: status)))
+        let known: Set<String> = ["lyric_captions_unavailable", "no_speech", "lyric_captions_model_error", "audio_too_long",
+                                  "audio_too_large", "no_audio", "unsupported_audio_format", "audio_only", "invalid_arguments"]
+        let stable = code.flatMap { known.contains($0.lowercased()) ? $0.lowercased() : nil }
+            ?? (status == 503 ? "lyric_captions_unavailable" : "lyric_captions_failed")
+        return record(.failure(stable, on: .server), kind: nil)
+    }
+
     @discardableResult
     private func record(_ result: ClientToolResult, kind: EditFailureKind?) -> ClientToolResult {
         turnOutcome.record(result, kind: kind)
@@ -1286,6 +1487,9 @@ final class EditorViewModel: ObservableObject {
     }
 
     private func runCaptionsTool(language: String, translateLanguage: String?, burnIn: Bool) async -> ClientToolResult {
+        guard await confirmServerCaptionsUpload() else {
+            return .failure(cloudProcessingEnabled ? "user_declined" : "unsupported_on_device", on: .device)
+        }
         // Captions time against the edited clip: bake device edits in before uploading.
         if let stack = editStack, !stack.entries.isEmpty {
             isCloudStepRunning = true
@@ -1295,7 +1499,7 @@ final class EditorViewModel: ObservableObject {
             await rebaseStack(onto: flat)
         }
         processingOverlay = .generatingCaptions
-        await runGenerateCaptions(language: language)
+        await runGenerateCaptions(language: language, confirmed: true)
         guard captionArtifacts.hasSource else {
             return .failure("captions_failed", on: .server)
         }
