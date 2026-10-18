@@ -125,7 +125,9 @@ Errors (`{"error","code","operation":"lyric_captions"}`):
 | 503 | `lyric_captions_unavailable` | Missing `OPENAI_API_KEY`/`XAI_API_TOKEN`, ffmpeg or ffprobe. The message names what's missing. |
 | job `failed` | `no_speech` | Nothing was transcribed. |
 | job `failed` | `lyric_captions_model_error` | The model's reply wasn't usable. |
-| 404 | | Poll or result of an unknown, expired (30 min) or someone else's job: `{"error":"Job not found"}` / `{"error":"Result not available"}`. |
+| 404 | `job_lost` | The server restarted after the job was made (every deploy restarts it; jobs live in memory): `{"error":"Job not found","code":"job_lost","retryable":true}`. Send the audio again. |
+| 404 | `job_expired` | The job was dropped after the 30-minute TTL: same body with `"code":"job_expired"`. Send the audio again. |
+| 404 | | Poll or result of an unknown id or someone else's job: `{"error":"Job not found"}` / `{"error":"Result not available"}` (no code, nothing to retry). |
 
 `POST /api/lyric-captions/:jobId/burn` from an iOS client (Bearer, or a `FinalCap-iOS/*` UA) and
 `lyric_captions` sent to `/api/process-video` or `/api/jobs/process-video` answer **400**
@@ -191,7 +193,7 @@ become spaces. Fonts: `sudo apt-get install -y fonts-noto-cjk` (prod and the dev
    - The server builds the ASS from the finished job's lines, sized to the uploaded video (rotation
      aware), and burns it with `ass=` + `libx264 -preset medium -crf 20`, audio copied when
      AAC/MP3/ALAC, `+faststart`.
-   - Not charged again. Returns 404 `job_not_found` after the 30 min TTL, 409 `job_not_ready`
+   - Not charged again. Returns 404 `job_lost` / `job_expired` (`job_not_found` for an unknown id), 409 `job_not_ready`
      before success, and 503 `lyric_captions_unavailable` without libass or the CJK font.
    - Transcription still needs only the audio. The video goes up for the burn step, as it does for
      every other web edit.
@@ -258,7 +260,7 @@ Errors to handle: 401 (re-auth), 400 `invalid_arguments` / `audio_only` / `no_au
 `unsupported_audio_format`, 413 `audio_too_large` / `audio_too_long`, 429 `daily_limit_reached`
 (JSON; never with `FREE_EDITS_IOS=unlimited`) or a plain-text 429 from the per-IP rate limiter, 503
 `lyric_captions_unavailable`, a failed job with `code` `no_speech` or `lyric_captions_model_error`,
-and 404 on poll/result after the 30-minute TTL. A refused upload (any 4xx/503 before the 202) is not
+and 404 on poll/result with `code` `job_lost` (server restarted) or `job_expired` (30-minute TTL): show "Captions couldn't finish. Nothing was changed. Try again." and let the user retry (the audio is small; sending it again is safe, and a fresh job is a new request, which counts like any other). Poll through short outages: a network error or 502/503/504 while the server restarts is not a failure, retry for ~30 s first. A refused upload (any 4xx/503 before the 202) is not
 charged.
 
 ### Plain speech: "add Chinese captions" (same build as the song flow)
@@ -357,3 +359,25 @@ Use `AVVideoCompositionCoreAnimationTool`, one caption block per `lines[]` entry
   reads, which usually cost more than the model tokens. `speech` mode skips search.
 - Server burn-in (web only) costs one x264 re-encode of the video in server CPU time. iOS draws on
   device, so an iOS call costs only speech-to-text and Grok.
+
+## Restarts and lost jobs
+
+Jobs (including the finished caption JSON) live in the memory of the one node process, and every deploy
+restarts it. What this does about that:
+
+- Job ids look like `j<8 hex boot id>_<uuid>`. A poll/result/burn for an id from before the restart gets
+  404 with `code: "job_lost"` and `retryable: true` (status and `error` text are unchanged). The id
+  format is opaque to clients.
+- On SIGTERM the server keeps serving until pending jobs are done and their results were fetched, for
+  at most 45 s, then exits (systemd's default stop timeout is 90 s). A deploy therefore only breaks a
+  job that runs longer than that.
+- The web client rides out the restart (retries 502/503/504 and network errors while polling) and, if
+  the job is still lost, sends the audio once more. Any other failure shows one short message.
+- User-facing wording (Design): job missing or poll failed "Captions couldn't finish. Nothing was
+  changed. Try again."; audio over the limit (25 MB or 10 min) "This video's audio is too long for
+  translated captions. Try a clip under 10 minutes."; 503 `lyric_captions_unavailable` "Translated
+  captions aren't available right now. Try again later." The web tool result tells the model to relay
+  exactly that message.
+- Charging: a request that fails validation, or returns 503 before the 202, is never charged. Once the
+  202 is returned the request has been counted (iOS free daily limit; the web app has no per-edit
+  counter), so a job lost afterwards was counted. Do not tell users otherwise.
