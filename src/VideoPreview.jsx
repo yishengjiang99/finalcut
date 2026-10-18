@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { activeLine, overlayFontPx } from './captionTrack.js';
+import { activeLine, overlayFontPx, overlayPlacement, overlayFontFamily } from './captionTrack.js';
 
 const FPS_STEPS = [24, 25, 30, 60];
 
@@ -670,7 +670,7 @@ export default function VideoPreview({ captionTrack = null, videoUrl, title = 'V
               if (!line) return null;
               const fontPx = overlayFontPx(captionTrack, viewH || 360);
               return (
-                <div className="cap-overlay" data-testid="caption-overlay" aria-live="off" style={{ bottom: `${captionTrack.style.positionFromBottomPct}%`, fontSize: `${fontPx}px` }}>
+                <div className="cap-overlay" data-testid="caption-overlay" aria-live="off" style={{ ...overlayPlacement(captionTrack.style), fontSize: `${fontPx}px`, fontFamily: overlayFontFamily(captionTrack.style) }}>
                   {line.text && <div className="cap-line">{line.text}</div>}
                   {line.translation && <div className="cap-line cap-tr">{line.translation}</div>}
                 </div>

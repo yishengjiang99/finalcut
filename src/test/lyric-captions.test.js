@@ -417,7 +417,7 @@ describe('tool schema and clients', () => {
   it('web gets lyric_captions (video only, target_language required); and every FinalCap-iOS build gets it too, with no build gate', () => {
     const def = tools.find(t => t.function.name === 'lyric_captions');
     expect(def.function.parameters.required).toEqual(['target_language']);
-    expect(Object.keys(def.function.parameters.properties)).toEqual(['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size']);
+    expect(Object.keys(def.function.parameters.properties)).toEqual(['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size', 'font', 'size', 'position']);
     expect(buildToolsSchema().mediaTypes.lyric_captions).toEqual(['video']);
     expect(offeredToolsFor({ mediaType: 'image' }).map(t => t.function.name)).not.toContain('lyric_captions');
     expect(IOS_TOOL_ALLOWLIST.lyric_captions).toBe(10); // the same floor as the other iOS tools: no cutoff of its own

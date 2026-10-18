@@ -5,7 +5,7 @@ import { FFmpegHost } from './ffmpegHost.js';
 import { buildProcessArgs, resolveOutput, audioFadeNeedsDuration, OpArgsError } from './ops/process.js';
 import {
   buildTransitionArgs, buildAddAudioTrackArgs, buildBurnSubtitlesArgs, buildBurnAssArgs, buildSpeechAudioArgs,
-  buildThumbnailArgs, parseCliCommand,
+  buildThumbnailArgs, buildMuxSoftSubsArgs, parseCliCommand,
 } from './ops/multi.js';
 import { getFetchAbortSignal } from '../abortableFetch.js';
 import fontUrl from '../../scripts/asc/fonts/Inter-Bold.ttf?url';
@@ -354,6 +354,21 @@ export async function burnAss(ass, videoBytes, mime) {
     inputs: [toFile(videoBytes, mime)],
     files,
     buildArgv: ({ inputs, output, dir, threads }) => buildBurnAssArgs({ input: inputs[0], output, threads, assPath: `${dir}/lyrics.ass`, fontsDir: dir }),
+  });
+  return data;
+}
+
+/**
+ * Mux an SRT into the clip as a mov_text caption track with `-c copy`: no re-encode, no font, no
+ * upload. Output keeps the input's container (mp4/m4v → mp4, mov → mov).
+ */
+export async function muxSoftSubtitles({ srt, language }, videoBytes, mime) {
+  const ext = baseMime(mime) === 'video/quicktime' ? 'mov' : 'mp4';
+  const { data } = await run({
+    inputs: [toFile(videoBytes, mime)],
+    files: [{ name: 'captions.srt', data: new TextEncoder().encode(srt) }],
+    outName: `output.${ext}`,
+    buildArgv: ({ inputs, output, dir }) => buildMuxSoftSubsArgs({ input: inputs[0], srtPath: `${dir}/captions.srt`, output, language }),
   });
   return data;
 }

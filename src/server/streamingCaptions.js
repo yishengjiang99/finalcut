@@ -1,15 +1,14 @@
 // Streaming captions (web): the browser streams the video's audio straight to ElevenLabs realtime
-// STT (Scribe v2 Realtime) and burns the captions itself. This server's part is small and stateless:
+// STT (Scribe v2 Realtime) and keeps the captions itself (live overlay, caption track at export). This server's part is small and stateless:
 //
 //   GET  /api/streaming-captions/status      → { available }              (is the flow configured?)
 //   POST /api/streaming-captions/token       → { token, wsUrl, query, … } (mint a single-use token; not charged)
 //   POST /api/streaming-captions/translate   → { lines:[{i,text,translation}] } (Grok, text only; the
 //                                              edit is charged here, once per captions job, after the
 //                                              first batch that produced a translated line)
-//   POST /api/streaming-captions/burn        → video/mp4                  (consented server fallback)
 //
 // The ElevenLabs key never leaves this process: only the 15-minute single-use token goes to the
-// browser. No audio and no video pass through here, except in the explicit burn fallback. No job
+// browser. No audio and no video pass through here. No job
 // state is kept, so a restart cannot lose anything (the client just repeats a failed call).
 // See docs/api/STREAMING_CAPTIONS.md.
 import express from 'express';
@@ -18,23 +17,15 @@ import { randomUUID } from 'crypto';
 import { ELEVENLABS_API_KEY } from './config.js';
 import {
   apiLimiter,
-  videoProcessLimiter,
   requireAuthenticatedUser,
   requireActiveSubscription,
   requireInferenceAccess,
-  uploadSingle,
 } from './middleware.js';
 import {
   LyricCaptionsError,
   parseTranslateRequest,
   assertTranslateAvailable,
   translateSpeechSegments,
-  parseBurnLines,
-  parseStyleOptions,
-  parseTargetLanguage,
-  burnLinesOnServer,
-  refuseIosBurn,
-  sendError,
 } from './lyricCaptions.js';
 import { normalizeLanguageCode } from './captionHelpers.js';
 
@@ -231,26 +222,6 @@ router.post('/api/streaming-captions/translate', translateLimiter, requireAuthen
     console.error('[streaming_captions] translate failed:', err?.message || err);
     // Retryable: the model call failed, the client repeats the batch.
     return res.status(502).json({ error: 'Translation failed', code: 'translation_failed', retryable: true, operation: 'streaming_captions' });
-  }
-});
-
-router.post('/api/streaming-captions/burn', videoProcessLimiter, requireAuthenticatedUser, refuseIosBurn, uploadSingle('video'), async (req, res) => {
-  try {
-    if (!req.file?.buffer?.length) throw new LyricCaptionsError('No video file provided (multipart field "video")');
-    const lines = parseBurnLines(req.body?.lines);
-    const targetLanguage = parseTargetLanguage(req.body?.target_language ?? req.body?.targetLanguage) || null;
-    const language = req.body?.language ? normalizeLanguageCode(req.body.language, { allowAuto: false }) : null;
-    let args = {};
-    if (req.body?.args) {
-      try { args = JSON.parse(req.body.args); } catch { throw new LyricCaptionsError('args must be valid JSON'); }
-    }
-    const style = parseStyleOptions(args);
-    const out = await burnLinesOnServer({ videoBuffer: req.file.buffer, lines, language, targetLanguage, style });
-    res.set('Content-Type', 'video/mp4');
-    res.set('X-Lyric-Captions-Burn', 'server');
-    return res.send(out);
-  } catch (err) {
-    return sendError(res, err, 'Failed to burn captions');
   }
 });
 

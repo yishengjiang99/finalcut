@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import VideoPreview from '../VideoPreview.jsx';
-import CaptionPanel from '../CaptionPanel.jsx';
 import { normalizeStyle } from '../captionTrack.js';
 
 beforeEach(() => {
@@ -48,17 +47,32 @@ describe('live caption overlay on the preview', () => {
   });
 });
 
-describe('caption panel', () => {
-  it('reports position and size changes and offers export, SRT, ASS and remove', () => {
-    const calls = { style: [], export: 0, srt: 0, ass: 0, remove: 0 };
-    render(<CaptionPanel track={trackWith()} onStyle={(p) => calls.style.push(p)} onExport={() => { calls.export += 1; }} onSrt={() => { calls.srt += 1; }} onAss={() => { calls.ass += 1; }} onRemove={() => { calls.remove += 1; }} />);
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '33' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Large' }));
-    fireEvent.click(screen.getByRole('button', { name: /Export/ }));
-    fireEvent.click(screen.getByRole('button', { name: /SRT/ }));
-    fireEvent.click(screen.getByRole('button', { name: /ASS/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Remove captions/ }));
-    expect(calls).toEqual({ style: [{ positionFromBottomPct: 33 }, { sizeScale: 1.4 }], export: 1, srt: 1, ass: 1, remove: 1 });
-    expect(screen.getByText(/burned into the video when you export/i)).toBeInTheDocument();
+describe('placement and font from the style the model chose in chat', () => {
+  const overlayAt = (style) => {
+    const { container } = render(<VideoPreview videoUrl="v.mp4" captionTrack={trackWith(style)} />);
+    fireEvent.click(screen.getByRole('button', { name: /open video/i }));
+    at(container.querySelector('video'), 2);
+    return screen.getByTestId('caption-overlay');
+  };
+  it('bottom (Alignment 2) sits N% up, middle (5) is vertically centered, top (8) hangs from the top margin', () => {
+    expect(overlayAt({ alignment: 2, positionFromBottomPct: 25 }).style.bottom).toBe('25%');
+  });
+  it('middle and top use top-based placement', () => {
+    const mid = overlayAt({ alignment: 5 });
+    expect(mid.style.top).toBe('50%');
+    expect(mid.style.bottom).toBe('');
+  });
+  it('top', () => {
+    const top = overlayAt({ alignment: 8 });
+    expect(top.style.top).toBe('8%');
+  });
+  it('Inter is the overlay font when chosen; the CJK family otherwise', () => {
+    expect(overlayAt({ font: 'Inter' }).style.fontFamily).toMatch(/^Inter/);
+  });
+  it('the default is the CJK family', () => {
+    expect(overlayAt({}).style.fontFamily).toMatch(/Noto Sans CJK SC/);
+  });
+  it('there are no caption controls on the card: no style sliders or SRT/ASS/Remove buttons', () => {
+    expect(document.querySelector('[data-testid="caption-panel"]')).toBeNull();
   });
 });

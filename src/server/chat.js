@@ -27,6 +27,7 @@ import {
   validateMedia,
 } from './clientExecution.js';
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
+import { CAPTION_STYLE_GUIDANCE } from '../lyricShared.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
 import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD } from './iosToolAllowlist.js';
 import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, FFMPEG_CLI_STRING_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
@@ -168,7 +169,7 @@ function mediaGuidance(mediaType, { ffmpegFallback = false } = {}) {
       : ffmpegFallback ? ` These photo limits take priority over the routing rule below: never call ${FFMPEG_CLI_TOOL_NAME} on a photo.` : '');
 }
 
-export function buildSystemMessage({ ffmpegFallback = false, mediaType = null } = {}) {
+export function buildSystemMessage({ ffmpegFallback = false, mediaType = null, captionStyle = false } = {}) {
   // The FFmpeg fallback handles videos and audio only, so it is never described for a photo.
   const fallbackGuidance = mediaType === 'image' || mediaType === 'none' ? ''
     : ffmpegFallback === 'ios' ? FFMPEG_FALLBACK_GUIDANCE_IOS
@@ -182,6 +183,8 @@ export function buildSystemMessage({ ffmpegFallback = false, mediaType = null } 
     'The calls run sequentially and each one operates on the output of the one before it, so work out the arguments of later calls ' +
     'from the result you expect from earlier ones: after a crop to 800x600 the frame is 800x600 and later coordinates are relative to it; ' +
     'after a trim, later timestamps are relative to the trimmed clip.',
+    // Web only: the iOS app draws its own captions and has no style parameters to fill.
+    captionStyle && mediaType !== 'image' && mediaType !== 'none' ? CAPTION_STYLE_GUIDANCE : '',
     'Write your reply to the user as plain text, once, with no heading or label.',
   ];
 
@@ -388,7 +391,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   if (roundCapReached) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
   }
-  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null });
+  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null, captionStyle: !parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
   const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
 
   const modelMessages = [systemMessage];
@@ -608,7 +611,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const { media: clientMedia, ...clientBody } = req.body;
     const hasTools = Array.isArray(clientBody.tools) && clientBody.tools.length > 0;
     const mediaType = hasTools ? streamingMediaType(clientMedia) : 'none';
-    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType });
+    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType, captionStyle: !iosInfo.isFinalCapIos });
 
     debugChat('request', JSON.stringify({
       userId,

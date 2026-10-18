@@ -164,4 +164,52 @@ describe('lyric_captions in /api/chat', () => {
     expect(text).toContain('"name":"lyric_captions"');
     expect(text).toContain('target_language');
   });
+
+  describe('style question inside the tool loop', () => {
+    const QUESTION = 'Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.';
+    const media = { type: 'video', width: 720, height: 1280, durationSec: 20 };
+    const sys = { role: 'system', content: systemPrompt };
+
+    it('"caption in Chinese" (no style): the model is shown the rule and the style params, and its question reaches the user with no tool call', async () => {
+      // The mocked model behaves as the system prompt instructs: it asks the one question.
+      reply = () => json({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: QUESTION } }] });
+      const res = await postChat({ execution: 'client', messages: [sys, { role: 'user', content: 'caption in Chinese' }], media });
+      const body = await res.json();
+      expect(body.status).toBe('final');
+      expect(JSON.stringify(body)).toContain('Which font and where should the captions go?');
+      expect(body.toolCalls || []).toHaveLength(0);
+      const sent = xaiCalls[0];
+      expect(sent.messages[0].content).toContain(QUESTION);
+      const props = sent.tools.find(t => t.function.name === 'lyric_captions').function.parameters.properties;
+      expect(Object.keys(props)).toEqual(expect.arrayContaining(['font', 'size', 'position', 'position_from_bottom_pct']));
+    });
+
+    it('the rule is in the server-owned system message for web clients (video), and not for photos or the iOS app', async () => {
+      reply = () => json({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }] });
+      const systemOf = (call) => call.messages.find(m => m.role === 'system').content;
+      await postChat({ execution: 'client', messages: [{ role: 'user', content: 'caption in Chinese' }], media });
+      expect(systemOf(xaiCalls[0])).toContain(QUESTION);
+      await postChat({ execution: 'client', messages: [{ role: 'user', content: 'caption in Chinese' }], media: { type: 'image', width: 10, height: 10 } });
+      expect(systemOf(xaiCalls[1])).not.toContain(QUESTION);
+      await postChat({ execution: 'client', messages: [{ role: 'user', content: 'caption in Chinese' }], media }, { 'User-Agent': 'FinalCap-iOS/12' });
+      expect(systemOf(xaiCalls[2])).not.toContain(QUESTION);
+    });
+
+    it('the answer "bottom, large" → the next turn calls lyric_captions with explicit style params, which pass through unchanged', async () => {
+      const args = { target_language: 'zh-Hans', mode: 'speech', font: 'Noto Sans CJK SC', size: 'large', position: 'bottom', position_from_bottom_pct: 20 };
+      reply = () => json({ choices: [{ index: 0, finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'st1', type: 'function', function: { name: 'lyric_captions', arguments: JSON.stringify(args) } }] } }] });
+      const res = await postChat({ execution: 'client', messages: [sys, { role: 'user', content: 'caption in Chinese' }, { role: 'assistant', content: QUESTION }, { role: 'user', content: 'bottom, large' }], media });
+      const body = await res.json();
+      expect(body).toMatchObject({ status: 'tool_calls', toolCalls: [{ id: 'st1', name: 'lyric_captions', arguments: args }] });
+    });
+
+    it('"caption in Chinese, bottom, large" (style already given) → straight to the tool call with the stated parts', async () => {
+      const args = { target_language: 'zh-Hans', mode: 'speech', size: 'large', position: 'bottom' };
+      reply = () => json({ choices: [{ index: 0, finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'st2', type: 'function', function: { name: 'lyric_captions', arguments: JSON.stringify(args) } }] } }] });
+      const res = await postChat({ execution: 'client', messages: [sys, { role: 'user', content: 'caption in Chinese, bottom, large' }], media });
+      const body = await res.json();
+      expect(body.toolCalls[0]).toMatchObject({ name: 'lyric_captions', arguments: { size: 'large', position: 'bottom', target_language: 'zh-Hans' } });
+      expect(xaiCalls).toHaveLength(1);
+    });
+  });
 });

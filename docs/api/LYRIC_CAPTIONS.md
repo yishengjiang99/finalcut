@@ -1,6 +1,6 @@
 # lyric_captions: bilingual lyric/speech captions
 
-> **Web, plain speech:** "add captions in Chinese" now streams the audio to ElevenLabs realtime STT and burns in the browser; see [STREAMING_CAPTIONS.md](STREAMING_CAPTIONS.md). This upload-based flow remains for songs (`mode: "lyrics"`), for iOS, and as the fallback when `ELEVENLABS_API_KEY` is not set.
+> **Web, plain speech:** "add captions in Chinese" now streams the audio to ElevenLabs realtime STT, shows a live overlay and adds a caption track on Export (no burn, no server video processing); see [STREAMING_CAPTIONS.md](STREAMING_CAPTIONS.md). This upload-based flow remains for songs (`mode: "lyrics"`), for iOS, and as the fallback when `ELEVENLABS_API_KEY` is not set.
 
 Audio in, captions out. The client sends only the audio track. The server transcribes it with
 word timestamps, identifies the song and corrects misheard lyrics, translates each line, and
@@ -35,7 +35,17 @@ when the user names the spoken or sung language.
 | `source_language` | string | `auto` | Sung/spoken language. |
 | `mode` | `auto` \| `lyrics` \| `speech` | `auto` | `lyrics` identifies the song and checks published lyrics. `speech` (ordinary talking) only fixes obvious errors and never searches. `auto` lets the server decide from the transcript. |
 | `position_from_bottom_pct` | number 0–45 | 20 | Bottom of the caption block, as % of the video height. |
-| `font_size` | integer 8–400 | 48/1280 of the height | In video pixels. |
+| `font_size` | integer 8–400 | 48/1280 of the height | In video pixels. Prefer `size`. |
+| `font` | `Noto Sans CJK SC` \| `Inter` | `Noto Sans CJK SC` | Whitelist: the fonts the browser engine can draw. `Inter` is Latin only. Web overlay only. |
+| `size` | `small` \| `default` \| `large` \| `xl` | `default` | 0.75× / 1× / 1.4× / 1.8× of the default size (48 px at 720×1280, scaled). |
+| `position` | `bottom` \| `middle` \| `top` | `bottom` | ASS Alignment 2 / 5 / 8. Bottom uses `position_from_bottom_pct` as MarginV; middle has MarginV 0; top has MarginV 8 % of the height. |
+
+Style on the web: invalid values never fail the call; they fall back to the default and are clamped
+(`resolveCaptionStyle` in `src/lyricShared.js`). The web model asks one question first ("Which font and
+where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.") when the look is
+unspecified, then passes explicit `font`, `size` and `position`; a stated preference, "default" or
+"just do it" goes straight to the call. The same params are in the iOS schema, but the iOS app draws
+its own captions, its tool text and system message are unchanged, and it does not get the question.
 
 Who runs it:
 
@@ -130,6 +140,16 @@ Errors (`{"error","code","operation":"lyric_captions"}`):
 | 404 | `job_lost` | The server restarted after the job was made (every deploy restarts it; jobs live in memory): `{"error":"Job not found","code":"job_lost","retryable":true}`. Send the audio again. |
 | 404 | `job_expired` | The job was dropped after the 30-minute TTL: same body with `"code":"job_expired"`. Send the audio again. |
 | 404 | | Poll or result of an unknown id or someone else's job: `{"error":"Job not found"}` / `{"error":"Result not available"}` (no code, nothing to retry). |
+
+**iOS results the server rewrites.** App builds that cannot run `lyric_captions` answer with an error or an
+unknown-tool result. Tool results do pass through the server's chat loop (`POST /api/chat`,
+`execution: "client"`, role `tool`), where `rewriteLyricCaptionsResult` (`src/server/clientExecution.js`)
+replaces them for `FinalCap-iOS` clients before the model sees them: an unknown/unsupported result
+(`unsupported_on_device`, `unknown_tool`, …) becomes `{"ok":false,"code":"unsupported_on_device","error":"lyric_captions is not available in this version of the app. Tell the user Chinese captions need the latest app update, and offer captions in the video's own language."}`;
+any other error becomes `{"ok":false,"error":"Captions couldn't finish. Nothing was changed. Try again."}`
+with no raw text. Successful results and `skipped_by_user` pass through. This is not a build gate and
+does not change which tools are offered (an `unsupported_on_device` result still stops that tool being
+offered for the rest of the turn, as for any tool).
 
 `POST /api/lyric-captions/:jobId/burn` from an iOS client (Bearer, or a `FinalCap-iOS/*` UA) and
 `lyric_captions` sent to `/api/process-video` or `/api/jobs/process-video` answer **400**

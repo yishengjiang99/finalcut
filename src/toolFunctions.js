@@ -4,15 +4,15 @@
 // the user agrees to the upload. In "server" engine mode every edit goes to the server API.
 
 import { captionSourceFor, recordCaptionBurn, videoHasBurnedCaptions } from './captionLineage.js';
-import { setTrack, trackToAss, DEFAULT_FONT_RATIO } from './captionTrack.js';
+import { setTrack, trackToSrt } from './captionTrack.js';
 import { runLyricCaptionsWeb, describeSong, friendlyLyricCaptionsError } from './lyricCaptionsClient.js';
 import {
-  streamingAvailable, runStreamingCaptions, burnStreamingCaptionsOnServer, friendlyStreamingError,
+  streamingAvailable, runStreamingCaptions, friendlyStreamingError,
   CONTINUE_COPY, STREAMING_MESSAGES, StreamingCaptionsError,
 } from './streamingCaptions.js';
 import { createClientLog } from './clientLog.js';
 import { keepAwake } from './wakeLock.js';
-import { buildAss, LYRIC_FONT } from './lyricShared.js';
+import { buildAss, LYRIC_FONT, resolveCaptionStyle } from './lyricShared.js';
 import { abortableFetch as fetch, getFetchAbortSignal } from './abortableFetch.js';
 import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
@@ -455,8 +455,8 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
   });
   const lines = result.lines?.length || 0;
   const songText = describeSong(result.song);
-  attachCaptionTrack({ source: videoFileData, lines: result.lines || [], language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage });
-  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview, NOT burned in yet: the user can adjust the caption size and position, download SRT/ASS, or burn them in when they export.${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
+  const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines || [], language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, videoHeight: height });
+  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}), NOT burned into the picture: when the user presses Export they are added to the video file as a caption track (no re-encode), which the user turns on in the video player.${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
 }
 
 // Streaming captions: the video's audio (never the picture) is streamed from this browser straight to
@@ -533,17 +533,20 @@ async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFi
   clog.log('run_done', { lines: result.lines.length, overlay: true });
   toolStatus('Captions ready', 1);
   const count = result.lines.length;
-  attachCaptionTrack({ source: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, clog });
-  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview and are NOT burned into the video yet: the user can change the caption size and position on the captions card, download SRT/ASS, or burn them in when they export. ${replacing ? 'They replace the captions burned earlier (the overlay is on the uncaptioned clip). ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
+  const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, clog, videoHeight: height });
+  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). They are NOT burned into the picture: when the user presses Export they are added to the video file as a caption track (no re-encode), which the user turns on in the video player. ${replacing ? 'They replace the captions burned earlier (the overlay is on the uncaptioned clip). ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
 }
 
 /** Keep the finished lines as the caption track of `source` and post the "Captions · A → B" card. */
-function attachCaptionTrack({ source, lines, language, targetLanguage, args = {}, replacing, addMessage, clog }) {
-  const style = {};
-  if (Number.isFinite(args.position_from_bottom_pct)) style.positionFromBottomPct = args.position_from_bottom_pct;
-  setTrack(source, { lines, language, targetLanguage, style });
+function attachCaptionTrack({ source, lines, language, targetLanguage, args = {}, replacing, addMessage, clog, videoHeight = 0 }) {
+  // The style the model chose in chat (font, size, position), validated and clamped; the default is the agreed style.
+  const { style, ignored } = resolveCaptionStyle(args, { videoHeight });
+  if (ignored.length) clog?.log('style_ignored', { fields: ignored.join(',') });
+  const track = setTrack(source, { lines, language, targetLanguage, style });
   clog?.log('captions_attached', { lines: lines.length, replacing: Boolean(replacing) });
   addMessage({ text: `Captions · ${languageLabel(language)} \u2192 ${languageLabel(targetLanguage)}`, captions: { bytes: source, lines: lines.length } });
+  const where = { 2: 'bottom', 5: 'middle', 8: 'top' }[track.style.alignment];
+  return `${track.style.font}, size x${track.style.sizeScale}, ${where}${track.style.alignment === 2 ? `, ${track.style.positionFromBottomPct}% up` : ''}`;
 }
 
 const LANGUAGE_NAMES = { en: 'English', 'zh-hans': 'Chinese', 'zh-hant': 'Chinese (Traditional)', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', ja: 'Japanese', ko: 'Korean', pt: 'Portuguese', it: 'Italian', ru: 'Russian', ar: 'Arabic', hi: 'Hindi' };
@@ -553,82 +556,38 @@ export const languageLabel = (code) => {
   return LANGUAGE_NAMES[raw.toLowerCase()] || LANGUAGE_NAMES[raw.toLowerCase().split('-')[0]] || raw;
 };
 
-// ─── Export: the only place captions are re-encoded into the video ──────────────────────────────
-export const IOS_BURN_MAX_BYTES = 20 * 1024 * 1024; // iOS Safari kills the tab on large in-memory burns
-export const IOS_BURN_MAX_SHORT_SIDE = 720;
-export const isIosBrowser = (nav = globalThis.navigator || {}) => /iPhone|iPad|iPod/i.test(nav.userAgent || '') || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
-
-/** 'server' when this device should not burn in memory (iOS with a big or HD clip), else 'browser'. */
-export function chooseBurnRoute({ bytes = 0, width = 0, height = 0, ios = isIosBrowser() } = {}) {
-  if (!ios) return 'browser';
-  return bytes > IOS_BURN_MAX_BYTES || Math.min(width || 0, height || 0) > IOS_BURN_MAX_SHORT_SIDE ? 'server' : 'browser';
-}
-
-const asciiTail = (stderr) => String(stderr || '').split('\n').map(l => l.replace(/[^\x20-\x7e]/g, '').trim()).filter(Boolean).slice(-3).map(l => l.slice(0, 120)).join(' | ');
+// ─── Export: the captions become a caption track in the file, never pixels ──────────────────────
+// ISO 639-2 codes for the track's language tag (players list the track by it).
+const TRACK_LANGUAGES = { en: 'eng', zh: 'zho', es: 'spa', fr: 'fra', de: 'deu', ja: 'jpn', ko: 'kor', pt: 'por', it: 'ita', ru: 'rus', ar: 'ara', hi: 'hin' };
+export const trackLanguageCode = (code) => TRACK_LANGUAGES[String(code || '').toLowerCase().split('-')[0]] || 'und';
+const MOV_TEXT_CONTAINERS = new Set(['video/mp4', 'video/x-m4v', 'video/m4v', 'video/quicktime']);
+const MOV_TEXT_VIDEO = new Set(['h264', 'hevc', 'mpeg4']);
+const MOV_TEXT_AUDIO = new Set(['aac', 'mp3', 'alac']);
 
 /**
- * Burn a caption track into `bytes` (the user pressed Export). Small clips burn in ffmpeg.wasm;
- * an iPhone with a big or HD clip goes to the server route instead, after the usual upload consent.
- * Logs export_start, burn_progress (every 4 s: the tab may die mid-burn), burn_end and burn_error.
+ * Add the caption track to `bytes` as a mov_text (MP4 Timed Text) track with `-c copy`, in the browser:
+ * no re-encode, no font, nothing uploaded, so it takes a moment even on a phone. The video and audio
+ * are byte-for-byte the originals. Throws code 'soft_track_unsupported' when the container or codecs
+ * cannot hold the track (the caller then saves the captions as an SRT file instead).
+ * Logs export_start, mux_end and mux_error.
  */
-export async function burnCaptionTrack({ bytes, mime = 'video/mp4', track, headers = {}, clog = createClientLog({ headers }), onStatus = () => {} }) {
-  if (videoHasBurnedCaptions(bytes)) {
-    throw Object.assign(new Error('This video already has captions burned in. Export it as is, or start from the original upload.'), { code: 'captions_already_burned' });
-  }
-  const { width, height } = engine.summarizeProbe(await engine.probeMedia(bytes, mime));
-  if (!(width && height)) throw Object.assign(new Error('The video size is unknown, so the captions cannot be laid out.'), { code: 'unsupported_in_browser' });
-  const route = chooseBurnRoute({ bytes: bytes.byteLength, width, height });
-  clog.log('export_start', { bytes: bytes.byteLength, w: width, h: height, route, lines: track.lines.length, ios: isIosBrowser() });
+export async function muxCaptionTrack({ bytes, mime = 'video/mp4', track, clog = createClientLog({ headers: sampleAuthHeaders() }) }) {
+  const type = String(mime || '').split(';')[0].trim().toLowerCase();
   const startedAt = Date.now();
-  const fontSize = Math.max(12, Math.round(height * DEFAULT_FONT_RATIO * track.style.sizeScale));
-  const onServer = () => {
-    onStatus('Uploading and burning on the server…');
-    return burnStreamingCaptionsOnServer({
-      videoBytes: bytes, lines: track.lines, language: track.language, targetLanguage: track.targetLanguage, headers,
-      args: { position_from_bottom_pct: track.style.positionFromBottomPct, font_size: fontSize },
-    });
-  };
-  const inBrowser = async () => {
-    onStatus('Burning captions in on this device…');
-    const ass = trackToAss(track, { width, height, fontName: LYRIC_FONT });
-    return engine.burnAss(assWithFont(ass, engine.FONT_FAMILY), bytes, mime);
-  };
-  let timer = null;
-  const unsubscribe = engine.subscribeEngine?.((st) => { if (st.phase === 'error') clog.log('burn_error', { phase: st.phase, msg: String(st.error || '').replace(/[^\x20-\x7e]/g, '').slice(0, 100) }); });
-  const beat = () => { const st = engine.getEngineState?.() || {}; clog.log('burn_progress', { p: Number.isFinite(st.progress) ? Math.round(st.progress * 100) : null, phase: st.phase, mode: st.mode, ms: Date.now() - startedAt }); };
+  clog.log('export_start', { bytes: bytes.byteLength, type, lines: track.lines.length, mode: 'soft_track' });
   try {
-    let burned;
-    let on;
-    if (route === 'server') {
-      if (!(await requestUploadConsent({ tool: 'lyric_captions', reason: 'This video is large for a phone, so burning the captions in here could crash the tab. The server can do it, but it needs the video uploaded.', uploads: 'video' }))) {
-        lastExecution.errorCode = 'skipped_by_user';
-        throw new UploadDeclinedError('lyric_captions', 'Not uploaded. You can download the captions as SRT or ASS instead.');
-      }
-      clog.log('burn_start', { on: 'server' });
-      burned = await onServer();
-      on = 'server';
-    } else {
-      clog.log('burn_start', { on: 'browser' });
-      beat();
-      timer = setInterval(beat, 4000);
-      burned = await browserFirst('lyric_captions', inBrowser, onServer);
-      on = lastExecution.executedOn;
+    if (!MOV_TEXT_CONTAINERS.has(type)) throw Object.assign(new Error('This video format cannot hold a caption track.'), { code: 'soft_track_unsupported' });
+    const info = engine.summarizeProbe(await engine.probeMedia(bytes, mime));
+    if (!MOV_TEXT_VIDEO.has(info.videoCodec) || (info.hasAudio && !MOV_TEXT_AUDIO.has(info.audioCodec))) {
+      throw Object.assign(new Error('This video\u2019s codecs cannot hold a caption track without re-encoding.'), { code: 'soft_track_unsupported' });
     }
-    clog.log('burn_end', { ms: Date.now() - startedAt, on, bytes: burned?.byteLength });
-    recordCaptionBurn(bytes, burned);
-    return { bytes: burned, on };
+    const out = await engine.muxSoftSubtitles({ srt: trackToSrt(track), language: trackLanguageCode(track.targetLanguage) }, bytes, mime);
+    clog.log('mux_end', { ms: Date.now() - startedAt, bytes: out?.byteLength });
+    return { bytes: out, mime: type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4' };
   } catch (error) {
-    clog.log('burn_error', { code: error?.code, name: error?.name, msg: String(error?.message || '').replace(/[^\x20-\x7e]/g, '').slice(0, 100), tail: asciiTail(error?.stderr), ms: Date.now() - startedAt });
+    clog.log('mux_error', { code: error?.code, msg: String(error?.message || '').replace(/[^\x20-\x7e]/g, '').slice(0, 100), ms: Date.now() - startedAt });
     throw error;
-  } finally {
-    clearInterval(timer);
-    unsubscribe?.();
   }
-}
-
-// Point every style of an ASS script at the font the browser engine has (it has no system fonts).
-export function assWithFont(ass, fontName) {
-  return String(ass).replace(/^(Style:\s*[^,]*,)[^,]*/gm, `$1${fontName}`);
 }
 
 export const toolFunctions = {

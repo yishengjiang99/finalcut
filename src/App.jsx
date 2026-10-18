@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { systemPrompt } from './tools.js';
-import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, burnCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
+import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, muxCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
@@ -14,9 +14,8 @@ import Landing from './Landing.jsx';
 import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './telemetry.js';
 import { takePendingPrompt } from './pendingPrompt.js';
 import { newBuildAvailable } from './buildInfo.js';
-import CaptionPanel from './CaptionPanel.jsx';
 import { makeShareFile, canShareFile, shareOrDownload } from './shareFile.js';
-import { subscribeTracks, tracksVersion, getTrack, updateTrackStyle, clearTrack, restoreTrack, trackToSrt, trackToAss } from './captionTrack.js';
+import { subscribeTracks, tracksVersion, getTrack, restoreTrack, trackToSrt } from './captionTrack.js';
 import { videoHasBurnedCaptions } from './captionLineage.js';
 import { createClientLog } from './clientLog.js';
 import './App.css';
@@ -76,16 +75,6 @@ const mediaFilename = (item) => {
   const slug = item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'export';
   return `finalcap-${slug}.${MIME_EXTENSIONS[item.mimeType] || (item.isAudio ? 'mp3' : 'mp4')}`;
 };
-
-// Picture size of a clip, from the browser's own metadata (no ffmpeg needed).
-const readVideoSize = (url) => new Promise((resolve) => {
-  const v = document.createElement('video');
-  const done = (size) => { v.removeAttribute('src'); resolve(size); };
-  v.preload = 'metadata';
-  v.onloadedmetadata = () => done({ width: v.videoWidth || 0, height: v.videoHeight || 0 });
-  v.onerror = () => done({ width: 0, height: 0 });
-  v.src = url;
-});
 
 const saveBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -208,7 +197,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const lastPromptRef = useRef(''); // the last thing the user asked: what a Retry button sends again
   useSyncExternalStore(subscribeTracks, tracksVersion); // re-render when a caption track changes
-  const [exportSheet, setExportSheet] = useState(null); // { mediaId, phase: 'choose'|'burning'|'done'|'error', text }
+  const [exportSheet, setExportSheet] = useState(null); // { file }: a finished export waiting for a fresh tap to share
   const restoreTriedRef = useRef(new Set());
   const [newVersion, setNewVersion] = useState(false); // the server runs a newer build than this tab
   const chatWindowRef = useRef(null);
@@ -829,35 +818,11 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   }, [media]);
 
   const captionFileBase = (item) => mediaFilename(item).replace(/\.\w+$/, '');
-  const downloadCaptionText = (item, kind) => {
-    const capTrack = trackOfMedia(item.id);
-    if (!capTrack) return;
-    const run = async () => {
-      let body;
-      if (kind === 'ass') {
-        const size = await readVideoSize(item.url);
-        if (!(size.width && size.height)) return toast('Could not read the video size for the ASS file');
-        body = trackToAss(capTrack, size);
-      } else {
-        body = trackToSrt(capTrack);
-      }
-      saveBlob(new Blob([body], { type: 'text/plain;charset=utf-8' }), `${captionFileBase(item)}.${kind}`);
-      track('export', { format: kind, placement: 'captions_panel' });
-    };
-    run();
-  };
-
-  const changeCaptionStyle = (item, patch) => updateTrackStyle(mediaBytesRef.current.get(item.id), patch);
-  const removeCaptions = (item) => {
-    clearTrack(mediaBytesRef.current.get(item.id));
-    toast('Captions removed');
-  };
-
   const handleExport = () => {
     if (!activeMedia) return toast('Add a video or audio file first');
     const capTrack = trackOfMedia(activeMedia.id);
     if (capTrack && !activeMedia.isAudio && !videoHasBurnedCaptions(mediaBytesRef.current.get(activeMedia.id))) {
-      setExportSheet({ mediaId: activeMedia.id, phase: 'choose' });
+      exportWithCaptions(activeMedia);
       return;
     }
     plainExport(activeMedia);
@@ -880,54 +845,48 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
   };
 
-  // Export with the captions burned in: the only place they are re-encoded into the video.
-  const exportBurned = async () => {
-    const sheet = exportSheet;
-    const item = mediaById(sheet?.mediaId);
-    const bytes = item && mediaBytesRef.current.get(item.id);
+  // Export with captions: the lines become a caption track (mov_text) in the file, in the browser, with
+  // `-c copy`: nothing is re-encoded and nothing is uploaded. If the file cannot hold a track, the
+  // captions are saved as an SRT instead (same Export button, one line saying so).
+  const exportWithCaptions = async (item) => {
+    const bytes = mediaBytesRef.current.get(item.id);
     const capTrack = bytes && getTrack(bytes);
-    if (!capTrack) { setExportSheet(null); return; }
+    if (!capTrack) return plainExport(item);
     const clog = createClientLog({ headers: sampleAuthHeaders() });
     clog.attach();
     clog.env();
-    setExportSheet({ mediaId: item.id, phase: 'burning', text: 'Preparing…' });
+    toast('Adding the captions to the video…');
     try {
-      const { bytes: burned } = await burnCaptionTrack({
-        bytes, mime: item.mimeType || 'video/mp4', track: capTrack, headers: sampleAuthHeaders(), clog,
-        onStatus: (text) => setExportSheet({ mediaId: item.id, phase: 'burning', text }),
-      });
-      const blob = new Blob([burned], { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-      const id = addMessage({ text: 'Exported with captions burned in.', videoUrl: url, mimeType: 'video/mp4' });
-      if (id !== null && id !== undefined) mediaBytesRef.current.set(id, burned); // keeps the no-double-burn guard on this clip
-      const burnedItem = { ...item, url, mimeType: 'video/mp4', kind: 'result', label: `${item.label} (captions)` };
-      track('export', { format: 'video/mp4', placement: 'export_burned' });
-      const file = makeShareFile(blob, `${captionFileBase(burnedItem)}.mp4`, 'video/mp4');
-      if (canShareFile(file)) {
-        // The render took a while, so the tap that started it is no longer a user activation: ask for a new one.
+      const { bytes: out, mime } = await muxCaptionTrack({ bytes, mime: item.mimeType || 'video/mp4', track: capTrack, clog });
+      const file = makeShareFile(out, `${captionFileBase(item)}.${mime === 'video/quicktime' ? 'mov' : 'mp4'}`, mime);
+      track('export', { format: mime, placement: 'export_captions' });
+      const outcome = await shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: (e, d) => clog.log(e, d), kind: 'export_captions' });
+      if (outcome === 'needsTap') {
+        // The mux took a moment, so the tap is no longer a user activation: ask for a fresh one.
         clog.log('share_ready', { bytes: file.size });
-        setExportSheet({ mediaId: item.id, phase: 'ready', text: 'Your video is ready.', file });
-      } else {
-        saveBlob(blob, file.name);
-        setExportSheet(null);
-        toast('Exported with captions');
+        setExportSheet({ file });
+      } else if (outcome !== 'cancelled') {
+        toast('Exported with a caption track. Turn captions on in the video player.');
       }
     } catch (error) {
-      const declined = error?.name === 'UploadDeclinedError';
-      setExportSheet({ mediaId: item.id, phase: 'error', text: declined ? 'Not exported. You can download the captions as SRT or ASS instead.' : `Export failed: ${String(error?.message || error).slice(0, 200)} You can still download the captions as SRT or ASS.` });
+      clog.log('export_srt_fallback', { code: error?.code || null });
+      saveBlob(new Blob([trackToSrt(capTrack)], { type: 'text/plain;charset=utf-8' }), `${captionFileBase(item)}.srt`);
+      toast(error?.code === 'soft_track_unsupported'
+        ? 'This video format cannot hold a caption track, so the captions were saved as an SRT file.'
+        : 'The caption track could not be added here, so the captions were saved as an SRT file.');
     } finally {
       clog.detach();
     }
   };
 
-  // The "Ready - Share" tap: a fresh user activation for navigator.share.
+  // The "Share" tap: a fresh user activation for navigator.share.
   const shareReadyExport = () => {
     const file = exportSheet?.file;
     if (!file) return;
-    shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export_burned' }).then((outcome) => {
+    shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export_captions' }).then((outcome) => {
       if (outcome === 'cancelled') return; // the sheet stays so they can share again
       setExportSheet(null);
-      toast(outcome === 'shared' ? 'Exported with captions' : 'Saved to your downloads');
+      toast(outcome === 'shared' ? 'Exported with a caption track' : 'Saved to your downloads');
     });
   };
 
@@ -1110,15 +1069,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         </div>
         <div className="rc-body">
           <div className="rc-title">{`✓ ${msg.captionCard.lines} caption lines`}</div>
-          <CaptionPanel
-            track={capTrack}
-            disabled={isCallingAPI}
-            onStyle={(patch) => changeCaptionStyle(item, patch)}
-            onExport={() => { setExportSheet({ mediaId: item.id, phase: 'choose' }); }}
-            onSrt={() => downloadCaptionText(item, 'srt')}
-            onAss={() => downloadCaptionText(item, 'ass')}
-            onRemove={() => removeCaptions(item)}
-          />
+          <p className="cap-note">Press Export to save the video with the captions as a caption track.</p>
         </div>
       </div>
     );
@@ -1158,30 +1109,18 @@ export default function App({ skipLanding = false, startWithSample = false } = {
           </div>
         </div>
       )}
-      {exportSheet && (() => {
-        const item = mediaById(exportSheet.mediaId);
-        const busy = exportSheet.phase === 'burning';
-        return (
-          <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
-            <div className="consent">
-              <h3 id="export-title">Export “{item?.label || 'video'}”</h3>
-              {exportSheet.phase === 'choose' && <p>Your captions are shown over the preview. Burning them into the video re-encodes it, so it takes a moment.</p>}
-              {exportSheet.text && <p className="export-status" role="status">{exportSheet.text}</p>}
-              <div className="consent-actions">
-                {exportSheet.phase === 'ready' && <button className="jbtn" autoFocus onClick={shareReadyExport}>Ready – Share</button>}
-                {exportSheet.phase === 'ready' && exportSheet.file && <button className="jbtn open" onClick={() => { saveBlob(exportSheet.file, exportSheet.file.name); setExportSheet(null); }}>Download instead</button>}
-                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && (
-                  <button className="jbtn" autoFocus onClick={exportBurned}>{exportSheet.phase === 'error' ? 'Try again' : 'Export with captions burned in'}</button>
-                )}
-                {exportSheet.phase === 'choose' && item && <button className="jbtn open" onClick={() => { setExportSheet(null); plainExport(item); }}>Export without captions</button>}
-                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'srt')}>Download SRT</button>}
-                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'ass')}>Download ASS</button>}
-                <button className="jbtn open" onClick={() => { setExportSheet(null); }}>{busy ? 'Hide' : 'Close'}</button>
-              </div>
+      {exportSheet && (
+        <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
+          <div className="consent">
+            <h3 id="export-title">Export</h3>
+            <p className="export-status" role="status">Your video is ready.</p>
+            <div className="consent-actions">
+              <button className="jbtn" autoFocus onClick={shareReadyExport}>Share</button>
+              <button className="jbtn open" onClick={() => { setExportSheet(null); }}>Close</button>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
       <header className="topbar">
         <div className="brand">
           <img src={logoUrl} alt="FinalCap logo" width="30" height="30" />

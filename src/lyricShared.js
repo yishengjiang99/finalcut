@@ -147,14 +147,79 @@ export function needsCjkFont(lines, ...langs) {
  * outline 3, shadow 1, bottom-center.
  */
 export const REFERENCE_SIZE = Object.freeze({ width: 720, height: 1280, fontSize: 48, marginLR: 48 });
-export function assStyleFor({ width, height, fontSize, positionFromBottomPct = DEFAULT_POSITION_FROM_BOTTOM_PCT }) {
+
+// ─── Caption style the model can choose in chat ─────────────────────────────────────────────
+// The default is the agreed style: Noto Sans CJK SC Bold 48 at 720x1280 (scaled), MarginV 20 %,
+// Alignment 2 (bottom center). The fonts are the ones the browser engine (ffmpeg.wasm/libass) and
+// the overlay can draw: the CJK family and the bundled Latin Inter.
+export const CAPTION_FONTS = Object.freeze([LYRIC_FONT, 'Inter']);
+export const CAPTION_SIZE_PRESETS = Object.freeze({ small: 0.75, default: 1, large: 1.4, xl: 1.8 });
+/** position → ASS Alignment (numpad: 2 bottom, 5 middle, 8 top, all centered). */
+export const CAPTION_ALIGNMENTS = Object.freeze({ bottom: 2, middle: 5, top: 8 });
+export const TOP_MARGIN_PCT = 8;
+export const SIZE_SCALE_RANGE = Object.freeze({ min: 0.5, max: 2.5 });
+const SIZE_ALIASES = { small: 'small', smaller: 'small', tiny: 'small', default: 'default', normal: 'default', medium: 'default', regular: 'default', large: 'large', big: 'large', bigger: 'large', xl: 'xl', 'extra large': 'xl', 'extra-large': 'xl', xlarge: 'xl', huge: 'xl' };
+const POSITION_ALIASES = { bottom: 'bottom', low: 'bottom', middle: 'middle', center: 'middle', centre: 'middle', top: 'top' };
+const clampNum = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+export const CAPTION_STYLE_QUESTION = 'Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up.';
+/** The rule the model follows for caption style, in the web system prompt (server-owned). */
+export const CAPTION_STYLE_GUIDANCE = 'Caption style: when the user asks for captions (lyric_captions) and has not said how they should look (font, size, position) and has not said "default" or "just do it", do not call the tool yet. Ask exactly one short question: "Which font and where should the captions go? Default is Noto Sans CJK SC Bold, bottom, 20% up." Then call lyric_captions with explicit font, size and position (and position_from_bottom_pct) from their answer. If they already stated any style preference ("bottom, large", "at the top", "bigger"), or say "default", "just do it" or "any", call the tool straight away, with the stated parts as parameters and the defaults for the rest. Never ask the style question twice.';
+
+/**
+ * Validate the style arguments of a lyric_captions call. Never throws: a bad value is dropped (the
+ * default stays) and named in `ignored` so the caller can log it. Position and font size are
+ * clamped: height 0-45 %, size 0.5x-2.5x of the default.
+ * @returns {{ style: { font: string, sizeScale: number, alignment: 2|5|8, positionFromBottomPct: number }, ignored: string[] }}
+ */
+export function resolveCaptionStyle(args = {}, { videoHeight = 0 } = {}) {
+  const ignored = [];
+  const a = args && typeof args === 'object' ? args : {};
+  const style = { font: LYRIC_FONT, sizeScale: 1, alignment: 2, positionFromBottomPct: DEFAULT_POSITION_FROM_BOTTOM_PCT };
+  if (a.font != null && a.font !== '') {
+    const want = String(a.font).replace(/\bbold\b/i, '').trim().toLowerCase();
+    const hit = CAPTION_FONTS.find(f => f.toLowerCase() === want) || (/^noto sans( cjk)?( sc)?$/.test(want) ? LYRIC_FONT : null);
+    if (hit) style.font = hit; else ignored.push('font');
+  }
+  if (a.size != null && a.size !== '') {
+    const id = SIZE_ALIASES[String(a.size).trim().toLowerCase()];
+    if (id) style.sizeScale = CAPTION_SIZE_PRESETS[id]; else ignored.push('size');
+  } else if (a.font_size != null && a.font_size !== '') {
+    const px = Number(a.font_size);
+    const base = videoHeight * (REFERENCE_SIZE.fontSize / REFERENCE_SIZE.height);
+    if (Number.isFinite(px) && px > 0 && base > 0) style.sizeScale = Math.round(clampNum(px / base, SIZE_SCALE_RANGE.min, SIZE_SCALE_RANGE.max) * 100) / 100;
+    else ignored.push('font_size');
+  }
+  let position = 'bottom';
+  if (a.position != null && a.position !== '') {
+    position = POSITION_ALIASES[String(a.position).trim().toLowerCase()];
+    if (!position) { ignored.push('position'); position = 'bottom'; }
+  }
+  style.alignment = CAPTION_ALIGNMENTS[position];
+  if (a.position_from_bottom_pct != null && a.position_from_bottom_pct !== '') {
+    const pct = Number(a.position_from_bottom_pct);
+    if (Number.isFinite(pct)) style.positionFromBottomPct = Math.round(clampNum(pct, 0, 45));
+    else ignored.push('position_from_bottom_pct');
+  }
+  return { style, ignored };
+}
+
+/** MarginV in px for an alignment: from the bottom (2), none (5, centered), or from the top (8). */
+export function marginVFor({ height, alignment = 2, positionFromBottomPct = DEFAULT_POSITION_FROM_BOTTOM_PCT }) {
+  if (alignment === 5) return 0;
+  if (alignment === 8) return Math.round(height * TOP_MARGIN_PCT / 100);
+  return Math.round(height * positionFromBottomPct / 100);
+}
+
+export function assStyleFor({ width, height, fontSize, positionFromBottomPct = DEFAULT_POSITION_FROM_BOTTOM_PCT, alignment = 2 }) {
+  const al = alignment === 5 || alignment === 8 ? alignment : 2;
   return {
     fontSize: fontSize ?? Math.max(12, Math.round(REFERENCE_SIZE.fontSize * height / REFERENCE_SIZE.height)),
-    marginV: Math.round(height * positionFromBottomPct / 100),
+    marginV: marginVFor({ height, alignment: al, positionFromBottomPct }),
     marginLR: Math.round(REFERENCE_SIZE.marginLR * width / REFERENCE_SIZE.width),
     outline: 3,
     shadow: 1,
-    alignment: 2,
+    alignment: al,
   };
 }
 
@@ -167,8 +232,8 @@ export function translationToShow(line) {
 }
 
 /** ASS file: PlayRes = video size, one Dialogue per line with "original\Ntranslation". */
-export function buildAss({ lines, width, height, fontName = LYRIC_FONT, fontSize, positionFromBottomPct }) {
-  const st = assStyleFor({ width, height, fontSize, positionFromBottomPct });
+export function buildAss({ lines, width, height, fontName = LYRIC_FONT, fontSize, positionFromBottomPct, alignment }) {
+  const st = assStyleFor({ width, height, fontSize, positionFromBottomPct, alignment });
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',

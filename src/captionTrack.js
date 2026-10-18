@@ -3,10 +3,10 @@
 // active line over the preview (timed from the lines, styled with `style`); nothing is burned in
 // until the user exports. The track also survives a reload (text only, in localStorage, keyed by a
 // fingerprint of the video) so a crashed or reloaded tab does not lose the work.
-import { buildAss, REFERENCE_SIZE, DEFAULT_POSITION_FROM_BOTTOM_PCT, LYRIC_FONT, translationToShow } from './lyricShared.js';
+import { REFERENCE_SIZE, DEFAULT_POSITION_FROM_BOTTOM_PCT, LYRIC_FONT, CAPTION_FONTS, translationToShow, TOP_MARGIN_PCT } from './lyricShared.js';
 import { videoHasBurnedCaptions } from './captionLineage.js';
 
-export const DEFAULT_CAPTION_STYLE = Object.freeze({ positionFromBottomPct: DEFAULT_POSITION_FROM_BOTTOM_PCT, sizeScale: 1, font: LYRIC_FONT });
+export const DEFAULT_CAPTION_STYLE = Object.freeze({ positionFromBottomPct: DEFAULT_POSITION_FROM_BOTTOM_PCT, sizeScale: 1, font: LYRIC_FONT, alignment: 2 });
 export const POSITION_RANGE = Object.freeze({ min: 0, max: 45 });
 export const SIZE_SCALES = Object.freeze([
   { id: 'small', label: 'Small', scale: 0.75 },
@@ -26,7 +26,8 @@ export function normalizeStyle(style = {}) {
   return {
     positionFromBottomPct: Number.isFinite(pos) ? clamp(Math.round(pos), POSITION_RANGE.min, POSITION_RANGE.max) : DEFAULT_CAPTION_STYLE.positionFromBottomPct,
     sizeScale: Number.isFinite(scale) ? clamp(Math.round(scale * 100) / 100, 0.5, 2.5) : DEFAULT_CAPTION_STYLE.sizeScale,
-    font: typeof style.font === 'string' && style.font ? style.font : DEFAULT_CAPTION_STYLE.font,
+    font: CAPTION_FONTS.includes(style.font) ? style.font : DEFAULT_CAPTION_STYLE.font,
+    alignment: [2, 5, 8].includes(Number(style.alignment)) ? Number(style.alignment) : 2,
   };
 }
 
@@ -84,6 +85,17 @@ export function activeLine(track, t) {
   return text || translation ? { text, translation } : null;
 }
 
+/** Inline CSS for the overlay box: bottom N %, centered, or top (ASS alignment 2, 5, 8). */
+export function overlayPlacement(style = DEFAULT_CAPTION_STYLE) {
+  if (style.alignment === 5) return { top: '50%', transform: 'translateY(-50%)' };
+  if (style.alignment === 8) return { top: `${TOP_MARGIN_PCT}%` };
+  return { bottom: `${style.positionFromBottomPct}%` };
+}
+/** CSS font-family for the overlay. */
+export const overlayFontFamily = (style = DEFAULT_CAPTION_STYLE) => (style.font === 'Inter'
+  ? 'Inter, system-ui, sans-serif'
+  : '"Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif');
+
 /** Overlay font height in px for a preview whose picture is `viewHeight` px tall. */
 export const overlayFontPx = (track, viewHeight) => Math.max(10, Math.round(viewHeight * DEFAULT_FONT_RATIO * (track?.style?.sizeScale ?? 1)));
 
@@ -94,22 +106,15 @@ const stamp = (sec, comma) => {
   return `${pad(Math.floor(ms / 3600000))}:${pad(Math.floor(ms / 60000) % 60)}:${pad(Math.floor(ms / 1000) % 60)}${comma ? ',' : '.'}${pad(ms % 1000, 3)}`;
 };
 
+// Markup in a cue (<i>…</i>) crashed Apple players when it reached a mov_text track, so it never does.
+const plainCue = (t) => String(t ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
 export function trackToSrt(track) {
   return track.lines
-    .map(l => ({ l, text: l.text.trim(), tr: translationToShow(l) ? l.translation.trim() : '' }))
+    .map(l => ({ l, text: plainCue(l.text), tr: translationToShow(l) ? plainCue(l.translation) : '' }))
     .filter(e => e.text || e.tr)
     .map((e, i) => `${i + 1}\n${stamp(e.l.start, true)} --> ${stamp(e.l.end, true)}\n${[e.text, e.tr].filter(Boolean).join('\n')}\n`)
     .join('\n');
-}
-
-/** The ASS script for a video of `width`×`height`, with the track's style. */
-export function trackToAss(track, { width, height, fontName }) {
-  const { positionFromBottomPct, sizeScale } = track.style;
-  return buildAss({
-    lines: track.lines, width, height, fontName: fontName || LYRIC_FONT,
-    fontSize: Math.max(12, Math.round(height * DEFAULT_FONT_RATIO * sizeScale)),
-    positionFromBottomPct,
-  });
 }
 
 // ─── Edits after captioning ─────────────────────────────────────────────────────────────────

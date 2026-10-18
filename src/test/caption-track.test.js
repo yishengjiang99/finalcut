@@ -1,7 +1,7 @@
 // The caption track: overlay timing, style clamping, SRT/ASS, what edits do to it, and reload persistence.
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  setTrack, getTrack, updateTrackStyle, clearTrack, activeLine, overlayFontPx, normalizeStyle, trackToSrt, trackToAss,
+  setTrack, getTrack, updateTrackStyle, clearTrack, activeLine, overlayFontPx, normalizeStyle, trackToSrt,
   carryTrackOnEdit, parseClock, shiftLines, restoreTrack, videoKey, persistTrack, CAPTIONS_CLEARED_NOTICE,
 } from '../captionTrack.js';
 import { recordCaptionBurn } from '../captionLineage.js';
@@ -24,7 +24,7 @@ describe('overlay', () => {
     expect(activeLine(t, 5)).toEqual({ text: 'Same', translation: '' }); // a translation that repeats the original is not drawn twice
   });
 
-  it('style changes are clamped and drive the overlay size and the export', () => {
+  it('style changes are clamped and drive the overlay size', () => {
     expect(normalizeStyle({ positionFromBottomPct: 99, sizeScale: 9 })).toMatchObject({ positionFromBottomPct: 45, sizeScale: 2.5 });
     expect(normalizeStyle({ positionFromBottomPct: -5, sizeScale: 0.1 })).toMatchObject({ positionFromBottomPct: 0, sizeScale: 0.5 });
     expect(normalizeStyle({})).toMatchObject({ positionFromBottomPct: 20, sizeScale: 1 });
@@ -33,10 +33,7 @@ describe('overlay', () => {
     const before = overlayFontPx(getTrack(bytes), 1000);
     updateTrackStyle(bytes, { sizeScale: 1.8, positionFromBottomPct: 35 });
     expect(overlayFontPx(getTrack(bytes), 1000)).toBeGreaterThan(before);
-    const ass = trackToAss(getTrack(bytes), { width: 1080, height: 1920 });
-    expect(ass).toMatch(/,672,1\n/); // MarginV: 35% of 1920
-    expect(ass).toMatch(/Style: Default,[^,]+,130,/); // 1920 × 48/1280 × 1.8 = 129.6
-    expect(trackToAss(getTrack(bytes), { width: 1080, height: 1920 })).toContain('Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello there\\N你好');
+    expect(getTrack(bytes).style).toMatchObject({ sizeScale: 1.8, positionFromBottomPct: 35, alignment: 2 });
   });
 
   it('writes SRT with both lines and skips a duplicate translation', () => {
@@ -44,6 +41,12 @@ describe('overlay', () => {
     expect(srt).toContain('1\n00:00:01,000 --> 00:00:03,000\nHello there\n你好\n');
     expect(srt).toContain('2\n00:00:04,000 --> 00:00:06,000\nSame\n');
     expect(srt).not.toContain('Same\nSame');
+  });
+
+  it('strips markup from cues: <i> tags in a mov_text track crashed Apple players', () => {
+    const srt = trackToSrt(setTrack(new Uint8Array([4]), { lines: [{ start: 0, end: 1, text: '<i>Hi</i> <b>there</b>', translation: '你好 <font color="red">x</font>' }] }));
+    expect(srt).toContain('Hi there\n你好 x\n');
+    expect(srt).not.toMatch(/<[a-z/]/i);
   });
 });
 

@@ -101,7 +101,16 @@ export function parseStyleOptions(raw = {}) {
     throw new LyricCaptionsError('position_from_bottom_pct must be a number from 0 to 45');
   }
   const fontSize = optionalInt(raw.font_size ?? raw.fontSize, 'font_size', 8, 400);
-  return { positionFromBottomPct, fontSize };
+  // `position` (bottom|middle|top) or the ASS `alignment` (2|5|8) the browser sends on export.
+  let alignment;
+  if (raw.alignment != null && raw.alignment !== '') {
+    alignment = Number(raw.alignment);
+    if (![2, 5, 8].includes(alignment)) throw new LyricCaptionsError('alignment must be 2, 5 or 8');
+  } else if (raw.position != null && raw.position !== '') {
+    alignment = { bottom: 2, middle: 5, top: 8 }[String(raw.position).toLowerCase()];
+    if (!alignment) throw new LyricCaptionsError('position must be bottom, middle or top');
+  }
+  return { positionFromBottomPct, fontSize, ...(alignment ? { alignment } : {}) };
 }
 
 function optionalInt(value, field, min, max) {
@@ -421,7 +430,7 @@ export async function runLyricCaptions({ audioPath, options, onProgress = () => 
     model,
     style: {
       fontName,
-      ...assStyleFor({ width: options.width ?? 1080, height: options.height ?? 1920, fontSize: options.fontSize, positionFromBottomPct: options.positionFromBottomPct }),
+      ...assStyleFor({ width: options.width ?? 1080, height: options.height ?? 1920, fontSize: options.fontSize, positionFromBottomPct: options.positionFromBottomPct, alignment: options.alignment }),
       positionFromBottomPct: options.positionFromBottomPct,
       // Scale rules for overlay clients: font = 48/1280 of the height, side margins = 48/720 of the width.
       fontSizeOfHeight: options.fontSize ? undefined : REFERENCE_SIZE.fontSize / REFERENCE_SIZE.height,
@@ -430,7 +439,7 @@ export async function runLyricCaptions({ audioPath, options, onProgress = () => 
     lines: merged.lines.map(l => ({ start: l.start, end: l.end, text: l.text, translation: l.translation, words: l.words })),
   };
   if (options.width && options.height) {
-    result.ass = buildAss({ lines: result.lines, width: options.width, height: options.height, fontName, fontSize: options.fontSize, positionFromBottomPct: options.positionFromBottomPct });
+    result.ass = buildAss({ lines: result.lines, width: options.width, height: options.height, fontName, fontSize: options.fontSize, positionFromBottomPct: options.positionFromBottomPct, alignment: options.alignment });
   }
   return result;
 }

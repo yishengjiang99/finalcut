@@ -1,3 +1,4 @@
+import { CAPTION_STYLE_GUIDANCE } from './lyricShared.js';
 export const tools = [
   {
     type: 'function',
@@ -937,7 +938,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'lyric_captions',
-      description: 'Translated captions: burns the original line plus a translation into the video. This is THE tool whenever the user wants captions or subtitles in another language, for speech and for songs. Use it for "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the video into Chinese and burn the captions", "translate the speech to Spanish", and for songs: "add lyrics captions", "subtitle the song in Chinese", "subtitle the song in German and Chinese", "translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: fixes only obvious recognition errors, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the audio with word timestamps (only the audio track is sent to the server, never the video), translates each line into target_language, and burns two-line captions into the video (original on top, translation below, about 20% up from the bottom; Chinese and other scripts render correctly). In lyrics mode it also identifies the song and corrects misheard lyrics against the published lyrics. Burns captions once: if the video already has captions from an earlier step, they are replaced, not doubled. Use generate_captions only for same-language subtitles, soft SRT/VTT files, or style/position options. Videos only — not supported for photos.',
+      description: 'Translated captions: burns the original line plus a translation into the video. This is THE tool whenever the user wants captions or subtitles in another language, for speech and for songs. Use it for "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the video into Chinese and burn the captions", "translate the speech to Spanish", and for songs: "add lyrics captions", "subtitle the song in Chinese", "subtitle the song in German and Chinese", "translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: fixes only obvious recognition errors, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the audio with word timestamps (only the audio track is sent to the server, never the video), translates each line into target_language, and burns two-line captions into the video (original on top, translation below, about 20% up from the bottom; Chinese and other scripts render correctly). In lyrics mode it also identifies the song and corrects misheard lyrics against the published lyrics. Captions first appear as a live overlay on the preview and are burned in when the user exports. Burns captions once: if the video already has captions from an earlier step, they are replaced, not doubled. Use generate_captions only for same-language subtitles, soft SRT/VTT files, or style/position options. If the user has not said how the captions should look (font, size, position) and has not said "default", ask one short question first (see the system prompt), then call this tool with explicit font, size and position. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -965,9 +966,27 @@ export const tools = [
           },
           font_size: {
             type: 'integer',
-            description: 'Optional font size in video pixels. Default is about video height / 27.',
+            description: 'Optional font size in video pixels. Default is about video height / 27. Prefer "size".',
             minimum: 8,
             maximum: 400
+          },
+          font: {
+            type: 'string',
+            description: 'Caption font. Default "Noto Sans CJK SC" (Bold; draws Chinese, Japanese and Latin). "Inter" is Latin only.',
+            enum: ['Noto Sans CJK SC', 'Inter'],
+            default: 'Noto Sans CJK SC'
+          },
+          size: {
+            type: 'string',
+            description: 'Caption size: "small", "default", "large" or "xl". Default "default" (48 px on a 720x1280 video, scaled).',
+            enum: ['small', 'default', 'large', 'xl'],
+            default: 'default'
+          },
+          position: {
+            type: 'string',
+            description: 'Where the captions go: "bottom" (default, about 20% up; position_from_bottom_pct moves it), "middle" or "top".',
+            enum: ['bottom', 'middle', 'top'],
+            default: 'bottom'
           }
         },
         required: ['target_language']
@@ -1069,4 +1088,4 @@ export const tools = [
   }
 ];
 
-export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic) only use frame edits: apply_color_filter, adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation, crop_video, resize_video, rotate_video, flip_video_horizontal, flip_video_vertical, add_text, convert_image_format — never trim, speed, audio, captions, or transitions on a photo. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video. For any request to caption or subtitle in a different language ("add captions in Chinese", "translate the video into Chinese"), or for songs, music videos, or the original line plus a translation, call lyric_captions with target_language (mode speech for ordinary talking, lyrics for songs) instead; generate_captions is for same-language captions.';
+export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic) only use frame edits: apply_color_filter, adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation, crop_video, resize_video, rotate_video, flip_video_horizontal, flip_video_vertical, add_text, convert_image_format — never trim, speed, audio, captions, or transitions on a photo. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video. For any request to caption or subtitle in a different language ("add captions in Chinese", "translate the video into Chinese"), or for songs, music videos, or the original line plus a translation, call lyric_captions with target_language (mode speech for ordinary talking, lyrics for songs) instead; generate_captions is for same-language captions. ' + CAPTION_STYLE_GUIDANCE;

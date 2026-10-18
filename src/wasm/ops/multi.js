@@ -110,6 +110,22 @@ export function buildBurnAssArgs({ input, output, threads, assPath, fontsDir }) 
   return [...HEAD, '-i', input, '-vf', `ass=filename=${assPath}:fontsdir=${fontsDir}`, '-map', '0:v:0', '-map', '0:a?', ...threadCap(threads), ...X264, '-c:a', 'copy', '-movflags', '+faststart', output];
 }
 
+/**
+ * Add a caption track to an mp4/mov without re-encoding: video and audio are copied, the SRT becomes
+ * a mov_text (MP4 Timed Text / tx3g) track. Only the first video and the audio streams are mapped, so
+ * data/timecode streams a phone adds (tmcd, mebx), which mp4 cannot hold, are left out.
+ */
+export function buildMuxSoftSubsArgs({ input, srtPath, output, language = 'und' }) {
+  return [
+    ...HEAD, '-i', input, '-i', srtPath,
+    '-map', '0:v:0', '-map', '0:a?', '-map', '1:0',
+    '-c', 'copy', '-c:s', 'mov_text',
+    '-metadata:s:s:0', `language=${/^[a-z]{3}$/.test(language) ? language : 'und'}`, '-metadata:s:s:0', 'handler_name=Captions',
+    '-disposition:s:0', 'default',
+    '-movflags', '+faststart', output,
+  ];
+}
+
 /** Mono 16 kHz 16-bit WAV of the clip's audio: what speech recognition reads. */
 export function buildSpeechAudioArgs({ input, output }) {
   return [...HEAD, '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-f', 'wav', output];

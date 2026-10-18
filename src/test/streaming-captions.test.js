@@ -251,31 +251,12 @@ describe('POST /api/streaming-captions/translate', () => {
   });
 });
 
-describe('POST /api/streaming-captions/burn (consented fallback)', () => {
-  const burn = (fields = {}) => {
+describe('the video never reaches the captions server', () => {
+  it('there is no burn route: POST /api/streaming-captions/burn is gone', async () => {
     const form = new FormData();
     form.append('video', new Blob(['VIDEO']), 'v.mp4');
-    for (const [k, v] of Object.entries(fields)) form.append(k, typeof v === 'string' ? v : JSON.stringify(v));
-    return fetch(`${base}/api/streaming-captions/burn`, { method: 'POST', headers: { 'sample-access-token': sampleToken }, body: form });
-  };
-
-  it('burns the lines the browser sends with the agreed style: one two-line Dialogue per caption', async () => {
-    const res = await burn({ lines: [{ start: 0.5, end: 2, text: 'Hello', translation: '你好' }, { start: 2.5, end: 4, text: 'Bye', translation: '再见' }], language: 'en', target_language: 'zh-Hans' });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('video/mp4');
-    expect(await res.text()).toBe('BURNED');
-    expect(burnedAss).toContain('PlayResX: 720');
-    expect(burnedAss).toContain('Style: Default,Noto Sans CJK SC,48,');
-    expect(burnedAss).toMatch(/,2,48,48,256,1\n/); // Alignment 2, margins 48, MarginV 20% of 1280
-    const dialogues = burnedAss.split('\n').filter(l => l.startsWith('Dialogue:'));
-    expect(dialogues).toHaveLength(2);
-    expect(dialogues[0]).toContain('Hello\\N你好');
-  });
-
-  it('rejects missing or malformed lines', async () => {
-    expect((await burn({})).status).toBe(400);
-    expect((await burn({ lines: 'not json' })).status).toBe(400);
-    expect((await burn({ lines: [{ start: 2, end: 1, text: 'x' }] })).status).toBe(400);
+    const res = await fetch(`${base}/api/streaming-captions/burn`, { method: 'POST', headers: { 'sample-access-token': sampleToken }, body: form });
+    expect(res.status).toBe(404);
   });
 });
 

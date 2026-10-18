@@ -3,11 +3,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { setUploadConsentHandler, setCloudCaptions } from '../engineMode.js';
 
-const engineMock = vi.hoisted(() => ({ burnFails: false, burns: [] }));
+const engineMock = vi.hoisted(() => ({ burnFails: false, burns: [], muxes: [], muxFails: false, probe: null }));
 vi.mock('../wasm/ffmpegEngine.js', async (importOriginal) => {
   const base = await (await import('./helpers/noWasmEngine.js')).noWasmEngine(importOriginal);
   return {
     ...base,
+    probeMedia: async (...a) => engineMock.probe || base.probeMedia(...a),
+    muxSoftSubtitles: async (opts, bytes) => {
+      if (engineMock.muxFails) throw Object.assign(new Error('out of memory'), { code: 'wasm_exec_failed' });
+      engineMock.muxes.push({ ...opts, bytes });
+      return new Uint8Array([4, 4, bytes.length]);
+    },
     burnAss: async (ass, bytes) => {
       if (engineMock.burnFails) throw Object.assign(new Error('no wasm'), { code: 'wasm_load_failed' });
       engineMock.burns.push({ ass, bytes });
@@ -24,7 +30,7 @@ vi.mock('../lyricCaptionsClient.js', async (importOriginal) => ({
   ...(await importOriginal()),
   runLyricCaptionsWeb: vi.fn(async () => ({ burned: new Uint8Array([5]), audioBytes: 44, summary: { translatedCount: 1 }, result: { lines: [{}], language: 'en', targetLanguage: 'zh-Hans', mode: 'lyrics', song: null } })),
 }));
-import { toolFunctions, setToolStatusListener, canFallBackToUpload, isRetryable, KEEP_OPEN_HINT, PICKING_UP_HINT, burnCaptionTrack, chooseBurnRoute, languageLabel } from '../toolFunctions.js';
+import { toolFunctions, setToolStatusListener, canFallBackToUpload, isRetryable, KEEP_OPEN_HINT, PICKING_UP_HINT, muxCaptionTrack, trackLanguageCode, languageLabel } from '../toolFunctions.js';
 import { getTrack, setTrack } from '../captionTrack.js';
 import * as streaming from '../streamingCaptions.js';
 import * as lyricClient from '../lyricCaptionsClient.js';
@@ -48,6 +54,9 @@ beforeEach(() => {
   requests.length = 0;
   engineMock.burnFails = false;
   engineMock.burns.length = 0;
+  engineMock.muxes.length = 0;
+  engineMock.muxFails = false;
+  engineMock.probe = null;
   consent = vi.fn(async () => true);
   setUploadConsentHandler(consent);
   setCloudCaptions(true); // a stored "cloud captions" opt-in must not skip the ElevenLabs prompt
@@ -56,10 +65,7 @@ beforeEach(() => {
   streaming.runStreamingCaptions.mockReset().mockResolvedValue(streamed);
   lyricClient.runLyricCaptionsWeb.mockClear();
   global.FormData = class { constructor() { this.data = {}; requests.push(this); } append(k, v) { this.data[k] = v; } };
-  global.fetch = vi.fn(async (url) => {
-    if (url === '/api/streaming-captions/burn') return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7, 7]).buffer };
-    throw new Error(`unexpected ${url}`);
-  });
+  global.fetch = vi.fn(async (url) => { throw new Error(`unexpected ${url}`); });
 });
 afterEach(() => setUploadConsentHandler(null));
 
@@ -86,7 +92,8 @@ describe('streaming lyric_captions on web', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({ text: 'Captions · English → Chinese', captions: { bytes: input, lines: 2 } });
     expect(result).toMatch(/streamed/);
-    expect(result).toMatch(/NOT burned into the video yet/);
+    expect(result).toMatch(/NOT burned into the picture/);
+    expect(result).toMatch(/caption track/);
     expect(result).toMatch(/ElevenLabs may keep it, so do not tell the user it was deleted/);
     expect(lyricClient.runLyricCaptionsWeb).not.toHaveBeenCalled();
   });
@@ -208,79 +215,93 @@ describe('streaming that cannot start, retry, and the on-screen hints', () => {
 });
 
 
-describe('export: burning the overlay in (the only re-encode)', () => {
+describe('export: the captions become a caption track (mov_text, -c copy), in the browser', () => {
   const src = () => new Uint8Array([1, 2, 3]);
   const makeTrack = (bytes, style) => setTrack(bytes, { lines, language: 'en', targetLanguage: 'zh-Hans', style }, { persist: false });
   const logs = () => { const events = []; return { events, clog: { log: (ev, d) => events.push({ ev, ...d }) } }; };
+  const probe = (video = 'h264', audio = 'aac') => ({ format: { duration: 10 }, streams: [{ codec_type: 'video', width: 1080, height: 1920, codec_name: video }, ...(audio ? [{ codec_type: 'audio', codec_name: audio }] : [])] });
 
-  it('burns in the browser with the track style (position and size carried into the ASS)', async () => {
+  it('muxes an SRT with both lines as a track tagged with the target language: nothing burned, nothing uploaded', async () => {
     const bytes = src();
-    const t = makeTrack(bytes, { positionFromBottomPct: 30, sizeScale: 1.4 });
     const { events, clog } = logs();
-    const out = await burnCaptionTrack({ bytes, track: t, clog });
-    expect(out.on).toBe('browser');
-    const ass = engineMock.burns[0].ass;
-    expect(ass).toContain('PlayResX: 1920');
-    expect(ass).toMatch(/Style: Default,[^,]+,57,/); // 1080 × 48/1280 × 1.4 ≈ 57
-    expect(ass).toMatch(/,-1,0,0,0,100,100,0,0,1,3,1,2,\d+,\d+,324,1/); // MarginV 30% of 1080
-    expect(ass.split('\n').filter(l => l.startsWith('Dialogue:'))).toHaveLength(2);
-    expect(videoHasBurnedCaptions(out.bytes)).toBe(true); // lineage: export never double-burns
-    expect(events.map(e => e.ev)).toEqual(expect.arrayContaining(['export_start', 'burn_start', 'burn_progress', 'burn_end']));
-    expect(events.find(e => e.ev === 'export_start')).toMatchObject({ route: 'browser', lines: 2 });
-  });
-
-  it('refuses to burn onto a clip that already carries burned captions', async () => {
-    const bytes = src();
-    const out = new Uint8Array([8]);
-    recordCaptionBurn(bytes, out);
-    await expect(burnCaptionTrack({ bytes: out, track: makeTrack(out), clog: logs().clog })).rejects.toMatchObject({ code: 'captions_already_burned' });
+    engineMock.probe = probe();
+    const out = await muxCaptionTrack({ bytes, mime: 'video/mp4', track: makeTrack(bytes), clog });
+    expect(out.mime).toBe('video/mp4');
+    expect(engineMock.muxes).toHaveLength(1);
+    expect(engineMock.muxes[0].language).toBe('zho');
+    expect(engineMock.muxes[0].srt).toContain('1\n00:00:00,500 --> 00:00:02,500\nHello my friend\n你好，我的朋友\n');
     expect(engineMock.burns).toHaveLength(0);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(videoHasBurnedCaptions(out.bytes)).toBe(false); // the picture is untouched
+    expect(events.map(e => e.ev)).toEqual(['export_start', 'mux_end']);
+    expect(events[0]).toMatchObject({ mode: 'soft_track', lines: 2 });
   });
 
-  it('when the browser cannot burn, asks before uploading and burns on the server with the style args', async () => {
-    engineMock.burnFails = true;
+  it('a .mov from an iPhone stays a .mov; a clip with no audio is fine', async () => {
     const bytes = src();
-    const t = makeTrack(bytes, { positionFromBottomPct: 10, sizeScale: 1 });
-    const out = await burnCaptionTrack({ bytes, track: t, clog: logs().clog });
-    expect(consent.mock.calls.some(c => c[0].uploads === 'video')).toBe(true);
-    const form = requests.find(f => f.data.lines);
-    expect(JSON.parse(form.data.args)).toEqual({ position_from_bottom_pct: 10, font_size: 41 });
-    expect(out.on).toBe('server');
+    engineMock.probe = probe('hevc', null);
+    const out = await muxCaptionTrack({ bytes, mime: 'video/quicktime', track: makeTrack(bytes), clog: logs().clog });
+    expect(out.mime).toBe('video/quicktime');
   });
 
-  it('logs burn_error with an ASCII-only ffmpeg tail when the burn fails and the upload is declined', async () => {
-    engineMock.burnFails = true;
-    consent.mockResolvedValue(false);
+  it('formats and codecs mp4 cannot hold without re-encoding are refused (the caller saves an SRT), with no burn and no upload', async () => {
+    const bytes = src();
+    for (const [mime, pr] of [['video/webm', probe('vp9', 'opus')], ['video/mp4', probe('vp9', 'aac')], ['video/mp4', probe('h264', 'opus')]]) {
+      engineMock.probe = pr;
+      const { events, clog } = logs();
+      await expect(muxCaptionTrack({ bytes, mime, track: makeTrack(bytes), clog })).rejects.toMatchObject({ code: 'soft_track_unsupported' });
+      expect(events.at(-1).ev).toBe('mux_error');
+    }
+    expect(engineMock.muxes).toHaveLength(0);
+    expect(engineMock.burns).toHaveLength(0);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('a mux failure (for example out of memory) is logged and thrown; there is no server or burn fallback', async () => {
+    engineMock.probe = probe();
+    engineMock.muxFails = true;
     const bytes = src();
     const { events, clog } = logs();
-    await expect(burnCaptionTrack({ bytes, track: makeTrack(bytes), clog })).rejects.toMatchObject({ name: 'UploadDeclinedError' });
-    expect(events.find(e => e.ev === 'burn_error')).toMatchObject({ name: 'UploadDeclinedError' });
+    await expect(muxCaptionTrack({ bytes, track: makeTrack(bytes), clog })).rejects.toMatchObject({ code: 'wasm_exec_failed' });
+    expect(events.at(-1)).toMatchObject({ ev: 'mux_error', code: 'wasm_exec_failed' });
+    expect(consent).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('an iPhone with a big or HD clip goes to the server route (after consent); decline uploads nothing', async () => {
-    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari', platform: 'iPhone', maxTouchPoints: 5 });
-    try {
-      const bytes = src();
-      const t = makeTrack(bytes);
-      const { events, clog } = logs();
-      consent.mockResolvedValue(false);
-      await expect(burnCaptionTrack({ bytes, track: t, clog })).rejects.toMatchObject({ name: 'UploadDeclinedError' });
-      expect(engineMock.burns).toHaveLength(0);
-      expect(requests.find(f => f.data.lines)).toBeUndefined();
-      expect(events.find(e => e.ev === 'export_start')).toMatchObject({ route: 'server', ios: true });
-      consent.mockResolvedValue(true);
-      const out = await burnCaptionTrack({ bytes, track: t, clog });
-      expect(out.on).toBe('server');
-      expect(engineMock.burns).toHaveLength(0); // never ran ffmpeg.wasm on the phone
-    } finally { vi.unstubAllGlobals(); }
+  it('language tags are ISO 639-2, und when unknown', () => {
+    expect(trackLanguageCode('zh-Hans')).toBe('zho');
+    expect(trackLanguageCode('es')).toBe('spa');
+    expect(trackLanguageCode('xx')).toBe('und');
+    expect(trackLanguageCode(null)).toBe('und');
   });
+});
 
-  it('route choice: only iOS is limited (over 20 MB or short side over 720 px)', () => {
-    const MB = 1024 * 1024;
-    expect(chooseBurnRoute({ ios: false, bytes: 500 * MB, width: 3840, height: 2160 })).toBe('browser');
-    expect(chooseBurnRoute({ ios: true, bytes: 5 * MB, width: 1280, height: 720 })).toBe('browser');
-    expect(chooseBurnRoute({ ios: true, bytes: 5 * MB, width: 720, height: 1280 })).toBe('browser');
-    expect(chooseBurnRoute({ ios: true, bytes: 21 * MB, width: 720, height: 1280 })).toBe('server');
-    expect(chooseBurnRoute({ ios: true, bytes: 5 * MB, width: 1080, height: 1920 })).toBe('server');
+
+describe('style the model chose in chat reaches the overlay track', () => {
+  it('"caption in Chinese, bottom, large" → bottom, Alignment 2, 1.4x, default font and 20% up', async () => {
+    const input = new Uint8Array([5, 5]);
+    await tool({ target_language: 'zh-Hans', position: 'bottom', size: 'large' }, input);
+    expect(getTrack(input).style).toMatchObject({ alignment: 2, sizeScale: 1.4, font: 'Noto Sans CJK SC', positionFromBottomPct: 20 });
+  });
+  it('top, xl, Inter, 30% → carried exactly; the tool result names the style', async () => {
+    const input = new Uint8Array([6, 6]);
+    const { result } = await tool({ target_language: 'zh-Hans', position: 'top', size: 'xl', font: 'Inter', position_from_bottom_pct: 30 }, input);
+    expect(getTrack(input).style).toMatchObject({ alignment: 8, sizeScale: 1.8, font: 'Inter', positionFromBottomPct: 30 });
+    expect(result).toMatch(/style: Inter, size x1.8, top/);
+  });
+  it('no style params → the agreed default (Noto Sans CJK SC, 1x, Alignment 2, 20%)', async () => {
+    const input = new Uint8Array([7, 7]);
+    await tool({ target_language: 'zh-Hans' }, input);
+    expect(getTrack(input).style).toMatchObject({ alignment: 2, sizeScale: 1, font: 'Noto Sans CJK SC', positionFromBottomPct: 20 });
+  });
+  it('invalid values are dropped to the default, never an error', async () => {
+    const input = new Uint8Array([8, 8]);
+    await tool({ target_language: 'zh-Hans', font: 'Comic Sans', size: 'gigantic', position: 'sideways', position_from_bottom_pct: 999 }, input);
+    expect(getTrack(input).style).toMatchObject({ alignment: 2, sizeScale: 1, font: 'Noto Sans CJK SC', positionFromBottomPct: 45 });
+  });
+  it('font_size in pixels is converted with the video height (1080 px tall: 57 px = 1.4x)', async () => {
+    const input = new Uint8Array([9, 9]);
+    await tool({ target_language: 'zh-Hans', font_size: 57 }, input);
+    expect(getTrack(input).style.sizeScale).toBeCloseTo(1.4, 1);
   });
 });
