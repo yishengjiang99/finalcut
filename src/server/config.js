@@ -20,6 +20,8 @@ export function nodeEnvWarning(env = process.env) {
 }
 export const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Streaming captions: the server only mints single-use realtime tokens with this key; it never reaches the browser.
+export const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

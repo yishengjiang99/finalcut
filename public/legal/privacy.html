@@ -15,7 +15,7 @@
 </head>
 <body>
   <h1>FinalCap Privacy Policy</h1>
-  <p class="meta">Effective: 2026-09-26 · Last updated: 2026-10-10 · Product: FinalCap (iOS + web) at grepawk.com · Operator: grepawk / Yisheng Jiang</p>
+  <p class="meta">Effective: 2026-09-26 · Last updated: 2026-10-18 · Product: FinalCap (iOS + web) at grepawk.com · Operator: grepawk / Yisheng Jiang</p>
   <p>This policy describes how FinalCap handles information when you use our iOS app and website. It does <strong>not</strong> cover unrelated grepawk products (for example Grok Camera / Photo Recipes) unless you use those separately.</p>
 
   <h2>Information we collect</h2>
@@ -33,6 +33,15 @@
     <li><strong>Usage analytics (web)</strong> — anonymous product events recorded on our own servers so we can see which parts of the site work: page views of the landing page, which editing tool ran and whether it succeeded, that a file was opened (type and a coarse size range, not the name), exports, sign-in and upgrade steps, and the referring website's domain and campaign tags. To count repeat visits, the site stores a random ID in your browser's local storage, plus a per-tab session ID. We use no cookies and no third-party analytics for this, we do not store your IP address, and we never record your prompts, file names, media, frames, or account details. If your browser sends Global Privacy Control or Do Not Track, no events are sent.</li>
   </ul>
 
+  <h2 id="streaming-captions">Streaming captions (optional)</h2>
+  <p>When you ask FinalCap on the web to caption or translate speech (for example "add captions in Chinese"), the audio from your video, not the picture, streams from your browser to ElevenLabs to transcribe it. There is no separate prompt: asking for captions starts it.</p>
+  <ul>
+    <li><strong>What leaves your browser.</strong> Your browser takes the audio from your video and streams only the audio, never the picture, directly to ElevenLabs (Scribe v2 Realtime) to transcribe it. It connects with a short-lived, single-use token that our server issues. The audio does not pass through our servers, and we keep no copy of it.</li>
+    <li><strong>What ElevenLabs may keep.</strong> ElevenLabs may keep the audio and the transcript under its own privacy policy (<a href="https://elevenlabs.io/privacy-policy" rel="noopener noreferrer">elevenlabs.io/privacy-policy</a>). We cannot delete them from ElevenLabs, and we have not enabled any zero-retention mode. This is the one case where we cannot delete your audio.</li>
+    <li><strong>What we receive.</strong> Your browser sends us the transcript text (not the audio). Our server forwards that text to xAI (Grok) to translate it and returns the result. Our server holds the text in memory only while it handles the request and does not store it.</li>
+    <li><strong>The video.</strong> The video itself is never sent to ElevenLabs or xAI. Burning captions into the video happens in your browser. If your browser cannot do that, the app asks you before it uploads the video to our server for that one step.</li>
+  </ul>
+
   <h2>How we use information</h2>
   <ul>
     <li>Provide editing, captioning (including lyric captions and translation), preview, and export.</li>
@@ -42,10 +51,10 @@
   </ul>
 
   <h2>Sharing</h2>
-  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; xAI for Grok AI models, including lyric lookup, translation, and wording notifications from an anonymous summary; Apple, including Apple Push Notification service to deliver notifications; and Stripe on web). The on-device speech model is served from our own servers. We do not sell your personal information.</p>
+  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; ElevenLabs for speech-to-text on streaming captions (your browser sends the audio to it directly, and it keeps data under its own policy); xAI for Grok AI models, including lyric lookup, translation, and wording notifications from an anonymous summary; Apple, including Apple Push Notification service to deliver notifications; and Stripe on web). The on-device speech model is served from our own servers. We do not sell your personal information.</p>
 
   <h2>Retention</h2>
-  <p>Uploaded media and job outputs are kept as needed to provide the service and then deleted or anonymized according to our retention schedule and your deletion requests, subject to legal holds. For lyric captions, the uploaded audio is deleted right after transcription, and the transcript lines and translations are kept in server memory for up to 30 minutes so the caption burn-in step can use them, then expire.</p>
+  <p>Uploaded media and job outputs are kept as needed to provide the service and then deleted or anonymized according to our retention schedule and your deletion requests, subject to legal holds. For lyric captions, the uploaded audio is deleted right after transcription, and the transcript lines and translations are kept in server memory for up to 30 minutes so the caption burn-in step can use them, then expire. For streaming captions the audio goes directly from your browser to ElevenLabs, which keeps the audio and transcript under its own policy and which we cannot ask to delete; we hold no copy, and the transcript text is not stored on our server.</p>
   <p>Anonymous usage analytics events are deleted automatically after 13 months. Notification events and the log of notifications sent are deleted after 13 months; a push token is disabled as soon as Apple reports it is no longer valid (for example after the app is deleted).</p>
 
   <h2>Your choices</h2>

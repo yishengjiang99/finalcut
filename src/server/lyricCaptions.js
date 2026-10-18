@@ -37,13 +37,20 @@ import { extractAudioToWav } from './captions.js';
 import { isIosClient } from './clientInfo.js';
 import { notAvailableOnServerError } from './ffmpegOps.js';
 import { normalizeLanguageCode, stripLlmFences, normalizeCaptionText } from './captionHelpers.js';
-import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs } from './jobs.js';
+import {
+  DEFAULT_POSITION_FROM_BOTTOM_PCT, isCjkText, sameText, buildLines, assTime, escapeAssText, LYRIC_FONT, fontForLanguages,
+  needsCjkFont, REFERENCE_SIZE, assStyleFor, translationToShow, buildAss,
+} from '../lyricShared.js';
+export {
+  DEFAULT_POSITION_FROM_BOTTOM_PCT, buildLines, assTime, escapeAssText, LYRIC_FONT, fontForLanguages, needsCjkFont,
+  REFERENCE_SIZE, assStyleFor, translationToShow, buildAss,
+};
+import { enqueueCustomJob, JOBS_DIR, _jobsForTests as jobs, missingJobCode } from './jobs.js';
 
 export const LYRIC_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI audio limit; 10 min of 16 kHz WAV is 19.2 MB
 export const LYRIC_AUDIO_MAX_SECONDS = 10 * 60;
 export const LYRIC_RESULT_TTL_MS = 30 * 60 * 1000;
 export const LYRIC_MODES = ['auto', 'lyrics', 'speech'];
-export const DEFAULT_POSITION_FROM_BOTTOM_PCT = 20;
 export const UNAVAILABLE = 'lyric_captions_unavailable';
 const SEARCH_MODEL = process.env.LYRIC_CAPTIONS_MODEL || 'grok-4.7';
 const FALLBACK_MODEL = process.env.LYRIC_CAPTIONS_FALLBACK_MODEL || XAI_UTILITY_MODEL;
@@ -60,10 +67,6 @@ export class LyricCaptionsError extends Error {
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
-const CJK_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
-const isCjkText = (s) => CJK_RE.test(String(s || ''));
-const SENTENCE_END_RE = /[.!?。！？…]$/;
-const CLAUSE_END_RE = /[.!?。！？…,;:，；：、]$/;
 
 /** Target language: keep a valid BCP-47 tag as given (zh-Hans, pt-BR); otherwise a normalized code. */
 export function parseTargetLanguage(raw) {
@@ -108,192 +111,6 @@ function optionalInt(value, field, min, max) {
   return n;
 }
 
-function joinWords(words) {
-  let out = '';
-  for (const w of words) {
-    const t = String(w.w ?? '').trim();
-    if (!t) continue;
-    if (out && !(isCjkText(out.slice(-1)) && isCjkText(t[0])) && !/^[,.!?;:，。！？、；：)]/.test(t)) out += ' ';
-    out += t;
-  }
-  return out;
-}
-
-/**
- * Turn a transcription ({ segments:[{start,end,text}], words:[{w,start,end}] }) into caption
- * lines timed from their first/last word. Long segments split at word boundaries (max ~42 Latin or
- * ~18 CJK characters) and at pauses over 1.2 s, so each event fits on screen as one line.
- */
-export function buildLines({ segments = [], words = [] } = {}, { maxChars, maxGap = 1.2 } = {}) {
-  // A segment that repeats the previous one's text while overlapping it in time is a transcriber
-  // duplicate; drop it. Back-to-back repeats (a chorus line sung twice) are real and stay.
-  const segs = [];
-  for (const s of segments) {
-    const text = String(s.text || '').trim();
-    if (!text) continue;
-    const prev = segs[segs.length - 1];
-    if (prev && sameText(prev.text, text) && s.start < prev.end - 0.05) {
-      prev.end = Math.max(prev.end, s.end);
-      continue;
-    }
-    segs.push({ ...s, text, words: [] });
-  }
-  const ws = words
-    .filter(w => Number.isFinite(w.start) && Number.isFinite(w.end) && String(w.w ?? '').trim())
-    .filter((w, i, arr) => !(i > 0 && arr[i - 1].start === w.start && arr[i - 1].end === w.end && arr[i - 1].w === w.w));
-  if (!segs.length && ws.length) segs.push({ start: ws[0].start, end: ws[ws.length - 1].end, text: joinWords(ws), words: [] });
-  for (const w of ws) {
-    const mid = (w.start + w.end) / 2;
-    let best = segs[0];
-    let bestDist = Infinity;
-    for (const s of segs) {
-      const d = mid < s.start ? s.start - mid : mid > s.end ? mid - s.end : 0;
-      if (d < bestDist) { best = s; bestDist = d; }
-    }
-    best?.words.push(w);
-  }
-  const lines = [];
-  for (const s of segs) {
-    const limit = maxChars ?? (isCjkText(s.text) ? 18 : 42);
-    if (!s.words.length) {
-      lines.push({ start: s.start, end: s.end, text: s.text, words: [] });
-      continue;
-    }
-    // Break at pauses, after sentence ends, and before the line gets too long — preferring the
-    // last comma/clause break in the line over a cut mid-phrase.
-    const groups = [];
-    let cur = [];
-    const minSentence = Math.round(limit * 0.3);
-    for (const w of s.words) {
-      const prev = cur[cur.length - 1];
-      if (prev && w.start - prev.end > maxGap) {
-        groups.push(cur);
-        cur = [];
-      } else if (prev && joinWords([...cur, w]).length > limit) {
-        let k = -1;
-        for (let j = cur.length - 2; j >= 0; j--) if (CLAUSE_END_RE.test(String(cur[j].w).trim())) { k = j; break; }
-        if (k >= 0) {
-          groups.push(cur.slice(0, k + 1));
-          cur = cur.slice(k + 1);
-        } else {
-          groups.push(cur);
-          cur = [];
-        }
-      }
-      cur.push(w);
-      if (SENTENCE_END_RE.test(String(w.w).trim()) && joinWords(cur).length >= minSentence) {
-        groups.push(cur);
-        cur = [];
-      }
-    }
-    if (cur.length) groups.push(cur);
-    for (const g of groups) {
-      lines.push({
-        start: g[0].start,
-        end: g[g.length - 1].end,
-        text: groups.length === 1 ? s.text : joinWords(g),
-        words: g.map(w => ({ w: String(w.w).trim(), start: round3(w.start), end: round3(w.end) })),
-      });
-    }
-  }
-  lines.sort((a, b) => a.start - b.start);
-  // Minimum on-screen time without overlapping the next line.
-  for (let i = 0; i < lines.length; i++) {
-    const next = lines[i + 1];
-    let end = Math.max(lines[i].end, lines[i].start + 0.8);
-    if (next) end = Math.min(end, next.start);
-    lines[i].start = round3(lines[i].start);
-    lines[i].end = round3(Math.max(end, lines[i].start + 0.05));
-  }
-  return lines;
-}
-
-const round3 = (n) => Math.round(n * 1000) / 1000;
-
-/** ASS time H:MM:SS.cc */
-export function assTime(sec) {
-  const cs = Math.max(0, Math.round(sec * 100));
-  const h = Math.floor(cs / 360000);
-  const m = Math.floor((cs % 360000) / 6000);
-  const s = Math.floor((cs % 6000) / 100);
-  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`;
-}
-
-/** Make lyric text inert in ASS: no override blocks, no backslash escapes, one line. */
-export function escapeAssText(text) {
-  return String(text ?? '')
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\\/g, '/')
-    .replace(/\{/g, '(')
-    .replace(/\}/g, ')')
-    .trim();
-}
-
-/** One family for Latin and Chinese lines (Yisheng's style spec); it also covers kana and hangul. */
-export const LYRIC_FONT = 'Noto Sans CJK SC';
-export function fontForLanguages() {
-  return LYRIC_FONT;
-}
-
-export function needsCjkFont(lines, ...langs) {
-  if (langs.some(l => /^(zh|ja|ko)/i.test(String(l || '')))) return true;
-  return lines.some(l => isCjkText(l.text) || isCjkText(l.translation));
-}
-
-/**
- * Style spec, defined at 720x1280 and scaled to the video: font 48 (48/1280 of the height),
- * MarginV 256 (20% of the height, or position_from_bottom_pct), MarginL/R 48 (48/720 of the width),
- * outline 3, shadow 1, bottom-center.
- */
-export const REFERENCE_SIZE = Object.freeze({ width: 720, height: 1280, fontSize: 48, marginLR: 48 });
-export function assStyleFor({ width, height, fontSize, positionFromBottomPct = DEFAULT_POSITION_FROM_BOTTOM_PCT }) {
-  return {
-    fontSize: fontSize ?? Math.max(12, Math.round(REFERENCE_SIZE.fontSize * height / REFERENCE_SIZE.height)),
-    marginV: Math.round(height * positionFromBottomPct / 100),
-    marginLR: Math.round(REFERENCE_SIZE.marginLR * width / REFERENCE_SIZE.width),
-    outline: 3,
-    shadow: 1,
-    alignment: 2,
-  };
-}
-
-const sameText = (a, b) => normalizeCaptionText(a) !== '' && normalizeCaptionText(a) === normalizeCaptionText(b);
-
-/** The translation to draw under a line, or '' when it just repeats the original. */
-export function translationToShow(line) {
-  const t = escapeAssText(line.translation);
-  return t && !sameText(t, line.text) ? t : '';
-}
-
-/** ASS file: PlayRes = video size, one Dialogue per line with "original\Ntranslation". */
-export function buildAss({ lines, width, height, fontName = LYRIC_FONT, fontSize, positionFromBottomPct }) {
-  const st = assStyleFor({ width, height, fontSize, positionFromBottomPct });
-  const header = [
-    '[Script Info]',
-    'ScriptType: v4.00+',
-    `PlayResX: ${width}`,
-    `PlayResY: ${height}`,
-    'WrapStyle: 0',
-    'ScaledBorderAndShadow: yes',
-    '',
-    '[V4+ Styles]',
-    'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Default,${fontName},${st.fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,${st.outline},${st.shadow},${st.alignment},${st.marginLR},${st.marginLR},${st.marginV},1`,
-    '',
-    '[Events]',
-    'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
-  ];
-  // Exactly one Dialogue per caption line: original, hard \N, translation. A translation that only
-  // repeats the original is left out so the same text is never drawn twice.
-  const events = lines
-    .map(l => ({ l, text: escapeAssText(l.text), translation: translationToShow(l) }))
-    .filter(e => e.text || e.translation)
-    .map(({ l, text, translation }) => {
-      const parts = [text, translation].filter(Boolean);
-      return `Dialogue: 0,${assTime(l.start)},${assTime(l.end)},Default,,0,0,0,,${parts.join('\\N')}`;
-    });
-  return `${[...header, ...events].join('\n')}\n`;
-}
 
 /** Pull the JSON object out of a model reply (tolerates fences and prose around it). */
 export function parseModelJson(text) {
@@ -348,7 +165,7 @@ export function mergeCorrections(lines, parsed, { usedWebSearch }) {
   return { lines: merged, song, mode, language, translatedCount: merged.filter(l => l.translation).length };
 }
 
-export function buildCorrectionPrompt({ lines, targetLanguage, sourceLanguage, mode, detectedLanguage }) {
+export function buildCorrectionPrompt({ lines, targetLanguage, sourceLanguage, mode, detectedLanguage, context = [] }) {
   const system = [
     'You fix speech-recognition transcripts of short user videos and translate them for bilingual captions.',
     'Input: numbered transcript lines (with timestamps) from one clip.',
@@ -368,6 +185,8 @@ export function buildCorrectionPrompt({ lines, targetLanguage, sourceLanguage, m
     `Target language for translations: ${targetLanguage}.`,
     `Source language: ${sourceLanguage === 'auto' ? `auto (recognizer guessed ${detectedLanguage || 'unknown'})` : sourceLanguage}.`,
     `Mode: ${mode}.`,
+    // Streaming captions translate a few lines at a time: the previous lines keep names and terms consistent.
+    ...(context.length ? ['', 'Earlier lines of the same clip (context only, do not output them):', ...context.map(t => `- ${t}`)] : []),
     '',
     ...lines.map((l, i) => `${i} [${l.start.toFixed(2)}-${l.end.toFixed(2)}] ${l.text}`),
   ].join('\n');
@@ -437,8 +256,8 @@ async function postJson(url, body, timeoutMs) {
  * Grok correction + translation. Lyrics/auto: Responses API with the web_search tool. If that
  * fails (model or tool unavailable), or in speech mode, chat completions without search.
  */
-async function correctWithGrok({ lines, targetLanguage, sourceLanguage, mode, detectedLanguage }) {
-  const { system, user } = buildCorrectionPrompt({ lines, targetLanguage, sourceLanguage, mode, detectedLanguage });
+async function correctWithGrok({ lines, targetLanguage, sourceLanguage, mode, detectedLanguage, context }) {
+  const { system, user } = buildCorrectionPrompt({ lines, targetLanguage, sourceLanguage, mode, detectedLanguage, context });
   if (mode !== 'speech') {
     try {
       const data = await postJson('https://api.x.ai/v1/responses', {
@@ -516,6 +335,7 @@ async function burnAss({ inputPath, assPath, outputPath, copyAudio }) {
 
 const defaultHooks = {
   hasApiKeys: () => Boolean(OPENAI_API_KEY && XAI_API_TOKEN),
+  hasTranslateKey: () => Boolean(XAI_API_TOKEN),
   probeHostTools,
   probeMedia,
   extractAudioToWav,
@@ -615,6 +435,107 @@ export async function runLyricCaptions({ audioPath, options, onProgress = () => 
   return result;
 }
 
+// ── Streaming captions support (text in, text out; see streamingCaptions.js) ─────────────────
+
+export const TRANSLATE_MAX_SEGMENTS = 40;
+export const TRANSLATE_MAX_TEXT = 400;
+export const TRANSLATE_MAX_TOTAL_CHARS = 8000;
+export const TRANSLATE_MAX_CONTEXT = 4;
+
+/** Validate a translate-batch body: { target_language, source_language?, segments:[{i,start,end,text}], context?:[text] }. */
+export function parseTranslateRequest(body = {}) {
+  const targetLanguage = parseTargetLanguage(body.target_language ?? body.targetLanguage);
+  if (!targetLanguage) throw new LyricCaptionsError('target_language is required: a language code or name such as "zh-Hans", "es", or "Japanese"');
+  const sourceLanguage = normalizeLanguageCode(body.source_language ?? body.sourceLanguage ?? 'auto', { allowAuto: true });
+  if (!sourceLanguage) throw new LyricCaptionsError('source_language must be "auto" or a language code/name');
+  const raw = body.segments;
+  if (!Array.isArray(raw) || !raw.length) throw new LyricCaptionsError('segments must be a non-empty array');
+  if (raw.length > TRANSLATE_MAX_SEGMENTS) throw new LyricCaptionsError(`At most ${TRANSLATE_MAX_SEGMENTS} segments per request`, { status: 413, code: 'batch_too_large' });
+  let total = 0;
+  const segments = raw.map((s, k) => {
+    const text = typeof s?.text === 'string' ? s.text.trim() : '';
+    const start = Number(s?.start);
+    const end = Number(s?.end);
+    if (!text) throw new LyricCaptionsError(`segments[${k}].text is required`);
+    if (text.length > TRANSLATE_MAX_TEXT) throw new LyricCaptionsError(`segments[${k}].text is longer than ${TRANSLATE_MAX_TEXT} characters`, { status: 413, code: 'batch_too_large' });
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || end > 86_400) throw new LyricCaptionsError(`segments[${k}] needs numeric start <= end (seconds)`);
+    total += text.length;
+    const i = Number.isInteger(s?.i) ? s.i : k;
+    return { i, start, end, text };
+  });
+  if (total > TRANSLATE_MAX_TOTAL_CHARS) throw new LyricCaptionsError(`A batch can hold at most ${TRANSLATE_MAX_TOTAL_CHARS} characters`, { status: 413, code: 'batch_too_large' });
+  const context = (Array.isArray(body.context) ? body.context : [])
+    .filter(t => typeof t === 'string' && t.trim())
+    .slice(-TRANSLATE_MAX_CONTEXT)
+    .map(t => t.trim().slice(0, TRANSLATE_MAX_TEXT));
+  return { targetLanguage, sourceLanguage, segments, context };
+}
+
+export function assertTranslateAvailable() {
+  if (!hooks.hasTranslateKey()) {
+    throw new LyricCaptionsError('Translated captions are unavailable on this server: missing XAI_API_TOKEN.', { status: 503, code: UNAVAILABLE });
+  }
+}
+
+/**
+ * Translate transcript segments with Grok. Speech only: never identifies a song and never uses
+ * web search (mode is fixed to "speech", which skips the Responses/web_search call).
+ */
+export async function translateSpeechSegments({ segments, targetLanguage, sourceLanguage = 'auto', context = [] }) {
+  const lines = segments.map(s => ({ start: s.start, end: s.end, text: s.text, words: [] }));
+  const { parsed, model } = await hooks.correct({ lines, targetLanguage, sourceLanguage, mode: 'speech', detectedLanguage: null, context });
+  const merged = mergeCorrections(lines, parsed, { usedWebSearch: false });
+  return {
+    lines: merged.lines.map((l, k) => ({ i: segments[k].i, text: l.text, translation: l.translation })),
+    language: merged.language,
+    model,
+  };
+}
+
+/** Parse the lines a client sends for a server burn (the streaming flow keeps its lines in the browser). */
+export function parseBurnLines(raw) {
+  let lines = raw;
+  if (typeof raw === 'string') {
+    try { lines = JSON.parse(raw); } catch { throw new LyricCaptionsError('lines must be valid JSON'); }
+  }
+  if (!Array.isArray(lines) || !lines.length) throw new LyricCaptionsError('lines must be a non-empty array');
+  if (lines.length > 3000) throw new LyricCaptionsError('Too many caption lines', { status: 413, code: 'batch_too_large' });
+  return lines.map((l, k) => {
+    const start = Number(l?.start);
+    const end = Number(l?.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || end > 86_400) throw new LyricCaptionsError(`lines[${k}] needs numeric start <= end (seconds)`);
+    return {
+      start, end,
+      text: typeof l?.text === 'string' ? l.text.slice(0, TRANSLATE_MAX_TEXT) : '',
+      translation: typeof l?.translation === 'string' ? l.translation.slice(0, TRANSLATE_MAX_TEXT) : '',
+    };
+  });
+}
+
+/** Burn caption lines into an uploaded video with ffmpeg (ass filter). Returns the mp4 bytes. */
+export async function burnLinesOnServer({ videoBuffer, lines, language, targetLanguage, style }) {
+  const id = randomUUID();
+  const inputPath = path.join(JOBS_DIR, `lyric-burn-${id}.in`);
+  const assPath = path.join(JOBS_DIR, `lyric-burn-${id}.ass`);
+  const outputPath = path.join(JOBS_DIR, `lyric-burn-${id}.mp4`);
+  try {
+    const fontName = fontForLanguages(language, targetLanguage);
+    await assertLyricCaptionsAvailable({ forBurn: true, fontName: needsCjkFont(lines, language, targetLanguage) ? fontName : null });
+    await fs.mkdir(JOBS_DIR, { recursive: true });
+    await fs.writeFile(inputPath, videoBuffer);
+    let meta;
+    try { meta = await hooks.probeMedia(inputPath); } catch { meta = null; }
+    const size = videoDisplaySize(meta);
+    if (!size) throw new LyricCaptionsError('Lyric captions need a video', { code: 'unsupported_for_photo' });
+    const audio = (meta.streams || []).find(s => s.codec_type === 'audio');
+    await fs.writeFile(assPath, buildAss({ lines, width: size.width, height: size.height, fontName, ...style }), 'utf8');
+    await hooks.burnAss({ inputPath, assPath, outputPath, copyAudio: !audio || ['aac', 'mp3', 'alac'].includes(audio.codec_name) });
+    return await fs.readFile(outputPath);
+  } finally {
+    await Promise.all([inputPath, assPath, outputPath].map(p => fs.unlink(p).catch(() => {})));
+  }
+}
+
 /** Short, lyric-free summary for job polling and the chat tool result. */
 export function summarizeResult(result) {
   return {
@@ -653,7 +574,7 @@ function uploadAudio(req, res, next) {
   });
 }
 
-function sendError(res, err, fallback) {
+export function sendError(res, err, fallback) {
   if (err instanceof LyricCaptionsError) return res.status(err.status).json(err.toJSON());
   console.error(`[lyric_captions] ${fallback}:`, err?.message || err);
   return res.status(500).json({ error: fallback, operation: 'lyric_captions' });
@@ -762,7 +683,7 @@ router.post('/api/lyric-captions', videoProcessLimiter, requireAuthenticatedUser
  * the burn fallback answers 400 not_available_on_server to iOS clients, before reading any upload,
  * like the grouped tools on the process-video routes.
  */
-function refuseIosBurn(req, res, next) {
+export function refuseIosBurn(req, res, next) {
   if (!isIosClient(req)) return next();
   const err = notAvailableOnServerError('lyric_captions',
     'The FinalCap iOS app draws lyric captions on the device from the job result\'s lines; the server burn-in is for the web app only');
@@ -771,15 +692,15 @@ function refuseIosBurn(req, res, next) {
 
 router.post('/api/lyric-captions/:jobId/burn', videoProcessLimiter, requireAuthenticatedUser, refuseIosBurn, uploadSingle('video'), async (req, res) => {
   const job = jobFor(req);
-  if (!job) return res.status(404).json({ error: 'Lyric caption job not found or expired', code: 'job_not_found', operation: 'lyric_captions' });
+  if (!job) {
+    // job_lost = the server restarted since the job was made; job_expired = past the 30-minute TTL.
+    const code = missingJobCode(req.params.jobId) || 'job_not_found';
+    return res.status(404).json({ error: 'Lyric caption job not found or expired', code, retryable: code !== 'job_not_found', operation: 'lyric_captions' });
+  }
   if (job.status !== 'succeeded' || !job.resultJson) {
     return res.status(409).json({ error: `Lyric caption job is ${job.status}`, code: 'job_not_ready', operation: 'lyric_captions' });
   }
   if (!req.file?.buffer?.length) return res.status(400).json({ error: 'No video file provided (multipart field "video")', operation: 'lyric_captions' });
-  const id = randomUUID();
-  const inputPath = path.join(JOBS_DIR, `lyric-burn-${id}.in`);
-  const assPath = path.join(JOBS_DIR, `lyric-burn-${id}.ass`);
-  const outputPath = path.join(JOBS_DIR, `lyric-burn-${id}.mp4`);
   try {
     let args = {};
     if (req.body?.args) {
@@ -787,25 +708,12 @@ router.post('/api/lyric-captions/:jobId/burn', videoProcessLimiter, requireAuthe
     }
     const style = parseStyleOptions({ ...job.lyricOptions, ...args });
     const result = job.resultJson;
-    const fontName = fontForLanguages(result.language, result.targetLanguage);
-    await assertLyricCaptionsAvailable({ forBurn: true, fontName: needsCjkFont(result.lines, result.language, result.targetLanguage) ? fontName : null });
-    await fs.mkdir(JOBS_DIR, { recursive: true });
-    await fs.writeFile(inputPath, req.file.buffer);
-    let meta;
-    try { meta = await hooks.probeMedia(inputPath); } catch { meta = null; }
-    const size = videoDisplaySize(meta);
-    if (!size) throw new LyricCaptionsError('Lyric captions need a video', { code: 'unsupported_for_photo' });
-    const audio = (meta.streams || []).find(s => s.codec_type === 'audio');
-    await fs.writeFile(assPath, buildAss({ lines: result.lines, width: size.width, height: size.height, fontName, ...style }), 'utf8');
-    await hooks.burnAss({ inputPath, assPath, outputPath, copyAudio: !audio || ['aac', 'mp3', 'alac'].includes(audio.codec_name) });
-    const out = await fs.readFile(outputPath);
+    const out = await burnLinesOnServer({ videoBuffer: req.file.buffer, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, style });
     res.set('Content-Type', 'video/mp4');
     res.set('X-Lyric-Captions-Burn', 'server');
     return res.send(out);
   } catch (err) {
     return sendError(res, err, 'Failed to burn lyric captions');
-  } finally {
-    await Promise.all([inputPath, assPath, outputPath].map(p => fs.unlink(p).catch(() => {})));
   }
 });
 

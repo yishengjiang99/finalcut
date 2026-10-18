@@ -13,6 +13,7 @@ import logoUrl from './brand/logo-96.webp';
 import Landing from './Landing.jsx';
 import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './telemetry.js';
 import { takePendingPrompt } from './pendingPrompt.js';
+import { newBuildAvailable } from './buildInfo.js';
 import './App.css';
 
 const sampleCommands = [
@@ -184,6 +185,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const [isSampleMode, setIsSampleMode] = useState(false);
   const [sampleAccessToken, setSampleAccessTokenState] = useState(null);
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
+  const lastPromptRef = useRef(''); // the last thing the user asked: what a Retry button sends again
+  const [newVersion, setNewVersion] = useState(false); // the server runs a newer build than this tab
   const chatWindowRef = useRef(null);
   const composerZoneRef = useRef(null);
   // Pin the composer to the bottom of the *visual* viewport (iPhone Safari keyboard):
@@ -221,7 +224,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const jobIdCounterRef = useRef(1);
   const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
-  const [, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
+  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
   const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
   // Which clip the next edit applies to. Bytes are kept per media message so any
@@ -474,6 +477,17 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     return () => { ignore = true; };
   }, []);
 
+  // An open tab keeps its old bundle: offer a reload when the server has a newer build (never reload by itself).
+  useEffect(() => {
+    let stopped = false;
+    const check = async () => { if (!stopped && await newBuildAvailable()) setNewVersion(true); };
+    const first = setTimeout(check, 10_000);
+    const timer = setInterval(check, 5 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { stopped = true; clearTimeout(first); clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+
   const addMessage = ({
     text,
     isUser = false,
@@ -481,7 +495,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     videoType = 'processed',
     mimeType = null,
     showSampleLinks = false,
-    vttUrl = null
+    vttUrl = null,
+    retry = false
   }) => {
     // Whatever a cancelled job still reports (its aborted request) is not shown.
     if (currentJobRef.current?.controller.signal.aborted) return;
@@ -505,7 +520,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         }
       }
     }
-    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, excludeFromAPI: true, showSampleLinks, vttUrl, parentId }]);
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, excludeFromAPI: true, showSampleLinks, vttUrl, parentId, retryText: retry ? lastPromptRef.current : null }]);
   };
 
   // Tools hand back edited bytes through this setter, then post the result message.
@@ -638,6 +653,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     if (!hasStringOverride) setChatInput('');
     // Dismiss the on-screen keyboard after sending (the box shrinks back to one row via chatInput).
     textareaRef.current?.blur();
+    lastPromptRef.current = text;
     const newMessage = { role: 'user', content: text, id: messageIdCounterRef.current++ };
     trackOnce('first_prompt', { prompt_len_bucket: lengthBucket(text.length), input: hasStringOverride ? 'suggestion' : 'typed' });
     const newMessages = [...messages, newMessage];
@@ -940,7 +956,23 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
   return (
     <div className="fc editor">
-      {uploadConsent && (
+      {uploadConsent && (uploadConsent.kind === 'streaming_audio' || uploadConsent.kind === 'connection_dropped') && (
+        // Streaming captions: the wording comes with the request (asked every time, never remembered).
+        <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby={uploadConsent.title ? 'consent-title' : undefined}>
+          <div className="consent">
+            {uploadConsent.title && <h3 id="consent-title">{uploadConsent.title}</h3>}
+            <p>
+              {uploadConsent.body}
+              {uploadConsent.privacyHref && (<> <a href={uploadConsent.privacyHref} target="_blank" rel="noopener noreferrer">{uploadConsent.privacyLabel || 'Privacy details'}</a></>)}
+            </p>
+            <div className="consent-actions">
+              <button className="jbtn open" autoFocus={uploadConsent.kind === 'streaming_audio'} onClick={() => answerUploadConsent(false)}>{uploadConsent.declineLabel}</button>
+              <button className="jbtn" autoFocus={uploadConsent.kind === 'connection_dropped'} onClick={() => answerUploadConsent(true)}>{uploadConsent.confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {uploadConsent && uploadConsent.kind !== 'streaming_audio' && uploadConsent.kind !== 'connection_dropped' && (
         <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consent-title">
           <div className="consent">
             <h3 id="consent-title">This step uploads {UPLOAD_NOUN[uploadConsent.uploads] || 'your file'}</h3>
@@ -978,6 +1010,12 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         {sessionExpired && <button className="btn-export" onClick={handleGetStarted} title="Your session has expired">Sign in again</button>}
         <button className="btn-export" onClick={handleExport} disabled={!activeMedia} title={activeMedia ? `Download “${activeMedia.label}”` : 'Add a file to export'}>Export</button>
       </header>
+      {newVersion && (
+        <div className="new-version-bar" role="status">
+          <span>New version available — reload</span>
+          <button className="chip-btn primary" onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      )}
 
       <div className="layout">
         <aside className="rail">
@@ -1017,6 +1055,11 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                 <React.Fragment key={msg.id}>
                   <div className={`msg ${msg.role === 'user' ? 'user' : 'assistant'}`} data-message-id={msg.id}>
                     {msg.content && <div className="bubble">{msg.content}</div>}
+                    {msg.retryText && (
+                      <div className="rc-actions">
+                        <button className="chip-btn primary" disabled={isCallingAPI} onClick={() => handleSend(msg.retryText)}>↻ Retry</button>
+                      </div>
+                    )}
                     {msg.videoUrl && renderAttachment(msg)}
                   </div>
                   {i === 0 && (
@@ -1032,8 +1075,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                 <div className="msg assistant">
                   <div className="bubble typing" aria-live="polite">
                     <span></span><span></span><span></span>
-                    <span className="typing-stage">{toolStage || 'Working\u2026'}</span>
+                    <span className="typing-stage">{(Number.isFinite(turnStatus?.progress) && turnStatus.text) || toolStage || 'Working\u2026'}</span>
                   </div>
+                  {turnStatus?.hint && <div className="typing-hint" aria-live="polite">{turnStatus.hint}</div>}
                 </div>
               )}
             </div>

@@ -2017,3 +2017,11 @@ body {
   .fc.editor .layout, .fc.editor .main { flex: 1 0 auto; min-height: auto; }
   .fc.editor .chat, .fc.editor .view { flex: 1 0 auto; min-height: auto; overflow: visible; }
 }
+
+.new-version-bar {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 6px 12px; font-size: 13px;
+  background: rgba(124, 92, 255, 0.18); border-bottom: 1px solid rgba(124, 92, 255, 0.35);
+}
+
+.typing-hint { margin: 4px 4px 0; font-size: 12px; color: var(--text-dim); }

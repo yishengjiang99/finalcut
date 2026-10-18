@@ -1,7 +1,7 @@
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { TMP_DIR, APP_BASE_URL } from './config.js';
 import {
   apiLimiter,
@@ -27,6 +27,58 @@ import { detectMediaType, MEDIA_TYPE_IMAGE, MEDIA_TYPE_VIDEO } from './mediaType
 const jobs = new Map();
 
 const JOBS_DIR = path.join(TMP_DIR, 'finalcut-jobs');
+
+// Job state lives in this process's memory (and TMP_DIR, which systemd's PrivateTmp wipes on every
+// restart), and every push to main restarts the service. Job ids therefore carry a per-process boot
+// id, so a poll for an id from before a restart can be told apart from a plain unknown id and
+// answered with a retryable code (`job_lost`) instead of a bare 404.
+let BOOT_ID = randomBytes(4).toString('hex');
+const JOB_ID_RE = /^j([0-9a-f]{8})_[0-9a-f-]{36}$/;
+
+export function newJobId() {
+  return `j${BOOT_ID}_${randomUUID()}`;
+}
+
+/** 'job_lost' (made by a previous process: restart/deploy), 'job_expired' (this process dropped it), or undefined. */
+export function missingJobCode(id) {
+  const m = JOB_ID_RE.exec(String(id || ''));
+  if (!m) return undefined;
+  return m[1] === BOOT_ID ? 'job_expired' : 'job_lost';
+}
+
+/** 404 body for an unknown job id. `error` keeps its old text; `code` and `retryable` are additive. */
+export function jobNotFoundBody(id, error = 'Job not found') {
+  const code = missingJobCode(id);
+  return code ? { error, code, retryable: true } : { error };
+}
+
+/** Jobs a restart would break: still running, or finished but not yet picked up by the client. */
+export function pendingJobCount() {
+  let n = 0;
+  for (const j of jobs.values()) {
+    if (j.status === 'queued' || j.status === 'running') n += 1;
+    else if (j.status === 'succeeded' && (j.resultJson || j.resultPath) && !j.resultFetched) n += 1;
+  }
+  return n;
+}
+
+/**
+ * Graceful shutdown helper: wait (up to maxMs) until no job is pending, so a deploy does not kill the
+ * jobs of users who are mid-request. Resolves with the number still pending.
+ */
+export async function waitForJobsToSettle({ maxMs = 45_000, pollMs = 500 } = {}) {
+  const deadline = Date.now() + maxMs;
+  while (pendingJobCount() > 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  return pendingJobCount();
+}
+
+/** Test hook: forget every job and pretend the process restarted (new boot id). */
+export function _simulateRestartForTests() {
+  jobs.clear();
+  BOOT_ID = randomBytes(4).toString('hex');
+}
 
 async function ensureJobsDir() {
   await fs.mkdir(JOBS_DIR, { recursive: true });
@@ -109,7 +161,7 @@ export async function enqueueCustomJob(fields, runner) {
   await ensureJobsDir();
   const now = new Date().toISOString();
   const job = {
-    id: randomUUID(),
+    id: newJobId(),
     status: 'queued',
     progress: 0,
     error: null,
@@ -203,7 +255,7 @@ router.post(
       if (!args || typeof args !== 'object' || Array.isArray(args)) args = {};
 
       await ensureJobsDir();
-      const id = randomUUID();
+      const id = newJobId();
       inputPath = path.join(JOBS_DIR, `${id}.in`);
       await fs.writeFile(inputPath, req.file.buffer);
 
@@ -281,10 +333,11 @@ router.get(
   async (req, res) => {
     const job = jobs.get(req.params.id);
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return res.status(404).json(jobNotFoundBody(req.params.id));
     }
     const sample = isValidSampleModeRequest(req);
     if (!sample && job.userId != null && req.user?.id != null && job.userId !== req.user.id) {
+      // Someone else's job: indistinguishable from an unknown id (no code, nothing to retry).
       return res.status(404).json({ error: 'Job not found' });
     }
     return res.json(publicJob(job, getJobBaseUrl(req, job)));
@@ -301,13 +354,15 @@ router.get(
   requireActiveSubscription,
   async (req, res) => {
     const job = jobs.get(req.params.id);
-    if (!job || job.status !== 'succeeded' || (!job.resultPath && !job.resultJson)) {
+    if (!job) return res.status(404).json(jobNotFoundBody(req.params.id, 'Result not available'));
+    if (job.status !== 'succeeded' || (!job.resultPath && !job.resultJson)) {
       return res.status(404).json({ error: 'Result not available' });
     }
     const sample = isValidSampleModeRequest(req);
     if (!sample && job.userId != null && req.user?.id != null && job.userId !== req.user.id) {
       return res.status(404).json({ error: 'Result not available' });
     }
+    job.resultFetched = true; // no longer holds up a graceful shutdown
     // JSON results (lyric_captions) are kept in memory, never written to disk.
     if (job.resultJson) return res.json(job.resultJson);
     try {

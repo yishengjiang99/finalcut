@@ -8,10 +8,12 @@ beforeAll(() => {
   setUploadConsentHandler(() => true);
   setCloudCaptions(true);
 });
-const lyricWeb = vi.hoisted(() => ({ inputs: [] }));
-vi.mock('../lyricCaptionsClient.js', () => ({
+const lyricWeb = vi.hoisted(() => ({ inputs: [], fail: null }));
+vi.mock('../lyricCaptionsClient.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   describeSong: (song) => (song ? `Song: "${song.title}"` : 'No song identified.'),
   runLyricCaptionsWeb: async (args, bytes) => {
+    if (lyricWeb.fail) throw lyricWeb.fail;
     lyricWeb.inputs.push(bytes);
     return { burned: new Uint8Array(20 + lyricWeb.inputs.length), audioBytes: 44, summary: { translatedCount: 1 }, result: { lines: [{}], language: 'de', targetLanguage: 'zh-Hans', mode: 'lyrics', song: { title: 'T' } } };
   },
@@ -106,5 +108,40 @@ describe('lyric_captions follows the same rule', () => {
     noteDerivedVideo(out, edited);
     const r3 = await toolFunctions.lyric_captions({ target_language: 'es' }, edited, set, vi.fn());
     expect(r3).toContain(CAPTIONS_ALREADY_BURNED);
+  });
+});
+
+describe('lyric_captions failures reach the user as one short message', () => {
+  const run = async (error) => {
+    lyricWeb.fail = error;
+    const addMessage = vi.fn();
+    try {
+      const result = await toolFunctions.lyric_captions({ target_language: 'zh-Hans' }, new Uint8Array([1]), vi.fn(), addMessage);
+      return { result, shown: addMessage.mock.calls.map(c => c[0].text) };
+    } finally { lyricWeb.fail = null; }
+  };
+  const err = (message, extra = {}) => Object.assign(new Error(message), extra);
+
+  it('job missing / poll failed: the Design message, never "Job not found" or "Error creating lyric captions"', async () => {
+    for (const e of [err('Job not found', { code: 'job_lost', status: 404 }), err('Job poll failed (500)', { status: 500 }), err('Network error', { code: 'network' }), err('Lyric captions timed out', { code: 'timeout' })]) {
+      const { result, shown } = await run(e);
+      expect(shown).toEqual(["Captions couldn't finish. Nothing was changed. Try again."]);
+      expect(result).toContain('"Captions couldn\'t finish. Nothing was changed. Try again."');
+      expect(result).toMatch(/exactly this message and nothing else/);
+      expect(JSON.stringify([shown, result])).not.toMatch(/Job not found|Error creating lyric captions|Sorry/);
+    }
+  });
+
+  it('audio over the limit and unavailable service use their own messages', async () => {
+    for (const e of [err('x', { code: 'audio_too_long', status: 413 }), err('x', { code: 'audio_too_large', status: 413 }), err('Lyric captions support up to 10 minutes of audio')]) {
+      expect((await run(e)).shown).toEqual(["This video's audio is too long for translated captions. Try a clip under 10 minutes."]);
+    }
+    for (const e of [err('x', { code: 'lyric_captions_unavailable', status: 503 }), err('x', { status: 503 })]) {
+      expect((await run(e)).shown).toEqual(["Translated captions aren't available right now. Try again later."]);
+    }
+  });
+
+  it('actionable server messages are kept (no speech, no audio track)', async () => {
+    expect((await run(err('No singing or speech detected in the audio', { code: 'no_speech' }))).shown).toEqual(['No singing or speech detected in the audio']);
   });
 });

@@ -359,9 +359,25 @@ server {
     add_header Cross-Origin-Opener-Policy "same-origin" always;
     add_header Cross-Origin-Embedder-Policy "require-corp" always;
 
-    # Serve static files
+    # The HTML shell must always be revalidated: it names the hashed bundle, so a
+    # cached copy keeps phones on an old build. Hashed /assets/ stay immutable below.
+    # add_header in a location replaces ALL server-level add_header lines, so repeat them.
+    location = /index.html {
+        add_header Cache-Control "no-cache" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    }
+
+    # Serve static files (SPA fallback serves index.html, so it must not be cached either)
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
     }
 
     # Proxy API requests to Node.js server

@@ -4,8 +4,15 @@
 // the user agrees to the upload. In "server" engine mode every edit goes to the server API.
 
 import { captionSourceFor, recordCaptionBurn } from './captionLineage.js';
-import { runLyricCaptionsWeb, describeSong } from './lyricCaptionsClient.js';
-import { abortableFetch as fetch } from './abortableFetch.js';
+import { runLyricCaptionsWeb, describeSong, friendlyLyricCaptionsError } from './lyricCaptionsClient.js';
+import {
+  streamingAvailable, runStreamingCaptions, burnStreamingCaptionsOnServer, friendlyStreamingError,
+  CONTINUE_COPY, STREAMING_MESSAGES, StreamingCaptionsError,
+} from './streamingCaptions.js';
+import { createClientLog } from './clientLog.js';
+import { keepAwake } from './wakeLock.js';
+import { buildAss, LYRIC_FONT } from './lyricShared.js';
+import { abortableFetch as fetch, getFetchAbortSignal } from './abortableFetch.js';
 import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
 import { CLI_MIME_TYPES } from './wasm/ops/multi.js';
@@ -148,7 +155,7 @@ let toolStatusListener = null;
 export function setToolStatusListener(listener) {
   toolStatusListener = typeof listener === 'function' ? listener : null;
 }
-const toolStatus = (text, progress) => toolStatusListener?.({ text, ...(Number.isFinite(progress) ? { progress } : {}) });
+const toolStatus = (text, progress, hint) => toolStatusListener?.({ text, ...(Number.isFinite(progress) ? { progress } : {}), ...(hint ? { hint } : {}) });
 
 const sampleAuthHeaders = () => (sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {});
 
@@ -458,6 +465,95 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
   addMessage({ text: `Bilingual captions burned in (${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage}). ${songText}`, videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })), mimeType: 'video/mp4' });
   const where = lastExecution.executedOn === 'server' ? 'burn-in: server (you agreed to upload the video)' : 'burn-in: on this device';
   return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText}${replacing ? ' Replaced the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video); ${where}.`;
+}
+
+// Streaming captions: the video's audio (never the picture) is streamed from this browser straight to
+// A streaming failure before any session was accepted may fall back to the upload-based flow.
+const NO_FALLBACK = new Set(['cancelled', 'skipped_by_user', 'no_audio', 'audio_too_long', 'no_speech', 'declined_continue', 'daily_limit_reached']);
+export function canFallBackToUpload(err) {
+  if (!err || err.name === 'UploadDeclinedError' || NO_FALLBACK.has(err.code)) return false;
+  if (err.status === 401 || err.status === 402 || err.status === 403 || err.status === 429) return false;
+  return err.neverStarted === true;
+}
+// The chat offers a Retry button for failures that a second try can fix.
+export function isRetryable(err) {
+  return Boolean(err) && err.name !== 'UploadDeclinedError' && !['cancelled', 'skipped_by_user', 'no_audio', 'audio_too_long', 'no_speech', 'declined_continue'].includes(err.code);
+}
+
+// ElevenLabs realtime speech-to-text, started as soon as the user asks for captions (no prompt; the privacy page says so). Our server
+// only mints the single-use token and translates the committed text; the burn runs in ffmpeg.wasm.
+async function streamingCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage, clog = createClientLog()) {
+  const headers = sampleAuthHeaders();
+  // Technical stage events go to the server journal (see src/clientLog.js); never audio, text or tokens.
+  try {
+    return await streamingCaptionsFlow(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog);
+  } catch (err) {
+    clog.log('run_fail', { code: err?.code, name: err?.name, neverStarted: err?.neverStarted, msg: String(err?.message || '').slice(0, 100) });
+    throw err;
+  }
+}
+
+const isMobileBrowser = () => {
+  const nav = globalThis.navigator || {};
+  return /iPhone|iPad|iPod|Android/i.test(nav.userAgent || '') || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
+};
+export const KEEP_OPEN_HINT = 'Keep this tab open until captions finish';
+export const PICKING_UP_HINT = 'Picking up where we left off…';
+
+async function streamingCaptionsFlow(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog) {
+  const releaseWake = keepAwake({ onEvent: (e, detail) => clog.log('wakelock', { st: e, detail }) });
+  try {
+    return await streamingCaptionsSteps(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog);
+  } finally {
+    releaseWake();
+  }
+}
+
+async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog) {
+  const fileMimeType = currentFileMimeType || 'video/mp4';
+  const probeStart = Date.now();
+  const { width, height } = engine.summarizeProbe(await engine.probeMedia(videoFileData, fileMimeType));
+  clog.log('probe_end', { ms: Date.now() - probeStart, w: width, h: height });
+  const signal = getFetchAbortSignal();
+  toolStatus('Preparing the audio… 1%', 0.01, isMobileBrowser() ? KEEP_OPEN_HINT : null);
+  const extractStart = Date.now();
+  clog.log('extract_start');
+  let wav;
+  try { wav = await engine.extractSpeechAudio(videoFileData, fileMimeType); } catch (err) {
+    clog.log('extract_error', { code: err?.code, name: err?.name, msg: String(err?.message || '').slice(0, 100), ms: Date.now() - extractStart });
+    throw err;
+  }
+  clog.log('extract_end', { ms: Date.now() - extractStart, bytes: wav?.byteLength });
+  const result = await runStreamingCaptions(args, wav, {
+    headers,
+    log: clog.log,
+    signal: signal || undefined,
+    onProgress: ({ percent, text, pickingUp }) => toolStatus(`${text} ${percent}%`, percent / 100, pickingUp ? PICKING_UP_HINT : (isMobileBrowser() ? KEEP_OPEN_HINT : null)),
+    // A dropped connection keeps the finished lines; resuming needs a fresh token from the first unfinished range.
+    confirmContinue: ({ atSec, reason }) => requestUploadConsent({
+      tool: 'lyric_captions', kind: 'connection_dropped', uploads: 'audio',
+      body: reason === 'time_limit' ? STREAMING_MESSAGES.timeLimit(atSec) : STREAMING_MESSAGES.connectionDropped(atSec),
+      ...CONTINUE_COPY,
+    }),
+  });
+  clog.log('streamed', { lines: result.lines.length, translated: result.translatedCount });
+  const burnStart = Date.now();
+  clog.log('burn_start', { lines: result.lines.length });
+  toolStatus('Burning captions into the video…', 0.99);
+  const burned = await browserFirst('lyric_captions', async () => {
+    if (!(width && height)) throw Object.assign(new Error('The video size is unknown, so the captions cannot be laid out here.'), { code: 'unsupported_in_browser' });
+    const ass = buildAss({ lines: result.lines, width, height, fontName: LYRIC_FONT });
+    return engine.burnAss(assWithFont(ass, engine.FONT_FAMILY), videoFileData, fileMimeType);
+  }, () => burnStreamingCaptionsOnServer({ videoBytes: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, headers }));
+  clog.log('burn_end', { ms: Date.now() - burnStart, on: lastExecution.executedOn, bytes: burned?.byteLength });
+  clog.log('run_done', { burnedOn: lastExecution.executedOn, lines: result.lines.length });
+  recordCaptionBurn(videoFileData, burned);
+  setVideoFileData(burned);
+  toolStatus('Done', 1);
+  const count = result.lines.length;
+  addMessage({ text: `Bilingual captions burned in (${count} lines, ${result.language || 'auto'} → ${result.targetLanguage}).`, videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })), mimeType: 'video/mp4' });
+  const where = lastExecution.executedOn === 'server' ? 'burn-in: server (you agreed to upload the video)' : 'burn-in: on this device';
+  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. ${replacing ? 'Replaced the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted; ${where}.`;
 }
 
 // Point every style of an ASS script at the font the browser engine has (it has no system fonts).
@@ -1218,15 +1314,43 @@ export const toolFunctions = {
 
   // Audio-in, captions-out: transcription and burn-in run in the browser (ffmpeg.wasm).
   lyric_captions: async (args, inputVideoFileData, setVideoFileData, addMessage) => {
+    let streaming = false;
+    // Plain speech is logged from its very first step (before the status check, consent and decode).
+    const clog = args?.mode !== 'lyrics' ? createClientLog({ headers: sampleAuthHeaders() }) : null;
+    clog?.attach();
+    clog?.env();
+    clog?.log('tool_start', { lang: String(args?.target_language || '').slice(0, 12), bytes: inputVideoFileData?.byteLength });
     try {
       // Same rule as generate_captions: never burn on top of burned captions.
       const { bytes: videoFileData, replacing } = captionSourceFor(inputVideoFileData);
       if ((currentFileMimeType || '').startsWith('image/')) throw new Error('Lyric captions are not supported for photos');
       if (!args?.target_language) throw new Error('target_language is required');
+      // Plain speech ("add captions in Chinese") streams to realtime STT when the server has it; songs
+      // (mode "lyrics") keep the upload-based flow that looks the lyrics up.
+      const available = args.mode !== 'lyrics' && await streamingAvailable({ headers: sampleAuthHeaders() });
+      clog?.log('status_check', { available: Boolean(available) });
+      if (available) {
+        streaming = true;
+        try {
+          return await streamingCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage, clog);
+        } catch (err) {
+          // Streaming could not even start (token refused, socket never accepted, nothing answered):
+          // fall back to the upload-based flow, which asks before uploading the audio.
+          if (!canFallBackToUpload(err)) throw err;
+          clog?.log('fallback_upload', { code: err?.code });
+          streaming = false;
+        }
+      }
       return await lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage);
     } catch (error) {
-      addMessage({ text: 'Error creating lyric captions: ' + error.message });
-      return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}: ${error.message}`;
+      if (error?.code === 'cancelled') throw error;
+      clog?.log('tool_fail', { code: error?.code, name: error?.name });
+      // One short message for the user (never "Job not found"); the model is told to say just that.
+      const friendly = streaming || error instanceof StreamingCaptionsError ? friendlyStreamingError(error) : friendlyLyricCaptionsError(error);
+      addMessage({ text: friendly, retry: isRetryable(error) });
+      return `Failed to create lyric captions${error.code ? ` (${error.code})` : ''}. Nothing was changed. Reply to the user with exactly this message and nothing else (no apology, no extra explanation): "${friendly}"`;
+    } finally {
+      clog?.detach();
     }
   },
 
