@@ -2,6 +2,7 @@
   "ttl": 3600,
   "video": [
     { "id": "v-captions", "label": "Captions", "prompt": "Add captions from what's said in the video.", "icon": "captions.bubble", "tools": ["generate_captions"] },
+    { "id": "v-captions-zh", "label": "Chinese captions", "prompt": "Add Chinese captions translated from what's said in the video.", "icon": "character.bubble", "tools": ["lyric_captions"], "minBuild": 19 },
     { "id": "v-trim-15", "label": "Trim to 15s", "prompt": "Trim the video to the first 15 seconds.", "icon": "scissors", "tools": ["trim_video"] },
     { "id": "v-title", "label": "Add a title", "prompt": "Add a title at the top of the video in large white text. Ask me what it should say first.", "icon": "textformat", "tools": ["add_text"] },
     { "id": "v-vertical", "label": "Make it vertical", "prompt": "Make the video vertical (9:16) for Reels and TikTok.", "icon": "rectangle.portrait", "tools": ["resize_video_preset"] },

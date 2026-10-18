@@ -30,6 +30,11 @@ The repo default is `config/ios-suggestions.json`:
 }
 ```
 
+- **Chinese captions chip:** the default video list has `v-captions-zh` ("Chinese captions", tool
+  `lyric_captions`) right after Captions with `"minBuild": 19`. The cutoff lives on the chip only, so
+  builds 10 to 18 do not show a chip that dead-ends; the `lyric_captions` tool itself has no build gate.
+  A live override file (`IOS_SUGGESTIONS_PATH`) replaces the repo default, so add the same entry there
+  (see "Admin API") for it to show on a server that uses one.
 - **Media:** which array an entry is in (`video` or `photo`) decides its media. The older shape,
   `{ "suggestions": [ { ..., "media": ["video", "photo"] } ] }`, is also accepted.
 - **Required fields:**

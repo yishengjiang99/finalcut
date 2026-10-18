@@ -24,7 +24,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const GROUPED_FIXTURE = path.join(here, 'fixtures', 'ios-suggestions-grouped.json');
 const CUTOFF = GROUPED_EFFECTS_MIN_BUILD;
 const VIDEO_IDS = ['v-captions', 'v-trim-15', 'v-title', 'v-vertical', 'v-slowmo', 'v-speed-2x', 'v-warm', 'v-mute'];
+// From build 19 the Chinese captions chip follows Captions (minBuild lives on the chip only).
+const VIDEO_IDS_19 = [VIDEO_IDS[0], 'v-captions-zh', ...VIDEO_IDS.slice(1)];
 const PHOTO_IDS = ['p-bw', 'p-brighten', 'p-vivid', 'p-warm', 'p-square', 'p-text'];
+const label_ok = (l) => l.length <= 24;
 const noLimit = (req, res, next) => next();
 const ids = (body) => body.suggestions.map(s => s.id);
 
@@ -68,8 +71,24 @@ describe('default config (config/ios-suggestions.json, FinalCut Design set)', ()
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(ids(body)).toEqual(VIDEO_IDS);
-    expect(body.suggestions).toEqual(raw.video.map(({ id, label, prompt, icon }) => ({ id, label, prompt, icon })));
+    expect(body.suggestions).toEqual(raw.video.filter(e => !e.minBuild || e.minBuild <= 12).map(({ id, label, prompt, icon }) => ({ id, label, prompt, icon })));
     expect(body.ttl).toBe(3600);
+  });
+
+  it('Chinese captions chip: shown from build 19 right after Captions, hidden on builds 10-18 (no dead end); lyric_captions itself is not gated', async () => {
+    const chip = raw.video.find(e => e.id === 'v-captions-zh');
+    expect(chip).toEqual({ id: 'v-captions-zh', label: 'Chinese captions', prompt: "Add Chinese captions translated from what's said in the video.", icon: 'character.bubble', tools: ['lyric_captions'], minBuild: 19 });
+    expect(raw.video.map(e => e.id).slice(0, 2)).toEqual(['v-captions', 'v-captions-zh']);
+    for (const build of [10, 11, 12, 18]) expect(ids(await getJson(`?build=${build}&media=video`))).toEqual(VIDEO_IDS);
+    for (const build of [19, 20, 40]) {
+      const body = await getJson(`?build=${build}&media=video`);
+      expect(ids(body)).toEqual(VIDEO_IDS_19);
+      expect(body.suggestions[1]).toEqual({ id: 'v-captions-zh', label: 'Chinese captions', prompt: "Add Chinese captions translated from what's said in the video.", icon: 'character.bubble' }); // minBuild/tools never sent
+    }
+    expect(ids(await getJson('?build=19&media=photo'))).toEqual(PHOTO_IDS);
+    // The tool has no build gate of its own: every iOS build is offered it, so the cutoff is on the chip only.
+    for (const build of [10, 12, 18, 19]) expect(iosToolNamesFor(build, 'video').has('lyric_captions')).toBe(true);
+    expect(label_ok(chip.label)).toBe(true);
   });
 
   it('build 12 photo: all 6 pills, in config order, no video pills', async () => {
@@ -110,7 +129,7 @@ describe('default config (config/ios-suggestions.json, FinalCut Design set)', ()
       expect(got).toContain('p-vivid');
       expect(got).toEqual(PHOTO_IDS);
     }
-    expect(ids(await getJson(`?build=${CUTOFF}&media=video`))).toEqual(VIDEO_IDS);
+    expect(ids(await getJson(`?build=${CUTOFF}&media=video`))).toEqual(VIDEO_IDS_19);
   });
 
   it('a build with no on-device tools (9) gets no pills', async () => {
@@ -129,7 +148,7 @@ describe('default config (config/ios-suggestions.json, FinalCut Design set)', ()
     const warn = vi.fn();
     const config = validateSuggestionsConfig(raw, { warn });
     expect(warn).not.toHaveBeenCalled();
-    expect(config.video.map(e => e.id)).toEqual(VIDEO_IDS);
+    expect(config.video.map(e => e.id)).toEqual(VIDEO_IDS_19);
     expect(config.photo.map(e => e.id)).toEqual(PHOTO_IDS);
     const prop = (tool, param) => tools.find(t => t.function.name === tool).function.parameters.properties[param];
     expect(prop('apply_color_filter', 'filter').enum).toEqual(expect.arrayContaining(['warm', 'grayscale', 'black_and_white']));
