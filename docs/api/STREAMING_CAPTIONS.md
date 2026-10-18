@@ -190,6 +190,24 @@ worked every time (HTTP 200); the key and tokens were never logged.
   test in real Safari/Chrome before turning pacing above 1x on by default.
 * **Default is 4x** (decision of the product owner). `fc.streamPace` can turn it back down (1 = real time); max 4.
 
+## Drop-rate sweep at 4x (2026-10-18, from the build box)
+
+Raw `ws` client, the ~56 s speech clip, 4x pace, 8 runs per variant, real key (never logged). A "drop" is a close with code 1006 before the audio finished. `control_echo` is an **unrelated** WebSocket echo server, not ElevenLabs.
+
+| Variant | Drops / runs | Drop times (s into the run) |
+|---|---|---|
+| baseline (manual commits, 0.5 s chunks, timestamps + language detection) | 5 / 8 | 11.4, 4.2, 4.1, 1.3, 9.3 |
+| `commit_strategy=vad` | **3 / 8** | 5.9, 9.2, 10.9 |
+| 0.25 s chunks | 5 / 8 | 8.7, 4.6, 12.8, 2.9, 11.3 |
+| 1 s chunks | 6 / 8 | 3.5, 12.7, 2.9, 4.3, 1.2, 1.0 |
+| no `include_timestamps` | 6 / 8 | 3.8, 1.4, 11, 23.3, 7.5, 0.8 |
+| no language detection | 4 / 8 | 3.4, 0.8, 2.6, 2.2 |
+| `language_code=en` | 5 / 8 | 3.5, 7.6, 6.2, 1.8, 2.3 |
+| US host (`api.us.elevenlabs.io`) | 6 / 8 | 5.2, 1.8, 7.6, 3.8, 1.9, 1.4 |
+| control: unrelated echo server | 7 / 8 | 0.7, 5.3, 2.7, 16.4, 5.3, 2.9, 16.3 |
+
+Conclusion: **no variant is clearly better.** `vad` (3/8) and no-language-detection (4/8) are the lowest, but with 8 runs each the gap to the baseline (5/8) is within noise, and `vad` removes our own commit points (the planner aligns ranges to them), so it is not worth the risk. The unrelated echo server drops about as often (7/8), so the drops come from the box's network path, not from anything in the request. **Defaults are unchanged** (manual commits, 0.5 s chunks, 4x, timestamps and language detection on). The client's resume logic (3 automatic resumes, fresh token, continue from the first unfinished range) is the mitigation; test in real Safari/Chrome on a consumer network before drawing conclusions about browsers.
+
 ## Still to check in a real browser
 
 * The 1006 drops above, in Safari and Chrome, from a normal consumer network.
