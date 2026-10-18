@@ -285,7 +285,7 @@ export function offsetWords(words, { sessionStartSec, rangeStartInSession, range
  * `commits` are the range end points (samples) inside the run; each gets one `commit:true` chunk.
  * Resolves { ended: 'done'|'dropped'|'error', error?, results } and never rejects except on cancel.
  */
-export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs = 30_000, connectTimeoutMs = 15_000, onSegment, onSent }) {
+export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs = 30_000, connectTimeoutMs = 15_000, onSegment, onSent, log = () => {} }) {
   const fromSample = ranges[0].startSample;
   const toSample = ranges[ranges.length - 1].endSample;
   const sessionStartSec = fromSample / SAMPLE_RATE;
@@ -298,10 +298,16 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
     let sendingDone = false;
     let nextExpected = 0; // index into ranges of the next committed event
     let idleTimer = null;
+    let sentSec = 0;
+    let firstMsg = false;
+    let tick = null;
+    let sawPartial = false;
     const finish = (value) => {
       if (settled) return;
       settled = true;
       clearTimeout(idleTimer);
+      clearInterval(tick);
+      log('run_end', { ended: value.ended, kind: value.error?.kind, rs: ws?.readyState, sentSec: +(sentSec).toFixed(1), next: nextExpected });
       signal?.removeEventListener?.('abort', onAbort);
       try { ws?.close(); } catch { /* already closed */ }
       resolve({ ...value, nextExpected });
@@ -320,28 +326,34 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
 
     const armIdle = (ms) => {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => finish({ ended: 'error', error: { kind: 'timeout', message: 'No answer from the transcription service' } }), ms);
+      idleTimer = setTimeout(() => { log('idle_timeout', { waitMs: ms, rs: ws?.readyState, opened, sentSec: +(sentSec).toFixed(1) }); finish({ ended: 'error', error: { kind: 'timeout', message: 'No answer from the transcription service' } }); }, ms);
     };
 
     try {
+      log('ws_new', { from: +(sessionStartSec).toFixed(1) });
       ws = new WebSocketImpl(url);
     } catch (err) {
+      log('ws_new_error', { msg: String(err?.message || err).slice(0, 100) });
       return finish({ ended: 'error', error: { kind: 'connect', message: err?.message || 'Could not connect' } });
     }
     armIdle(connectTimeoutMs);
+    tick = setInterval(() => log('ws_tick', { rs: ws?.readyState, buf: ws?.bufferedAmount, sentSec: +(sentSec).toFixed(1), opened }), 5000);
 
     const handle = (data) => {
       armIdle(idleTimeoutMs);
       let msg;
       try { msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data)); } catch { return; }
       const type = msg?.message_type;
+      if (!firstMsg) { firstMsg = true; log('ws_first_msg', { type }); }
       if (type === 'session_started') {
         opened = true;
+        log('ws_session_started');
         pump();
         return;
       }
       if (type === 'committed_transcript_with_timestamps') {
         const range = ranges[nextExpected++];
+        log('committed', { idx: range?.index, wc: Array.isArray(msg.words) ? msg.words.length : 0 });
         if (range) onSegment({ range, text: String(msg.text || ''), words: msg.words, languageCode: msg.language_code || null, sessionStartSec });
         if (sendingDone && nextExpected >= ranges.length) finish({ ended: 'done' });
         return;
@@ -353,15 +365,19 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
         if (sendingDone && nextExpected >= ranges.length) finish({ ended: 'done' });
         return;
       }
-      if (type === 'committed_transcript' || type === 'partial_transcript' || type === 'warning') return;
+      if (type === 'partial_transcript') { if (!sawPartial) { sawPartial = true; log('first_partial'); } return; }
+      if (type === 'committed_transcript' || type === 'warning') return;
+      log('ws_msg_other', { type });
       if (type && (type in SESSION_ERRORS || /error|exceeded|throttled|rate_limited|overflow|exhausted|terms/.test(type))) {
         finish({ ended: 'error', error: { kind: type, message: String(msg.error || type) } });
       }
     };
 
     ws.onmessage = (event) => handle(event.data);
-    ws.onerror = () => { /* a close event follows; it decides */ };
-    ws.onclose = () => {
+    ws.onopen = () => log('ws_open');
+    ws.onerror = () => { log('ws_error', { rs: ws?.readyState }); /* a close event follows; it decides */ };
+    ws.onclose = (e) => {
+      log('ws_close', { code: e?.code, reason: String(e?.reason || '').slice(0, 60), clean: e?.wasClean, rs: ws?.readyState, sentSec: +(sentSec).toFixed(1), opened });
       if (settled) return;
       if (sendingDone && nextExpected >= ranges.length) return finish({ ended: 'done' });
       finish({ ended: opened ? 'dropped' : 'error', error: opened ? undefined : { kind: 'connect', message: 'Could not connect' } });
@@ -384,7 +400,9 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
             commit: commitSet.has(next),
             sample_rate: SAMPLE_RATE,
           }));
+          if (!sentSec) log('first_chunk', { bytes: chunk.byteLength });
           pos = next;
+          sentSec = (pos - fromSample) / SAMPLE_RATE + sessionStartSec;
           onSent?.(pos);
           await sleep((chunk.length / SAMPLE_RATE / pace) * 1000);
         }
@@ -392,6 +410,7 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
         if (nextExpected >= ranges.length) return finish({ ended: 'done' });
         armIdle(idleTimeoutMs); // the last committed events are on their way
       } catch (err) {
+        log('pump_error', { msg: String(err?.message || err).slice(0, 100), name: err?.name });
         if (!settled) finish({ ended: 'dropped' });
       }
     }
@@ -414,13 +433,15 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
     headers = {}, signal, fetchImpl = fetch, WebSocketImpl = globalThis.WebSocket,
     sleep = wait, pace = getStreamPace(), onProgress = () => {}, confirmContinue = async () => false,
     mint = mintStreamingToken, idleTimeoutMs, connectTimeoutMs, maxSessions = 20, rangeAttempts = 2,
-    autoResumes = AUTO_RESUMES, resumeBackoffMs = RESUME_BACKOFF_MS,
+    autoResumes = AUTO_RESUMES, resumeBackoffMs = RESUME_BACKOFF_MS, log = () => {},
   } = deps;
   const targetLanguage = args.target_language;
   const sourceLanguage = args.source_language || 'auto';
   if (!WebSocketImpl) throw new StreamingCaptionsError('This browser cannot stream audio', { code: 'unsupported_in_browser' });
 
-  const pcm = wavToPcm16k(wav);
+  const decodeStart = Date.now();
+  let pcm;
+  try { pcm = wavToPcm16k(wav); } catch (err) { log('decode_error', { code: err?.code, msg: String(err?.message || err).slice(0, 100) }); throw err; }
   const totalSec = pcm.length / SAMPLE_RATE;
   if (totalSec > MAX_AUDIO_SECONDS) throw new StreamingCaptionsError(`Audio is longer than ${MAX_AUDIO_SECONDS / 60} minutes`, { code: 'audio_too_long', status: 413 });
   if (!pcm.length) throw new StreamingCaptionsError('The file has no audio track', { code: 'no_audio' });
@@ -430,6 +451,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
     const startSample = index === 0 ? 0 : points[index - 1];
     return { index, startSample, endSample: end, start: startSample / SAMPLE_RATE, end: end / SAMPLE_RATE, status: 'pending', attempts: 0, lines: [], raw: null, error: null };
   });
+  log('plan', { dur: +totalSec.toFixed(1), samples: pcm.length, ranges: ranges.length, pace, decMs: Date.now() - decodeStart });
   const language = { detected: null };
   let percentFloor = 0;
   let sessionId = null;
@@ -440,7 +462,9 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
   const allLines = () => ranges.filter(r => r.status === 'done').flatMap(r => r.lines);
   const coveredEnd = () => { let end = 0; for (const r of ranges) { if (r.status !== 'done') break; end = r.end; } return end; };
   const report = (stage) => {
+    const before = percentFloor;
     percentFloor = Math.max(percentFloor, Math.min(PERCENT_CAP, Math.floor((100 * doneSec()) / totalSec)));
+    if (percentFloor !== before) log('pct', { p: percentFloor, stage });
     onProgress({
       percent: percentFloor,
       stage,
@@ -459,7 +483,10 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
         const out = [];
         for (let at = 0; at < lines.length; at += TRANSLATE_BATCH) {
           const batch = lines.slice(at, at + TRANSLATE_BATCH);
+          log('tr_req', { n: batch.length });
+          const t0 = Date.now();
           const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal });
+          log('tr_res', { ok: true, n: translated.length, ms: Date.now() - t0 });
           const byIndex = new Map(translated.map(t => [t.i, t]));
           batch.forEach((l, k) => {
             const t = byIndex.get(k);
@@ -472,6 +499,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
         for (const l of out) lastTexts.push(l.text);
       } catch (err) {
         if (err.code === 'cancelled' || signal?.aborted) return;
+        log('tr_res', { ok: false, code: err.code, status: err.status });
         range.status = 'failed';
         range.error = err;
         range.raw = lines; // transcribed fine: a retry only translates again
@@ -534,9 +562,13 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
     let connection;
     for (let tries = 1; ; tries++) {
       try {
+        log('token_req', { try: tries, resume: Boolean(sessionId) });
+        const tokenStart = Date.now();
         connection = await mint({ headers, sourceLanguage, resumeSessionId: sessionId, fetchImpl });
+        log('token_res', { ok: true, ms: Date.now() - tokenStart });
         break;
       } catch (err) {
+        log('token_res', { ok: false, code: err?.code, status: err?.status, msg: String(err?.message || '').slice(0, 80) });
         if (signal?.aborted) throw cancelled();
         const transient = err.code === 'network' || err.code === 'streaming_captions_busy' || err.status === 502;
         if (tries >= 2 || !transient) throw new StreamingCaptionsError(err.message, { code: err.code || 'streaming_failed', status: err.status, lines: allLines() });
@@ -547,7 +579,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
     run.forEach(r => { r.status = 'running'; });
     report('listening');
 
-    const result = await streamRun({ pcm, ranges: run, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs, connectTimeoutMs, onSegment });
+    const result = await streamRun({ pcm, ranges: run, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs, connectTimeoutMs, onSegment, log });
     // Whatever the socket delivered is translated before deciding what happens next.
     await translateChain;
     if (signal?.aborted) throw cancelled();
@@ -561,6 +593,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
       const unfinished = () => { failed.forEach(r => { r.status = 'pending'; r.attempts = Math.max(0, r.attempts - 1); }); }; // a resume is not a per-range retry
       if (resumesUsed < autoResumes) {
         // The budget belongs to the session (the whole job), not to a range: a few quiet reconnects first.
+        log('auto_resume', { n: resumesUsed + 1, cause });
         await sleep(resumeBackoffMs[Math.min(resumesUsed, resumeBackoffMs.length - 1)] ?? 0);
         resumesUsed += 1;
         if (signal?.aborted) throw cancelled();

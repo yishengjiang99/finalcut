@@ -9,6 +9,7 @@ import {
   streamingAvailable, runStreamingCaptions, burnStreamingCaptionsOnServer, friendlyStreamingError,
   CONSENT_COPY, CONTINUE_COPY, STREAMING_MESSAGES, StreamingCaptionsError,
 } from './streamingCaptions.js';
+import { createClientLog } from './clientLog.js';
 import { buildAss, LYRIC_FONT } from './lyricShared.js';
 import { abortableFetch as fetch, getFetchAbortSignal } from './abortableFetch.js';
 import * as engine from './wasm/ffmpegEngine.js';
@@ -469,19 +470,46 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
 // ElevenLabs realtime speech-to-text, after the user taps "Send audio" (asked every time). Our server
 // only mints the single-use token and translates the committed text; the burn runs in ffmpeg.wasm.
 async function streamingCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage) {
+  const headers = sampleAuthHeaders();
+  // Technical stage events go to the server journal (see src/clientLog.js); never audio, text or tokens.
+  const clog = createClientLog({ headers });
+  clog.attach();
+  clog.env();
+  try {
+    return await streamingCaptionsFlow(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog);
+  } catch (err) {
+    clog.log('run_fail', { code: err?.code, name: err?.name, msg: String(err?.message || '').slice(0, 100) });
+    throw err;
+  } finally {
+    clog.detach();
+  }
+}
+
+async function streamingCaptionsFlow(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog) {
   const fileMimeType = currentFileMimeType || 'video/mp4';
+  clog.log('consent_shown', { bytes: videoFileData?.byteLength, mime: fileMimeType });
   const agreed = await requestUploadConsent({ tool: 'lyric_captions', uploads: 'audio', kind: 'streaming_audio', provider: 'elevenlabs', ...CONSENT_COPY });
+  clog.log(agreed ? 'consent_accepted' : 'consent_declined');
   if (!agreed) {
     lastExecution.errorCode = 'skipped_by_user';
     throw new UploadDeclinedError('lyric_captions', STREAMING_MESSAGES.declined);
   }
-  const headers = sampleAuthHeaders();
+  const probeStart = Date.now();
   const { width, height } = engine.summarizeProbe(await engine.probeMedia(videoFileData, fileMimeType));
+  clog.log('probe_end', { ms: Date.now() - probeStart, w: width, h: height });
   const signal = getFetchAbortSignal();
   toolStatus('Preparing the audio…', 0);
-  const wav = await engine.extractSpeechAudio(videoFileData, fileMimeType);
+  const extractStart = Date.now();
+  clog.log('extract_start');
+  let wav;
+  try { wav = await engine.extractSpeechAudio(videoFileData, fileMimeType); } catch (err) {
+    clog.log('extract_error', { code: err?.code, name: err?.name, msg: String(err?.message || '').slice(0, 100), ms: Date.now() - extractStart });
+    throw err;
+  }
+  clog.log('extract_end', { ms: Date.now() - extractStart, bytes: wav?.byteLength });
   const result = await runStreamingCaptions(args, wav, {
     headers,
+    log: clog.log,
     signal: signal || undefined,
     onProgress: ({ percent, text }) => toolStatus(`${text} ${percent}%`, percent / 100),
     // A dropped connection keeps the finished lines; resuming needs a fresh token from the first unfinished range.
@@ -491,12 +519,14 @@ async function streamingCaptionsInBrowser(args, videoFileData, replacing, setVid
       ...CONTINUE_COPY,
     }),
   });
+  clog.log('burn_start', { lines: result.lines.length });
   toolStatus('Burning captions into the video…', 0.99);
   const burned = await browserFirst('lyric_captions', async () => {
     if (!(width && height)) throw Object.assign(new Error('The video size is unknown, so the captions cannot be laid out here.'), { code: 'unsupported_in_browser' });
     const ass = buildAss({ lines: result.lines, width, height, fontName: LYRIC_FONT });
     return engine.burnAss(assWithFont(ass, engine.FONT_FAMILY), videoFileData, fileMimeType);
   }, () => burnStreamingCaptionsOnServer({ videoBytes: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, headers }));
+  clog.log('run_done', { burnedOn: lastExecution.executedOn, lines: result.lines.length });
   recordCaptionBurn(videoFileData, burned);
   setVideoFileData(burned);
   toolStatus('Done', 1);

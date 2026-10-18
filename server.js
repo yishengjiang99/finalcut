@@ -12,6 +12,7 @@ import { chatRouter } from './src/server/chat.js';
 import { jobsRouter, pendingJobCount, waitForJobsToSettle } from './src/server/jobs.js';
 import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { streamingCaptionsRouter } from './src/server/streamingCaptions.js';
+import { clientLogRouter } from './src/server/clientLog.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { iosSuggestionsAdminRouter } from './src/server/iosSuggestionsAdmin.js';
@@ -61,6 +62,9 @@ setupAuth(app, { sessionStore });
 // Stripe webhook endpoint must be mounted before JSON body parsing
 // so Stripe signature verification receives the raw body.
 app.use(stripeWebhookRouter);
+
+// Client debug events: its own 16 KB JSON parser, mounted before the large global one.
+app.use(clientLogRouter);
 
 app.use(express.json({ limit: '950mb' }));
 
