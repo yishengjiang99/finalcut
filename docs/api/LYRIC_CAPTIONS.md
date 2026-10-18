@@ -11,16 +11,27 @@ Code: `src/server/lyricCaptions.js` (endpoint, pipeline, ASS), `src/lyricCaption
 ## Chat tool
 
 `lyric_captions` is an agentic tool: `GET /api/tools/schema` and `/api/chat` offer it to the
-model for videos (never photos). Its description maps requests such as "add lyrics captions",
-"subtitle the song in German and Chinese", and "translate the lyrics on the video to Spanish" to the
-tool. The model fills `target_language` from the language the user wants the translation in, and
-`source_language` only when the user names the sung language.
+model for videos (never photos). It is the tool for **any request to caption or subtitle a video in
+another language**, for plain speech as well as songs. Its description maps these phrasings to it:
+
+- plain speech: "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the
+  video into Chinese and burn the captions", "translate the speech to Spanish" (the model sets
+  `mode: "speech"`, `target_language: "zh-Hans"` for Chinese, and leaves `source_language` out so the
+  spoken language is detected);
+- songs: "add lyrics captions", "subtitle the song in German and Chinese", "translate the lyrics on
+  the video to Spanish" (`mode: "lyrics"` or `auto`).
+
+`generate_captions` is for same-language captions (and, on web, soft SRT/VTT files). Its web
+description and the system prompt send other-language requests to `lyric_captions`; on iOS builds
+from `LYRIC_CAPTIONS_MIN_BUILD` its description says it never translates. The model fills
+`target_language` from the language the user wants the translation in, and `source_language` only
+when the user names the spoken or sung language.
 
 | Parameter | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `target_language` | string, required | | Code or name: `zh-Hans`, `zh-Hant`, `es`, `Japanese`. BCP-47 tags are kept as given. |
 | `source_language` | string | `auto` | Sung/spoken language. |
-| `mode` | `auto` \| `lyrics` \| `speech` | `auto` | `lyrics` identifies the song and checks published lyrics. `speech` only fixes obvious errors and never searches. |
+| `mode` | `auto` \| `lyrics` \| `speech` | `auto` | `lyrics` identifies the song and checks published lyrics. `speech` (ordinary talking) only fixes obvious errors and never searches. `auto` lets the server decide from the transcript. |
 | `position_from_bottom_pct` | number 0–45 | 20 | Bottom of the caption block, as % of the video height. |
 | `font_size` | integer 8–400 | 48/1280 of the height | In video pixels. |
 
@@ -29,11 +40,9 @@ Who runs it:
 - **Web (streaming chat):** the browser runs it (`toolFunctions.lyric_captions`, see "Web flow").
 - **Client execution mode (`execution: "client"`):** offered to non-iOS clients, which run the
   flow below and post a short result back.
-- **FinalCap iOS:** not offered. The tool isn't in `src/server/iosToolAllowlist.js` and the iOS/10
-  tool snapshot is unchanged. Sending audio to the server conflicts with the iOS promise that media
-  stays on device unless Cloud processing is on, so it needs either Cloud processing on or a
-  one-time consent prompt. **Open decision for iOS and Design.** To ship it, add
-  `lyric_captions: <build>` to the allowlist once a build implements the iOS contract below.
+- **FinalCap iOS:** gated on `LYRIC_CAPTIONS_MIN_BUILD` in `src/server/iosToolAllowlist.js`, currently
+  the placeholder `1_000_000_000`, so no build (10, 11, 12) sees it yet. From that build on, iOS
+  gets it for videos only, with an iOS description of the on-device flow. See "iOS" below.
 
 The tool result the model sees is short: song title, artist, link and confidence, line count, and
 languages. It never contains the lyric text. Example:
@@ -49,9 +58,14 @@ follow the same rule.
 
 ## POST /api/lyric-captions
 
-Auth: Bearer or session, like other edits. Charged as one edit (`requireInferenceAccess`), and only
-after the request passes validation and the dependency check. Rate limit: the video-processing
-limiter (20 per 15 min per IP).
+Auth: `Authorization: Bearer <accessToken>` (iOS), a session cookie (web), or `sample-access-token`,
+like other edits. Charged as one edit (`requireInferenceAccess`), and only after the dependency check
+(503), the request fields, and an ffprobe of the audio have passed. A refused upload is never
+charged. From a client-mode chat tool call, send `X-Turn-Token: <latest turnToken>` and
+`X-Tool-Call-Id: <toolCalls[i].id>` so the run isn't charged on top of the chat turn
+(`X-Inference-Charged: false`; each tool call id is free once). With `FREE_EDITS_IOS=unlimited`, iOS
+is never blocked and gets `X-Inference-Unlimited: true` (usage still counted once per job, polls are
+not counted). Rate limit: the video-processing limiter (20 per 15 min per IP, a plain-text 429).
 
 `multipart/form-data` fields:
 
@@ -102,13 +116,21 @@ Errors (`{"error","code","operation":"lyric_captions"}`):
 
 | Status | `code` | When |
 | --- | --- | --- |
+| 401 | | Missing, invalid or expired Bearer token. |
 | 400 | `invalid_arguments` | Missing or invalid `target_language`, `mode`, `position_from_bottom_pct`, `font_size`, `width`/`height`, or no `audio` field. |
 | 400 | `audio_only` / `no_audio` / `unsupported_audio_format` | A video was sent, there's no audio stream, or the file is unreadable. |
 | 413 | `audio_too_large` / `audio_too_long` | Over 25 MB or 10 min. |
-| 429 | `daily_limit_reached` | Free-edit limit, same as other edits. |
+| 429 | `daily_limit_reached` | Free-edit limit, same as other edits (never with `FREE_EDITS_IOS=unlimited` for iOS). A 429 with a plain-text body is the per-IP rate limiter. |
+| 403 | | `Active subscription required`: a web user without a subscription. |
 | 503 | `lyric_captions_unavailable` | Missing `OPENAI_API_KEY`/`XAI_API_TOKEN`, ffmpeg or ffprobe. The message names what's missing. |
 | job `failed` | `no_speech` | Nothing was transcribed. |
 | job `failed` | `lyric_captions_model_error` | The model's reply wasn't usable. |
+| 404 | | Poll or result of an unknown, expired (30 min) or someone else's job: `{"error":"Job not found"}` / `{"error":"Result not available"}`. |
+
+`POST /api/lyric-captions/:jobId/burn` from an iOS client (Bearer, or a `FinalCap-iOS/*` UA) and
+`lyric_captions` sent to `/api/process-video` or `/api/jobs/process-video` answer **400**
+`{"code":"not_available_on_server","operation":"lyric_captions"}` (`unsupported_for_photo` for a
+photo on the process-video routes). iOS draws the captions itself.
 
 Results live in server memory for 30 minutes (for the burn fallback), then the job is dropped.
 The uploaded audio and the converted WAV are deleted as soon as transcription finishes.
@@ -178,35 +200,152 @@ Upload size, measured on a 12 s 1080x1920 sample (10 Mbit/s H.264, typical of ph
 video 16.0 MB, 16 kHz mono WAV 384 KB (2.4%, about 42× smaller), mono AAC m4a at 48 kbit/s
 70 KB (0.45%, about 220× smaller).
 
-## iOS contract (for the FinalCut iOS team; nothing in `ios/` changed)
+## iOS (for the FinalCut iOS team; nothing in `ios/` changed)
 
-Requires Cloud processing on, or a one-time consent prompt (see "Chat tool").
+### Build gate
 
-1. **Extract audio**:
+`export const LYRIC_CAPTIONS_MIN_BUILD = 1_000_000_000;` in `src/server/iosToolAllowlist.js` is a
+placeholder that no real build reaches, the same pattern as `GROUPED_EFFECTS_MIN_BUILD`. To enable,
+replace it with the first valid TestFlight build that implements this section, then run `npm test`,
+push and deploy. No test needs editing. From that build on, for `User-Agent: FinalCap-iOS/<build>`:
+
+- `GET /api/tools/schema` and `POST /api/chat` (`execution: "client"`) offer `lyric_captions` for
+  **videos only** (never photos; `mediaTypes.lyric_captions` is `["video"]`). It sits right after
+  `generate_captions`.
+- Parameters are the same as on web. The description is iOS-specific
+  (`LYRIC_CAPTIONS_IOS_DESCRIPTION`): it also covers plain speech (`mode: "speech"`) and phrasing such
+  as "add Chinese captions" and "translate the video into Chinese"; the app asks before uploading,
+  sends only the audio, and draws the captions; if Cloud processing is off or the user declines,
+  nothing is uploaded and the model must not retry this turn; the model never quotes the text.
+- `generate_captions` gets `GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION` from the same build: same-language
+  only, translation goes to `lyric_captions`. Older builds keep their pinned description.
+- Builds below the cutoff keep exactly their current tools and descriptions (the iOS/10 snapshot is
+  byte-identical; iOS/12 differs from it only by the `ffmpeg_cli` fallback tool).
+
+### Flow the app runs (client execution)
+
+The tool call arrives as `{ "id": "call_…", "name": "lyric_captions", "arguments": { "target_language": "zh-Hans", "source_language": "de", "mode": "auto" } }`.
+
+1. **Cloud processing off:** show the card below and **never call the server**. Post the tool
+   result `{"ok":false,"error":"skipped_by_user","executedOn":"device"}`.
+2. **Cloud processing on:** show the consent prompt **every time**. "Not now" → the same
+   `skipped_by_user` result.
+3. **Extract audio** (refuse over 10 min before uploading):
    - `AVAssetExportSession` with `AVAssetExportPresetAppleM4A` (`.m4a`, smallest upload), or
    - `AVAssetReader` with `AVLinearPCMBitDepthKey: 16`, `AVSampleRateKey: 16000`,
      `AVNumberOfChannelsKey: 1`, written out as a WAV.
-   - Refuse clips over 10 min before uploading.
-2. **POST** `/api/lyric-captions` (Bearer) with `audio`, `target_language`, optional fields, and
-   `width`/`height` = the render size after `preferredTransform`. Poll with backoff, then GET
-   `resultUrl`.
-3. **Render** with `AVVideoCompositionCoreAnimationTool`, one caption block per `lines[]` entry:
-   - Parent layer = render size, video layer, and an overlay layer with
-     `isGeometryFlipped = false`. In a video composition, Core Animation's origin is bottom-left,
-     so the block's bottom edge is at `y = 0.2 × H`.
-   - One `CATextLayer` (or a layer holding an attributed string) per line:
-     - Text: `text`, a line break, then `translation`, centered.
-     - Width `W − 2 × (48/720 × W)`. Let it wrap; grow upward from the 20% anchor.
-     - Font: `NotoSansCJKsc-Bold`, bundled, or `PingFangSC-Semibold` as the system fallback.
-       Size `48/1280 × H`.
-     - White fill. Black stroke about 3 px at 720x1280 (scaled): draw a stroked copy under the
-       filled copy, or use `strokeWidth` (negative = stroke + fill).
-     - Shadow: black at 50%, offset 1 px (scaled), small radius.
-   - Show only from `start` to `end`: `opacity` keyframes with
-     `beginTime = AVCoreAnimationBeginTimeAtZero + start`, `isRemovedOnCompletion = false`,
-     hold 0 outside the range.
-   - Skip `translation` when it is empty. Never draw a line twice.
-4. Report back with a short tool result (song, lineCount, languages), never the lyrics.
+4. **Upload:** `POST /api/lyric-captions`, `multipart/form-data`, headers
+   `Authorization: Bearer <accessToken>`, `User-Agent: FinalCap-iOS/<build>`,
+   `X-Turn-Token: <latest turnToken>`, `X-Tool-Call-Id: <the call id>`. Fields: `audio` (file),
+   `target_language`, plus `source_language`, `mode`, `position_from_bottom_pct`, `font_size` when
+   the tool call has them, and `width`/`height` = the render size after `preferredTransform`
+   (optional; only needed if you want `ass`). Response **202**
+   `{ jobId, status: "queued", operation: "lyric_captions", durationSec, pollUrl, resultUrl }`.
+5. **Poll** `GET pollUrl` (= `/api/jobs/<jobId>`, same Bearer) with backoff (e.g. start at 2–3 s,
+   ×1.5, cap 10 s; the poll limiter allows 100 requests per 15 min per IP). Body:
+   `{ jobId, status: queued|running|succeeded|failed, progress, code?, error?, summary?, resultUrl?, contentType? }`.
+   `progress` is 0 → 0.2 (audio decoded) → 0.5 (transcribed) → 0.9 (lyrics checked and translated) → 1.
+6. **Result:** `GET resultUrl` (= `/api/jobs/<jobId>/result`) → the JSON above. It is kept 30 minutes;
+   fetch it once and keep it on device. The audio is already deleted on the server by then.
+7. **Draw** the captions locally from `lines` (see "Rendering"). Never call
+   `/api/lyric-captions/:jobId/burn` (400 `not_available_on_server` for iOS).
+8. **Tool result** for the chat continuation, short and lyric-free:
+   `{"ok":true,"executedOn":"device","output":{"duration":…,"width":…,"height":…,"song":{"title":…,"artist":…,"url":…},"lineCount":14,"language":"de","targetLanguage":"zh-Hans"}}`
+   (the poll `summary` has these fields). On failure: `{"ok":false,"error":"<code>","executedOn":"device"}`
+   using the server `code` (e.g. `no_speech`, `audio_too_long`, `lyric_captions_unavailable`).
+
+Errors to handle: 401 (re-auth), 400 `invalid_arguments` / `audio_only` / `no_audio` /
+`unsupported_audio_format`, 413 `audio_too_large` / `audio_too_long`, 429 `daily_limit_reached`
+(JSON; never with `FREE_EDITS_IOS=unlimited`) or a plain-text 429 from the per-IP rate limiter, 503
+`lyric_captions_unavailable`, a failed job with `code` `no_speech` or `lyric_captions_model_error`,
+and 404 on poll/result after the 30-minute TTL. A refused upload (any 4xx/503 before the 202) is not
+charged.
+
+### Plain speech: "add Chinese captions" (same build as the song flow)
+
+On a build that has `lyric_captions`, "add Chinese captions" or "translate the video into Chinese"
+reaches the app as the same tool call, with `mode` set to `speech`:
+
+```json
+{ "id": "call_…", "name": "lyric_captions", "arguments": { "target_language": "zh-Hans", "mode": "speech" } }
+```
+
+No new endpoint and no new code path: run the "Flow the app runs" steps above with these differences.
+
+1. Same consent rules. Cloud processing off → card + `skipped_by_user`, nothing is uploaded. On →
+   ask every time. (The upload prompt copy below mentions song lyrics; Design should supply a speech
+   variant, for example "FinalCap will upload this video's audio, but not the picture, to transcribe
+   and translate it. The audio is deleted after transcription.")
+2. Extract the audio exactly as for songs (m4a via `AVAssetExportSession`, or 16 kHz mono WAV via
+   `AVAssetReader`; 10 min cap).
+3. `POST /api/lyric-captions` with `audio`, `target_language=zh-Hans`, `mode=speech`. Omit
+   `source_language`: the spoken language is detected and returned as `language`.
+4. Poll as before. Show **"Checking the words and translating…"** once `progress >= 0.5` (it is the
+   `speech` text in the progress table below).
+5. The result has `song: null`, `lines[]` with `text` (original) and `translation` (Chinese), and
+   `language` (the detected spoken language). Draw it with the same overlay as songs (original on
+   top, Chinese under it, Noto Sans CJK SC Bold so the glyphs render). Applied card:
+   "Captions · Speech + Chinese".
+6. Tool result (short, no text): `{"ok":true,"executedOn":"device","output":{"lineCount":4,"language":"en","targetLanguage":"zh-Hans","duration":…,"width":…,"height":…}}`.
+7. If the video already has captions drawn by this tool or by on-device `generate_captions`, re-render
+   from the version before them (see "Rendering"); never draw both.
+
+What the user sees before and after: builds without `lyric_captions` (today) only get same-language
+on-device captions and the model says translation is not available; builds from the cutoff get the
+flow above. `zh-Hant` for Traditional; any other language name or code works the same way.
+
+### Copy (Design, final)
+
+Cloud processing **off** (card; never call the server):
+
+> **Lyric captions use the cloud**
+> To caption a song, FinalCap uploads this video's audio to transcribe and translate it. Turn on Cloud processing to use lyric captions.
+>
+> [Open Settings] [Not now]
+
+Cloud processing **on**, shown **every time** before uploading:
+
+> **Upload the audio?**
+> FinalCap will upload this video's audio, but not the picture, to transcribe it, look up the song's lyrics, and translate them. The audio is deleted after transcription.
+>
+> [Upload audio] [Not now]
+
+Progress stages:
+
+| When | Text |
+| --- | --- |
+| Until the upload finishes (before the 202) | "Uploading audio…" |
+| Job `progress < 0.5` (includes `queued`) | "Listening to the song…" |
+| Job `progress >= 0.5` | "Finding lyrics and translating…", or "Checking the words and translating…" when the tool call's `mode` is `speech` |
+| During the local burn (drawing/exporting on device) | "Adding captions…" |
+
+Applied card, with language names from the result's `language` and `targetLanguage` (localized
+names, e.g. `Locale.current.localizedString(forLanguageCode:)`):
+
+- a song was identified (`song` non-null): **"Lyrics · German + Chinese"**
+- no song (`song` is `null`, e.g. speech): **"Captions · Speech + Chinese"**
+
+### Rendering
+
+Use `AVVideoCompositionCoreAnimationTool`, one caption block per `lines[]` entry:
+
+- Parent layer = render size, video layer, and an overlay layer with `isGeometryFlipped = false`.
+  In a video composition, Core Animation's origin is bottom-left, so the block's bottom edge is at
+  `y = position_from_bottom_pct/100 × H` (default 0.2 × H).
+- One `CATextLayer` (or a layer holding an attributed string) per line:
+  - Text: `text`, a line break, then `translation`, centered. Skip `translation` when it is empty.
+    Never draw a line twice.
+  - Width `W − 2 × (48/720 × W)`. Let it wrap; grow upward from the anchor.
+  - Font: `NotoSansCJKsc-Bold`, bundled, or `PingFangSC-Semibold` as the system fallback. Size
+    `48/1280 × H` (or `font_size`).
+  - White fill. Black stroke about 3 px at 720x1280 (scaled): draw a stroked copy under the filled
+    copy, or use `strokeWidth` (negative = stroke + fill).
+  - Shadow: black at 50%, offset 1 px (scaled), small radius.
+- Show only from `start` to `end`: `opacity` keyframes with
+  `beginTime = AVCoreAnimationBeginTimeAtZero + start`, `isRemovedOnCompletion = false`, hold 0
+  outside the range.
+- Caption from the uncaptioned source: if the video already has lyric captions drawn by this tool,
+  re-render from the version before them instead of drawing on top (see "Chat tool").
 
 ## Cost per call (estimate; check current price lists)
 
@@ -216,4 +355,5 @@ Requires Cloud processing on, or a one-time consent prompt (see "Chat tool").
   about 40 tokens per line. A 40-line song is roughly 2k input and 2k output tokens.
 - `lyrics`/`auto` add the `web_search` tool's per-search charges and the tokens of the pages Grok
   reads, which usually cost more than the model tokens. `speech` mode skips search.
-- Server burn-in (web only) costs one x264 re-encode of the video in server CPU time.
+- Server burn-in (web only) costs one x264 re-encode of the video in server CPU time. iOS draws on
+  device, so an iOS call costs only speech-to-text and Grok.
