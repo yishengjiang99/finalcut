@@ -50,10 +50,11 @@ struct EditorView: View {
                     state: model.state,
                     videoURL: model.localVideoURL,
                     processingMessage: model.lyricStatus ?? model.processingOverlay.message,
-                    onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil,
                     playerItem: model.previewItem,
                     photo: model.previewPhoto,
-                    showsDimmer: model.isCloudStepRunning
+                    showsDimmer: model.isCloudStepRunning,
+                    canUndo: false,
+                    onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil
                 )
                 .frame(maxHeight: 240)
                 if let importError = model.importError {
