@@ -250,8 +250,28 @@ export async function mintStreamingToken({ headers = {}, sourceLanguage, resumeS
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Translate one batch of lines; transient failures (network, 429, 5xx) are retried once with a backoff. */
-async function translateBatch(lines, { targetLanguage, sourceLanguage, context, sessionId, headers, fetchImpl, sleep, signal }) {
+/** Translate retries: 3 tries with a growing wait (a phone that was just backgrounded needs a moment for its network). */
+export const TRANSLATE_BACKOFF_MS = [1500, 4000];
+const TRANSIENT_STATUS = [429, 500, 502, 503, 504];
+
+/** Resolve when the tab is visible (at once if it already is). `onWait` keeps the stall watchdog quiet while we wait. */
+function untilVisible(visibility, signal, onWait) {
+  if (!visibility?.isHidden?.()) return Promise.resolve();
+  return new Promise((resolve) => {
+    let off = () => {};
+    const keepAlive = setInterval(() => onWait?.(), 1000);
+    const done = () => { clearInterval(keepAlive); off(); signal?.removeEventListener?.('abort', done); resolve(); };
+    off = visibility.subscribe((state) => { if (state !== 'hidden') done(); });
+    signal?.addEventListener?.('abort', done, { once: true });
+  });
+}
+
+/**
+ * Translate one batch of lines. Transient failures (network, 429, 5xx) are retried up to 3 times in all
+ * with a longer backoff (1.5 s, then 4 s). A network failure while the tab is hidden does not use up a
+ * try: it waits for the tab to come back (visibilitychange) and tries again at once.
+ */
+async function translateBatch(lines, { targetLanguage, sourceLanguage, context, sessionId, headers, fetchImpl, sleep, signal, visibility, touch, log = () => {}, backoffMs = TRANSLATE_BACKOFF_MS }) {
   const payload = JSON.stringify({
     ...(sessionId ? { sessionId } : {}), // the captions job: the server charges the edit once per job, at its first translated batch
     target_language: targetLanguage,
@@ -259,21 +279,32 @@ async function translateBatch(lines, { targetLanguage, sourceLanguage, context, 
     segments: lines.map((l, k) => ({ i: k, start: l.start, end: l.end, text: l.text })),
     context,
   });
+  const tries = backoffMs.length + 1;
   let lastError;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= tries;) {
     if (signal?.aborted) throw cancelled();
+    const hiddenAtStart = Boolean(visibility?.isHidden?.());
     try {
       const res = await fetchImpl('/api/streaming-captions/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: payload, ...(signal ? { signal } : {}) });
       const body = await res.json().catch(() => ({}));
       if (res.ok) return body.lines || [];
       lastError = httpError(body, res, `Translation failed (${res.status})`);
-      if (![429, 500, 502, 503, 504].includes(res.status)) throw lastError;
+      if (!TRANSIENT_STATUS.includes(res.status)) throw lastError;
     } catch (err) {
       if (signal?.aborted) throw cancelled();
-      if (err.status && ![429, 500, 502, 503, 504].includes(err.status)) throw err;
+      if (err.status && !TRANSIENT_STATUS.includes(err.status)) throw err;
       lastError = err.status ? err : Object.assign(new Error('Network error'), { code: 'network' });
     }
-    if (attempt < 2) await sleep(500);
+    if (lastError.code === 'network' && (hiddenAtStart || visibility?.isHidden?.())) {
+      // The browser cut the connection because the tab went to the background: wait for it, then retry for free.
+      log('tr_wait_visible', { attempt });
+      await untilVisible(visibility, signal, touch);
+      if (signal?.aborted) throw cancelled();
+      log('tr_resume', { attempt });
+      continue;
+    }
+    if (attempt < tries) { touch?.(); await sleep(backoffMs[attempt - 1]); touch?.(); }
+    attempt += 1;
   }
   throw lastError;
 }
@@ -514,7 +545,8 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
     headers = {}, signal, fetchImpl = fetch, WebSocketImpl = globalThis.WebSocket,
     sleep = wait, pace = getStreamPace(), onProgress = () => {}, confirmContinue = async () => false,
     mint = mintStreamingToken, idleTimeoutMs, connectTimeoutMs, maxSessions = 20, rangeAttempts = 2,
-    autoResumes = AUTO_RESUMES, resumeBackoffMs = RESUME_BACKOFF_MS, log = () => {},
+    autoResumes = AUTO_RESUMES, resumeBackoffMs = RESUME_BACKOFF_MS, log = () => {}, visibility = pageVisibility,
+    translateBackoffMs = TRANSLATE_BACKOFF_MS,
   } = deps;
   const touch = () => { state.lastProgress = Date.now(); };
   const targetLanguage = args.target_language;
@@ -584,7 +616,7 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
           touch();
           log('tr_req', { n: batch.length });
           const t0 = Date.now();
-          const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal });
+          const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal, visibility, touch, log, backoffMs: translateBackoffMs });
           log('tr_res', { ok: true, n: translated.length, ms: Date.now() - t0 });
           const byIndex = new Map(translated.map(t => [t.i, t]));
           batch.forEach((l, k) => {
