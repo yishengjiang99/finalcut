@@ -10,30 +10,54 @@ const flushTimers = () => new Promise((r) => setTimeout(r, 1100));
 const batches = (fetchImpl) => fetchImpl.mock.calls.map(([url, init]) => ({ url, init, body: JSON.parse(init.body) }));
 
 describe('createClientLog', () => {
-  it('batches events with ms offsets, one POST per second, sending headers and keepalive', async () => {
+  it('sends events at once (a page that freezes right after has already reported), with the build id, headers and keepalive', () => {
     const fetchImpl = vi.fn(async () => ({ ok: true }));
     let t = 1000;
     const c = createClientLog({ headers: { 'sample-access-token': 'abc' }, fetchImpl, now: () => (t += 10) });
-    c.log('a', { n: 1 }); c.log('b', { n: 2 });
-    expect(fetchImpl).not.toHaveBeenCalled();
-    await flushTimers();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [b] = batches(fetchImpl);
-    expect(b.url).toBe('/api/client-log');
-    expect(b.init.keepalive).toBe(true);
-    expect(b.init.headers['sample-access-token']).toBe('abc');
-    expect(b.body.sid).toMatch(/^[a-z0-9]{6,24}$/);
-    expect(b.body.events.map(e => e.ev)).toEqual(['a', 'b']);
-    expect(b.body.events[1].ms).toBeGreaterThan(b.body.events[0].ms);
+    c.log('extract_start', { n: 1 }); c.log('extract_end', { n: 2 });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [b1, b2] = batches(fetchImpl);
+    expect(b1.url).toBe('/api/client-log');
+    expect(b1.init.keepalive).toBe(true);
+    expect(b1.init.headers['sample-access-token']).toBe('abc');
+    expect(b1.body.sid).toMatch(/^[a-z0-9]{6,24}$/);
+    expect(typeof b1.body.build).toBe('string');
+    expect(b1.body.events.map(e => e.ev)).toEqual(['extract_start']);
+    expect(b2.body.events[0].ms).toBeGreaterThan(b1.body.events[0].ms);
   });
 
-  it('terminal events (ws_close, errors) flush immediately', () => {
+  it('the chatty events (pct, ws_tick) wait and ride along with the next event', () => {
     const fetchImpl = vi.fn(async () => ({ ok: true }));
     const c = createClientLog({ fetchImpl });
-    c.log('ws_open');
-    c.log('ws_close', { code: 1006 });
+    c.log('pct', { p: 6 }); c.log('ws_tick', { rs: 1 });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    c.log('committed', { idx: 0 });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(batches(fetchImpl)[0].body.events.map(e => e.ev)).toEqual(['ws_open', 'ws_close']);
+    expect(batches(fetchImpl)[0].body.events.map(e => e.ev)).toEqual(['pct', 'ws_tick', 'committed']);
+  });
+
+  it('the env event carries the build id', () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true }));
+    createClientLog({ fetchImpl }).env();
+    expect(batches(fetchImpl)[0].body.events[0]).toMatchObject({ ev: 'env', build: expect.any(String) });
+  });
+
+  it('reports visibility, pageshow, freeze and resume while attached', () => {
+    const handlers = {};
+    const doc = { visibilityState: 'hidden', addEventListener: (k, f) => { handlers[`d:${k}`] = f; }, removeEventListener: (k) => { delete handlers[`d:${k}`]; } };
+    const win = { document: doc, addEventListener: (k, f) => { handlers[`w:${k}`] = f; }, removeEventListener: (k) => { delete handlers[`w:${k}`]; } };
+    const fetchImpl = vi.fn(async () => ({ ok: true }));
+    const c = createClientLog({ fetchImpl, win });
+    c.attach();
+    handlers['d:visibilitychange']();
+    doc.visibilityState = 'visible';
+    handlers['d:visibilitychange']();
+    handlers['d:freeze'](); handlers['d:resume'](); handlers['w:pageshow']({ persisted: true });
+    const events = batches(fetchImpl).flatMap(b => b.body.events);
+    expect(events.filter(e => e.ev === 'visibility').map(e => e.state)).toEqual(['hidden', 'visible']);
+    for (const ev of ['freeze', 'resume', 'pageshow']) expect(events.some(e => e.ev === ev)).toBe(true);
+    c.detach();
+    expect(handlers['d:visibilitychange']).toBeUndefined();
   });
 
   it('captures window errors and unhandled rejections while attached, and stops after detach', () => {

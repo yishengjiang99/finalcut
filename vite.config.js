@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { cpSync, createReadStream, existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execSync } from 'node:child_process'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 // Self-hosted ffmpeg.wasm cores, copied from node_modules by scripts/copy-ffmpeg-core.mjs.
@@ -42,8 +43,16 @@ function ffmpegCore() {
   }
 }
 
+// The commit this bundle is built from, shown in client-log events and compared with /api/health's `commit`
+// so an open tab can tell that a newer build is live.
+function buildId() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA
+  try { return execSync('git rev-parse HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return 'dev' }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(buildId()) },
   plugins: [react(), ffmpegCore()],
   worker: { format: 'es' },
   optimizeDeps: { exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'] },

@@ -86,7 +86,7 @@ describe('POST /api/client-log', () => {
 
   it('is rate limited', async () => {
     let last;
-    for (let i = 0; i < 205; i++) last = await post({ sid: 'abc123_XYZ-1', events: [{ ev: 'tick' }] });
+    for (let i = 0; i < 605; i++) last = await post({ sid: 'abc123_XYZ-1', events: [{ ev: 'tick' }] });
     expect(last.status).toBe(429);
   });
 

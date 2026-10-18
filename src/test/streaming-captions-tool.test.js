@@ -24,7 +24,7 @@ vi.mock('../lyricCaptionsClient.js', async (importOriginal) => ({
   ...(await importOriginal()),
   runLyricCaptionsWeb: vi.fn(async () => ({ burned: new Uint8Array([5]), audioBytes: 44, summary: { translatedCount: 1 }, result: { lines: [{}], language: 'en', targetLanguage: 'zh-Hans', mode: 'lyrics', song: null } })),
 }));
-import { toolFunctions } from '../toolFunctions.js';
+import { toolFunctions, setToolStatusListener, canFallBackToUpload, isRetryable, KEEP_OPEN_HINT, PICKING_UP_HINT } from '../toolFunctions.js';
 import * as streaming from '../streamingCaptions.js';
 import * as lyricClient from '../lyricCaptionsClient.js';
 import { noteDerivedVideo, videoHasBurnedCaptions } from '../captionLineage.js';
@@ -165,5 +165,54 @@ describe('routing', () => {
     await tool({ target_language: 'zh-Hans' });
     expect(streaming.runStreamingCaptions).not.toHaveBeenCalled();
     expect(lyricClient.runLyricCaptionsWeb).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('streaming that cannot start, retry, and the on-screen hints', () => {
+  it('falls back to the upload-based flow (which asks before uploading) when no streaming session was ever accepted', async () => {
+    streaming.runStreamingCaptions.mockRejectedValue(new streaming.StreamingCaptionsError("Captions couldn't finish. Nothing was changed. Try again.", { code: 'ranges_failed', neverStarted: true }));
+    const { result, messages } = await tool({ target_language: 'zh-Hans' });
+    expect(lyricClient.runLyricCaptionsWeb).toHaveBeenCalledTimes(1);
+    expect(messages.some(m => /couldn't finish/.test(m.text || ''))).toBe(false);
+    expect(result).not.toMatch(/^Failed/);
+  });
+
+  it('a failure after streaming started does not fall back: one message with a Retry offer', async () => {
+    streaming.runStreamingCaptions.mockRejectedValue(new streaming.StreamingCaptionsError('x', { code: 'ranges_failed', neverStarted: false }));
+    const { messages } = await tool({ target_language: 'zh-Hans' });
+    expect(lyricClient.runLyricCaptionsWeb).not.toHaveBeenCalled();
+    expect(messages).toEqual([{ text: "Captions couldn't finish. Nothing was changed. Try again.", retry: true }]);
+  });
+
+  it('the stalled error says so, with Retry; declining Continue and "too long" offer no Retry', async () => {
+    streaming.runStreamingCaptions.mockRejectedValue(new streaming.StreamingCaptionsError('x', { code: 'stalled', neverStarted: false }));
+    const stalled = await tool({ target_language: 'zh-Hans' });
+    expect(stalled.messages).toEqual([{ text: 'Captions stopped making progress. Nothing was changed. Try again.', retry: true }]);
+    expect(isRetryable({ code: 'declined_continue' })).toBe(false);
+    expect(isRetryable({ code: 'audio_too_long' })).toBe(false);
+    expect(isRetryable({ code: 'ranges_failed' })).toBe(true);
+    expect(canFallBackToUpload({ code: 'stalled', neverStarted: true })).toBe(true);
+    expect(canFallBackToUpload({ code: 'stalled', neverStarted: false })).toBe(false);
+    expect(canFallBackToUpload({ code: 'cancelled', neverStarted: true })).toBe(false);
+    expect(canFallBackToUpload({ status: 429, neverStarted: true })).toBe(false);
+  });
+
+  it('shows "Keep this tab open…" on a phone while streaming, and "Picking up where we left off…" after the tab was away', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari' });
+    const seen = [];
+    setToolStatusListener((s) => seen.push(s));
+    streaming.runStreamingCaptions.mockImplementation(async (args, wav, deps) => {
+      deps.onProgress({ percent: 12, text: 'Listening…', pickingUp: false });
+      deps.onProgress({ percent: 30, text: 'Listening…', pickingUp: true });
+      return streamed;
+    });
+    try {
+      await tool({ target_language: 'zh-Hans' });
+    } finally { setToolStatusListener(null); vi.unstubAllGlobals(); }
+    expect(seen.find(s => s.text === 'Listening… 12%')).toMatchObject({ progress: 0.12, hint: KEEP_OPEN_HINT });
+    expect(seen.find(s => s.text === 'Listening… 30%')).toMatchObject({ hint: PICKING_UP_HINT });
+    expect(KEEP_OPEN_HINT).toBe('Keep this tab open until captions finish');
+    expect(PICKING_UP_HINT).toBe('Picking up where we left off…');
   });
 });

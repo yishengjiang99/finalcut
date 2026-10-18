@@ -2,7 +2,12 @@
 // `client-log {json}` lines) so a hang on someone's phone can be diagnosed. Only technical fields are sent:
 // never audio, transcript or caption text, tokens, keys or headers. Failures here never affect the flow.
 
+import { BUILD_ID } from './buildInfo.js';
+
 const MAX_BATCH = 50;
+// Events go out at once, so a page that is frozen or killed right after (a phone backgrounding the tab) has already told us.
+// Only the chatty ones wait (up to a second) and ride along with the next event.
+const BATCHED = new Set(['pct', 'ws_tick']);
 const FLUSH_MS = 1000;
 const TERMINAL = new Set(['ws_close', 'window_error', 'unhandled_rejection', 'run_fail', 'run_done', 'stall']);
 
@@ -24,7 +29,7 @@ export function createClientLog({ headers = {}, fetchImpl = globalThis.fetch, no
 
   const send = (events, { beacon = false } = {}) => {
     if (!enabled || !events.length) return;
-    const body = JSON.stringify({ sid, events });
+    const body = JSON.stringify({ sid, build: BUILD_ID.slice(0, 40), events });
     try {
       if (beacon && globalThis.navigator?.sendBeacon) {
         globalThis.navigator.sendBeacon('/api/client-log', new Blob([body], { type: 'application/json' }));
@@ -49,7 +54,7 @@ export function createClientLog({ headers = {}, fetchImpl = globalThis.fetch, no
       if (debugOn) console.debug('[fc]', ev, data);
       if (!enabled) return;
       buffer.push(entry);
-      if (TERMINAL.has(ev) || buffer.length >= MAX_BATCH) flush();
+      if (!BATCHED.has(ev) || buffer.length >= MAX_BATCH) flush();
       else if (!timer) timer = setTimeout(flush, FLUSH_MS);
     } catch { /* ignore */ }
   };
@@ -60,10 +65,23 @@ export function createClientLog({ headers = {}, fetchImpl = globalThis.fetch, no
     const onError = (e) => log('window_error', { msg: cut(e?.message), src: cut(String(e?.filename || '').split('/').pop(), 60), line: e?.lineno });
     const onRejection = (e) => log('unhandled_rejection', { msg: cut(e?.reason?.message ?? e?.reason) });
     const onHide = () => { log('pagehide'); flush({ beacon: true }); };
+    const onShow = (e) => log('pageshow', { persisted: Boolean(e?.persisted) });
+    const doc = win.document;
+    const onVis = () => log('visibility', { state: doc?.visibilityState });
+    const onFreeze = () => { log('freeze'); flush({ beacon: true }); };
+    const onResume = () => log('resume');
     win.addEventListener('error', onError);
     win.addEventListener('unhandledrejection', onRejection);
     win.addEventListener('pagehide', onHide);
+    win.addEventListener('pageshow', onShow);
+    doc?.addEventListener?.('visibilitychange', onVis);
+    doc?.addEventListener?.('freeze', onFreeze);
+    doc?.addEventListener?.('resume', onResume);
     attached = () => {
+      win.removeEventListener('pageshow', onShow);
+      doc?.removeEventListener?.('visibilitychange', onVis);
+      doc?.removeEventListener?.('freeze', onFreeze);
+      doc?.removeEventListener?.('resume', onResume);
       win.removeEventListener('error', onError);
       win.removeEventListener('unhandledrejection', onRejection);
       win.removeEventListener('pagehide', onHide);
@@ -75,6 +93,7 @@ export function createClientLog({ headers = {}, fetchImpl = globalThis.fetch, no
   const env = () => {
     const nav = globalThis.navigator || {};
     log('env', {
+      build: BUILD_ID.slice(0, 12),
       cois: Boolean(globalThis.crossOriginIsolated),
       sab: typeof SharedArrayBuffer !== 'undefined',
       ws: typeof WebSocket !== 'undefined',

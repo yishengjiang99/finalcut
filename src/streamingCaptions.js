@@ -25,6 +25,24 @@ export const COMMIT_MIN_SEC = 20;
 export const COMMIT_MAX_SEC = 30;
 export const TRANSLATE_BATCH = 20;
 export const PERCENT_CAP = 99;
+/** Percent once the audio is decoded and the commit points are planned; streaming fills 5..99 (half audio sent, half transcribed and translated). */
+export const PREP_PERCENT = 5;
+/** No sign of life (audio sent, a socket message, a translate answer, a token) for this long: stop with a clear error. */
+export const STALL_MS = 20_000;
+/** A socket that has shown no sign of life for this long when the tab comes back is treated as dead and resumed at once. */
+export const DEAD_ON_RETURN_MS = 8_000;
+
+/** The page's visibility, injectable for tests: { isHidden(), subscribe(cb) → unsubscribe }. */
+export const pageVisibility = {
+  isHidden: () => globalThis.document?.visibilityState === 'hidden',
+  subscribe: (cb) => {
+    const doc = globalThis.document;
+    if (!doc?.addEventListener) return () => {};
+    const on = () => cb(doc.visibilityState);
+    doc.addEventListener('visibilitychange', on);
+    return () => doc.removeEventListener('visibilitychange', on);
+  },
+};
 /** Automatic resumes (fresh token, continue from the first unfinished range) per session before the Continue prompt; a user-approved Continue grants a new budget. */
 export const AUTO_RESUMES = 3;
 export const RESUME_BACKOFF_MS = [500, 1500, 3000];
@@ -49,6 +67,7 @@ export const formatClock = (sec) => {
 
 export const STREAMING_MESSAGES = Object.freeze({
   ...LYRIC_CAPTIONS_MESSAGES,
+  stalled: 'Captions stopped making progress. Nothing was changed. Try again.',
   restarted: "Captions couldn't finish because the service restarted. Nothing was changed. Try again.",
   busy: 'The transcription service is busy. Try again in a moment.',
   declined: 'Audio not sent. Nothing was changed.',
@@ -71,7 +90,7 @@ export const CONTINUE_COPY = Object.freeze({
 });
 
 export class StreamingCaptionsError extends Error {
-  constructor(message, { code = 'streaming_failed', status, lines = [], failedRanges = [], atSec = null } = {}) {
+  constructor(message, { code = 'streaming_failed', status, lines = [], failedRanges = [], atSec = null, neverStarted = false } = {}) {
     super(message);
     this.name = 'StreamingCaptionsError';
     this.code = code;
@@ -79,6 +98,7 @@ export class StreamingCaptionsError extends Error {
     this.lines = lines; // what was finished (kept)
     this.failedRanges = failedRanges;
     this.atSec = atSec;
+    this.neverStarted = neverStarted; // no session was ever started: the caller may fall back to the upload flow
   }
 }
 
@@ -106,6 +126,7 @@ export function friendlyStreamingError(error) {
   if (error?.name === 'UploadDeclinedError') return error.message;
   const code = error?.code;
   if (code === 'declined_continue' && error.message) return error.message;
+  if (code === 'stalled') return STREAMING_MESSAGES.stalled;
   if (code === 'job_lost' || code === 'job_expired') return STREAMING_MESSAGES.restarted;
   if (code === 'audio_too_long' || (error?.status === 413 && code !== 'batch_too_large')) return STREAMING_MESSAGES.tooLong;
   if (code === 'busy' || code === 'streaming_captions_busy' || code === 'rate_limited' || error?.status === 429) return STREAMING_MESSAGES.busy;
@@ -285,7 +306,7 @@ export function offsetWords(words, { sessionStartSec, rangeStartInSession, range
  * `commits` are the range end points (samples) inside the run; each gets one `commit:true` chunk.
  * Resolves { ended: 'done'|'dropped'|'error', error?, results } and never rejects except on cancel.
  */
-export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs = 30_000, connectTimeoutMs = 15_000, onSegment, onSent, log = () => {} }) {
+export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs = 30_000, connectTimeoutMs = 15_000, onSegment, onSent, onOpen, onActivity, registerKick, visibility = pageVisibility, log = () => {} }) {
   const fromSample = ranges[0].startSample;
   const toSample = ranges[ranges.length - 1].endSample;
   const sessionStartSec = fromSample / SAMPLE_RATE;
@@ -299,6 +320,8 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
     let nextExpected = 0; // index into ranges of the next committed event
     let idleTimer = null;
     let sentSec = 0;
+    let lastActivity = Date.now(); // last message FROM the service (sends into a dead socket do not count)
+    let unsubscribeVisibility = () => {};
     let firstMsg = false;
     let tick = null;
     let sawPartial = false;
@@ -307,6 +330,7 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
       settled = true;
       clearTimeout(idleTimer);
       clearInterval(tick);
+      unsubscribeVisibility();
       log('run_end', { ended: value.ended, kind: value.error?.kind, rs: ws?.readyState, sentSec: +(sentSec).toFixed(1), next: nextExpected });
       signal?.removeEventListener?.('abort', onAbort);
       try { ws?.close(); } catch { /* already closed */ }
@@ -316,6 +340,8 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
       if (settled) return;
       settled = true;
       clearTimeout(idleTimer);
+      clearInterval(tick);
+      unsubscribeVisibility();
       signal?.removeEventListener?.('abort', onAbort);
       try { ws?.close(); } catch { /* already closed */ }
       reject(err);
@@ -337,10 +363,24 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
       return finish({ ended: 'error', error: { kind: 'connect', message: err?.message || 'Could not connect' } });
     }
     armIdle(connectTimeoutMs);
+    // Something outside (the stall watchdog, the tab coming back) found this socket dead or stuck: end the run as a drop,
+    // which resumes from the first unfinished range with a fresh token.
+    const kick = (reason) => {
+      if (settled) return;
+      log('kick', { reason, rs: ws?.readyState, quietMs: Date.now() - lastActivity, sentSec: +(sentSec).toFixed(1), opened });
+      finish({ ended: 'dropped' });
+    };
+    registerKick?.(kick);
+    unsubscribeVisibility = visibility.subscribe((state) => {
+      log('vis', { state, rs: ws?.readyState, quietMs: Date.now() - lastActivity });
+      if (state === 'visible' && !settled && (ws?.readyState !== 1 || Date.now() - lastActivity > DEAD_ON_RETURN_MS)) kick('dead_on_return');
+    });
     tick = setInterval(() => log('ws_tick', { rs: ws?.readyState, buf: ws?.bufferedAmount, sentSec: +(sentSec).toFixed(1), opened }), 5000);
 
     const handle = (data) => {
       armIdle(idleTimeoutMs);
+      lastActivity = Date.now();
+      onActivity?.();
       let msg;
       try { msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data)); } catch { return; }
       const type = msg?.message_type;
@@ -348,6 +388,7 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
       if (type === 'session_started') {
         opened = true;
         log('ws_session_started');
+        onOpen?.();
         pump();
         return;
       }
@@ -429,12 +470,62 @@ export function streamRun({ pcm, ranges, connection, WebSocketImpl, pace, sleep,
  * Throws StreamingCaptionsError (partial lines kept on `.lines`) or an Error with code 'cancelled'.
  */
 export async function runStreamingCaptions(args, wav, deps = {}) {
+  const { signal: outer, stallMs = STALL_MS, log = () => {}, visibility = pageVisibility } = deps;
+  const ctl = new AbortController();
+  const onOuterAbort = () => ctl.abort();
+  if (outer?.aborted) ctl.abort(); else outer?.addEventListener?.('abort', onOuterAbort, { once: true });
+  const state = { stalled: false, paused: false, opened: false, lastProgress: Date.now(), getLines: () => [], kick: null, pickingUp: false, hiddenDuringRun: false };
+  const interval = Math.max(10, Math.min(1000, Math.floor(stallMs / 4)));
+  let lastTimerTick = Date.now();
+  const timer = setInterval(() => {
+    const now = Date.now();
+    const gap = now - lastTimerTick;
+    lastTimerTick = now;
+    if (state.paused || ctl.signal.aborted) return;
+    if (gap > Math.max(3000, interval * 6)) {
+      // The page itself was frozen (a phone backgrounding the tab): that is not "no progress". Check the socket, give it a fresh window.
+      log('timer_gap', { gapMs: gap });
+      state.lastProgress = now;
+      state.pickingUp = true;
+      state.kick?.('thawed');
+      return;
+    }
+    const quiet = now - state.lastProgress;
+    if (quiet > stallMs) {
+      log('stall', { quietMs: quiet, opened: state.opened, run: Boolean(state.kick) });
+      state.lastProgress = now;
+      if (state.kick) { state.kick('stalled'); return; } // a stuck stream resumes (auto-resume budget), it does not fail
+      state.stalled = true; // nothing is streaming (a token request or a translation hangs): stop with a clear error
+      ctl.abort();
+    }
+  }, interval);
+  const unwatch = visibility.subscribe((v) => {
+    if (v === 'hidden') { state.hiddenDuringRun = true; log('hidden'); return; }
+    if (state.hiddenDuringRun) { state.pickingUp = true; state.lastProgress = Date.now(); }
+  });
+  try {
+    return await runStreamingCaptionsCore(args, wav, { ...deps, signal: ctl.signal }, state);
+  } catch (err) {
+    if (state.stalled && !outer?.aborted && err?.code === 'cancelled') {
+      throw new StreamingCaptionsError(STREAMING_MESSAGES.stalled, { code: 'stalled', lines: state.getLines(), neverStarted: !state.opened });
+    }
+    if (err && typeof err === 'object' && err.code !== 'cancelled') err.neverStarted = !state.opened;
+    throw err;
+  } finally {
+    clearInterval(timer);
+    unwatch();
+    outer?.removeEventListener?.('abort', onOuterAbort);
+  }
+}
+
+async function runStreamingCaptionsCore(args, wav, deps, state) {
   const {
     headers = {}, signal, fetchImpl = fetch, WebSocketImpl = globalThis.WebSocket,
     sleep = wait, pace = getStreamPace(), onProgress = () => {}, confirmContinue = async () => false,
     mint = mintStreamingToken, idleTimeoutMs, connectTimeoutMs, maxSessions = 20, rangeAttempts = 2,
     autoResumes = AUTO_RESUMES, resumeBackoffMs = RESUME_BACKOFF_MS, log = () => {},
   } = deps;
+  const touch = () => { state.lastProgress = Date.now(); };
   const targetLanguage = args.target_language;
   const sourceLanguage = args.source_language || 'auto';
   if (!WebSocketImpl) throw new StreamingCaptionsError('This browser cannot stream audio', { code: 'unsupported_in_browser' });
@@ -453,27 +544,43 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
   });
   log('plan', { dur: +totalSec.toFixed(1), samples: pcm.length, ranges: ranges.length, pace, decMs: Date.now() - decodeStart });
   const language = { detected: null };
-  let percentFloor = 0;
+  let percentFloor = PREP_PERCENT;
   let sessionId = null;
+  let sentSecAbs = 0; // audio seconds handed to the socket so far (monotonic, across resumed sessions)
+  let sessionOpen = false; // ElevenLabs accepted the current socket
   let translateChain = Promise.resolve();
   const lastTexts = [];
 
   const doneSec = () => ranges.filter(r => r.status === 'done').reduce((a, r) => a + (r.end - r.start), 0);
   const allLines = () => ranges.filter(r => r.status === 'done').flatMap(r => r.lines);
   const coveredEnd = () => { let end = 0; for (const r of ranges) { if (r.status !== 'done') break; end = r.end; } return end; };
-  const report = (stage) => {
+  // Percent: 5 once the audio is decoded; then half audio sent, half transcribed AND translated; never above 99.
+  const computePercent = () => Math.min(PERCENT_CAP, PREP_PERCENT + Math.floor((100 - PREP_PERCENT - 1) * (0.5 * Math.min(1, sentSecAbs / totalSec) + 0.5 * Math.min(1, doneSec() / totalSec))));
+  const stageNow = () => {
+    if (!sessionOpen) return 'connecting';
+    return sentSecAbs >= totalSec - 0.05 && ranges.some(r => r.status === 'transcribed') ? 'translating' : 'listening';
+  };
+  const STAGE_TEXT = { connecting: 'Connecting…', listening: 'Listening…', translating: 'Translating…' };
+  let lastStage = null;
+  const report = () => {
+    touch();
+    const stage = stageNow();
     const before = percentFloor;
-    percentFloor = Math.max(percentFloor, Math.min(PERCENT_CAP, Math.floor((100 * doneSec()) / totalSec)));
-    if (percentFloor !== before) log('pct', { p: percentFloor, stage });
+    percentFloor = Math.max(percentFloor, computePercent());
+    if (percentFloor !== before || stage !== lastStage) log('pct', { p: percentFloor, stage });
+    lastStage = stage;
     onProgress({
       percent: percentFloor,
       stage,
-      text: stage === 'translating' ? 'Translating…' : 'Listening…',
+      text: STAGE_TEXT[stage],
+      pickingUp: state.pickingUp, // the tab was away and the stream is being picked up again
       lines: allLines(),
       coveredEnd: coveredEnd(),
       ranges: ranges.map(({ index, start, end, status }) => ({ index, start, end, status })),
     });
   };
+  state.getLines = allLines;
+  report(); // decoded and planned: 5%, "Connecting…" until the socket is accepted
 
   // Translate finished ranges one at a time, in order, while later audio is still streaming.
   const enqueueTranslation = (range, lines) => {
@@ -483,6 +590,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
         const out = [];
         for (let at = 0; at < lines.length; at += TRANSLATE_BATCH) {
           const batch = lines.slice(at, at + TRANSLATE_BATCH);
+          touch();
           log('tr_req', { n: batch.length });
           const t0 = Date.now();
           const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal });
@@ -504,7 +612,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
         range.error = err;
         range.raw = lines; // transcribed fine: a retry only translates again
       }
-      report('translating');
+      report();
     });
     return translateChain;
   };
@@ -523,11 +631,18 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
       lines = [];
     }
     lines = lines.filter(l => l.text).map(l => ({ start: Math.max(0, l.start), end: Math.min(totalSec, Math.max(l.end, l.start + 0.05)), text: l.text }));
-    if (!lines.length) { range.status = 'done'; range.lines = []; report('listening'); return; }
+    if (!lines.length) { range.status = 'done'; range.lines = []; report(); return; }
     range.status = 'transcribed';
-    report('listening');
+    report();
     enqueueTranslation(range, lines);
   };
+
+  // A hung call (a token request that never answers) must not outlive an abort (stall watchdog or the user's Stop).
+  const raceAbort = (promise) => new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(cancelled());
+    signal?.addEventListener?.('abort', () => reject(cancelled()), { once: true });
+    promise.then(resolve, reject);
+  });
 
   const todoRanges = () => ranges.filter(r => r.status !== 'done');
   const progressed = () => ranges.some(r => r.status === 'done' || r.status === 'transcribed');
@@ -564,7 +679,9 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
       try {
         log('token_req', { try: tries, resume: Boolean(sessionId) });
         const tokenStart = Date.now();
-        connection = await mint({ headers, sourceLanguage, resumeSessionId: sessionId, fetchImpl });
+        touch();
+        connection = await raceAbort(mint({ headers, sourceLanguage, resumeSessionId: sessionId, fetchImpl }));
+        touch();
         log('token_res', { ok: true, ms: Date.now() - tokenStart });
         break;
       } catch (err) {
@@ -577,14 +694,30 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
     }
     sessionId = connection.sessionId || sessionId;
     run.forEach(r => { r.status = 'running'; });
-    report('listening');
+    sessionOpen = false;
+    report();
 
-    const result = await streamRun({ pcm, ranges: run, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs, connectTimeoutMs, onSegment, log });
+    const result = await streamRun({ pcm, ranges: run, connection, WebSocketImpl, pace, sleep, signal, idleTimeoutMs, connectTimeoutMs, onSegment, log,
+      onOpen: () => {
+        sessionOpen = true; state.opened = true; report();
+        if (state.pickingUp) setTimeout(() => { state.pickingUp = false; report(); }, 4000);
+      },
+      onActivity: touch,
+      registerKick: (fn) => { state.kick = fn; },
+      visibility: deps.visibility,
+      onSent: (pos) => {
+        touch();
+        const wasAllSent = sentSecAbs >= totalSec - 0.05;
+        sentSecAbs = Math.max(sentSecAbs, pos / SAMPLE_RATE);
+        if (computePercent() > percentFloor || (!wasAllSent && sentSecAbs >= totalSec - 0.05)) report();
+      },
+    });
     // Whatever the socket delivered is translated before deciding what happens next.
     await translateChain;
     if (signal?.aborted) throw cancelled();
     for (const r of run) if (r.status === 'running' || r.status === 'pending') { r.status = 'failed'; r.error = result.error || null; }
 
+    state.kick = null;
     const kind = result.error?.kind;
     const cause = result.ended === 'dropped' ? 'dropped' : (result.ended === 'error' ? (SESSION_ERRORS[kind] || (kind === 'timeout' || kind === 'connect' ? 'dropped' : 'failed')) : null);
     const failed = ranges.filter(r => r.status === 'failed' && !r.raw);
@@ -603,7 +736,9 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
       if (progressed()) {
         const atSec = coveredEnd();
         // Keep what is finished and ask whether to resume from the first unfinished range with a fresh token.
-        const resume = await confirmContinue({ atSec, keptLines: allLines(), reason: cause });
+        state.paused = true;
+        let resume;
+        try { resume = await confirmContinue({ atSec, keptLines: allLines(), reason: cause }); } finally { state.paused = false; touch(); }
         if (!resume) {
           throw new StreamingCaptionsError(cause === 'time_limit' ? STREAMING_MESSAGES.timeLimit(atSec) : STREAMING_MESSAGES.connectionDropped(atSec), { code: 'declined_continue', lines: allLines(), atSec });
         }
@@ -640,7 +775,7 @@ export async function runStreamingCaptions(args, wav, deps = {}) {
   }
   const lines = allLines().sort((a, b) => a.start - b.start);
   if (!lines.length) throw new StreamingCaptionsError('No speech detected in the audio', { code: 'no_speech' });
-  report('translating');
+  report();
   return {
     lines,
     language: language.detected,

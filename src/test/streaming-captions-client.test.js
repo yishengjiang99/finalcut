@@ -196,7 +196,14 @@ describe('runStreamingCaptions', () => {
     expect(percents.length).toBeGreaterThan(2);
     percents.forEach((p, i) => { expect(Number.isInteger(p)).toBe(true); expect(p).toBeLessThanOrEqual(99); if (i) expect(p).toBeGreaterThanOrEqual(percents[i - 1]); });
     expect(percents.at(-1)).toBe(99);
-    expect(new Set(progress.map(p => p.stage))).toEqual(new Set(['listening', 'translating']));
+    expect(new Set(progress.map(p => p.stage))).toEqual(new Set(['connecting', 'listening', 'translating']));
+    expect(progress[0]).toMatchObject({ percent: 5, stage: 'connecting', text: 'Connecting…' }); // decoded and planned
+    // Percent moves as audio is SENT, before any range has been transcribed and translated.
+    const whileSending = progress.filter(p => p.stage === 'listening' && p.ranges.every(r => r.status !== 'done' && r.status !== 'transcribed'));
+    expect(whileSending.length).toBeGreaterThan(3);
+    expect(Math.max(...whileSending.map(p => p.percent))).toBeGreaterThan(20);
+    expect(progress.find(p => p.stage === 'listening').text).toBe('Listening…');
+    expect(progress.find(p => p.stage === 'translating').text).toBe('Translating…');
     expect(progress.at(-1).lines).toHaveLength(2);
     // Translation batches go out in order with the earlier text as context.
     const bodies = fetchImpl.mock.calls.map(c => JSON.parse(c[1].body));
@@ -231,6 +238,57 @@ describe('runStreamingCaptions', () => {
     await expect(promise).rejects.toMatchObject({ code: 'cancelled' });
     expect(sockets[0].closed).toBe(true);
     expect(sockets[0].sent.length).toBeLessThanOrEqual(sentAtCancel + 1);
+  });
+
+  describe('stall watchdog (no sign of life for 20 s, here 60 ms)', () => {
+    it('a stream that opens but then goes silent is resumed (not failed) and its socket closed; the budget then ends it with "couldn\'t finish"', async () => {
+      class Mute { constructor() { this.bufferedAmount = 0; this.readyState = 1; this.sent = []; queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ message_type: 'session_started' }) })); } send(m) { this.sent.push(m); } close() { this.closed = true; } }
+      const sockets = [];
+      const WebSocketImpl = class extends Mute { constructor(u) { super(u); sockets.push(this); } };
+      const events = [];
+      const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({
+        WebSocketImpl, fetchImpl: okTranslate(), stallMs: 100, idleTimeoutMs: 10_000, connectTimeoutMs: 10_000, resumeBackoffMs: [0, 0, 0],
+        sleep: (ms) => (ms === 0 ? Promise.resolve() : new Promise(r => setTimeout(r, 300))), log: (ev, d) => events.push({ ev, ...d }),
+      })).catch(e => e);
+      expect(error).toBeInstanceOf(StreamingCaptionsError);
+      expect(error.message).toBe(STREAMING_MESSAGES.couldntFinish);
+      expect(sockets.length).toBeGreaterThanOrEqual(2); // it tried again with a fresh socket
+      expect(sockets.every(s => s.closed)).toBe(true);
+      expect(events.some(e => e.ev === 'stall' && e.run === true)).toBe(true);
+      expect(events.some(e => e.ev === 'kick' && e.reason === 'stalled')).toBe(true);
+    });
+
+    it('a token request that never answers is stopped too, and flagged as never started (the caller may fall back)', async () => {
+      const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({
+        WebSocketImpl: class { constructor() { this.bufferedAmount = 0; } send() {} close() {} }, fetchImpl: okTranslate(), stallMs: 60,
+        mint: () => new Promise(() => {}),
+      })).catch(e => e);
+      expect(error.code).toBe('stalled');
+      expect(error.neverStarted).toBe(true);
+    });
+
+    it('a socket that never opens is flagged neverStarted after its failures', async () => {
+      class Dead { constructor() { this.bufferedAmount = 0; queueMicrotask(() => this.onclose?.({ code: 1006, reason: '', wasClean: false })); } send() {} close() {} }
+      const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({ WebSocketImpl: Dead, fetchImpl: okTranslate() })).catch(e => e);
+      expect(error.neverStarted).toBe(true);
+      expect(error.message).toBe(STREAMING_MESSAGES.couldntFinish);
+    });
+
+    it('the user cancelling is still "cancelled", not a stall; waiting for the user to answer Continue is not a stall', async () => {
+      const controller = new AbortController();
+      const p = runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({
+        WebSocketImpl: class { constructor() { this.bufferedAmount = 0; } send() {} close() {} }, fetchImpl: okTranslate(), stallMs: 10_000, signal: controller.signal,
+        mint: () => new Promise(() => {}),
+      })).catch(e => e);
+      setTimeout(() => controller.abort(), 20);
+      expect((await p).code).toBe('cancelled');
+      // The Continue prompt can stay open longer than the stall limit.
+      const { FakeSocket } = socketFactory(({ commitIndex, sockets: all }) => (all.length < 5 && commitIndex === 0 && all.length === 1 ? segmentMsg('Hello', wordsAt(0.5, ['Hello'])) : (all.length === 5 ? segmentMsg('Bye', wordsAt(1, ['Bye'])) : 'drop')));
+      const out = await runStreamingCaptions({ target_language: 'es' }, makeWav(52, [[25.7, 26.3]]), baseDeps({
+        WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), stallMs: 60, confirmContinue: () => new Promise(r => setTimeout(() => r(true), 200)),
+      })).catch(e => e);
+      expect(out.code).not.toBe('stalled');
+    });
   });
 
   it('a dropped connection resumes by itself from the first unfinished range with a fresh token, after a short backoff, without asking', async () => {
@@ -450,5 +508,93 @@ describe('messages and server calls', () => {
     const body = JSON.parse(calls.at(-1)[1].body);
     expect(body).toEqual({ source_language: 'en', resumeSessionId: 'sess' });
     await expect(mintStreamingToken({ fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({ code: 'streaming_captions_unavailable', error: 'x' }) }) })).rejects.toMatchObject({ code: 'streaming_captions_unavailable', status: 503 });
+  });
+});
+
+
+describe('the tab going away and coming back (phones freeze background tabs)', () => {
+  class OpenSocket {
+    constructor() { this.bufferedAmount = 0; this.readyState = 1; this.sent = []; queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ message_type: 'session_started' }) })); }
+    send(m) { this.sent.push(m); }
+    close() { this.closed = true; this.readyState = 3; }
+  }
+  const visibilityHub = () => {
+    const subs = new Set();
+    return { isHidden: () => false, subscribe: (cb) => { subs.add(cb); return () => subs.delete(cb); }, emit: (state) => subs.forEach(cb => cb(state)) };
+  };
+
+  it('on return, a dead socket is replaced at once with a fresh one (no waiting for a timeout), and the UI says it is picking up', async () => {
+    const hub = visibilityHub();
+    const sockets = [];
+    const progress = [];
+    const events = [];
+    const WebSocketImpl = class extends OpenSocket {
+      constructor(u) { super(u); sockets.push(this); }
+      send(raw) {
+        super.send(raw);
+        const m = JSON.parse(raw);
+        if (sockets.length === 2 && m.commit) queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ message_type: 'committed_transcript_with_timestamps', text: 'Hello again', language_code: 'en', words: [{ text: 'Hello', start: 0.2, end: 0.5, type: 'word' }, { text: 'again', start: 0.6, end: 0.9, type: 'word' }] }) }));
+      }
+    };
+    let chunks = 0;
+    const out = await runStreamingCaptions({ target_language: 'es' }, makeWav(8), baseDeps({
+      WebSocketImpl, fetchImpl: okTranslate(), visibility: hub, stallMs: 60_000, idleTimeoutMs: 60_000, connectTimeoutMs: 60_000, resumeBackoffMs: [0],
+      log: (ev, d) => events.push({ ev, ...d }), onProgress: (p) => progress.push(p),
+      sleep: async () => {
+        await Promise.resolve();
+        if (sockets.length === 1 && ++chunks === 4) { sockets[0].readyState = 3; hub.emit('hidden'); hub.emit('visible'); } // came back: the socket is dead
+      },
+    }));
+    expect(sockets).toHaveLength(2);
+    expect(sockets[0].closed).toBe(true);
+    expect(events.some(e => e.ev === 'kick' && e.reason === 'dead_on_return')).toBe(true);
+    expect(events.some(e => e.ev === 'auto_resume')).toBe(true);
+    expect(out.lines.map(l => l.text)).toEqual(['Hello again']);
+    expect(progress.some(p => p.pickingUp === true)).toBe(true);
+  });
+
+  it('on return, a healthy socket is left alone', async () => {
+    const hub = visibilityHub();
+    const sockets = [];
+    const WebSocketImpl = class extends OpenSocket {
+      constructor(u) { super(u); sockets.push(this); }
+      send(raw) {
+        super.send(raw);
+        if (JSON.parse(raw).commit) queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ message_type: 'committed_transcript_with_timestamps', text: 'Hi', language_code: 'en', words: [{ text: 'Hi', start: 0.2, end: 0.5, type: 'word' }] }) }));
+      }
+    };
+    let chunks = 0;
+    await runStreamingCaptions({ target_language: 'es' }, makeWav(8), baseDeps({
+      WebSocketImpl, fetchImpl: okTranslate(), visibility: hub, stallMs: 60_000,
+      sleep: async () => { await Promise.resolve(); if (++chunks === 4) { hub.emit('hidden'); hub.emit('visible'); } },
+    }));
+    expect(sockets).toHaveLength(1);
+  });
+
+  it('a frozen page (a huge gap between timer ticks) is not a stall: the socket is checked and resumed, not failed', async () => {
+    const realNow = Date.now.bind(Date);
+    let offset = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + offset);
+    try {
+      const sockets = [];
+      const events = [];
+      const WebSocketImpl = class extends OpenSocket {
+        constructor(u) { super(u); sockets.push(this); }
+        send(raw) {
+          super.send(raw);
+          if (sockets.length === 2 && JSON.parse(raw).commit) queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ message_type: 'committed_transcript_with_timestamps', text: 'Back', language_code: 'en', words: [{ text: 'Back', start: 0.1, end: 0.4, type: 'word' }] }) }));
+        }
+      };
+      let chunks = 0;
+      const out = await runStreamingCaptions({ target_language: 'es' }, makeWav(8), baseDeps({
+        WebSocketImpl, fetchImpl: okTranslate(), stallMs: 400, idleTimeoutMs: 60_000, connectTimeoutMs: 60_000, resumeBackoffMs: [0],
+        log: (ev, d) => events.push({ ev, ...d }),
+        sleep: () => new Promise(r => setTimeout(() => { if (sockets.length === 1 && ++chunks === 3) offset += 60_000; r(); }, 40)),
+      }));
+      expect(events.some(e => e.ev === 'timer_gap')).toBe(true);
+      expect(events.some(e => e.ev === 'stall')).toBe(false);
+      expect(sockets).toHaveLength(2);
+      expect(out.lines.map(l => l.text)).toEqual(['Back']);
+    } finally { spy.mockRestore(); }
   });
 });

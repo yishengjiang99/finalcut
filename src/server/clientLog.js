@@ -48,7 +48,7 @@ export function _setClientLogSink(fn) { sink = fn || ((line) => console.log(line
 
 const clientLogLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 200,
+  max: 600,
   message: { error: 'Too many log requests.', code: 'rate_limited' },
 });
 export const _clientLogLimiterForTests = clientLogLimiter;
@@ -59,6 +59,7 @@ router.post('/api/client-log', clientLogLimiter, requireAuthenticatedUser, expre
   const sid = typeof body.sid === 'string' && SID_RE.test(body.sid) ? body.sid : null;
   const events = Array.isArray(body.events) ? body.events.slice(0, CLIENT_LOG_MAX_EVENTS) : [];
   if (!sid || !events.length) return res.status(400).json({ error: 'sid and events are required' });
+  const build = typeof body.build === 'string' && /^[0-9a-zA-Z._-]{1,40}$/.test(body.build) ? body.build.slice(0, 12) : undefined;
   const ua = String(req.get('user-agent') || '').replace(/[\r\n]+/g, ' ').slice(0, 160);
   const user = req.user?.id ?? null;
   let kept = 0;
@@ -66,7 +67,7 @@ router.post('/api/client-log', clientLogLimiter, requireAuthenticatedUser, expre
     const ev = sanitizeEvent(raw);
     if (!ev) return;
     kept++;
-    sink(`client-log ${JSON.stringify({ sid, u: user, i, ua: i === 0 ? ua : undefined, ...ev })}`);
+    sink(`client-log ${JSON.stringify({ sid, b: build, u: user, i, ua: i === 0 ? ua : undefined, ...ev })}`);
   });
   return res.status(204).end();
 });
