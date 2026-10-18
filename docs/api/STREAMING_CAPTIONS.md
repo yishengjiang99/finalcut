@@ -112,7 +112,7 @@ the lyric burn. 400 on malformed lines, 503 `lyric_captions_unavailable` without
 
 ## Browser behavior
 
-* **Pacing:** `STREAM_PACE_DEFAULT = 1` (real time). Override with `localStorage.setItem('fc.streamPace','3')` (clamped 0.5–4) to try faster-than-real-time (2x and 4x tested OK, see below).
+* **Pacing:** `STREAM_PACE_DEFAULT = 4`: audio goes out four times faster than real time (0.5 s chunks every 125 ms), so a 56 s clip is sent in about 14 s. Override with `localStorage.setItem('fc.streamPace','1')` (real time; any value is clamped to 0.5–4).
 * **Percent:** `floor(99 × seconds transcribed AND translated ÷ total seconds)`, monotonic, **never above 99**; the UI shows 100 only after the burn. Stage text: `Listening…`, `Translating…`; status line `"<stage> <percent>%"`.
 * **Progress object** (`onProgress`): `{percent, stage:'listening'|'translating', text, lines:[{start,end,text,translation}], coveredEnd, ranges:[{index,start,end,status:'pending'|'running'|'transcribed'|'done'|'failed'}]}`.
 * **Cancel:** the editor's Stop aborts: the socket closes, no more audio or translate calls, the job shows as cancelled.
@@ -169,7 +169,7 @@ worked every time (HTTP 200); the key and tokens were never logged.
   `keepalive_interval_ms` in the query made it worse and is no longer sent. Browser WebSocket stacks
   (which negotiate permessage-deflate) have **not** been tested, and Node `ws` with permessage-deflate dropped 2 of 2;
   test in real Safari/Chrome before turning pacing above 1x on by default.
-* **Default stays at 1x.** Faster pacing is only the opt-in `fc.streamPace` flag (max 4).
+* **Default is 4x** (decision of the product owner). `fc.streamPace` can turn it back down (1 = real time); max 4.
 
 ## Still to check in a real browser
 

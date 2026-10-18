@@ -127,12 +127,13 @@ describe('audio decoding', () => {
 describe('pacing flag', () => {
   const storage = (v) => ({ getItem: () => v });
   it('defaults to real time; explicit option or fc.streamPace flag is clamped to 0.5-4', () => {
-    expect(getStreamPace(undefined, storage(null))).toBe(1);
+    expect(getStreamPace(undefined, storage(null))).toBe(4); // default 4x
+    expect(getStreamPace(undefined, storage('1'))).toBe(1); // fc.streamPace=1 turns it back to real time
     expect(getStreamPace(3, storage(null))).toBe(3);
     expect(getStreamPace(undefined, storage('2'))).toBe(2);
     expect(getStreamPace(10, storage(null))).toBe(4);
     expect(getStreamPace(0.1, storage(null))).toBe(0.5);
-    expect(getStreamPace('nope', storage('x'))).toBe(1);
+    expect(getStreamPace('nope', storage('x'))).toBe(4);
   });
 });
 
@@ -204,11 +205,15 @@ describe('runStreamingCaptions', () => {
     expect(bodies[1].context).toEqual(['Hello my friend']);
   });
 
-  it('pace 4 sends the same audio in a quarter of the wall time', async () => {
+  it('the default pace is 4x: the same audio in a quarter of the wall time; pace 1 is real time', async () => {
     const { FakeSocket } = socketFactory(twoSegments);
     const sleeps = [];
-    await runStreamingCaptions({ target_language: 'es' }, makeWav(52, [[25.7, 26.3]]), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), pace: 4, sleep: async (ms) => { sleeps.push(ms); } }));
+    await runStreamingCaptions({ target_language: 'es' }, makeWav(52, [[25.7, 26.3]]), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl: okTranslate(), sleep: async (ms) => { sleeps.push(ms); } }));
     expect(sleeps.reduce((a, b) => a + b, 0)).toBeCloseTo(13000, -2);
+    const slow = [];
+    const again = socketFactory(twoSegments);
+    await runStreamingCaptions({ target_language: 'es' }, makeWav(52, [[25.7, 26.3]]), baseDeps({ WebSocketImpl: again.FakeSocket, fetchImpl: okTranslate(), pace: 1, sleep: async (ms) => { slow.push(ms); } }));
+    expect(slow.reduce((a, b) => a + b, 0)).toBeCloseTo(52000, -2);
   });
 
   it('cancel closes the socket, stops sending, and rejects with code cancelled', async () => {

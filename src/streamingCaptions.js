@@ -15,8 +15,8 @@ import { LYRIC_CAPTIONS_MESSAGES } from './lyricCaptionsClient.js';
 
 export const SAMPLE_RATE = 16000;
 export const MAX_AUDIO_SECONDS = 600;
-/** Audio seconds sent per wall-clock second. 1 = real time. 2x and 4x were accepted by the service in a real-key test (see docs/api/STREAMING_CAPTIONS.md); default stays 1x. */
-export const STREAM_PACE_DEFAULT = 1;
+/** Audio seconds sent per wall-clock second. Default 4x (a real-key test showed 2x and 4x give the same text and timestamps as real time, see docs/api/STREAMING_CAPTIONS.md); `fc.streamPace` = 1 turns it back to real time. */
+export const STREAM_PACE_DEFAULT = 4;
 export const STREAM_PACE_MIN = 0.5;
 export const STREAM_PACE_MAX = 4;
 export const CHUNK_SAMPLES = 8000; // 0.5 s; documented range is 0.1-1 s
@@ -30,7 +30,7 @@ export const AUTO_RESUMES = 3;
 export const RESUME_BACKOFF_MS = [500, 1500, 3000];
 
 const PACE_KEY = 'fc.streamPace';
-/** Pacing: explicit option, else the `fc.streamPace` localStorage flag, else real time. Clamped to 0.5-4. */
+/** Pacing: explicit option, else the `fc.streamPace` localStorage flag, else STREAM_PACE_DEFAULT (4). Clamped to 0.5-4; 1 = real time. */
 export function getStreamPace(explicit, storage = globalThis.localStorage) {
   let value = Number(explicit);
   if (!Number.isFinite(value) || value <= 0) {
