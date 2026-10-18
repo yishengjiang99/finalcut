@@ -8,7 +8,7 @@ import {
   fetchClientConfig,
   setUploadConsentHandler,
 } from './engineMode.js';
-import { checkClip, DEFAULT_CLIP_LIMITS } from './wasm/clipLimits.js';
+import { checkClip, DEFAULT_CLIP_LIMITS, isConstrainedBrowser } from './wasm/clipLimits.js';
 import logoUrl from './brand/logo-96.webp';
 import Landing from './Landing.jsx';
 import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './telemetry.js';
@@ -18,6 +18,8 @@ import { makeShareFile, canShareFile, shareOrDownload } from './shareFile.js';
 import { subscribeTracks, tracksVersion, getTrack, restoreTrack, trackToSrt } from './captionTrack.js';
 import { videoHasBurnedCaptions } from './captionLineage.js';
 import { createClientLog } from './clientLog.js';
+import { exportCaptionedVideo, EXPORT_NOTICES } from './captionExport.js';
+import { burnCaptionsWebCodecs, webCodecsAvailable } from './captionBurn.js';
 import './App.css';
 
 const sampleCommands = [
@@ -197,7 +199,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const lastPromptRef = useRef(''); // the last thing the user asked: what a Retry button sends again
   useSyncExternalStore(subscribeTracks, tracksVersion); // re-render when a caption track changes
-  const [exportSheet, setExportSheet] = useState(null); // { file }: a finished export waiting for a fresh tap to share
+  const [exportSheet, setExportSheet] = useState(null); // { working, pct }: captions being added; { file, notice }: a finished export waiting for a fresh tap to share
+  const exportAbortRef = useRef(null);
   const restoreTriedRef = useRef(new Set());
   const [newVersion, setNewVersion] = useState(false); // the server runs a newer build than this tab
   const chatWindowRef = useRef(null);
@@ -845,9 +848,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
   };
 
-  // Export with captions: the lines become a caption track (mov_text) in the file, in the browser, with
-  // `-c copy`: nothing is re-encoded and nothing is uploaded. If the file cannot hold a track, the
-  // captions are saved as an SRT instead (same Export button, one line saying so).
+  // Export with captions: the captions are drawn into the frames in the browser (WebCodecs + canvas, hardware
+  // H.264, audio copied), so they show in Photos and everywhere else. Nothing is uploaded. A browser that
+  // cannot do that gets the soft caption track plus an SRT instead, with one line saying so.
   const exportWithCaptions = async (item) => {
     const bytes = mediaBytesRef.current.get(item.id);
     const capTrack = bytes && getTrack(bytes);
@@ -855,26 +858,38 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     const clog = createClientLog({ headers: sampleAuthHeaders() });
     clog.attach();
     clog.env();
-    toast('Adding the captions to the video…');
+    const controller = new AbortController();
+    exportAbortRef.current = controller;
+    setExportSheet({ working: true, pct: null });
     try {
-      const { bytes: out, mime } = await muxCaptionTrack({ bytes, mime: item.mimeType || 'video/mp4', track: capTrack, clog });
-      const file = makeShareFile(out, `${captionFileBase(item)}.${mime === 'video/quicktime' ? 'mov' : 'mp4'}`, mime);
-      track('export', { format: mime, placement: 'export_captions' });
+      const result = await exportCaptionedVideo({
+        bytes, mime: item.mimeType || 'video/mp4', track: capTrack, clog, signal: controller.signal,
+        constrained: isConstrainedBrowser(),
+        onProgress: (pct) => setExportSheet(prev => (prev?.working ? { working: true, pct } : prev)),
+        deps: { burn: burnCaptionsWebCodecs, mux: muxCaptionTrack, webCodecs: webCodecsAvailable },
+      });
+      setExportSheet(null);
+      const base = captionFileBase(item);
+      if (result.srt) saveBlob(new Blob([result.srt], { type: 'text/plain;charset=utf-8' }), `${base}.srt`);
+      if (result.kind === 'srt') {
+        toast(result.notice);
+        return;
+      }
+      const file = makeShareFile(result.bytes, `${base}.${result.ext}`, result.mime);
+      track('export', { format: result.mime, placement: result.kind === 'burned' ? 'export_captions_burned' : 'export_captions_track' });
       const outcome = await shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: (e, d) => clog.log(e, d), kind: 'export_captions' });
       if (outcome === 'needsTap') {
-        // The mux took a moment, so the tap is no longer a user activation: ask for a fresh one.
+        // Encoding took a while, so the tap is no longer a user activation: ask for a fresh one.
         clog.log('share_ready', { bytes: file.size });
-        setExportSheet({ file });
+        setExportSheet({ file, notice: result.notice });
       } else if (outcome !== 'cancelled') {
-        toast('Exported with a caption track. Turn captions on in the video player.');
+        toast(result.notice);
       }
     } catch (error) {
-      clog.log('export_srt_fallback', { code: error?.code || null });
-      saveBlob(new Blob([trackToSrt(capTrack)], { type: 'text/plain;charset=utf-8' }), `${captionFileBase(item)}.srt`);
-      toast(error?.code === 'soft_track_unsupported'
-        ? 'This video format cannot hold a caption track, so the captions were saved as an SRT file.'
-        : 'The caption track could not be added here, so the captions were saved as an SRT file.');
+      setExportSheet(null);
+      toast(error?.code === 'cancelled' ? EXPORT_NOTICES.cancelled : EXPORT_NOTICES.srt);
     } finally {
+      exportAbortRef.current = null;
       clog.detach();
     }
   };
@@ -886,7 +901,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export_captions' }).then((outcome) => {
       if (outcome === 'cancelled') return; // the sheet stays so they can share again
       setExportSheet(null);
-      toast(outcome === 'shared' ? 'Exported with a caption track' : 'Saved to your downloads');
+      toast(outcome === 'shared' ? (exportSheet?.notice || 'Exported') : 'Saved to your downloads');
     });
   };
 
@@ -1069,7 +1084,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         </div>
         <div className="rc-body">
           <div className="rc-title">{`✓ ${msg.captionCard.lines} caption lines`}</div>
-          <p className="cap-note">Press Export to save the video with the captions as a caption track.</p>
+          <p className="cap-note">Press Export to save the video with the captions in it.</p>
         </div>
       </div>
     );
@@ -1113,11 +1128,22 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
           <div className="consent">
             <h3 id="export-title">Export</h3>
-            <p className="export-status" role="status">Your video is ready.</p>
-            <div className="consent-actions">
-              <button className="jbtn" autoFocus onClick={shareReadyExport}>Share</button>
-              <button className="jbtn open" onClick={() => { setExportSheet(null); }}>Close</button>
-            </div>
+            {exportSheet.working ? (
+              <>
+                <p className="export-status" role="status">Adding the captions to the video…{Number.isFinite(exportSheet.pct) ? ` ${Math.round(exportSheet.pct * 100)}%` : ''}</p>
+                <div className="consent-actions">
+                  <button className="jbtn open" onClick={() => exportAbortRef.current?.abort()}>Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="export-status" role="status">Your video is ready.</p>
+                <div className="consent-actions">
+                  <button className="jbtn" autoFocus onClick={shareReadyExport}>Share</button>
+                  <button className="jbtn open" onClick={() => { setExportSheet(null); }}>Close</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

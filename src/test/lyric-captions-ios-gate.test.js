@@ -146,11 +146,11 @@ describe('every iOS build', () => {
       expect(names(at(build))).toContain('lyric_captions');
     }
     // The iOS copy is a separate object; the shared web definition is not mutated.
-    expect(WEB_DEF.function.description).toMatch(/exports them as a subtitle track in the video file \(not burned into the picture\)/);
+    expect(WEB_DEF.function.description).toMatch(/burns them into the video frames when the user exports/);
     expect(WEB_DEF.function.description).not.toMatch(/burns (the original|two-line)|are burned in when/);
     const gen = offeredToolsFor({}).find(t => t.function.name === 'generate_captions').function;
-    expect(gen.description).toMatch(/exports them as a subtitle track in the video file \(not burned in\)/);
-    expect(gen.description).toMatch(/frames in the browser/);
+    expect(gen.description).toMatch(/burns them into the video when the user exports/);
+    expect(gen.description).toMatch(/burned into the video frames when the user exports, in the browser/);
     expect(gen.description).not.toMatch(/call lyric_captions instead, which burns/);
   });
 

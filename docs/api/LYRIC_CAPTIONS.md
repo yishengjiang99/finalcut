@@ -1,6 +1,6 @@
 # lyric_captions: bilingual lyric/speech captions
 
-> **Web, plain speech:** "add captions in Chinese" now streams the audio to ElevenLabs realtime STT, shows a live overlay and adds a caption track on Export (no burn, no server video processing); see [STREAMING_CAPTIONS.md](STREAMING_CAPTIONS.md). This upload-based flow remains for songs (`mode: "lyrics"`), for iOS, and as the fallback when `ELEVENLABS_API_KEY` is not set.
+> **Web, plain speech:** "add captions in Chinese" now streams the audio to ElevenLabs realtime STT, shows a live overlay and burns the captions into the video in the browser on Export (no server video processing); see [STREAMING_CAPTIONS.md](STREAMING_CAPTIONS.md). This upload-based flow remains for songs (`mode: "lyrics"`), for iOS, and as the fallback when `ELEVENLABS_API_KEY` is not set.
 
 Audio in, captions out. The client sends only the audio track. The server transcribes it with
 word timestamps, identifies the song and corrects misheard lyrics, translates each line, and
@@ -208,8 +208,8 @@ become spaces. Fonts: `sudo apt-get install -y fonts-noto-cjk` (prod and the dev
 1. Decode the video's audio in the browser (`AudioContext.decodeAudioData`), then resample and
    down-mix to 16 kHz mono with `OfflineAudioContext`, and encode a WAV (1.9 MB per minute).
 2. `POST /api/lyric-captions` with the WAV only, then poll and fetch the result.
-3. No burn: `runLyricCaptionsWeb` returns `{ summary, result, audioBytes }`. The browser shows the lines
-   as a live overlay and, on Export, muxes them into the mp4 as a `mov_text` track with `-c copy`
+3. No burn here: `runLyricCaptionsWeb` returns `{ summary, result, audioBytes }`. The browser shows the lines
+   as a live overlay and, on Export, burns them into the frames in the browser with WebCodecs
    (docs/api/STREAMING_CAPTIONS.md). The video never leaves the browser for captions; there is no
    server burn route.
 

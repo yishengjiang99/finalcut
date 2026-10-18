@@ -3,7 +3,7 @@
 // the media is not uploaded; a step the browser cannot do may run on the server, but only after
 // the user agrees to the upload. In "server" engine mode every edit goes to the server API.
 
-import { captionSourceFor, recordCaptionBurn, videoHasBurnedCaptions } from './captionLineage.js';
+import { captionSourceFor, videoHasBurnedCaptions } from './captionLineage.js';
 import { setTrack, trackToSrt } from './captionTrack.js';
 import { runLyricCaptionsWeb, describeSong, friendlyLyricCaptionsError } from './lyricCaptionsClient.js';
 import {
@@ -18,7 +18,7 @@ import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
 import { CLI_MIME_TYPES } from './wasm/ops/multi.js';
 import { requestUploadConsent, UploadDeclinedError, getCloudCaptions } from './engineMode.js';
-import { dedupeSrtCues, translatedTrackWithoutDuplicates } from './server/captionHelpers.js';
+import { dedupeSrtCues, translatedTrackWithoutDuplicates, parseSrtCues } from './server/captionHelpers.js';
 
 // Aspect ratio presets for social media platforms
 const ASPECT_RATIO_PRESETS = {
@@ -388,38 +388,26 @@ async function generateCaptionsInBrowser(args, inputVideoFileData, setVideoFileD
     return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''}; ${how}. Soft subtitle track only (burn_in=false).`;
   }
 
-  // Same clean-up the server does before burning: merge repeated lines, drop translation cues
-  // that only repeat the original.
+  // The captions are not baked in here: they become the caption track of this video (live overlay on the
+  // preview), and Export burns them into the frames in the browser (WebCodecs, src/captionExport.js). Same
+  // clean-up as before: merge repeated lines, drop translation cues that only repeat the original.
   const primary = dedupeSrtCues(srt);
   const translatedTrack = translatedSrt ? translatedTrackWithoutDuplicates(primary, dedupeSrtCues(translatedSrt)) : '';
-  const style = args.style || 'default';
-  const position = args.position || 'bottom';
-  toolStatus('Burning captions into the video…');
-  let burned;
-  try {
-    // In the browser only: the video is never uploaded for captions. If the engine cannot burn, the
-    // captions are shown as soft subtitles below.
-    burned = await engine.burnSubtitles({ srt: primary, translatedSrt: translatedTrack || null, style, position }, videoFileData, fileMimeType);
-    lastExecution.executedOn = 'browser';
-  } catch (error) {
-    if (error.code === 'cancelled') throw error;
-    // The captions exist; show them as a soft track instead of failing the whole step.
-    softTracks(`Captions ready, but they were not burned into the video (${error.message}). Showing soft subtitles instead.`);
-    return `Captions generated (${langDesc}); ${how}. Burn-in did not run: ${error.message} Soft subtitles shown.`;
-  }
-  recordCaptionBurn(videoFileData, burned);
-  setVideoFileData(burned);
-  const dual = translatedSrt ? ` Dual-track burn-in (translated ${translateLanguage} + original).` : '';
-  // The caption text is in the video; it is not repeated in the chat bubble.
-  addMessage({ text: `Captions burned in (${langDesc}).${dual}`, videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })), mimeType: 'video/mp4' });
+  const lines = srtToLines(primary, translatedTrack);
+  if (!lines.length) throw new Error('No captions were generated from the audio');
+  const { height } = engine.summarizeProbe(await engine.probeMedia(videoFileData, fileMimeType));
+  const styleSummary = attachCaptionTrack({
+    source: videoFileData, lines, language, targetLanguage: translateLanguage || language, replacing, addMessage, videoHeight: height,
+    args: { position: args.position === 'top' ? 'top' : 'bottom' },
+  });
   addMessage({ text: 'SRT download:', videoUrl: srtUrl, videoType: 'subtitle-srt', mimeType: 'text/plain' });
   if (translatedSrt) addMessage({ text: `Translated SRT (${translateLanguage}):`, videoUrl: URL.createObjectURL(new Blob([translatedSrt], { type: 'text/plain' })), videoType: 'subtitle-srt', mimeType: 'text/plain' });
-  return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in; ${how}; burned in on this device.${replacing ? ' Replaced the captions burned earlier (re-burned from the uncaptioned video).' : ''}`;
+  return `Captions generated (${langDesc})${translatedSrt ? ` and translated to ${translateLanguage}` : ''} with burn-in on export; ${how}. They are a live overlay on the video preview (style: ${styleSummary}); Export burns them into the video in the browser, so they show everywhere. Nothing was uploaded except the audio.${replacing ? ' Replaced the earlier captions.' : ''}`;
 }
 
 // lyric_captions in the browser. Song lookup and translation need the audio on the server, so the
 // audio (never the video) is uploaded, and only after the user agrees (or has turned on cloud
-// captions). Shows a live overlay; the caption track is added on export.
+// captions). Shows a live overlay; Export burns it into the frames in the browser.
 async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage) {
   const fileMimeType = currentFileMimeType || 'video/mp4';
   if (!getCloudCaptions() && !(await requestUploadConsent({ tool: 'lyric_captions', uploads: 'audio', reason: 'Lyric captions identify the song and translate the lyrics on the server.' }))) {
@@ -437,7 +425,7 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
   const lines = result.lines?.length || 0;
   const songText = describeSong(result.song);
   const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines || [], language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, videoHeight: height });
-  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}), NOT burned into the picture: when the user presses Export they are added to the video file as a caption track (no re-encode), which the user turns on in the video player.${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
+  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player.${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
 }
 
 // Streaming captions: the video's audio (never the picture) is streamed from this browser straight to
@@ -515,7 +503,26 @@ async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFi
   toolStatus('Captions ready', 1);
   const count = result.lines.length;
   const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, clog, videoHeight: height });
-  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). They are NOT burned into the picture: when the user presses Export they are added to the video file as a caption track (no re-encode), which the user turns on in the video player. ${replacing ? 'They replace the captions burned earlier (the overlay is on the uncaptioned clip). ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
+  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. ${replacing ? 'They replace the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
+}
+
+const srtSeconds = (stamp) => {
+  const [h, m, rest] = String(stamp).split(':');
+  return Number(h) * 3600 + Number(m) * 60 + Number(String(rest).replace(',', '.'));
+};
+
+/** SRT cues (and an optional translated SRT with the same timing) as caption track lines. */
+export function srtToLines(srt, translatedSrt = '') {
+  const translated = parseSrtCues(translatedSrt);
+  return parseSrtCues(srt).map((cue) => {
+    const match = translated.find(t => t.start === cue.start && t.end === cue.end) || null;
+    return {
+      start: srtSeconds(cue.start),
+      end: srtSeconds(cue.end),
+      text: cue.text.replace(/\s*\n\s*/g, ' ').trim(),
+      translation: match ? match.text.replace(/\s*\n\s*/g, ' ').trim() : '',
+    };
+  }).filter(l => l.text || l.translation);
 }
 
 /** Keep the finished lines as the caption track of `source` and post the "Captions · A → B" card. */
@@ -537,7 +544,7 @@ export const languageLabel = (code) => {
   return LANGUAGE_NAMES[raw.toLowerCase()] || LANGUAGE_NAMES[raw.toLowerCase().split('-')[0]] || raw;
 };
 
-// ─── Export: the captions become a caption track in the file, never pixels ──────────────────────
+// ─── Soft-track export: the fallback when this browser cannot burn the captions in (src/captionExport.js) ───
 // ISO 639-2 codes for the track's language tag (players list the track by it).
 const TRACK_LANGUAGES = { en: 'eng', zh: 'zho', es: 'spa', fr: 'fra', de: 'deu', ja: 'jpn', ko: 'kor', pt: 'por', it: 'ita', ru: 'rus', ar: 'ara', hi: 'hin' };
 export const trackLanguageCode = (code) => TRACK_LANGUAGES[String(code || '').toLowerCase().split('-')[0]] || 'und';

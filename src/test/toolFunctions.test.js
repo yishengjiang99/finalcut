@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import * as engine from '../wasm/ffmpegEngine.js';
+import { getTrack } from '../captionTrack.js';
 import { setUploadConsentHandler, setCloudCaptions } from '../engineMode.js';
 
 vi.mock('../wasm/ffmpegEngine.js', async (importOriginal) => (await import('./helpers/noWasmEngine.js')).noWasmEngine(importOriginal));
@@ -1390,7 +1391,7 @@ describe('toolFunctions', () => {
     const burnCalls = () => engine.burnSubtitles.mock.calls;
     const serverVideoCalls = () => global.fetch.mock.calls.filter(([url]) => String(url).includes('process-video'));
 
-    it('burns in by default (burn_in true) and updates video data', async () => {
+    it('burn_in true (default): the captions become the clip\'s caption track, the video is not rewritten or uploaded', async () => {
       mockGenerateOk(
         '1\n00:00:00,000 --> 00:00:02,000\nHello world\n\n2\n00:00:02,000 --> 00:00:04,000\nThis is a test',
         'WEBVTT\n\n'
@@ -1404,11 +1405,12 @@ describe('toolFunctions', () => {
       );
 
       expect(result).toContain('Captions generated');
-      expect(result).toContain('burn-in');
-      expect(mockSetVideoFileData).toHaveBeenCalled();
+      expect(result).toContain('burn-in on export');
+      expect(mockSetVideoFileData).not.toHaveBeenCalled();
       expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(burnCalls()).toHaveLength(1);
+      expect(burnCalls()).toHaveLength(0); // nothing is burned with ffmpeg.wasm
       expect(serverVideoCalls()).toHaveLength(0);
+      expect(getTrack(mockVideoFileData).lines.map(l => l.text)).toEqual(['Hello world', 'This is a test']);
       expect(mockAddMessage.mock.calls.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -1449,40 +1451,6 @@ describe('toolFunctions', () => {
       );
     });
 
-    it('honors burn_in: true by burning in the browser, never on the server', async () => {
-      mockGenerateOk();
-
-      const result = await toolFunctions.generate_captions(
-        { burn_in: true },
-        mockVideoFileData,
-        mockSetVideoFileData,
-        mockAddMessage
-      );
-
-      expect(result).toContain('burn-in');
-      expect(mockSetVideoFileData).toHaveBeenCalled();
-      expect(burnCalls()).toHaveLength(1);
-      expect(serverVideoCalls()).toHaveLength(0);
-    });
-
-    it('when the browser cannot burn, the captions show as soft subtitles and the video is not uploaded', async () => {
-      mockGenerateOk();
-      engine.burnSubtitles.mockRejectedValueOnce(Object.assign(new Error('The video engine could not be loaded'), { code: 'wasm_load_failed' }));
-
-      const result = await toolFunctions.generate_captions(
-        { burn_in: true },
-        mockVideoFileData,
-        mockSetVideoFileData,
-        mockAddMessage
-      );
-
-      expect(result).toContain('Soft subtitles shown');
-      expect(mockSetVideoFileData).not.toHaveBeenCalled();
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(serverVideoCalls()).toHaveLength(0);
-      expect(global.fetch.mock.calls.every(([, init]) => !(init?.body instanceof FormData && init.body.has?.('video')))).toBe(true);
-    });
-
     it('should use auto language detection by default', async () => {
       mockGenerateOk('1\n00:00:00,000 --> 00:00:02,000\nHola mundo', 'WEBVTT\n\n');
 
@@ -1496,7 +1464,7 @@ describe('toolFunctions', () => {
       expect(result).toContain('auto-detected');
     });
 
-    it('translates then burns dual-track by default', async () => {
+    it('translates, then keeps both lines in the track (original, then translation) for the export', async () => {
       const translatedSrt = '1\n00:00:00,000 --> 00:00:02,000\nHola mundo';
       mockGenerateOk();
       global.fetch.mockResolvedValueOnce({
@@ -1513,9 +1481,11 @@ describe('toolFunctions', () => {
 
       expect(result).toContain('translated to es');
       expect(result).toContain('burn-in');
-      expect(mockSetVideoFileData).toHaveBeenCalled();
+      expect(mockSetVideoFileData).not.toHaveBeenCalled();
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(serverVideoCalls()).toHaveLength(0);
+      expect(getTrack(mockVideoFileData).lines).toEqual([{ start: 0, end: 2, text: 'Hello world', translation: 'Hola mundo' }]);
+      expect(getTrack(mockVideoFileData).targetLanguage).toBe('es');
     });
 
     it('translates with soft tracks when burn_in is false', async () => {

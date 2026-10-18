@@ -10,3 +10,9 @@ otherwise nothing is downloaded. Same-origin, cached by the browser after the fi
 
 SIL Open Font License 1.1 — see OFL.txt. Upstream: https://github.com/google/fonts
 (ofl/notosanssc, ofl/notosansjp).
+
+`NotoSansSC-Subset.ttf` (2.5 MB) is the caption burn's own font: the same face cut down to Latin, Greek,
+Cyrillic, punctuation, kana, GB2312 level 1, common traditional (Big5) and JIS level 1 characters
+(`python3 scripts/fonts/make_caption_subset.py`). The export loads it as a `FontFace` for the canvas
+caption drawing (`src/captionRender.js`), after the system CJK fonts, so a device without one still draws
+Chinese.

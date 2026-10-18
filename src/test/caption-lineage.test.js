@@ -1,5 +1,5 @@
-// Regression: captioning a video that already had burned captions (e.g. "add captions" then
-// "translate them") burned the text a second time, because each tool gets the previous output.
+// Captioning never changes the video: the lines become the clip's caption track (live overlay, burned in on
+// export), so "add captions" then "translate them" replaces the track instead of stacking text.
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { setUploadConsentHandler, setCloudCaptions } from '../engineMode.js';
 
@@ -20,7 +20,8 @@ vi.mock('../lyricCaptionsClient.js', async (importOriginal) => ({
 }));
 import { toolFunctions } from '../toolFunctions.js';
 import * as engine from '../wasm/ffmpegEngine.js';
-import { noteDerivedVideo, videoHasBurnedCaptions, CAPTIONS_ALREADY_BURNED } from '../captionLineage.js';
+import { noteDerivedVideo, videoHasBurnedCaptions } from '../captionLineage.js';
+import { getTrack } from '../captionTrack.js';
 
 const srt = '1\n00:00:00,000 --> 00:00:02,000\nHello world';
 const forms = [];
@@ -44,62 +45,47 @@ async function caption(args, input) {
   return { result, output };
 }
 
-describe('generate_captions never burns on top of burned captions', () => {
-  it('a second caption call re-burns from the uncaptioned source (replace, not stack)', async () => {
+describe('generate_captions attaches a caption track to the clip; nothing is burned at caption time', () => {
+  it('the video is unchanged, the track is kept for the live overlay and the export, and a second call replaces it (no stacking)', async () => {
     const original = new Uint8Array([1, 2, 3]);
     const first = await caption({ language: 'en' }, original);
-    expect(videoHasBurnedCaptions(first.output)).toBe(true);
-    expect(burnInputs()[0].length).toBe(3);
+    expect(first.output).toBe(original); // no re-encoded video
+    expect(engine.burnSubtitles).not.toHaveBeenCalled();
+    expect(videoHasBurnedCaptions(first.output)).toBe(false);
+    expect(getTrack(original).lines).toEqual([{ start: 0, end: 2, text: 'Hello world', translation: '' }]);
+    expect(first.result).toMatch(/burn-in on export/);
 
     const second = await caption({ language: 'en', translate_language: 'es' }, first.output);
-    expect(second.result).toMatch(/Replaced the captions burned earlier/);
-    // The burn ran on the original 3 bytes, not the already-captioned output.
-    expect(burnInputs()[1].length).toBe(3);
+    expect(second.output).toBe(original);
+    expect(getTrack(original).lines).toEqual([{ start: 0, end: 2, text: 'Hello world', translation: 'Hola mundo' }]);
     expect(engine.extractSpeechAudio.mock.calls.at(-1)[0]).toBe(original);
-
-    // Two caption calls in one model response chain the same way.
-    const third = await caption({ language: 'en' }, second.output);
-    expect(burnInputs()[2].length).toBe(3);
-    expect(third.result).toMatch(/Replaced/);
   });
 
-  it('refuses when other edits were applied on top of burned captions', async () => {
-    const original = new Uint8Array([4, 5, 6, 7]);
-    const { output: captioned } = await caption({}, original);
-    const brightened = new Uint8Array([8, 8, 8]);
-    noteDerivedVideo(captioned, brightened);
-    global.fetch.mockClear();
-    const { result } = await caption({}, brightened);
-    expect(result).toBe(`Failed to generate captions: ${CAPTIONS_ALREADY_BURNED}`);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('uncaptioned videos and their edits caption normally', async () => {
+  it('an edited clip gets its own track', async () => {
     const a = new Uint8Array([1]);
     const b = new Uint8Array([2]);
     noteDerivedVideo(a, b);
     const { result } = await caption({}, b);
-    expect(result).toMatch(/with burn-in; /);
+    expect(result).toMatch(/Captions generated/);
+    expect(getTrack(b).lines).toHaveLength(1);
+    expect(getTrack(a)).toBeNull();
   });
 });
 
-describe('lyric_captions follows the same rule', () => {
-  it('re-burns from the uncaptioned source after generate_captions or a previous lyric_captions', async () => {
+describe('lyric_captions replaces the same clip\'s track', () => {
+  it('uses the uncaptioned bytes every time and keeps the video unchanged', async () => {
     const original = new Uint8Array([1, 1, 1]);
     const { output: captioned } = await caption({}, original);
-    let out = captioned;
-    const set = (d) => { noteDerivedVideo(out, d); out = d; };
+    expect(captioned).toBe(original);
+    const set = vi.fn();
     const r1 = await toolFunctions.lyric_captions({ target_language: 'zh-Hans' }, captioned, set, vi.fn());
     expect(lyricWeb.inputs.at(-1)).toBe(original);
-    expect(r1).toMatch(/replace the captions burned earlier/);
     expect(r1).toMatch(/1 lines, de → zh-Hans/);
-    const r2 = await toolFunctions.lyric_captions({ target_language: 'es' }, out, set, vi.fn());
+    expect(set).not.toHaveBeenCalled();
+    const r2 = await toolFunctions.lyric_captions({ target_language: 'es' }, original, set, vi.fn());
     expect(lyricWeb.inputs.at(-1)).toBe(original);
-    expect(r2).toMatch(/replace the captions burned earlier/);
-    const edited = new Uint8Array([2]);
-    noteDerivedVideo(out, edited);
-    const r3 = await toolFunctions.lyric_captions({ target_language: 'es' }, edited, set, vi.fn());
-    expect(r3).toContain(CAPTIONS_ALREADY_BURNED);
+    expect(r2).toMatch(/de → zh-Hans/);
+    expect(getTrack(original).targetLanguage).toBe('zh-Hans');
   });
 });
 

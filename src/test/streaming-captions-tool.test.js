@@ -92,8 +92,8 @@ describe('streaming lyric_captions on web', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({ text: 'Captions · English → Chinese', captions: { bytes: input, lines: 2 } });
     expect(result).toMatch(/streamed/);
-    expect(result).toMatch(/NOT burned into the picture/);
-    expect(result).toMatch(/caption track/);
+    expect(result).toMatch(/burned into the video frames in the browser/);
+    expect(result).toMatch(/Photos and every player/);
     expect(result).toMatch(/ElevenLabs may keep it, so do not tell the user it was deleted/);
     expect(lyricClient.runLyricCaptionsWeb).not.toHaveBeenCalled();
   });
