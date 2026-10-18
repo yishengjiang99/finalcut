@@ -63,29 +63,11 @@ beforeEach(() => {
 afterEach(() => setUploadConsentHandler(null));
 
 describe('streaming lyric_captions on web', () => {
-  it('asks "Send the audio to ElevenLabs?" with the Design wording, every time', async () => {
+  it('starts at once: no "Send the audio to ElevenLabs?" prompt, nothing asked before streaming', async () => {
     await tool({ target_language: 'zh-Hans' });
-    await tool({ target_language: 'zh-Hans' });
-    const asks = consent.mock.calls.map(c => c[0]).filter(r => r.kind === 'streaming_audio');
-    expect(asks).toHaveLength(2);
-    expect(asks[0]).toMatchObject({
-      title: 'Send the audio to ElevenLabs?',
-      body: "FinalCap will stream this video's audio, but not the picture, to ElevenLabs to transcribe it. ElevenLabs may keep the audio and the transcript, and FinalCap can't delete them. The text is then sent to FinalCap, which sends it to xAI (Grok) to translate.",
-      privacyLabel: 'Privacy details',
-      privacyHref: '/legal/privacy.html#streaming-captions',
-      confirmLabel: 'Send audio',
-      declineLabel: 'Not now',
-      provider: 'elevenlabs',
-      uploads: 'audio',
-    });
-  });
-
-  it('"Not now": nothing is extracted, streamed or changed', async () => {
-    consent.mockResolvedValue(false);
-    const { result, messages } = await tool({ target_language: 'zh-Hans' });
-    expect(streaming.runStreamingCaptions).not.toHaveBeenCalled();
-    expect(messages.map(m => m.text)).toEqual(['Audio not sent. Nothing was changed.']);
-    expect(result).toContain('Audio not sent. Nothing was changed.');
+    expect(consent.mock.calls.map(c => c[0]).filter(r => r.kind === 'streaming_audio' || r.provider === 'elevenlabs')).toHaveLength(0);
+    expect(consent).not.toHaveBeenCalled();
+    expect(streaming.runStreamingCaptions).toHaveBeenCalledTimes(1);
   });
 
   it('streams, translates and burns in the browser with the agreed style (one two-line Dialogue per caption)', async () => {

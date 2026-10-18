@@ -7,7 +7,7 @@ import { captionSourceFor, recordCaptionBurn } from './captionLineage.js';
 import { runLyricCaptionsWeb, describeSong, friendlyLyricCaptionsError } from './lyricCaptionsClient.js';
 import {
   streamingAvailable, runStreamingCaptions, burnStreamingCaptionsOnServer, friendlyStreamingError,
-  CONSENT_COPY, CONTINUE_COPY, STREAMING_MESSAGES, StreamingCaptionsError,
+  CONTINUE_COPY, STREAMING_MESSAGES, StreamingCaptionsError,
 } from './streamingCaptions.js';
 import { createClientLog } from './clientLog.js';
 import { keepAwake } from './wakeLock.js';
@@ -480,7 +480,7 @@ export function isRetryable(err) {
   return Boolean(err) && err.name !== 'UploadDeclinedError' && !['cancelled', 'skipped_by_user', 'no_audio', 'audio_too_long', 'no_speech', 'declined_continue'].includes(err.code);
 }
 
-// ElevenLabs realtime speech-to-text, after the user taps "Send audio" (asked every time). Our server
+// ElevenLabs realtime speech-to-text, started as soon as the user asks for captions (no prompt; the privacy page says so). Our server
 // only mints the single-use token and translates the committed text; the burn runs in ffmpeg.wasm.
 async function streamingCaptionsInBrowser(args, videoFileData, replacing, setVideoFileData, addMessage, clog = createClientLog()) {
   const headers = sampleAuthHeaders();
@@ -511,13 +511,6 @@ async function streamingCaptionsFlow(args, videoFileData, replacing, setVideoFil
 
 async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFileData, addMessage, headers, clog) {
   const fileMimeType = currentFileMimeType || 'video/mp4';
-  clog.log('consent_shown', { bytes: videoFileData?.byteLength, mime: fileMimeType });
-  const agreed = await requestUploadConsent({ tool: 'lyric_captions', uploads: 'audio', kind: 'streaming_audio', provider: 'elevenlabs', ...CONSENT_COPY });
-  clog.log(agreed ? 'consent_accepted' : 'consent_declined');
-  if (!agreed) {
-    lastExecution.errorCode = 'skipped_by_user';
-    throw new UploadDeclinedError('lyric_captions', STREAMING_MESSAGES.declined);
-  }
   const probeStart = Date.now();
   const { width, height } = engine.summarizeProbe(await engine.probeMedia(videoFileData, fileMimeType));
   clog.log('probe_end', { ms: Date.now() - probeStart, w: width, h: height });
@@ -560,7 +553,7 @@ async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFi
   const count = result.lines.length;
   addMessage({ text: `Bilingual captions burned in (${count} lines, ${result.language || 'auto'} → ${result.targetLanguage}).`, videoUrl: URL.createObjectURL(new Blob([burned], { type: 'video/mp4' })), mimeType: 'video/mp4' });
   const where = lastExecution.executedOn === 'server' ? 'burn-in: server (you agreed to upload the video)' : 'burn-in: on this device';
-  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. ${replacing ? 'Replaced the captions burned earlier. ' : ''}With the user's OK the video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted; ${where}.`;
+  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. ${replacing ? 'Replaced the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted; ${where}.`;
 }
 
 // Point every style of an ASS script at the font the browser engine has (it has no system fonts).

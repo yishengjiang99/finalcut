@@ -75,15 +75,6 @@ export const STREAMING_MESSAGES = Object.freeze({
   timeLimit: (sec) => `The transcription session reached its time limit at ${formatClock(sec)}. Captions up to there are kept.`,
 });
 
-export const CONSENT_COPY = Object.freeze({
-  title: 'Send the audio to ElevenLabs?',
-  body: "FinalCap will stream this video's audio, but not the picture, to ElevenLabs to transcribe it. ElevenLabs may keep the audio and the transcript, and FinalCap can't delete them. The text is then sent to FinalCap, which sends it to xAI (Grok) to translate.",
-  privacyLabel: 'Privacy details',
-  privacyHref: '/legal/privacy.html#streaming-captions',
-  confirmLabel: 'Send audio',
-  declineLabel: 'Not now',
-});
-
 export const CONTINUE_COPY = Object.freeze({
   confirmLabel: 'Continue',
   declineLabel: 'Cancel',

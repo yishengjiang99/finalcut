@@ -26,7 +26,7 @@ single-use token reaches the browser. No CSP is set today; if one is added it ne
 ## Flow
 
 1. `GET /api/streaming-captions/status` → `{available}`; the tool uses this flow only when true and the mode is not `lyrics`.
-2. Consent every time: **"Send the audio to ElevenLabs?"** (see below). "Not now" ends the tool with "Audio not sent. Nothing was changed."
+2. No prompt: the browser starts streaming the audio as soon as captions are requested.
 3. The browser extracts the audio (16 kHz mono PCM), plans commit points at the quietest spot 20–30 s apart.
 4. `POST /api/streaming-captions/token` just before connecting. Connect to `wsUrl?…&token=…`.
 5. Stream 0.5 s chunks (`input_audio_chunk`, `commit:true` on the chunk that ends a segment) at the pacing constant.
@@ -126,7 +126,7 @@ the lyric burn. 400 on malformed lines, 503 `lyric_captions_unavailable` without
 
 ## Client log (iPhone debugging)
 
-`POST /api/client-log` (authenticated by the same header/cookie as the app, 16 KB, ≤ 60 events, 600 per 5 min per user) writes one journal line per event: `client-log {"sid":…,"b":<build>,"u":<user id>,"i":…,"ev":…}`. Never audio, transcript, translation text or tokens: those keys are dropped and secret-looking values redacted. The first `env` event is sent immediately with `fetch` `keepalive`, and every other event is sent immediately too, each with `keepalive` (only `pct` and `ws_tick` are batched, at 1 s), so the last event before a tab is killed still arrives. Events: `env`, `vis`, `pagehide`, `pageshow`, `freeze`, `resume`, `plan`, `token_req/res`, `ws_new/open/session_started/first_msg/first_chunk/first_partial/committed/close/tick/error`, `tr_req/tr_res`, `pct`, `auto_resume`, `kick`, `stall`, `timer_gap`, `hidden`, `idle_timeout`, `run_end`, `consent_shown/accepted` (upload fallback only), `probe_end`, `extract_start/end`, `streamed`, `burn_start/end`, `run_done`, `decode_error`, `pump_error`. `b` is the build id (git short sha) of the bundle that is running.
+`POST /api/client-log` (authenticated by the same header/cookie as the app, 16 KB, ≤ 60 events, 600 per 5 min per user) writes one journal line per event: `client-log {"sid":…,"b":<build>,"u":<user id>,"i":…,"ev":…}`. Never audio, transcript, translation text or tokens: those keys are dropped and secret-looking values redacted. The first `env` event is sent immediately with `fetch` `keepalive`, and every other event is sent immediately too, each with `keepalive` (only `pct` and `ws_tick` are batched, at 1 s), so the last event before a tab is killed still arrives. Events: `env`, `vis`, `pagehide`, `pageshow`, `freeze`, `resume`, `plan`, `token_req/res`, `ws_new/open/session_started/first_msg/first_chunk/first_partial/committed/close/tick/error`, `tr_req/tr_res`, `pct`, `auto_resume`, `kick`, `stall`, `timer_gap`, `hidden`, `idle_timeout`, `run_end`, `probe_end`, `extract_start/end`, `streamed`, `burn_start/end`, `run_done`, `decode_error`, `pump_error`. `b` is the build id (git short sha) of the bundle that is running.
 
 ## New-version bar
 
@@ -136,10 +136,6 @@ The bundle knows its commit (`__BUILD_ID__`, from `git rev-parse`). The app poll
 
 | When | Text |
 |---|---|
-| Consent title | Send the audio to ElevenLabs? |
-| Consent body | FinalCap will stream this video's audio, but not the picture, to ElevenLabs to transcribe it. ElevenLabs may keep the audio and the transcript, and FinalCap can't delete them. The text is then sent to FinalCap, which sends it to xAI (Grok) to translate. **Privacy details** → `/legal/privacy.html#streaming-captions` |
-| Consent buttons | **Send audio** / **Not now** (decline is focused) |
-| Declined | Audio not sent. Nothing was changed. |
 | Failed, nothing finished | Captions couldn't finish. Nothing was changed. Try again. |
 | Service restarted (`job_lost`/`job_expired`, after one silent retry) | Captions couldn't finish because the service restarted. Nothing was changed. Try again. |
 | Socket dropped | The connection dropped at 0:34. Captions up to there are kept. **Continue** / **Cancel** |
@@ -149,6 +145,9 @@ The bundle knows its commit (`__BUILD_ID__`, from `git rev-parse`). The app poll
 | 503 unavailable | Translated captions aren't available right now. Try again later. |
 
 ## Privacy
+
+There is **no consent prompt** on web: asking for captions starts the stream (the privacy page's "Streaming captions (optional)" section says so and says what leaves the browser). The only dialog left in this flow is **Continue / Cancel** after a dropped connection.
+
 
 Audio goes from the browser directly to ElevenLabs. ElevenLabs retains audio and transcripts by
 default; zero-retention mode is Enterprise-only (`enable_logging=false`), so it is not used. Do not tell

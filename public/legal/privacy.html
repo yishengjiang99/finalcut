@@ -34,12 +34,12 @@
   </ul>
 
   <h2 id="streaming-captions">Streaming captions (optional)</h2>
-  <p>When you ask FinalCap on the web to caption speech in another language (for example "add captions in Chinese"), this happens only if you tap <strong>Send audio</strong>. We ask every time. If you tap <strong>Not now</strong>, no audio leaves your browser.</p>
+  <p>When you ask FinalCap on the web to caption or translate speech (for example "add captions in Chinese"), the audio from your video, not the picture, streams from your browser to ElevenLabs to transcribe it. There is no separate prompt: asking for captions starts it.</p>
   <ul>
     <li><strong>What leaves your browser.</strong> Your browser takes the audio from your video and streams only the audio, never the picture, directly to ElevenLabs (Scribe v2 Realtime) to transcribe it. It connects with a short-lived, single-use token that our server issues. The audio does not pass through our servers, and we keep no copy of it.</li>
     <li><strong>What ElevenLabs may keep.</strong> ElevenLabs may keep the audio and the transcript under its own privacy policy (<a href="https://elevenlabs.io/privacy-policy" rel="noopener noreferrer">elevenlabs.io/privacy-policy</a>). We cannot delete them from ElevenLabs, and we have not enabled any zero-retention mode. This is the one case where we cannot delete your audio.</li>
     <li><strong>What we receive.</strong> Your browser sends us the transcript text (not the audio). Our server forwards that text to xAI (Grok) to translate it and returns the result. Our server holds the text in memory only while it handles the request and does not store it.</li>
-    <li><strong>The video.</strong> The captions are burned into your video in your browser. If your browser cannot do that, the app asks you before it uploads the video to our server for that one step.</li>
+    <li><strong>The video.</strong> The video itself is never sent to ElevenLabs or xAI. Burning captions into the video happens in your browser. If your browser cannot do that, the app asks you before it uploads the video to our server for that one step.</li>
   </ul>
 
   <h2>How we use information</h2>

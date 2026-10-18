@@ -3,7 +3,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   planCommitPoints, wavToPcm16k, getStreamPace, offsetWords, runStreamingCaptions, friendlyStreamingError, streamingAvailable,
-  mintStreamingToken, StreamingCaptionsError, STREAMING_MESSAGES, CONSENT_COPY, SAMPLE_RATE, CHUNK_SAMPLES, GRID_SAMPLES, formatClock,
+  mintStreamingToken, StreamingCaptionsError, STREAMING_MESSAGES, SAMPLE_RATE, CHUNK_SAMPLES, GRID_SAMPLES, formatClock,
 } from '../streamingCaptions.js';
 import { encodeWavMono16 } from '../lyricCaptionsClient.js';
 
@@ -476,8 +476,6 @@ describe('messages and server calls', () => {
     expect(STREAMING_MESSAGES.unavailable).toBe("Translated captions aren't available right now. Try again later.");
     expect(STREAMING_MESSAGES.connectionDropped(34)).toBe('The connection dropped at 0:34. Captions up to there are kept.');
     expect(formatClock(125)).toBe('2:05');
-    expect(CONSENT_COPY).toMatchObject({ title: 'Send the audio to ElevenLabs?', confirmLabel: 'Send audio', declineLabel: 'Not now' });
-    expect(CONSENT_COPY.body).toBe("FinalCap will stream this video's audio, but not the picture, to ElevenLabs to transcribe it. ElevenLabs may keep the audio and the transcript, and FinalCap can't delete them. The text is then sent to FinalCap, which sends it to xAI (Grok) to translate.");
   });
 
   it('friendlyStreamingError maps every failure to one short message, never the raw server text', () => {
