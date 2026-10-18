@@ -494,3 +494,44 @@ final class LyricCaptionsTests: XCTestCase {
         XCTAssertEqual(paywalls, 1)
     }
 }
+
+/// Opt-in (iOS Screenshots workflow, job `lyric`): renders one frame of Chinese captions on a
+/// vertical 1080x1920 video through the real compose path, for Design's 20% safe-area check.
+final class LyricCaptionsShotTests: XCTestCase {
+    func testCaptureChineseCaptionsOnVerticalVideo() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let outPath = env["FC_LYRIC_SHOT_OUT"] else {
+            throw XCTSkip("opt-in: TEST_RUNNER_FC_LYRIC_SHOT_OUT=<dir>")
+        }
+        let out = URL(fileURLWithPath: outPath, isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let clip = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
+        var stack = EditStack(base: clip, baseCanvas: NativeCanvas(width: 1280, height: 720, duration: 6, isPhoto: false, hasAudio: true))
+        // Centre 9:16 crop, scaled to a vertical 1080x1920 canvas.
+        stack.push(EditEntry(tool: "crop_video", op: .crop(x: 437, y: 0, width: 406, height: 720)))
+        stack.push(EditEntry(tool: "resize_video", op: .resize(width: 1080, height: 1920)))
+        stack.push(EditEntry(tool: "lyric_captions", op: .lyricCaptions(LyricCaptionTrack(lines: [
+            LyricLine(start: 0, end: 5, text: "Hello, this is a test of the caption position", translation: "你好，这是字幕位置的测试，字幕应该显示在画面下方两成的位置"),
+        ]))))
+        let composed = try await NativeComposer.compose(stack)
+        let generator = composed.makeImageGenerator()
+        let frame = try await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
+        XCTAssertEqual(frame.width, 1080)
+        XCTAssertEqual(frame.height, 1920)
+        let plain = UIImage(cgImage: frame)
+        try XCTUnwrap(plain.pngData()).write(to: out.appendingPathComponent("chinese-captions-1080x1920.png"))
+        // Same frame with the bottom 20% shaded and its top edge marked.
+        let size = CGSize(width: frame.width, height: frame.height)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let annotated = UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            plain.draw(at: .zero)
+            UIColor.red.withAlphaComponent(0.25).setFill()
+            ctx.fill(CGRect(x: 0, y: size.height * 0.8, width: size.width, height: size.height * 0.2))
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: size.height * 0.8 - 2, width: size.width, height: 4))
+        }
+        try XCTUnwrap(annotated.pngData()).write(to: out.appendingPathComponent("chinese-captions-1080x1920-20pct-guide.png"))
+        print("[lyric-shot] font=\(LyricCaptionFont.resolvedName) size=\(Int(size.width))x\(Int(size.height))")
+    }
+}

@@ -6,9 +6,15 @@ name: iOS simulator screenshots (paywall review shot)
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: 'Which job to run: all (default), paywall, or lyric'
+        required: false
+        default: 'all'
 
 jobs:
   paywall:
+    if: ${{ inputs.only != 'lyric' }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -83,4 +89,57 @@ jobs:
           path: |
             shots/
             ${{ runner.temp }}/paywall-xcodebuild.log
+          if-no-files-found: ignore
+
+  # One frame of Chinese lyric captions on a vertical 1080x1920 video (real compose path),
+  # plus a copy with the bottom 20% shaded, for Design's safe-area check. Artifact only.
+  lyric:
+    if: ${{ inputs.only == 'lyric' || inputs.only == 'all' || inputs.only == '' }}
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          for app in /Applications/Xcode_16.4.app /Applications/Xcode_16.3.app /Applications/Xcode_16.2.app /Applications/Xcode_26.0.app /Applications/Xcode.app; do
+            if [[ -d "$app" ]]; then sudo xcode-select -s "$app"; break; fi
+          done
+          xcodebuild -version
+
+      - name: Pick an iPhone simulator
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=[x for r in json.load(sys.stdin)["devices"].values() for x in r if x.get("isAvailable") and "iPhone" in x["name"]]; print((sorted(d,key=lambda x:("Pro Max" not in x["name"],x["name"]))[0])["udid"])')
+          echo "SIM=$UDID" >> "$GITHUB_ENV"
+
+      - name: Render the frame
+        env:
+          TEST_RUNNER_FC_LYRIC_SHOT_OUT: ${{ runner.temp }}/lyric-shot
+        working-directory: ios
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/lyric-shot"
+          xcodebuild test \
+            -project FinalCut.xcodeproj -scheme FinalCut \
+            -destination "id=$SIM" \
+            -only-testing:FinalCutTests/LyricCaptionsShotTests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/lyric.xcresult" \
+            CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/lyric-xcodebuild.log" 2>&1
+          rc=$?
+          grep -E "lyric-shot|error:|XCTAssert|Test Case|failed|passed|skipped" "$RUNNER_TEMP/lyric-xcodebuild.log" | tail -40
+          [[ $rc -eq 0 ]] || { tail -80 "$RUNNER_TEMP/lyric-xcodebuild.log"; exit $rc; }
+          mkdir -p "$GITHUB_WORKSPACE/shots"
+          cp "$RUNNER_TEMP"/lyric-shot/*.png "$GITHUB_WORKSPACE/shots/"
+          sips -g pixelWidth -g pixelHeight "$GITHUB_WORKSPACE"/shots/*.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lyric-caption-shot
+          path: |
+            shots/
+            ${{ runner.temp }}/lyric-xcodebuild.log
           if-no-files-found: ignore
