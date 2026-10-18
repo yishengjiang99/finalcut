@@ -650,7 +650,9 @@ final class APIClient {
         mimeType: String,
         request: LyricCaptionRequest,
         width: Int?,
-        height: Int?
+        height: Int?,
+        turnToken: String? = nil,
+        toolCallId: String? = nil
     ) async throws -> JobEnqueueResponse {
         let multipart = Self.makeLyricCaptionsBody(
             audio: audio, fileName: fileName, mimeType: mimeType,
@@ -661,6 +663,11 @@ final class APIClient {
             body: multipart.data, contentType: "multipart/form-data; boundary=\(multipart.boundary)"
         )
         urlRequest.timeoutInterval = 120
+        // From a client-mode chat tool call: the server doesn't charge it on top of the chat turn.
+        if let turnToken, !turnToken.isEmpty, let toolCallId, !toolCallId.isEmpty {
+            urlRequest.setValue(turnToken, forHTTPHeaderField: "X-Turn-Token")
+            urlRequest.setValue(toolCallId, forHTTPHeaderField: "X-Tool-Call-Id")
+        }
         let (data, response) = try await session.data(for: urlRequest)
         try Self.throwIfNeeded(response: response, data: data)
         do {

@@ -300,7 +300,7 @@ final class LyricCaptionsTests: XCTestCase {
         model.onOpenSettings = { openedSettings += 1 }
         let result = await model.executeToolCall(lyricCall())
         XCTAssertFalse(result.ok)
-        XCTAssertEqual(result.error, "cloud_processing_off")
+        XCTAssertEqual(result.error, "skipped_by_user")
         XCTAssertEqual(prompts.map(\.title), ["Lyric captions use the cloud"])
         XCTAssertEqual(prompts.first?.primary, "Open Settings")
         XCTAssertEqual(openedSettings, 1)
@@ -310,7 +310,7 @@ final class LyricCaptionsTests: XCTestCase {
         // Not now: same, but Settings stays closed.
         model.promptHandler = { prompts.append($0); return false }
         let again = await model.executeToolCall(lyricCall(["mode": .string("speech")]))
-        XCTAssertEqual(again.error, "cloud_processing_off")
+        XCTAssertEqual(again.error, "skipped_by_user")
         XCTAssertEqual(prompts.last?.title, "Translated captions use the cloud")
         XCTAssertEqual(openedSettings, 1)
         XCTAssertEqual(LyricStubProtocol.recorded.count, 0)
@@ -363,7 +363,7 @@ final class LyricCaptionsTests: XCTestCase {
         model.promptHandler = { prompts.append($0); return false }
         for _ in 0..<2 {
             let result = await model.executeToolCall(lyricCall())
-            XCTAssertEqual(result.error, "user_declined")
+            XCTAssertEqual(result.error, "skipped_by_user")
         }
         XCTAssertEqual(prompts.count, 2, "asked every time")
         XCTAssertEqual(prompts.first?.title, "Upload the audio?")
@@ -427,6 +427,8 @@ final class LyricCaptionsTests: XCTestCase {
         }
         XCTAssertFalse(body.contains("name=\"video\""), "never the picture")
         XCTAssertGreaterThan(upload.body.count, 4000, "real audio went up")
+        XCTAssertNil(upload.headers["X-Turn-Token"], "no chat turn, no turn token")
+        XCTAssertEqual(result.output?["width"], .number(1280))
 
         guard case .lyricCaptions(let track)? = model.editStack?.entries.last?.op else { return XCTFail("lyric captions entry") }
         XCTAssertEqual(track.lines.count, 2)
@@ -444,9 +446,14 @@ final class LyricCaptionsTests: XCTestCase {
         let json = #"{"song":null,"mode":"speech","language":"en","targetLanguage":"zh-Hans","lines":[{"start":0.5,"end":2.0,"text":"Hello","translation":"你好"}]}"#
         let model = try makeModel(cloud: true, routes: successRoutes(resultJSON: json))
         model.promptHandler = { _ in true }
+        model.currentTurnToken = "tt_1"
         let result = await model.executeToolCall(lyricCall(["mode": .string("speech")]))
         XCTAssertTrue(result.ok)
         XCTAssertEqual(model.messages.last?.content, "Captions · English → Chinese")
+        let upload = try XCTUnwrap(LyricStubProtocol.recorded.first { $0.path == "/api/lyric-captions" })
+        XCTAssertEqual(upload.headers["X-Turn-Token"], "tt_1")
+        XCTAssertEqual(upload.headers["X-Tool-Call-Id"], "ly1")
+        XCTAssertFalse(String(decoding: upload.body, as: UTF8.self).contains("name=\"source_language\""), "source language left to the server")
     }
 
     @MainActor

@@ -253,6 +253,8 @@ final class EditorViewModel: ObservableObject {
     /// "Open Settings" on the Cloud-off notice: shows the app's Cloud processing setting.
     var onOpenSettings: (() -> Void)?
     private var promptContinuation: CheckedContinuation<Bool, Never>?
+    /// Latest `turnToken` of the running client-mode chat turn (sent with the lyric captions upload).
+    var currentTurnToken: String?
 
     /// Photos and videos (photo mode, NATIVE_EDIT_UX.md §7).
     nonisolated static var pickerFilter: PHPickerFilter { .any(of: [.images, .videos]) }
@@ -991,8 +993,10 @@ final class EditorViewModel: ObservableObject {
                 ClientChatRequest(messages: conversation, media: await currentMedia(), thumbnails: await currentThumbnails())
             )
             var rounds = 0
+            defer { currentTurnToken = nil }
             while response.status == "tool_calls", !response.toolCalls.isEmpty, rounds < Self.maxClientRounds {
                 rounds += 1
+                currentTurnToken = response.turnToken
                 var results: [(callId: String, result: ClientToolResult)] = []
                 for call in response.toolCalls {
                     if Task.isCancelled { return }
@@ -1282,11 +1286,11 @@ final class EditorViewModel: ObservableObject {
             if await confirm(LyricCaptionsCopy.cloudOffPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) {
                 onOpenSettings?()
             }
-            return fail("cloud_processing_off")
+            return fail("skipped_by_user")
         }
         // Asked every time, no "don't ask again".
         guard await confirm(LyricCaptionsCopy.uploadPrompt(mode: request.mode, targetLanguage: request.targetLanguage)) else {
-            return fail("user_declined")
+            return fail("skipped_by_user")
         }
         guard let client = apiClient else { return fail("lyric_captions_failed", copy: LyricCaptionsCopy.generic) }
 
@@ -1329,7 +1333,9 @@ final class EditorViewModel: ObservableObject {
                 mimeType: "audio/mp4",
                 request: request,
                 width: Int(canvas.width.rounded()),
-                height: Int(canvas.height.rounded())
+                height: Int(canvas.height.rounded()),
+                turnToken: currentTurnToken,
+                toolCallId: call.id
             )
             activeJobId = enqueue.jobId
             let mode = request.mode
@@ -1365,6 +1371,9 @@ final class EditorViewModel: ObservableObject {
                 "targetLanguage": .string(target),
                 "mode": .string(result.mode ?? request.mode.rawValue),
                 "burnedIn": .bool(true),
+                "width": .number(Double(canvas.width.rounded())),
+                "height": .number(Double(canvas.height.rounded())),
+                "duration": .number((composed.duration * 1000).rounded() / 1000),
             ]
             if let language = result.language { output["language"] = .string(language) }
             if let song = result.song {
@@ -1488,7 +1497,7 @@ final class EditorViewModel: ObservableObject {
 
     private func runCaptionsTool(language: String, translateLanguage: String?, burnIn: Bool) async -> ClientToolResult {
         guard await confirmServerCaptionsUpload() else {
-            return .failure(cloudProcessingEnabled ? "user_declined" : "unsupported_on_device", on: .device)
+            return .failure(cloudProcessingEnabled ? "skipped_by_user" : "unsupported_on_device", on: .device)
         }
         // Captions time against the edited clip: bake device edits in before uploading.
         if let stack = editStack, !stack.entries.isEmpty {
