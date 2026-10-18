@@ -4,6 +4,7 @@
 import { toolFunctions, getCurrentFileMimeType, resetLastExecution, getLastExecution, setToolStatusListener } from './toolFunctions.js';
 import { track, msBucket } from './telemetry.js';
 import { noteDerivedVideo } from './captionLineage.js';
+import { priorHistory } from './chatHistory.js';
 import { carryTrackOnEdit, CAPTIONS_CLEARED_NOTICE } from './captionTrack.js';
 import { probeMedia, summarizeProbe, subscribeEngine } from './wasm/ffmpegEngine.js';
 
@@ -104,7 +105,8 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
   try {
     report({ text: 'Reading the file…' });
     let media = await describeMedia(working, getCurrentFileMimeType());
-    let conversation = [{ role: 'user', content: latestUser.content }];
+    // The earlier turns go along as text, so an answer like "Default" still has its question and request.
+    let conversation = [...priorHistory(messages), { role: 'user', content: latestUser.content }];
     let turnToken;
 
     for (let round = 0; round < MAX_CLIENT_ROUNDS; round += 1) {

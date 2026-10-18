@@ -74,6 +74,7 @@ describe('ffmpeg_cli follow-up rounds', () => {
       { role: 'assistant', content: 'Processed video:', excludeFromAPI: true, id: 6 }
     ];
     expect(messagesForCurrentTurn(messages)).toEqual([
+      { role: 'user', content: 'make it darker' }, // earlier turns go along as text only
       { role: 'user', content: 'add cover image' },
       { role: 'assistant', content: null, tool_calls: [discover] },
       { role: 'tool', tool_call_id: 'c1', name: 'ffmpeg_cli', content: '{"ok":true}' }

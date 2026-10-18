@@ -5,6 +5,7 @@ import { carryTrackOnEdit, CAPTIONS_CLEARED_NOTICE } from './captionTrack.js';
 import { toolFunctions, getCurrentFileMimeType, ffmpegCliStringFallback } from './toolFunctions.js';
 import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
 import { runClientTurn } from './clientTurn.js';
+import { priorHistory } from './chatHistory.js';
 
 export function assertToolCallApplied(result, functionName) {
   if (typeof result !== 'string' || !result.trim() || /^Failed\b/i.test(result.trim())) {
@@ -27,8 +28,9 @@ export function filterMessagesForInference(messages) {
 // plain chat request and tell the model why no tools are offered.
 export const NO_MEDIA_NOTE = 'No video, photo, or audio file is attached yet. Chat normally and answer questions. If the user asks for an edit, ask them to upload a file first; never claim an edit was applied.';
 
-// The latest request plus the tool calls and results that followed it, so the
-// model can continue a multi-step tool exchange (ffmpeg_cli discover → plan → run).
+// The earlier turns as text (src/chatHistory.js), the latest request, and the tool calls and results that
+// followed it, so the model keeps the context of a follow-up and can continue a multi-step tool exchange
+// (ffmpeg_cli discover → plan → run).
 export function messagesForCurrentTurn(messages) {
   const [latestUserMessage] = filterMessagesForInference(messages);
   if (!latestUserMessage) return [];
@@ -46,7 +48,7 @@ export function messagesForCurrentTurn(messages) {
       }
       return [];
     });
-  return [latestUserMessage, ...followUps];
+  return [...priorHistory(messages), latestUserMessage, ...followUps];
 }
 
 // ffmpeg_cli discover/plan and get_video_dimensions only gather information: the model has
