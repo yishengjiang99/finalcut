@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { tools } from './tools.js';
 import { noteDerivedVideo } from './captionLineage.js';
+import { carryTrackOnEdit, CAPTIONS_CLEARED_NOTICE } from './captionTrack.js';
 import { toolFunctions, getCurrentFileMimeType, ffmpegCliStringFallback } from './toolFunctions.js';
 import { FFMPEG_CLI_TOOL_NAME } from './ffmpegFallback.js';
 import { runClientTurn } from './clientTurn.js';
@@ -377,6 +378,7 @@ export function useCallAPI({
 
             // Pass uploadedVideos only to functions that need it
             let result;
+            const bytesBefore = workingVideoFileData;
             if (funcName === 'add_video_transition') {
               result = await toolFunction(args, workingVideoFileData, updateWorkingVideoFileData, addMessage, uploadedVideos);
             } else {
@@ -386,6 +388,7 @@ export function useCallAPI({
             // Tool functions report processing failures as result strings. Do
             // not let a later tool run against media that was never updated.
             result = assertToolCallApplied(result, funcName);
+            if (workingVideoFileData !== bytesBefore && carryTrackOnEdit(bytesBefore, workingVideoFileData, funcName, args) === 'cleared') addMessage({ text: CAPTIONS_CLEARED_NOTICE });
 
             currentMessages.push({
               role: 'tool',

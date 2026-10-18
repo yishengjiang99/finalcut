@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { systemPrompt } from './tools.js';
-import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType } from './toolFunctions.js';
+import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, burnCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import { setFetchAbortSignal } from './abortableFetch.js';
@@ -14,6 +14,11 @@ import Landing from './Landing.jsx';
 import { track, trackOnce, sizeBucket, lengthBucket, landingProps } from './telemetry.js';
 import { takePendingPrompt } from './pendingPrompt.js';
 import { newBuildAvailable } from './buildInfo.js';
+import CaptionPanel from './CaptionPanel.jsx';
+import { makeShareFile, canShareFile, shareOrDownload } from './shareFile.js';
+import { subscribeTracks, tracksVersion, getTrack, updateTrackStyle, clearTrack, restoreTrack, trackToSrt, trackToAss } from './captionTrack.js';
+import { videoHasBurnedCaptions } from './captionLineage.js';
+import { createClientLog } from './clientLog.js';
 import './App.css';
 
 const sampleCommands = [
@@ -70,6 +75,22 @@ const mediaFilename = (item) => {
   if (item.kind === 'original' && /\.\w+$/.test(item.label)) return item.label;
   const slug = item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'export';
   return `finalcap-${slug}.${MIME_EXTENSIONS[item.mimeType] || (item.isAudio ? 'mp3' : 'mp4')}`;
+};
+
+// Picture size of a clip, from the browser's own metadata (no ffmpeg needed).
+const readVideoSize = (url) => new Promise((resolve) => {
+  const v = document.createElement('video');
+  const done = (size) => { v.removeAttribute('src'); resolve(size); };
+  v.preload = 'metadata';
+  v.onloadedmetadata = () => done({ width: v.videoWidth || 0, height: v.videoHeight || 0 });
+  v.onerror = () => done({ width: 0, height: 0 });
+  v.src = url;
+});
+
+const saveBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  downloadFile(url, filename);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
 // Thumbnail with the clip's first frame; reports duration and frame size once known.
@@ -186,6 +207,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const [sampleAccessToken, setSampleAccessTokenState] = useState(null);
   const messageIdCounterRef = useRef(1); // Counter for unique message IDs
   const lastPromptRef = useRef(''); // the last thing the user asked: what a Retry button sends again
+  useSyncExternalStore(subscribeTracks, tracksVersion); // re-render when a caption track changes
+  const [exportSheet, setExportSheet] = useState(null); // { mediaId, phase: 'choose'|'burning'|'done'|'error', text }
+  const restoreTriedRef = useRef(new Set());
   const [newVersion, setNewVersion] = useState(false); // the server runs a newer build than this tab
   const chatWindowRef = useRef(null);
   const composerZoneRef = useRef(null);
@@ -496,12 +520,20 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     mimeType = null,
     showSampleLinks = false,
     vttUrl = null,
-    retry = false
+    retry = false,
+    captions = null
   }) => {
     // Whatever a cancelled job still reports (its aborted request) is not shown.
-    if (currentJobRef.current?.controller.signal.aborted) return;
+    if (currentJobRef.current?.controller.signal.aborted) return null;
     const id = messageIdCounterRef.current++;
     let parentId = null;
+    // The "Captions · A → B" card belongs to the clip whose bytes carry the caption track.
+    let captionMediaId = null;
+    if (captions?.bytes) {
+      captionMediaId = [...mediaBytesRef.current.entries()].find(([, b]) => b === captions.bytes)?.[0] ?? activeMediaIdRef.current;
+      if (captionMediaId !== null && mediaBytesRef.current.get(captionMediaId) !== captions.bytes) mediaBytesRef.current.set(captionMediaId, captions.bytes);
+      if (captionMediaId !== null && captionMediaId !== activeMediaIdRef.current) { activateMedia(captionMediaId); setVideoFileData(captions.bytes); }
+    }
     if (videoUrl) {
       if (currentJobRef.current) {
         const jobId = currentJobRef.current.id;
@@ -520,7 +552,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         }
       }
     }
-    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, excludeFromAPI: true, showSampleLinks, vttUrl, parentId, retryText: retry ? lastPromptRef.current : null }]);
+    setMessages(prev => [...prev, { role: isUser ? 'user' : 'assistant', content: text, videoUrl, videoType, mimeType, id, excludeFromAPI: true, showSampleLinks, vttUrl, parentId, retryText: retry ? lastPromptRef.current : null, captionCard: captionMediaId !== null ? { mediaId: captionMediaId, lines: captions.lines } : null }]);
+    return id;
   };
 
   // Tools hand back edited bytes through this setter, then post the result message.
@@ -781,11 +814,121 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     }
   };
 
+  // ─── Captions: overlay, style, export ─────────────────────────────────────────────────────────
+  const trackOfMedia = (id) => getTrack(mediaBytesRef.current.get(id));
+
+  // Put back captions saved for a video (a reload or crashed tab lost the in-memory ones).
+  useEffect(() => {
+    for (const item of media) {
+      if (restoreTriedRef.current.has(item.id)) continue;
+      const bytes = mediaBytesRef.current.get(item.id);
+      if (!bytes) continue;
+      restoreTriedRef.current.add(item.id);
+      if (!getTrack(bytes) && restoreTrack(bytes)) addMessage({ text: 'Restored the captions you made for this video.', captions: { bytes, lines: getTrack(bytes)?.lines.length || 0 } });
+    }
+  }, [media]);
+
+  const captionFileBase = (item) => mediaFilename(item).replace(/\.\w+$/, '');
+  const downloadCaptionText = (item, kind) => {
+    const capTrack = trackOfMedia(item.id);
+    if (!capTrack) return;
+    const run = async () => {
+      let body;
+      if (kind === 'ass') {
+        const size = await readVideoSize(item.url);
+        if (!(size.width && size.height)) return toast('Could not read the video size for the ASS file');
+        body = trackToAss(capTrack, size);
+      } else {
+        body = trackToSrt(capTrack);
+      }
+      saveBlob(new Blob([body], { type: 'text/plain;charset=utf-8' }), `${captionFileBase(item)}.${kind}`);
+      track('export', { format: kind, placement: 'captions_panel' });
+    };
+    run();
+  };
+
+  const changeCaptionStyle = (item, patch) => updateTrackStyle(mediaBytesRef.current.get(item.id), patch);
+  const removeCaptions = (item) => {
+    clearTrack(mediaBytesRef.current.get(item.id));
+    toast('Captions removed');
+  };
+
   const handleExport = () => {
     if (!activeMedia) return toast('Add a video or audio file first');
-    downloadFile(activeMedia.url, mediaFilename(activeMedia));
-    track('export', { format: String(activeMedia.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
-    toast(`Exported “${activeMedia.label}”`);
+    const capTrack = trackOfMedia(activeMedia.id);
+    if (capTrack && !activeMedia.isAudio && !videoHasBurnedCaptions(mediaBytesRef.current.get(activeMedia.id))) {
+      setExportSheet({ mediaId: activeMedia.id, phase: 'choose' });
+      return;
+    }
+    plainExport(activeMedia);
+  };
+
+  // Phones: the share sheet ("Save Video" puts it in Photos). It must start inside the tap, so the file
+  // is built synchronously from the bytes we already hold. Everything else downloads, as before.
+  const shareLog = (event, data) => createClientLog({ headers: sampleAuthHeaders() }).log(event, data);
+  const plainExport = (item) => {
+    const bytes = mediaBytesRef.current.get(item.id);
+    const file = bytes ? makeShareFile(bytes, mediaFilename(item), item.mimeType) : null;
+    if (file && canShareFile(file)) {
+      shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export' }).then((outcome) => {
+        if (outcome === 'shared') toast(`Exported “${item.label}”`);
+      });
+    } else {
+      downloadFile(item.url, mediaFilename(item));
+      toast(`Exported “${item.label}”`);
+    }
+    track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
+  };
+
+  // Export with the captions burned in: the only place they are re-encoded into the video.
+  const exportBurned = async () => {
+    const sheet = exportSheet;
+    const item = mediaById(sheet?.mediaId);
+    const bytes = item && mediaBytesRef.current.get(item.id);
+    const capTrack = bytes && getTrack(bytes);
+    if (!capTrack) { setExportSheet(null); return; }
+    const clog = createClientLog({ headers: sampleAuthHeaders() });
+    clog.attach();
+    clog.env();
+    setExportSheet({ mediaId: item.id, phase: 'burning', text: 'Preparing…' });
+    try {
+      const { bytes: burned } = await burnCaptionTrack({
+        bytes, mime: item.mimeType || 'video/mp4', track: capTrack, headers: sampleAuthHeaders(), clog,
+        onStatus: (text) => setExportSheet({ mediaId: item.id, phase: 'burning', text }),
+      });
+      const blob = new Blob([burned], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+      const id = addMessage({ text: 'Exported with captions burned in.', videoUrl: url, mimeType: 'video/mp4' });
+      if (id !== null && id !== undefined) mediaBytesRef.current.set(id, burned); // keeps the no-double-burn guard on this clip
+      const burnedItem = { ...item, url, mimeType: 'video/mp4', kind: 'result', label: `${item.label} (captions)` };
+      track('export', { format: 'video/mp4', placement: 'export_burned' });
+      const file = makeShareFile(blob, `${captionFileBase(burnedItem)}.mp4`, 'video/mp4');
+      if (canShareFile(file)) {
+        // The render took a while, so the tap that started it is no longer a user activation: ask for a new one.
+        clog.log('share_ready', { bytes: file.size });
+        setExportSheet({ mediaId: item.id, phase: 'ready', text: 'Your video is ready.', file });
+      } else {
+        saveBlob(blob, file.name);
+        setExportSheet(null);
+        toast('Exported with captions');
+      }
+    } catch (error) {
+      const declined = error?.name === 'UploadDeclinedError';
+      setExportSheet({ mediaId: item.id, phase: 'error', text: declined ? 'Not exported. You can download the captions as SRT or ASS instead.' : `Export failed: ${String(error?.message || error).slice(0, 200)} You can still download the captions as SRT or ASS.` });
+    } finally {
+      clog.detach();
+    }
+  };
+
+  // The "Ready - Share" tap: a fresh user activation for navigator.share.
+  const shareReadyExport = () => {
+    const file = exportSheet?.file;
+    if (!file) return;
+    shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: shareLog, kind: 'export_burned' }).then((outcome) => {
+      if (outcome === 'cancelled') return; // the sheet stays so they can share again
+      setExportSheet(null);
+      toast(outcome === 'shared' ? 'Exported with captions' : 'Saved to your downloads');
+    });
   };
 
   const openFilePicker = () => fileInputRef.current?.click();
@@ -916,6 +1059,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             title={getVideoTitle(msg.videoType)}
             mimeType={msg.mimeType}
             vttUrl={msg.vttUrl || null}
+            captionTrack={trackOfMedia(item.id)}
           />
           {item.kind !== 'result' && (
             <div className="rc-overlay">
@@ -954,6 +1098,32 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     );
   };
 
+  // "Captions · English → Chinese": the clip with the live overlay, and the style/export controls.
+  const renderCaptionCard = (msg) => {
+    const item = mediaById(msg.captionCard.mediaId);
+    const capTrack = item && trackOfMedia(item.id);
+    if (!item || !capTrack) return <div className="caption-card"><span className="cap-note">These captions are no longer on a clip (removed or the clip changed).</span></div>;
+    return (
+      <div className="result-card caption-card" title={item.label}>
+        <div className="rc-media">
+          <VideoPreview key={`captions-${msg.id}`} videoUrl={item.url} title={item.label} mimeType={item.mimeType} captionTrack={capTrack} />
+        </div>
+        <div className="rc-body">
+          <div className="rc-title">{`✓ ${msg.captionCard.lines} caption lines`}</div>
+          <CaptionPanel
+            track={capTrack}
+            disabled={isCallingAPI}
+            onStyle={(patch) => changeCaptionStyle(item, patch)}
+            onExport={() => { setExportSheet({ mediaId: item.id, phase: 'choose' }); }}
+            onSrt={() => downloadCaptionText(item, 'srt')}
+            onAss={() => downloadCaptionText(item, 'ass')}
+            onRemove={() => removeCaptions(item)}
+          />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="fc editor">
       {uploadConsent && (uploadConsent.kind === 'streaming_audio' || uploadConsent.kind === 'connection_dropped') && (
@@ -988,6 +1158,30 @@ export default function App({ skipLanding = false, startWithSample = false } = {
           </div>
         </div>
       )}
+      {exportSheet && (() => {
+        const item = mediaById(exportSheet.mediaId);
+        const busy = exportSheet.phase === 'burning';
+        return (
+          <div className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
+            <div className="consent">
+              <h3 id="export-title">Export “{item?.label || 'video'}”</h3>
+              {exportSheet.phase === 'choose' && <p>Your captions are shown over the preview. Burning them into the video re-encodes it, so it takes a moment.</p>}
+              {exportSheet.text && <p className="export-status" role="status">{exportSheet.text}</p>}
+              <div className="consent-actions">
+                {exportSheet.phase === 'ready' && <button className="jbtn" autoFocus onClick={shareReadyExport}>Ready – Share</button>}
+                {exportSheet.phase === 'ready' && exportSheet.file && <button className="jbtn open" onClick={() => { saveBlob(exportSheet.file, exportSheet.file.name); setExportSheet(null); }}>Download instead</button>}
+                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && (
+                  <button className="jbtn" autoFocus onClick={exportBurned}>{exportSheet.phase === 'error' ? 'Try again' : 'Export with captions burned in'}</button>
+                )}
+                {exportSheet.phase === 'choose' && item && <button className="jbtn open" onClick={() => { setExportSheet(null); plainExport(item); }}>Export without captions</button>}
+                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'srt')}>Download SRT</button>}
+                {exportSheet.phase !== 'burning' && exportSheet.phase !== 'ready' && item && <button className="jbtn open" onClick={() => downloadCaptionText(item, 'ass')}>Download ASS</button>}
+                <button className="jbtn open" onClick={() => { setExportSheet(null); }}>{busy ? 'Hide' : 'Close'}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <header className="topbar">
         <div className="brand">
           <img src={logoUrl} alt="FinalCap logo" width="30" height="30" />
@@ -1061,6 +1255,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                       </div>
                     )}
                     {msg.videoUrl && renderAttachment(msg)}
+                    {msg.captionCard && renderCaptionCard(msg)}
                   </div>
                   {i === 0 && (
                     <div className="chat-suggestions">

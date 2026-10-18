@@ -172,9 +172,9 @@ describe('allowlist thresholds', () => {
     const block = section.slice(section.indexOf('```') + 3, section.indexOf('```', section.indexOf('```') + 3));
     const documented = block.split('\n').map(l => l.trim()).filter(Boolean);
     // The doc block is the full build-10 allowlist, including generate_captions.
-    expect(documented).toHaveLength(21);
+    expect(documented).toHaveLength(22);
     expect([...allowlisted].sort()).toEqual([...documented].sort());
-    expect(allowlisted).toHaveLength(21);
+    expect(allowlisted).toHaveLength(22);
     for (const serverOnly of ['translate_captions', 'burn_subtitles']) expect(allowlisted).not.toContain(serverOnly);
     for (const name of allowlisted) {
       expect(names(tools)).toContain(name);

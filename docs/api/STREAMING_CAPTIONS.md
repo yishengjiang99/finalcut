@@ -2,7 +2,7 @@
 
 Plain speech captioning on the web ("add captions in Chinese") streams the video's **audio** from the
 browser straight to ElevenLabs realtime speech-to-text (`scribe_v2_realtime`), translates the committed
-text with Grok through our server, and burns the captions in the browser (ffmpeg.wasm). The picture is
+text with Grok through our server, and shows the captions as a live overlay on the preview (burned in with ffmpeg.wasm only when the user exports). The picture is
 never uploaded. Songs (`mode: "lyrics"`) and the iOS app keep the upload-based
 [lyric_captions](LYRIC_CAPTIONS.md) flow.
 
@@ -31,7 +31,16 @@ single-use token reaches the browser. No CSP is set today; if one is added it ne
 4. `POST /api/streaming-captions/token` just before connecting. Connect to `wsUrl?…&token=…`.
 5. Stream 0.5 s chunks (`input_audio_chunk`, `commit:true` on the chunk that ends a segment) at the pacing constant.
 6. Each `committed_transcript_with_timestamps` becomes caption lines; lines are translated in order in batches of ≤ 20 with `POST /api/streaming-captions/translate`, while later audio is still streaming.
-7. When every range is transcribed and translated, the browser burns the final lines (Noto Sans CJK SC Bold 48 at 720×1280, scaled; MarginV 20 %; Alignment 2; one two-line Dialogue per caption). The captions-lineage guard makes a second run replace, not stack.
+7. When every range is transcribed and translated the flow **ends**: no burn, no re-encode. The lines become a **caption track** attached to the video (see "Overlay, style and export"); percent reaches 100 and the chat shows the applied card "Captions · English → Chinese".
+
+## Overlay, style and export
+
+* **Live overlay** (`src/captionTrack.js`, `VideoPreview` `captionTrack`): the active line (original, then translation; a translation equal to the original is not drawn twice) is drawn over the preview from `currentTime`, bottom = `positionFromBottomPct`, size = default (ASS reference 48 px on 1280, scaled) × `sizeScale`. Default style = the agreed one: Noto Sans CJK SC Bold, 20 % up, bottom-centre. The caption card has a position slider (0–45 %) and size buttons (Small 0.75, Default, Large 1.4, Extra large 1.8); changes update the overlay live and are what the export uses. The preview font is a CJK-capable system font stack, so glyph shapes can differ slightly from the burned Noto font.
+* **Export** (header Export button or the card's Export…): a sheet offers *Export with captions burned in*, *Export without captions*, *Download SRT*, *Download ASS*. The burn (`burnCaptionTrack`) is the only re-encode. Small clips burn in ffmpeg.wasm; **on iOS Safari (iPhone/iPad) a clip over 20 MB or with a short side over 720 px is not burned in the tab** (it crashed Safari with the 10.6 MB font + a 1080×1920 clip in memory): the app asks the usual "This step uploads your video" consent and burns on `POST /api/streaming-captions/burn` (with `args` `{position_from_bottom_pct, font_size}`); if the user declines, nothing is uploaded and the sheet points to SRT/ASS. A browser burn that fails still falls back to the consented server burn.
+* **Share sheet on phones:** on iPhone/iPad/Android (not on desktop) Export builds a `File` (type `video/mp4`, name `finalcap-…mp4`) and, when `navigator.canShare({files})` is true, calls `navigator.share({files})` so iOS shows the share sheet with **Save Video** (to Photos). It runs inside the tap for a clip we already hold; after a burned export (long render, the tap's transient activation has expired) the sheet shows **Ready – Share** and shares on that tap. Cancelling the sheet (`AbortError`) is not an error; any other failure falls back to the normal download. SRT/ASS keep downloading. Client-log events: `share_ready`, `share_ok`, `share_cancel`, `share_fail`.
+* **No double burn:** the burned output is recorded in the caption lineage (`recordCaptionBurn`), so exporting again or captioning it replaces/refuses instead of stacking; a clip that already carries burned captions is never offered the burned export. Captioning a clip that carries a burn puts the overlay on the uncaptioned source clip.
+* **Edits after captioning (safe behavior):** the track follows edits that keep the timeline (resize, crop, rotate, flips, add_text, colour edits, volume/audio filters, format conversion); **trim shifts the lines exactly** (lines outside the kept part are dropped, the rest clipped); **every other edit clears the overlay** (speed, silence removal, transitions, free-form ffmpeg, an unparsable trim…) and the chat says why. The earlier clip keeps its captions, so Undo brings them back.
+* **Reload/crash:** the finished lines and style (text only) are saved in `localStorage` (`fc.captions.v1`, ≤ 8 videos, ≤ 900 KB) keyed by a fingerprint of the video (length + hash of 8 slices of 8 KB). Adding the same video again restores the captions ("Restored the captions you made for this video."). Removing captions forgets them.
 
 ## Routes
 
@@ -113,7 +122,7 @@ the lyric burn. 400 on malformed lines, 503 `lyric_captions_unavailable` without
 ## Browser behavior
 
 * **Pacing:** `STREAM_PACE_DEFAULT = 4`: audio goes out four times faster than real time (0.5 s chunks every 125 ms), so a 56 s clip is sent in about 14 s. Override with `localStorage.setItem('fc.streamPace','1')` (real time; any value is clamped to 0.5–4).
-* **Percent:** moves as audio is decoded and sent, not only when a range is translated: `5` once the audio is decoded, then `5 + floor(94 × (½ × seconds sent ÷ total + ½ × seconds transcribed AND translated ÷ total))`, monotonic, **never above 99**; the UI shows 100 only after the burn. Stage text is honest: `Connecting…` (token/socket), `Listening…` (audio going out / being transcribed), `Translating…` (all audio sent, waiting for the last translations); status line `"<stage> <percent>%"`.
+* **Percent:** moves as audio is decoded and sent, not only when a range is translated: `5` once the audio is decoded, then `5 + floor(94 × (½ × seconds sent ÷ total + ½ × seconds transcribed AND translated ÷ total))`, monotonic, **never above 99**; the status shows 100 ("Captions ready") when the lines are ready; there is no burn step in the caption flow. Stage text is honest: `Connecting…` (token/socket), `Listening…` (audio going out / being transcribed), `Translating…` (all audio sent, waiting for the last translations); status line `"<stage> <percent>%"`.
 * **Progress object** (`onProgress`): `{percent, stage:'connecting'|'listening'|'translating', text, pickingUp, lines:[{start,end,text,translation}], coveredEnd, ranges:[{index,start,end,status:'pending'|'running'|'transcribed'|'done'|'failed'}]}`.
 * **Stall watchdog:** if nothing happens for **20 s** (no chunk sent, no message from the service, no translation) a streaming run is ended as a drop and **resumed** (see Resume); a hang outside a stream (token mint, decode) ends with "Captions stopped making progress. Nothing was changed. Try again." and a **Retry** button. A gap of more than max(3 s, 6 × the watchdog tick) between timer ticks means the page was frozen (phones freeze background tabs), not that the network stalled: the clock restarts and the socket is checked/resumed instead of failed.
 * **Never started → upload flow:** if streaming could not start at all (no session was ever accepted: token, WebSocket or decode failed), the tool falls back to the existing upload-based lyric-captions flow, which asks before uploading the video's audio. Once streaming has started there is no fallback; the failure shows one message with **Retry** (not for "declined", "too long" or quota errors).
@@ -122,11 +131,11 @@ the lyric burn. 400 on malformed lines, 503 `lyric_captions_unavailable` without
 * **Timeouts:** 15 s to connect, 30 s without an answer (also after the last chunk) abandons the socket; each range gets one retry; nothing waits open-ended.
 * **Errors from ElevenLabs:** `rate_limited`, `queue_overflow`, `resource_exhausted`, `commit_throttled`: wait 2 s, retry the range once, then "The transcription service is busy. Try again in a moment."; `quota_exceeded`, `unaccepted_terms`: "Translated captions aren't available right now. Try again later."; `auth_error`: silent retry with a fresh token; `session_time_limit_exceeded` and a dropped socket: keep the finished lines and ask to continue; `insufficient_audio_activity`: an empty segment, not an error; any other: retry the range once, then the couldn't-finish message.
 * **Resume:** after a drop (or `session_time_limit_exceeded`) the client resumes **by itself up to 3 times per session** (the whole job, not per range; it is not reset when a range finishes): a short backoff (0.5 s, 1.5 s, 3 s), a fresh token (`resumeSessionId`, same job, no new charge) and streaming only from the start of the first unfinished range. Only when that budget is used up and something is already finished does the user see "The connection dropped at 0:34. Captions up to there are kept. [Continue] [Cancel]"; **Continue** grants a new budget of 3. With nothing finished there is nothing to keep, so it ends with the "couldn't finish" message. Timestamps of a resumed session are relative to its start and are offset by that start.
-* **Translation failures** retry the translation only (no new socket): once, then the range fails.
+* **Translation failures** retry the translation only (no new socket): 3 tries in all with a 1.5 s then 4 s backoff (network errors, 429, 5xx). A network failure while the tab is hidden does not use a try: it waits for `visibilitychange` to visible (logged `tr_wait_visible`/`tr_resume`) and retries at once. Then the range fails.
 
 ## Client log (iPhone debugging)
 
-`POST /api/client-log` (authenticated by the same header/cookie as the app, 16 KB, ≤ 60 events, 600 per 5 min per user) writes one journal line per event: `client-log {"sid":…,"b":<build>,"u":<user id>,"i":…,"ev":…}`. Never audio, transcript, translation text or tokens: those keys are dropped and secret-looking values redacted. The first `env` event is sent immediately with `fetch` `keepalive`, and every other event is sent immediately too, each with `keepalive` (only `pct` and `ws_tick` are batched, at 1 s), so the last event before a tab is killed still arrives. Events: `env`, `vis`, `pagehide`, `pageshow`, `freeze`, `resume`, `plan`, `token_req/res`, `ws_new/open/session_started/first_msg/first_chunk/first_partial/committed/close/tick/error`, `tr_req/tr_res`, `pct`, `auto_resume`, `kick`, `stall`, `timer_gap`, `hidden`, `idle_timeout`, `run_end`, `probe_end`, `extract_start/end`, `streamed`, `burn_start/end`, `run_done`, `decode_error`, `pump_error`. `b` is the build id (git short sha) of the bundle that is running.
+`POST /api/client-log` (authenticated by the same header/cookie as the app, 16 KB, ≤ 60 events, 600 per 5 min per user) writes one journal line per event: `client-log {"sid":…,"b":<build>,"u":<user id>,"i":…,"ev":…}`. Never audio, transcript, translation text or tokens: those keys are dropped and secret-looking values redacted. The first `env` event is sent immediately with `fetch` `keepalive`, and every other event is sent immediately too, each with `keepalive` (only `pct` and `ws_tick` are batched, at 1 s), so the last event before a tab is killed still arrives. Events: `env`, `vis`, `pagehide`, `pageshow`, `freeze`, `resume`, `plan`, `token_req/res`, `ws_new/open/session_started/first_msg/first_chunk/first_partial/committed/close/tick/error`, `tr_req/tr_res`, `pct`, `auto_resume`, `kick`, `stall`, `timer_gap`, `hidden`, `idle_timeout`, `run_end`, `probe_end`, `extract_start/end`, `streamed`, `run_done`, `captions_attached`, and at export `export_start`, `burn_start`, `burn_progress` (every 4 s: percent, engine phase, elapsed ms, so a crash mid-burn is visible), `burn_end`, `burn_error` (code, name, short ASCII message and the last 3 ffmpeg log lines), `decode_error`, `pump_error`. `b` is the build id (git short sha) of the bundle that is running.
 
 ## New-version bar
 
@@ -180,6 +189,24 @@ worked every time (HTTP 200); the key and tokens were never logged.
   (which negotiate permessage-deflate) have **not** been tested, and Node `ws` with permessage-deflate dropped 2 of 2;
   test in real Safari/Chrome before turning pacing above 1x on by default.
 * **Default is 4x** (decision of the product owner). `fc.streamPace` can turn it back down (1 = real time); max 4.
+
+## Drop-rate sweep at 4x (2026-10-18, from the build box)
+
+Raw `ws` client, the ~56 s speech clip, 4x pace, 8 runs per variant, real key (never logged). A "drop" is a close with code 1006 before the audio finished. `control_echo` is an **unrelated** WebSocket echo server, not ElevenLabs.
+
+| Variant | Drops / runs | Drop times (s into the run) |
+|---|---|---|
+| baseline (manual commits, 0.5 s chunks, timestamps + language detection) | 5 / 8 | 11.4, 4.2, 4.1, 1.3, 9.3 |
+| `commit_strategy=vad` | **3 / 8** | 5.9, 9.2, 10.9 |
+| 0.25 s chunks | 5 / 8 | 8.7, 4.6, 12.8, 2.9, 11.3 |
+| 1 s chunks | 6 / 8 | 3.5, 12.7, 2.9, 4.3, 1.2, 1.0 |
+| no `include_timestamps` | 6 / 8 | 3.8, 1.4, 11, 23.3, 7.5, 0.8 |
+| no language detection | 4 / 8 | 3.4, 0.8, 2.6, 2.2 |
+| `language_code=en` | 5 / 8 | 3.5, 7.6, 6.2, 1.8, 2.3 |
+| US host (`api.us.elevenlabs.io`) | 6 / 8 | 5.2, 1.8, 7.6, 3.8, 1.9, 1.4 |
+| control: unrelated echo server | 7 / 8 | 0.7, 5.3, 2.7, 16.4, 5.3, 2.9, 16.3 |
+
+Conclusion: **no variant is clearly better.** `vad` (3/8) and no-language-detection (4/8) are the lowest, but with 8 runs each the gap to the baseline (5/8) is within noise, and `vad` removes our own commit points (the planner aligns ranges to them), so it is not worth the risk. The unrelated echo server drops about as often (7/8), so the drops come from the box's network path, not from anything in the request. **Defaults are unchanged** (manual commits, 0.5 s chunks, 4x, timestamps and language detection on). The client's resume logic (3 automatic resumes, fresh token, continue from the first unfinished range) is the mitigation; test in real Safari/Chrome on a consumer network before drawing conclusions about browsers.
 
 ## Still to check in a real browser
 

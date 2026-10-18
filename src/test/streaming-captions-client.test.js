@@ -459,6 +459,48 @@ describe('runStreamingCaptions', () => {
     expect(error.failedRanges).toHaveLength(1);
   });
 
+  it('translate tries 3 times in all, with a longer backoff (1.5 s then 4 s), without opening a new socket', async () => {
+    const { FakeSocket, sockets } = socketFactory(() => segmentMsg('Hello there', wordsAt(0.5, ['Hello', 'there'])));
+    let calls = 0;
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls += 1;
+      if (calls <= 2) throw new TypeError('Load failed'); // what Safari throws when the network was cut
+      const body = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ lines: body.segments.map(sg => ({ i: sg.i, text: sg.text, translation: 'ok' })) }) };
+    });
+    const waits = [];
+    const out = await runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl, sleep: async (ms) => { if (ms >= 1000) waits.push(ms); } }));
+    expect(out.lines[0].translation).toBe('ok');
+    expect(calls).toBe(3);
+    expect(waits.filter(ms => ms === 1500 || ms === 4000)).toEqual([1500, 4000]);
+    expect(sockets).toHaveLength(1);
+  });
+
+  it('a network failure while the tab is hidden waits for it to come back, then retries at once (no try used up)', async () => {
+    const { FakeSocket } = socketFactory(() => segmentMsg('Hello there', wordsAt(0.5, ['Hello', 'there'])));
+    let hidden = false;
+    const subs = new Set();
+    const visibility = { isHidden: () => hidden, subscribe: (cb) => { subs.add(cb); return () => subs.delete(cb); } };
+    let calls = 0;
+    const events = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls += 1;
+      if (calls === 1) { hidden = true; throw new TypeError('Load failed'); } // cut as the tab was backgrounded
+      if (calls <= 3) throw new TypeError('Load failed');
+      const body = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ lines: body.segments.map(sg => ({ i: sg.i, text: sg.text, translation: 'ok' })) }) };
+    });
+    const run = runStreamingCaptions({ target_language: 'es' }, makeWav(10), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl, visibility, log: (ev, d) => events.push({ ev, ...d }) }));
+    await vi.waitFor(() => expect(events.some(e => e.ev === 'tr_wait_visible')).toBe(true));
+    expect(calls).toBe(1); // nothing is retried while hidden
+    hidden = false;
+    subs.forEach(cb => cb('visible'));
+    const out = await run;
+    expect(out.lines[0].translation).toBe('ok');
+    expect(events.some(e => e.ev === 'tr_resume')).toBe(true);
+    expect(calls).toBe(4); // the hidden failure did not use up a try: 1 hidden + 2 normal failures + the success
+  });
+
   it('audio over 10 minutes is refused before anything is sent', async () => {
     const { FakeSocket, sockets } = socketFactory(() => undefined);
     const error = await runStreamingCaptions({ target_language: 'es' }, makeWav(601), baseDeps({ WebSocketImpl: FakeSocket })).catch(e => e);

@@ -15,7 +15,7 @@
 // a number (minBuild) or `{ minBuild, maxBuild }` (both inclusive) to retire a tool in later builds.
 // The grouped effect tools (iOS-only definitions in iosGroupedTools.js) are gated on
 // GROUPED_EFFECTS_MIN_BUILD; see docs/api/IOS_GROUPED_TOOLS.md. lyric_captions (shared definition,
-// iOS description below) is gated on LYRIC_CAPTIONS_MIN_BUILD; see docs/api/LYRIC_CAPTIONS.md.
+// iOS description below) is offered to every FinalCap-iOS build, with no build gate; see docs/api/LYRIC_CAPTIONS.md.
 
 import { parseFinalCapIosUserAgent } from './clientInfo.js';
 import { APPLY_COLOR_FILTER_GROUPED_DESCRIPTION } from './iosGroupedTools.js';
@@ -27,15 +27,6 @@ import { APPLY_COLOR_FILTER_GROUPED_DESCRIPTION } from './iosGroupedTools.js';
  * Enabling is this one line: replace the placeholder with that build number.
  */
 export const GROUPED_EFFECTS_MIN_BUILD = 1_000_000_000;
-
-/**
- * First FinalCap-iOS build that runs lyric_captions (consent prompt, audio upload to
- * POST /api/lyric-captions, job polling, captions drawn on device from the result's `lines`).
- * Same placeholder as GROUPED_EFFECTS_MIN_BUILD: no real build reaches it yet.
- * Enabling is this one line: replace the placeholder with that build number.
- * See docs/api/LYRIC_CAPTIONS.md ("iOS").
- */
-export const LYRIC_CAPTIONS_MIN_BUILD = 1_000_000_000;
 
 /**
  * First FinalCap-iOS build with the server-side ffmpeg_cli fallback executor: when no
@@ -74,8 +65,8 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   convert_video_format: 10, // mp4/mov only on device (narrowed below)
   convert_image_format: 10, // jpg/png only on device (narrowed below)
   generate_captions: 10, // on-device speech → SRT/VTT + burn-in; no translation (narrowed below)
-  // Audio upload (with consent) → POST /api/lyric-captions → captions drawn on device (described below).
-  lyric_captions: LYRIC_CAPTIONS_MIN_BUILD,
+  // Audio upload (with consent) → POST /api/lyric-captions → captions drawn on device (described below). No build gate.
+  lyric_captions: 10,
   // Grouped effect tools (iOS-only definitions, iosGroupedTools.js).
   channel_mixer: GROUPED_EFFECTS_MIN_BUILD,
   color_adjust: GROUPED_EFFECTS_MIN_BUILD,
@@ -109,8 +100,7 @@ export const LYRIC_CAPTIONS_IOS_DESCRIPTION = 'Translated captions, run by the a
   'subtitles without translation. Videos only — not supported for photos.';
 
 /**
- * generate_captions description for builds that also have lyric_captions: it is same-language only and
- * translation goes to lyric_captions. Older builds keep the unchanged description above (their tool text is pinned).
+ * generate_captions description for iOS: it is same-language only and translation goes to lyric_captions.
  */
 export const GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION = 'Generate same-language subtitles from the video audio with on-device speech ' +
   'recognition (SRT/VTT). Use ISO language codes when possible (en, es, fr, de, ja, zh). When burn_in is true (default), burns the ' +
@@ -136,13 +126,9 @@ export const IOS_TOOL_OVERRIDES = Object.freeze({
     params: { speed: { minimum: 0.25, maximum: 4 } },
   },
   generate_captions: {
-    // No on-device translator in the edit path, and nothing here runs on the server.
+    // No on-device translator in the edit path, and nothing here runs on the server: translation is lyric_captions.
     removeParams: ['translate_language'],
-    description: 'Generate subtitles from the video audio with on-device speech recognition (SRT/VTT). ' +
-      'Use ISO language codes when possible (en, es, fr, de, ja, zh). When burn_in is true (default), burns the ' +
-      'captions into the video; when false, adds a soft subtitle track only. Translation is not available. ' +
-      'Use for accessibility or social content. Videos only — not supported for photos.',
-    descriptionFromBuild: { minBuild: LYRIC_CAPTIONS_MIN_BUILD, description: GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION },
+    description: GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION,
     params: {
       position: {
         description: 'Burn-in position for the captions: "bottom" (default) or "top".',
@@ -179,8 +165,6 @@ function applyIosOverrides(tool, build) {
     if (Array.isArray(parameters.required)) parameters.required = parameters.required.filter(r => r !== param);
   }
   if (override.description) copy.function.description = override.description;
-  const from = override.descriptionFromBuild;
-  if (from && build >= from.minBuild) copy.function.description = from.description;
   return copy;
 }
 

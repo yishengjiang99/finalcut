@@ -4,6 +4,7 @@
 import { toolFunctions, getCurrentFileMimeType, resetLastExecution, getLastExecution, setToolStatusListener } from './toolFunctions.js';
 import { track, msBucket } from './telemetry.js';
 import { noteDerivedVideo } from './captionLineage.js';
+import { carryTrackOnEdit, CAPTIONS_CLEARED_NOTICE } from './captionTrack.js';
 import { probeMedia, summarizeProbe, subscribeEngine } from './wasm/ffmpegEngine.js';
 
 export const MAX_CLIENT_ROUNDS = 8;
@@ -148,6 +149,8 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
               running = null;
               if (signal?.aborted) throw new Error('Job cancelled');
               const changed = working !== before;
+              // A caption overlay follows edits that keep the timeline (a trim shifts it); any other edit clears it, with a note.
+              if (changed && carryTrackOnEdit(before, working, call.name, call.arguments) === 'cleared') addMessage({ text: CAPTIONS_CLEARED_NOTICE });
               if (changed) media = await describeMedia(working, getCurrentFileMimeType());
               result = toolResultFor(text, getLastExecution(), changed ? media : undefined);
               track('tool_executed', { tool: call.name, ok: Boolean(result.ok), engine: String(result.executedOn || 'browser').slice(0, 32), ms_bucket: msBucket(Date.now() - toolStartedAt) });

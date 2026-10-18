@@ -151,7 +151,7 @@ Media stays on the device. The model gets metadata and up to 4 thumbnails per ch
 
 ## iOS allowlist (build 10)
 
-Requests from the app send `User-Agent: FinalCap-iOS/<CFBundleVersion>` (build 10 → `FinalCap-iOS/10`). For that build and later, the server should expose **only** these 21 tools to the model. Anything else still gets `{ ok: false, error: "unsupported_on_device", code: "unsupported_on_device", executedOn: "device" }` from the app as a safety net. `translate_captions` and `burn_subtitles` are **not** on the list.
+Requests from the app send `User-Agent: FinalCap-iOS/<CFBundleVersion>` (build 10 → `FinalCap-iOS/10`). For that build and later, the server should expose **only** these 22 tools to the model. Anything else still gets `{ ok: false, error: "unsupported_on_device", code: "unsupported_on_device", executedOn: "device" }` from the app as a safety net. `translate_captions` and `burn_subtitles` are **not** on the list.
 
 ```
 trim_video
@@ -175,6 +175,7 @@ get_supported_formats
 convert_video_format
 convert_image_format
 generate_captions
+lyric_captions
 ```
 
 Argument restrictions on device (other values return `invalid_arguments`, so ideally narrow the enums in the filtered schema too):
