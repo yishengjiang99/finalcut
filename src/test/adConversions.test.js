@@ -49,10 +49,21 @@ describe('ad conversions', () => {
     expect(h).toContain(`oauth_signature="${encodeURIComponent(sig)}"`);
   });
 
+  it('skips Reddit when there is no rdt_cid', async () => {
+    setAll();
+    const fetchImpl = vi.fn(async () => ({ ok: true }));
+    await forwardConversion(row, ctx(fetchImpl, { clickIds: { twclid: 'tw123' } }));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toContain('x.com');
+    fetchImpl.mockClear();
+    await forwardConversion(row, ctx(fetchImpl, { clickIds: {} }));
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('uses CUSTOM names, skips unmapped events, X without twclid, bots and test traffic', async () => {
     setAll();
     const fetchImpl = vi.fn(async () => ({ ok: true }));
-    await forwardConversion({ ...row, event: 'first_edit' }, ctx(fetchImpl, { clickIds: {} }));
+    await forwardConversion({ ...row, event: 'first_edit' }, ctx(fetchImpl, { clickIds: { rdt_cid: 'rd456' } }));
     expect(fetchImpl).toHaveBeenCalledTimes(1); // reddit only; X has no mapping/twclid
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body).data.events[0].type).toEqual({ tracking_type: 'CUSTOM', custom_event_name: 'first_edit' });
     fetchImpl.mockClear();

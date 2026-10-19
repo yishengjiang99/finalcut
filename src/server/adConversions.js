@@ -104,6 +104,8 @@ export function buildXRequest(cfg, { row, clickIds, ip, userAgent, eventId, now 
 }
 
 export function buildRedditRequest(cfg, { row, clickIds, ip, userAgent, eventId, now }) {
+  // Reddit only receives events for visitors who arrived from a Reddit ad click.
+  if (!clickIds?.rdt_cid) return null;
   let type = cfg.events[row.event];
   if (!type) return null;
   type = String(type).toUpperCase();
@@ -113,9 +115,9 @@ export function buildRedditRequest(cfg, { row, clickIds, ip, userAgent, eventId,
     event_at: now,
     action_source: 'WEBSITE',
     type: type === 'CUSTOM' ? { tracking_type: 'CUSTOM', custom_event_name: row.event } : { tracking_type: type },
+    click_id: clickIds.rdt_cid,
     metadata: { conversion_id: eventId },
   };
-  if (clickIds.rdt_cid) event.click_id = clickIds.rdt_cid;
   const user = {};
   if (ip) user.ip_address = ip;
   if (userAgent) user.user_agent = userAgent;
