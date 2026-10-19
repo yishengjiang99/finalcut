@@ -2,7 +2,7 @@
 // tool call comes back here and runs in ffmpeg.wasm; only small results (ok/error, duration,
 // frame size) go back for the next round. The media is not part of any request.
 import { toolFunctions, getCurrentFileMimeType, resetLastExecution, getLastExecution, setToolStatusListener } from './toolFunctions.js';
-import { track, msBucket } from './telemetry.js';
+import { track, trackOnce, msBucket } from './telemetry.js';
 import { noteDerivedVideo } from './captionLineage.js';
 import { priorHistory } from './chatHistory.js';
 import { carryTrackOnEdit, CAPTIONS_CLEARED_NOTICE } from './captionTrack.js';
@@ -155,6 +155,11 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
               if (changed && carryTrackOnEdit(before, working, call.name, call.arguments) === 'cleared') addMessage({ text: CAPTIONS_CLEARED_NOTICE });
               if (changed) media = await describeMedia(working, getCurrentFileMimeType());
               result = toolResultFor(text, getLastExecution(), changed ? media : undefined);
+              if (result.ok) trackOnce('first_edit', { tool: call.name });
+              if (call.name === 'generate_captions' || call.name === 'lyric_captions') {
+                trackOnce('captions_start', { tool: call.name, ok: Boolean(result.ok) });
+                if (call.arguments && (call.arguments.translate_language || call.arguments.target_language)) trackOnce('translate', { tool: call.name, ok: Boolean(result.ok) });
+              }
               track('tool_executed', { tool: call.name, ok: Boolean(result.ok), engine: String(result.executedOn || 'browser').slice(0, 32), ms_bucket: msBucket(Date.now() - toolStartedAt) });
             }
             if (!result.ok) blocked = call.name;

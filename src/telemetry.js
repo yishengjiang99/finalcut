@@ -28,6 +28,43 @@ function stored(storage, key) {
   }
 }
 
+const ATTRIB_KEY = 'finalcap.telemetry.attrib';
+const ATTRIB_TTL_MS = 28 * 24 * 60 * 60 * 1000; // matches the ad platforms' default click windows
+const ATTRIB_PARAMS = ['twclid', 'rdt_cid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+const ATTRIB_VALUE = /^[A-Za-z0-9_.:\-/+ ]{1,128}$/;
+
+/**
+ * Ad attribution: copy X `twclid`, Reddit `rdt_cid` and utm_* from the landing URL into first-party
+ * localStorage (28 days) so they can ride along with later telemetry events. The server forwards
+ * click ids to the ad platform's Conversions API and never stores them. Nothing captured under GPC/DNT.
+ */
+export function captureAttribution() {
+  try {
+    if (telemetryDisabled()) return;
+    const params = new URLSearchParams(window.location.search);
+    const fresh = {};
+    for (const key of ATTRIB_PARAMS) {
+      const v = params.get(key);
+      if (v && ATTRIB_VALUE.test(v)) fresh[key] = v;
+    }
+    if (!Object.keys(fresh).length) return;
+    window.localStorage.setItem(ATTRIB_KEY, JSON.stringify({ at: Date.now(), ...fresh }));
+  } catch { /* storage blocked */ }
+}
+
+export function attributionProps() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(ATTRIB_KEY) || 'null');
+    if (!saved || typeof saved !== 'object') return {};
+    if (!(Date.now() - Number(saved.at) < ATTRIB_TTL_MS)) { window.localStorage.removeItem(ATTRIB_KEY); return {}; }
+    const out = {};
+    for (const key of ATTRIB_PARAMS) if (typeof saved[key] === 'string' && ATTRIB_VALUE.test(saved[key])) out[key] = saved[key];
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 let pageId = null;
 const onceFlags = new Set();
 
@@ -46,6 +83,8 @@ export function track(event, props) {
 function send(event, props) {
   if (telemetryDisabled()) return;
   pageId = pageId || randomId();
+  const attrib = attributionProps();
+  if (Object.keys(attrib).length) props = { ...attrib, ...(props || {}) };
   const body = JSON.stringify({
     event,
     platform: 'web',
@@ -115,7 +154,7 @@ function readLandingProps() {
     }
   } catch { /* ignore */ }
   const params = new URLSearchParams(window.location.search);
-  for (const key of ['utm_source', 'utm_medium', 'utm_campaign']) {
+  for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
     const value = params.get(key);
     if (value && /^[A-Za-z0-9_.:\-/+ ]{1,64}$/.test(value)) props[key] = value;
   }

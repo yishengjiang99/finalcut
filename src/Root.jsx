@@ -6,7 +6,9 @@
 // landing button and after the visitor's first interaction (on idle), so the click stays instant.
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Landing from './Landing.jsx';
-import { track, trackOnce, landingProps } from './telemetry.js';
+import { track, trackOnce, landingProps, captureAttribution } from './telemetry.js';
+
+captureAttribution(); // ad click ids / utm_* from the landing URL -> first-party storage
 import { readDeepLink, storePendingPrompt } from './pendingPrompt.js';
 import './App.css';
 
