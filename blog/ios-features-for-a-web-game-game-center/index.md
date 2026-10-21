@@ -4,7 +4,7 @@ title: "How to integrate Game Center and other iOS features into a web game"
 description: A step by step guide to wrapping a browser JRPG in a SwiftUI shell and adding Game Center, haptics, controllers, iCloud Keychain and StoreKit 2.
 date: 2026-10-20
 publish: true
-product: finalcap
+product: grepawk
 tags: [ios, game-center, gamekit, wkwebview, storekit, haptics]
 hero: card.jpg
 heroAlt: Share card over the game's title art reading iOS features for a web game, Game Center, haptics and StoreKit, Temple of the High Priestess

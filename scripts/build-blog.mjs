@@ -334,7 +334,7 @@ function renderPost(p, all) {
     datePublished: p.date, dateModified: p.updated || p.date,
     author: { '@type': 'Person', name: p.author || AUTHOR }, publisher: PUBLISHER, image: images,
     ...(p.keyword || p.tags?.length ? { keywords: [p.keyword, ...(p.tags || [])].filter(Boolean).join(', ') } : {}),
-    about: { '@type': 'SoftwareApplication', name: prod.name, url: prod.site || prod.url, applicationCategory: { finalcap: 'MultimediaApplication', protune: 'PhotographyApplication' }[p.product] || 'MusicApplication', operatingSystem: p.product === 'finalcap' ? 'Web' : 'iOS' },
+    ...(prod.url ? { about: { '@type': 'SoftwareApplication', name: prod.name, url: prod.site || prod.url, applicationCategory: { finalcap: 'MultimediaApplication', protune: 'PhotographyApplication' }[p.product] || 'MusicApplication', operatingSystem: p.product === 'finalcap' ? 'Web' : 'iOS' } } : {}),
   };
   if (p.media.videos.length) posting.video = p.media.videos.map((v) => ({ '@type': 'VideoObject', name: v.title, description: v.caption || p.description, thumbnailUrl: abs(v.poster), uploadDate: p.date, contentUrl: abs(v.url), ...(v.duration ? { duration: v.duration } : {}) }));
   const ld = [posting, { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -352,7 +352,7 @@ function renderPost(p, all) {
 ${toc.length >= 4 ? `<nav class="toc" aria-label="On this page"><p>On this page</p><ol>${toc.map((h) => `<li><a href="#${h.id}">${esc(h.text)}</a></li>`).join('')}</ol></nav>` : ''}
 <div class="prose">
 ${html}</div>
-<aside class="app" aria-label="${esc(prod.name)}"><p><strong>${esc(prod.name)}</strong></p><p><a class="cta" href="${esc(prod.url)}" data-cta="blog_app" data-placement="post_end">${esc(prod.cta)}</a></p></aside>
+${prod.url ? `<aside class="app" aria-label="${esc(prod.name)}"><p><strong>${esc(prod.name)}</strong></p><p><a class="cta" href="${esc(prod.url)}" data-cta="blog_app" data-placement="post_end">${esc(prod.cta)}</a></p></aside>` : ''}
 <p class="share">Share: <a href="https://x.com/intent/post?url=${share}&amp;text=${encodeURIComponent(p.title)}" rel="noopener">X</a><a href="https://www.linkedin.com/sharing/share-offsite/?url=${share}" rel="noopener">LinkedIn</a><a href="mailto:?subject=${encodeURIComponent(p.title)}&amp;body=${share}">Email</a></p>
 </article>
 ${newer || older ? `<nav class="pn" aria-label="More posts">${older ? `<a class="prev" href="/blog/${older.slug}"><span>Previous</span>${esc(older.title)}</a>` : '<span></span>'}${newer ? `<a class="next" href="/blog/${newer.slug}"><span>Next</span>${esc(newer.title)}</a>` : ''}</nav>` : ''}

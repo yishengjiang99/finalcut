@@ -98,6 +98,15 @@ describe('blog build', () => {
     expect(readFileSync(path.join(out, 'blog', 'rss.xml'), 'utf8')).toMatch(/<rss version="2.0"[\s\S]*<item>/);
     expect(existsSync(path.join(out, 'blog', 'sources.json'))).toBe(true);
   }, 180000);
+  it('product grepawk renders no app link or app JSON-LD', async () => {
+    const dirs = fixture([['finalcut', 'neutral-post', fm('publish: true\n').replace('product: finalcap', 'product: grepawk')]]);
+    const out = mkdtempSync(path.join(tmpdir(), 'blog-out-'));
+    await buildBlog({ outDir: out, dirs });
+    const html = readFileSync(path.join(out, 'blog', 'neutral-post', 'index.html'), 'utf8');
+    expect(html).not.toContain('class="app"');
+    expect(html).not.toContain('SoftwareApplication');
+    expect(html).not.toContain('data-cta="blog_app"');
+  }, 60000);
   it('sitemap merge is idempotent', () => {
     const base = readFileSync(path.join(ROOT, 'public', 'sitemap.xml'), 'utf8');
     const posts = [{ slug: 'a-post', date: '2026-10-12' }];
