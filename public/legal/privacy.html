@@ -15,7 +15,7 @@
 </head>
 <body>
   <h1>FinalCap Privacy Policy</h1>
-  <p class="meta">Effective: 2026-09-26 · Last updated: 2026-10-18 · Product: FinalCap (iOS + web) at grepawk.com · Operator: grepawk / Yisheng Jiang</p>
+  <p class="meta">Effective: 2026-09-26 · Last updated: 2026-10-19 · Product: FinalCap (iOS + web) at grepawk.com · Operator: grepawk / Yisheng Jiang</p>
   <p>This policy describes how FinalCap handles information when you use our iOS app and website. It does <strong>not</strong> cover unrelated grepawk products (for example Grok Camera / Photo Recipes) unless you use those separately.</p>
 
   <h2>Information we collect</h2>
@@ -31,6 +31,7 @@
     <li><strong>Purchases</strong> — App Store transaction identifiers (iOS) or Stripe customer/subscription ids (web). We do not receive your full card number from Apple.</li>
     <li><strong>Diagnostics</strong> — optional crash or performance logs if enabled.</li>
     <li><strong>Usage analytics (web)</strong> — anonymous product events recorded on our own servers so we can see which parts of the site work: page views of the landing page, which editing tool ran and whether it succeeded, that a file was opened (type and a coarse size range, not the name), exports, sign-in and upgrade steps, and the referring website's domain and campaign tags. To count repeat visits, the site stores a random ID in your browser's local storage, plus a per-tab session ID. We use no cookies and no third-party analytics for this, we do not store your IP address, and we never record your prompts, file names, media, frames, or account details. If your browser sends Global Privacy Control or Do Not Track, no events are sent.</li>
+    <li><strong>Ad measurement (web)</strong> — we advertise FinalCap on X and Reddit and measure those ads from our server, without loading any X or Reddit script, pixel or cookie on the site. If you arrive from an ad, the site keeps the ad's click ID (<code>twclid</code> for X, <code>rdt_cid</code> for Reddit) and campaign tags in your browser's local storage for 28 days. When one of these steps happens, our server tells the ad platform that it happened: the landing page was viewed, you signed in, you started the sample video, your first edit succeeded, you started captions or a translation, you exported, or you completed a paid upgrade. With each report we send the click ID, your IP address and your browser's user agent, and a random event ID used to avoid double counting. X receives a report only when you arrived from an X ad, and Reddit receives a report only when you arrived from a Reddit ad. We do not send your email, name, prompts, file names or media, we do not store your IP address or the click ID on our servers, and bots and test traffic are skipped. X and Reddit handle this data under their own privacy policies (<a href="https://x.com/en/privacy" rel="noopener noreferrer">x.com/en/privacy</a>, <a href="https://www.reddit.com/policies/privacy-policy" rel="noopener noreferrer">reddit.com/policies/privacy-policy</a>). If your browser sends Global Privacy Control or Do Not Track, nothing is stored or sent.</li>
   </ul>
 
   <h2 id="streaming-captions">Streaming captions (optional)</h2>
@@ -51,7 +52,7 @@
   </ul>
 
   <h2>Sharing</h2>
-  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; ElevenLabs for speech-to-text on streaming captions (your browser sends the audio to it directly, and it keeps data under its own policy); xAI for Grok AI models, including lyric lookup, translation, and wording notifications from an anonymous summary; Apple, including Apple Push Notification service to deliver notifications; and Stripe on web). The on-device speech model is served from our own servers. We do not sell your personal information.</p>
+  <p>We use subprocessors for hosting, storage, speech-to-text, model inference, and payments (for example cloud hosts; OpenAI for speech-to-text and AI models; ElevenLabs for speech-to-text on streaming captions (your browser sends the audio to it directly, and it keeps data under its own policy); xAI for Grok AI models, including lyric lookup, translation, and wording notifications from an anonymous summary; Apple, including Apple Push Notification service to deliver notifications; Stripe on web; and X and Reddit, which receive ad-measurement reports as described above). The on-device speech model is served from our own servers. We do not sell your personal information.</p>
 
   <h2>Retention</h2>
   <p>Uploaded media and job outputs are kept as needed to provide the service and then deleted or anonymized according to our retention schedule and your deletion requests, subject to legal holds. For lyric captions, the uploaded audio is deleted right after transcription, and the transcript lines and translations are kept in server memory for up to 30 minutes so your device can fetch them, then expire. For streaming captions the audio goes directly from your browser to ElevenLabs, which keeps the audio and transcript under its own policy and which we cannot ask to delete; we hold no copy, and the transcript text is not stored on our server.</p>
@@ -63,7 +64,7 @@
     <li>You can revoke Sign in with Apple/Google in system settings.</li>
     <li>You can manage or cancel iOS subscriptions in Apple ID → Subscriptions.</li>
     <li>You can turn off promotional notifications in FinalCap → Settings → Tips &amp; offers, and all notifications in iOS Settings → Notifications → FinalCap. Turning notifications off stops the notification events described above.</li>
-    <li>You can reset the anonymous analytics ID by clearing this site's data in your browser, or turn analytics off by enabling Global Privacy Control or Do Not Track.</li>
+    <li>You can reset the anonymous analytics ID by clearing this site's data in your browser, or turn analytics and ad measurement off by enabling Global Privacy Control or Do Not Track. Clearing this site's data also removes any stored ad click ID.</li>
   </ul>
 
   <h2>Children</h2>

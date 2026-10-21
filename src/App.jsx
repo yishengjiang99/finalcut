@@ -845,7 +845,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       downloadFile(item.url, mediaFilename(item));
       toast(`Exported “${item.label}”`);
     }
-    track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' });
+    track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'export_button' }); track('export_done', { placement: 'export_button' });
   };
 
   // Export with captions: the captions are drawn into the frames in the browser (WebCodecs + canvas, hardware
@@ -876,7 +876,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         return;
       }
       const file = makeShareFile(result.bytes, `${base}.${result.ext}`, result.mime);
-      track('export', { format: result.mime, placement: result.kind === 'burned' ? 'export_captions_burned' : 'export_captions_track' });
+      track('export', { format: result.mime, placement: result.kind === 'burned' ? 'export_captions_burned' : 'export_captions_track' }); track('export_done', { placement: result.kind === 'burned' ? 'export_captions_burned' : 'export_captions_track' });
       const outcome = await shareOrDownload(file, { download: (f) => saveBlob(f, f.name), log: (e, d) => clog.log(e, d), kind: 'export_captions' });
       if (outcome === 'needsTap') {
         // Encoding took a while, so the tap is no longer a user activation: ask for a fresh one.
@@ -912,6 +912,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   };
 
   const loadSampleVideo = async () => {
+    trackOnce('sample_start', { source: 'sample' });
     setShowLanding(false);
     // Sample video path - using BigBuckBunny.mp4 as specified
     const sampleVideoUrl = '/BigBuckBunny.mp4';
@@ -1291,7 +1292,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                         {item.id !== activeMediaId && (
                           <button className="chip-btn primary" disabled={isCallingAPI} onClick={() => handleSelectMedia(item)}>✎ Edit this</button>
                         )}
-                        <button className="chip-btn" onClick={() => { downloadFile(item.url, mediaFilename(item)); track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'library' }); }}>⬇ Download</button>
+                        <button className="chip-btn" onClick={() => { downloadFile(item.url, mediaFilename(item)); track('export', { format: String(item.mimeType || 'unknown').split(';')[0].slice(0, 64), placement: 'library' }); track('export_done', { placement: 'library' }); }}>⬇ Download</button>
                         <button className="chip-btn" onClick={() => showMessage(item.id)}>Show in chat</button>
                       </div>
                     </div>

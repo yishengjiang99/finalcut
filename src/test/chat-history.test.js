@@ -27,7 +27,7 @@ vi.mock('../wasm/ffmpegEngine.js', () => ({
   summarizeProbe: () => ({ duration: 10, width: 720, height: 1280, fps: 30, hasAudio: true }),
   subscribeEngine: () => () => {},
 }));
-vi.mock('../telemetry.js', () => ({ track: () => {}, msBucket: () => '0' }));
+vi.mock('../telemetry.js', () => ({ track: () => {}, trackOnce: () => {}, msBucket: () => '0' }));
 
 import express from 'express';
 import { chatRouter } from '../server/chat.js';
