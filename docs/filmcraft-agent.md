@@ -87,3 +87,12 @@ Or from the devtools console on /filmcraft: `await import('/filmcraft-agent.js')
 
 Set `FILMCRAFT_AGENT_DISABLED=true` in the server env and restart `finalcut` → the route returns 503;
 nothing else changes. Full rollback: revert the PR (the route and files are self-contained).
+
+## Voice (`GET /api/filmcraft/voice/token`)
+
+The FilmCraft page has a mic button that starts an ElevenLabs Conversational AI session. The agent has one
+client tool, `edit_video(instruction)`; the page handles it by running `filmcraftAgent(instruction)` and
+returns the explanation for the voice to speak. This route returns `{signedUrl, agentId}` (signed wss URL,
+key stays on the server). Setup: an `ELEVENLABS_API_KEY` with **convai read/write** permission, then
+`node scripts/create-filmcraft-voice-agent.mjs` once and put `FILMCRAFT_VOICE_AGENT_ID=...` in `.env`.
+Until both are set it answers 503. Off switch: `FILMCRAFT_VOICE_DISABLED=true`.
