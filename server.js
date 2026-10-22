@@ -16,6 +16,7 @@ import { clientLogRouter } from './src/server/clientLog.js';
 import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { iosSuggestionsAdminRouter } from './src/server/iosSuggestionsAdmin.js';
+import { filmcraftAgentRouter } from './src/server/filmcraftAgent.js';
 import { v2Router } from './src/server/v2.js';
 import { telemetryRouter, scheduleTelemetryPurge } from './src/server/telemetry.js';
 import { pushRouter, getPushStore } from './src/server/push/router.js';
@@ -44,6 +45,8 @@ app.use(iosSuggestionsAdminRouter);
 // Anonymous first-party telemetry: before the session middleware so it never sets a cookie
 // (own small JSON parser + rate limiter; stores no IP). See src/server/telemetry.js.
 app.use(telemetryRouter);
+// FilmCraft agent planner: public, no session, own 256 KB parser + limiter; FILMCRAFT_AGENT_DISABLED=true -> 503.
+app.use(filmcraftAgentRouter);
 if (process.env.NODE_ENV !== 'test') scheduleTelemetryPurge();
 
 let sessionStore;
