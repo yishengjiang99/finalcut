@@ -825,6 +825,30 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     }
   };
 
+  // In-page bridge for agent tools (public/webmcp.js, docs/webmcp.md). Reads the latest state via a ref, so it
+  // never goes stale; it only calls the same handlers the buttons use.
+  const agentBridgeRef = useRef(null);
+  agentBridgeRef.current = {
+    busy: () => isCallingAPI,
+    messages: () => messagesRef.current
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .map(m => ({ id: m.id, role: m.role, text: m.content })),
+    media: () => media.map(({ id, label, mimeType, isAudio, kind, parentId }) => ({ id, label, mimeType, isAudio, kind, parentId, active: id === activeMediaId })),
+    send: async (text) => { setView('editor'); return runVoicePrompt(String(text || '')); },
+    cancel: () => { cancelRunning(); return true; },
+    select: async (id) => { const item = mediaById(Number(id)); return item ? selectMedia(item) : false; },
+    undo: async (id) => { const item = mediaById(Number(id ?? activeMediaId)); if (!item) return false; await handleUndo(item); return true; },
+    remove: (id) => { const item = mediaById(Number(id)); if (!item) return false; removeMedia(item); return true; },
+    exportActive: () => { if (!activeMedia) return false; handleExport(); return activeMedia.label; },
+    addFile: async (file) => { setView('editor'); await handleUpload({ target: { files: [file] } }); return true; },
+  };
+  useEffect(() => {
+    const ref = agentBridgeRef;
+    window.finalcutApp = new Proxy({}, { get: (_, key) => ref.current?.[key] });
+    window.dispatchEvent(new Event('finalcut:ready'));
+    return () => { delete window.finalcutApp; };
+  }, []);
+
   // ─── Captions: overlay, style, export ─────────────────────────────────────────────────────────
   const trackOfMedia = (id) => getTrack(mediaBytesRef.current.get(id));
 
