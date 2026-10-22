@@ -15,6 +15,8 @@ export const LIMITS = { prompt: 2000, state: 12000, history: 8, historyChars: 80
   snapshotChars: 10000, tracks: 24, clipsPerTrack: 40, media: 60, steps: 6 };
 
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 1000) / 1000 : undefined);
+/** Engine ids are numbers: keep them numeric (a stringified id is silently ignored by the engine). */
+const idv = v => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v === undefined || v === null ? undefined : String(v).slice(0, 40));
 const str = (v, n = 80) => (v === undefined || v === null ? undefined : String(v).slice(0, n));
 /** Keep the first and last clips of a long track, with a marker for the elided middle. */
 function headTail(list, max) {
@@ -25,24 +27,30 @@ function headTail(list, max) {
 
 /**
  * Normalize the client's compact project snapshot (docs/filmcraft-agent.md) and cap its size.
- * Shape: {tracks:[{id,kind:'video'|'audio',index,name,muted,locked,clips:[{id,name,source,start,end,in,out}]}],
- *         media:[{name,type,duration}], playhead?, duration?}. Times are seconds.
+ * Shape: {tracks:[{id,kind,index,name,muted,locked,enabled?,clips:[{id,item,link,name,source,start,end,in,out,enabled?,speed}]}],
+ *         media:[{item,name,path,type,duration}], markers?, selection?, playhead?, duration?}. Times are seconds; ids stay numeric.
  */
 export function compactSnapshot(raw, { clipsPerTrack = LIMITS.clipsPerTrack, maxChars = LIMITS.snapshotChars } = {}) {
   if (!raw || typeof raw !== 'object') return null;
   const build = per => {
     const tracks = (Array.isArray(raw.tracks) ? raw.tracks : []).slice(0, LIMITS.tracks).map((t, i) => {
       const { items, omitted } = headTail(Array.isArray(t?.clips) ? t.clips : [], per);
-      const out = { id: str(t?.id ?? `${t?.kind === 'audio' ? 'A' : 'V'}${(t?.index ?? i) + 1}`, 40), kind: t?.kind === 'audio' ? 'audio' : 'video',
+      const out = { id: idv(t?.id ?? `${t?.kind === 'audio' ? 'A' : 'V'}${(t?.index ?? i) + 1}`), kind: t?.kind === 'audio' ? 'audio' : 'video',
         index: Number.isInteger(t?.index) ? t.index : i, name: str(t?.name), muted: t?.muted ? true : undefined, locked: t?.locked ? true : undefined,
-        clips: items.map(c => ({ id: str(c?.id, 40), name: str(c?.name), source: str(c?.source, 120),
-          start: num(c?.start), end: num(c?.end), in: num(c?.in), out: num(c?.out) })) };
+        enabled: t?.enabled === false ? false : undefined, solo: t?.solo ? true : undefined,
+        clips: items.map(c => ({ id: idv(c?.id), item: idv(c?.item), link: idv(c?.link), name: str(c?.name), source: str(c?.source, 120),
+          start: num(c?.start), end: num(c?.end), in: num(c?.in), out: num(c?.out),
+          enabled: c?.enabled === false ? false : undefined, speed: num(c?.speed) })) };
       if (omitted) out.omittedClips = omitted;
       return out;
     });
     const media = (Array.isArray(raw.media) ? raw.media : []).slice(0, LIMITS.media)
-      .map(m => ({ name: str(m?.name, 120), type: str(m?.type, 20), duration: num(m?.duration) }));
-    return { tracks, media, playhead: num(raw.playhead), duration: num(raw.duration) };
+      .map(m => ({ item: idv(m?.item), name: str(m?.name, 120), path: str(m?.path, 160), type: str(m?.type, 20),
+        duration: typeof m?.duration === 'string' ? str(m.duration, 20) : num(m?.duration) }));
+    const markers = (Array.isArray(raw.markers) ? raw.markers : []).slice(0, 30).map(m => ({ name: str(m?.name), start: num(m?.start) }));
+    const selection = (Array.isArray(raw.selection) ? raw.selection : []).slice(0, 20).map(idv);
+    return { tracks, media, markers: markers.length ? markers : undefined, selection: selection.length ? selection : undefined,
+      playhead: num(raw.playhead), duration: num(raw.duration) };
   };
   let snap = build(clipsPerTrack);
   while (JSON.stringify(snap).length > maxChars && clipsPerTrack > 2) snap = build(clipsPerTrack = Math.floor(clipsPerTrack / 2));
@@ -74,7 +82,8 @@ const TICKS_PER_SECOND = 254_016_000_000;
 
 // Always offered: the commands most edits need.
 const PINNED = ['playhead.set', 'timeline.razor', 'captions.add', 'captions.newTrack', 'sequence.applyVideoTransition',
-  'sequence.applyAudioTransition', 'export.quick', 'export.presets.list', 'ui.inspect', 'edit.undo', 'edit.selectAll'];
+  'sequence.applyAudioTransition', 'export.quick', 'export.presets.list', 'ui.inspect', 'edit.undo', 'edit.selectAll',
+  'timeline.trim', 'edit.clear', 'edit.rippleDelete', 'clip.enable', 'timeline.setTrack', 'clip.audioGain', 'timeline.select', 'clip.speedDuration'];
 const SYNONYMS = {
   cut: ['razor', 'split', 'trim'], split: ['razor'], slice: ['razor'], fade: ['transition', 'dissolve', 'fade'],
   dissolve: ['transition'], caption: ['captions', 'text'], subtitle: ['captions'], subtitles: ['captions'],
@@ -116,6 +125,9 @@ export function validateCalls(raw, snapshot = null) {
     let entry = BY_KEY.get(`${c?.kind}:${id}`) || BY_ID.get(id);
     if (!entry) { rejected.push({ call: c, reason: `unknown command ${id || '(none)'}` }); continue; }
     const params = c?.params && typeof c.params === 'object' && !Array.isArray(c.params) ? c.params : {};
+    // Fallback: models often quote ids ("55"); the engine needs numbers.
+    for (const k of ['clip', 'item', 'track', 'from', 'to']) if (typeof params[k] === 'string' && /^\d+$/.test(params[k])) params[k] = Number(params[k]);
+    for (const k of ['clips', 'items', 'transitions']) if (Array.isArray(params[k])) params[k] = params[k].map(v => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v));
     // Required names may list alternatives: "a|b" in the name, or "ticks|\"seconds\":f64" in the type.
     const alts = (name, type) => [...name.split('|'), ...[...String(type).matchAll(/"(\w+)":/g)].map(m => m[1])];
     const missing = entry.a.filter(([name, type, req]) => req && !name.startsWith('…')
@@ -140,6 +152,16 @@ Time: params typed "ticks" are integers at ${TICKS_PER_SECOND} ticks per second 
 Use clip/track ids from the editor state when given; if a needed id is unknown, plan a query (e.g. request ui.inspect) and finish with needsResults=true.
 Project snapshot (when given) lists tracks and clips with their real ids; times there are seconds. Resolve references like
 "the second clip" (order by start on V1 unless a track is named) or "the music track" (audio track by name/source) to those ids. Never invent ids.
+Clip ids are the numeric "id" of clips in the snapshot; always pass them as JSON numbers (55, not "55"). A clip's "link" is its linked
+audio/video partner; "enabled":false means the clip is disabled (silent/invisible). Recipes (prefer these, they act on clips by id and need no selection):
+- trim a clip to N seconds: execute timeline.trim {clip, edge:"out", mode:"regular", delta:(N-(end-start))*${TICKS_PER_SECOND}} (integer ticks, negative to shorten); also trim its link partner the same way.
+- delete/remove a clip: execute edit.clear {clips:[id, link]} (leaves a gap; use edit.rippleDelete only when asked to close the gap).
+- mute/silence a clip (e.g. "mute music" where music is a clip): execute clip.enable {clips:[id]} only if that clip is not already "enabled":false (it toggles).
+  Mute a whole track only when the user says track: timeline.setTrack {track:<track id>, muted:true}.
+- volume of a clip: clip.audioGain {clips:[id], mode:"adjust", db:n}.
+- speed: clip.speedDuration {clips:[id], speed:<percent>}.
+Match names loosely: "the intro clip" = the clip whose name or source starts with "intro" (ignore extension and case).
+project.delete removes items from the Project bin, not from the timeline; do not use it for timeline clips.
 Work in batches: if a later step depends on the result of earlier calls (new clip ids after a cut, a query), plan only the first batch and
 finish with needsResults=true; the client runs it, re-snapshots and asks again.
 Never invent command ids.`;

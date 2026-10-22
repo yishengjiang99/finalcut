@@ -104,3 +104,12 @@ agent (`FINALCUT_VOICE_AGENT_ID`, created by `scripts/create-finalcut-voice-agen
 `edit_video(instruction)` calls the same `handleSend` as typing (the request shows in the chat and runs the normal
 edit flow) and returns the last assistant reply, shortened, for the voice to speak. Same router as above with its own
 path/agent var; 503 until configured. Off switch: `FINALCUT_VOICE_DISABLED=true`.
+
+## Snapshot fields (engine shapes)
+
+`sequence.inspect` returns `{video:[track], audio:[track], playhead, duration, markers, selection}` in ticks. Track:
+`{id, name, muted, locked, enabled, solo, items}`; item: `{clip, item, link, name, label, start, end, sourceIn, sourceOut, enabled, speed}`.
+Note `label` is the colour label (e.g. "Iris"), not a name. `project.items` returns `{rows:[{item, name, cells}|{bin, name}]}`;
+`files()` returns `[{path:"/files/intro.mp4", kind}]`. The helper maps these to clips `{id: clip, item, link, name, source
+(project item name), start, end, in, out, enabled?}` and media `{item, name, path, type, duration}`. Ids stay numbers: the engine ignores
+or rejects quoted ids, so the server also turns quoted numeric ids in planned calls back into numbers.

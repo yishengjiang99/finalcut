@@ -110,8 +110,8 @@ describe('project snapshot', () => {
     const clips = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `clip-${i}-${'x'.repeat(60)}`, start: i, end: i + 1 }));
     const s = compactSnapshot({ tracks: [{ id: 'V1', clips }] });
     expect(JSON.stringify(s).length).toBeLessThanOrEqual(10000);
-    expect(s.tracks[0].clips[0].id).toBe('0');
-    expect(s.tracks[0].clips.at(-1).id).toBe('499');
+    expect(s.tracks[0].clips[0].id).toBe(0);
+    expect(s.tracks[0].clips.at(-1).id).toBe(499);
     expect(s.tracks[0].omittedClips).toBe(500 - s.tracks[0].clips.length);
   });
   it('checks clip and track refs against the snapshot', () => {
@@ -157,5 +157,27 @@ describe('tool loop', () => {
       expect(seen[1]).toMatchObject({ role: 'tool', tool_call_id: 'a' });
       expect(seen[1].content).toMatch(/rejected: missing required time/);
     } finally { await s2.close(); }
+  });
+});
+
+describe('snapshot ids and engine fields', () => {
+  it('keeps numeric ids numeric and passes item/link/enabled/markers', () => {
+    const s = compactSnapshot({ tracks: [{ id: 15, kind: 'video', name: 'Video 1', clips: [{ id: 52, item: 48, link: '53', name: 'intro.mp4', source: 'intro.mp4', start: 30, end: 34, in: 0, out: 4, enabled: false }] }],
+      media: [{ item: 48, name: 'intro.mp4', path: '/files/intro.mp4', duration: '00:00:04:00' }], markers: [{ name: 'Open', start: 0 }], selection: [52] });
+    const c = s.tracks[0].clips[0];
+    expect(s.tracks[0].id).toBe(15); expect(c.id).toBe(52); expect(c.item).toBe(48); expect(c.link).toBe(53); expect(c.enabled).toBe(false);
+    expect(s.media[0]).toMatchObject({ item: 48, path: '/files/intro.mp4', duration: '00:00:04:00' });
+    expect(s.markers).toEqual([{ name: 'Open', start: 0 }]); expect(s.selection).toEqual([52]);
+  });
+  it('coerces quoted ids in calls to numbers', () => {
+    const snap = compactSnapshot({ tracks: [{ id: 18, kind: 'audio', clips: [{ id: 57, name: 'music.mp3' }] }] });
+    const { calls, rejected } = validateCalls([{ kind: 'execute', id: 'clip.enable', params: { clips: ['57'] } },
+      { kind: 'execute', id: 'timeline.setTrack', params: { track: '18', muted: true } }], snap);
+    expect(rejected).toEqual([]);
+    expect(calls[0].params.clips).toEqual([57]); expect(calls[1].params.track).toBe(18);
+  });
+  it('offers the clip-level commands for name-based edits', () => {
+    const ids = selectTools('delete broll').map(e => e.id);
+    for (const id of ['timeline.trim', 'edit.clear', 'clip.enable', 'timeline.setTrack']) expect(ids).toContain(id);
   });
 });
