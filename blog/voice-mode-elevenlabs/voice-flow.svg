@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="310" viewBox="0 0 960 310" font-family="Helvetica, Arial, sans-serif" font-size="16">
+  <rect width="960" height="310" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker></defs>
+  <g fill="#f1f5f9" stroke="#475569" stroke-width="1.5">
+    <rect x="20" y="60" width="140" height="56" rx="10"/>
+    <rect x="210" y="60" width="170" height="56" rx="10"/>
+    <rect x="430" y="60" width="200" height="56" rx="10"/>
+    <rect x="690" y="20" width="250" height="56" rx="10"/>
+    <rect x="690" y="110" width="250" height="56" rx="10"/>
+    <rect x="690" y="230" width="250" height="56" rx="10"/>
+    <rect x="150" y="230" width="230" height="56" rx="10"/>
+  </g>
+  <g fill="#0f172a" text-anchor="middle">
+    <text x="90" y="93">You speak</text>
+    <text x="295" y="93">ElevenLabs agent</text>
+    <text x="530" y="93">Same send path as typing</text>
+    <text x="815" y="53">Chat shows the request</text>
+    <text x="815" y="143">Grok plans, FFmpeg edits</text>
+    <text x="815" y="263">Short summary</text>
+    <text x="265" y="263">Agent speaks the result</text>
+    <text x="405" y="50" font-size="13" fill="#475569">edit_video instruction</text>
+  </g>
+  <g stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#a)">
+    <path d="M160 88H208"/>
+    <path d="M380 88H428"/>
+    <path d="M630 80L688 52"/>
+    <path d="M630 96L688 132"/>
+    <path d="M815 166V228"/>
+    <path d="M690 258H560V190H340V118"/>
+    <path d="M250 116V228"/>
+  </g>
+</svg>

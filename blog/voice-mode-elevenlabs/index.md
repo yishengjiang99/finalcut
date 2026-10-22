@@ -20,16 +20,7 @@ Voice runs on an ElevenLabs Conversational AI agent. We gave it a short prompt a
 
 The tool runs in the page. It hands the instruction to the same send function the Send button uses. So nothing about the edit is special for voice: the request appears in the chat as if you had typed it, and it goes through the usual Grok and FFmpeg flow.
 
-```mermaid
-flowchart LR
-  A[You speak] --> B[ElevenLabs agent]
-  B -->|edit_video instruction| C[Same send path as typing]
-  C --> D[Chat shows the request]
-  C --> E[Grok plans, FFmpeg edits]
-  E --> F[Short summary]
-  F --> B
-  B --> G[Agent speaks the result]
-```
+![Flow diagram: you speak to the ElevenLabs agent, which sends an edit_video instruction down the same send path as typing. The chat shows the request while Grok plans and FFmpeg edits. A short summary goes back to the agent, which speaks the result.](voice-flow.svg)
 
 ## What it says back
 
