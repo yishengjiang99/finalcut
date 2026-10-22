@@ -9,32 +9,48 @@
 
   async function safe(fn) { try { return await fn(); } catch (e) { return undefined; } }
 
-  /** Compact snapshot: tracks (+clips) from sequence.inspect, media from project.items + files(). */
+  // Real shapes (filmcraft engine, see docs/filmcraft-agent.md "Snapshot fields"):
+  //  sequence.inspect -> {video:[track], audio:[track], playhead, duration, markers:[{name,start}], selection:[clipId]}
+  //    track = {id, name, muted, locked, enabled, solo, items:[{clip, item, link, name, label(color!), start, end,
+  //             sourceIn, sourceOut, enabled, speed, gainDb}]}   (times in ticks)
+  //  project.items -> {rows:[{item, name, cells:{"Media Duration":..}} | {bin, name}]}
+  //  files() -> [{path:"/files/intro.mp4", kind:"blob"}]
   async function snapshot() {
     var fc = window.filmcraft;
     var seq = (await safe(function () { return fc.execute('sequence.inspect', {}); })) || {};
     if (seq && seq.result) seq = seq.result;
+    var proj = await safe(function () { return fc.execute('project.items', { recursive: true }); });
+    var rows = proj && (Array.isArray(proj) ? proj : proj.rows || proj.items) || [];
+    var itemName = {}, media = [];
+    rows.forEach(function (r) {
+      if (r && r.item !== undefined) {
+        itemName[r.item] = r.name;
+        var c = r.cells || {};
+        media.push({ item: r.item, name: r.name, type: c['Video Info'] ? 'video' : c['Audio Info'] ? 'audio' : undefined, duration: c['Media Duration'] || undefined });
+      }
+    });
+    var files = await safe(function () { return fc.files(); });
+    if (Array.isArray(files)) files.forEach(function (f) {
+      var base = String(f.path || '').split('/').pop();
+      var m = media.find(function (x) { return x.name === base; });
+      if (m) m.path = f.path; else media.push({ name: base, path: f.path });
+    });
     var tracks = [];
     [['video', seq.video || []], ['audio', seq.audio || []]].forEach(function (pair) {
       pair[1].forEach(function (t, i) {
         tracks.push({
           id: first(t.id, (pair[0] === 'audio' ? 'A' : 'V') + (i + 1)), kind: pair[0], index: i,
-          name: first(t.name, t.label), muted: !!first(t.muted, t.mute), locked: !!first(t.locked, t.lock),
-          clips: (t.items || t.clips || []).filter(function (c) { return first(c.clip, c.id) !== undefined; }).map(function (c) {
-            var start = first(c.start, c.timelineStart), end = first(c.end, typeof start === 'number' && typeof c.duration === 'number' ? start + c.duration : undefined);
-            return { id: first(c.clip, c.id), name: first(c.name, c.label), source: first(c.source, c.media, c.path),
-              start: sec(start), end: sec(end), in: sec(first(c.in, c.mediaIn, c.media_in)), out: sec(first(c.out, c.mediaOut, c.media_out)) };
+          name: t.name, muted: !!t.muted, locked: !!t.locked, enabled: t.enabled === false ? false : undefined, solo: t.solo ? true : undefined,
+          clips: (t.items || []).filter(function (c) { return c.clip !== undefined; }).map(function (c) {
+            return { id: c.clip, item: c.item, link: c.link === null ? undefined : c.link, name: c.name, source: itemName[c.item],
+              start: sec(c.start), end: sec(c.end), in: sec(c.sourceIn), out: sec(c.sourceOut),
+              enabled: c.enabled === false ? false : undefined, speed: c.speed !== undefined && c.speed !== 1 ? c.speed : undefined };
           }),
         });
       });
     });
-    var media = [];
-    var rows = await safe(function () { return fc.execute('project.items', { recursive: true }); });
-    rows = rows && (rows.result || rows.items || rows);
-    if (Array.isArray(rows)) rows.forEach(function (r) { media.push({ name: first(r.name, r.label), type: first(r.kind, r.type), duration: sec(r.duration) }); });
-    var files = await safe(function () { return fc.files(); });
-    if (Array.isArray(files)) files.forEach(function (f) { if (!media.some(function (m) { return m.name === f.path; })) media.push({ name: f.path, type: f.kind }); });
-    return { tracks: tracks, media: media, playhead: sec(first(seq.playhead, seq.time)), duration: sec(seq.duration) };
+    var markers = (seq.markers || []).map(function (m) { return { name: m.name, start: sec(m.start) }; });
+    return { tracks: tracks, media: media, markers: markers, selection: seq.selection || [], playhead: sec(seq.playhead), duration: sec(seq.duration) };
   }
 
   async function plan(body, endpoint) {
