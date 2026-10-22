@@ -11,7 +11,7 @@ import { apiLimiter } from './middleware.js';
 import { MUSIC_PRODUCT, resolveMusicPlan, musicPlans, musicSiteUrl, productOf } from './products.js';
 import { sendConversion } from './adsConversions.js';
 
-export const ATTRIBUTION_KEYS = ['event_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'twclid', 'rdt_cid', 'landing'];
+export const ATTRIBUTION_KEYS = ['event_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'twclid', 'rdt_cid', 'landing', 'ads_opt_out'];
 
 // Stripe metadata: ≤50 keys, key ≤40 chars, value ≤500 chars.
 export function attributionFrom(body = {}) {
@@ -21,6 +21,8 @@ export function attributionFrom(body = {}) {
     if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, k === 'landing' ? 300 : 200);
   }
   if (out.event_id && !/^[A-Za-z0-9_.:-]{8,80}$/.test(out.event_id)) delete out.event_id;
+  // Browser sent Global Privacy Control / Do Not Track: keep no click ids, report nothing to ad platforms.
+  if (out.ads_opt_out) { out.ads_opt_out = '1'; delete out.twclid; delete out.rdt_cid; delete out.landing; }
   return out;
 }
 
@@ -103,6 +105,7 @@ export async function handleMusicWebhookEvent(event, { stripe = defaultStripe, d
       if (email) {
         await setProductEntitlement({ email, product: MUSIC_PRODUCT, plan, source: 'stripe', ref: obj.subscription || obj.payment_intent || obj.id, customerId: obj.customer || null, active: true });
       }
+      if (obj.metadata?.ads_opt_out === '1') return true;
       const isTrial = obj.mode === 'subscription' && (obj.amount_total || 0) === 0;
       const value = isTrial ? 0 : (obj.amount_total || 0) / 100 || (musicPlans(env)[plan]?.value ?? 0);
       await send({
@@ -127,7 +130,7 @@ export async function handleMusicWebhookEvent(event, { stripe = defaultStripe, d
       const meta = subscriptionMetadataOfInvoice(obj);
       if (!meta || meta.product !== MUSIC_PRODUCT) return false;
       // First paid invoice after the trial (and every renewal): server-only Purchase, no pixel to dedupe with.
-      if ((obj.amount_paid || 0) > 0) {
+      if ((obj.amount_paid || 0) > 0 && meta.ads_opt_out !== '1') {
         await send({
           kind: 'purchase', eventId: `inv_${obj.id}`, value: obj.amount_paid / 100,
           currency: (obj.currency || 'usd').toUpperCase(), email: obj.customer_email,

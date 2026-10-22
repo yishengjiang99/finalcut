@@ -149,6 +149,14 @@ describe('ad conversions', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('GPC/DNT opt-out: no click ids kept and no conversion sent', async () => {
+    expect(music.attributionFrom({ ads_opt_out: '1', twclid: 'tw', rdt_cid: 'rd', utm_source: 'x' })).toEqual({ ads_opt_out: '1', utm_source: 'x' });
+    const send = vi.fn(async () => ({}));
+    await music.handleMusicWebhookEvent({ type: 'checkout.session.completed', data: { object: { id: 'cs_o', mode: 'payment', amount_total: 4999, customer_details: { email: 'a@b.co' }, metadata: { product: 'music', plan: 'lifetime', ads_opt_out: '1' } } } }, { db, send, env: {} });
+    expect(send).not.toHaveBeenCalled();
+    expect(db.setProductEntitlement).toHaveBeenCalled();
+  });
+
   it('webhook sends start_trial for a Pro trial checkout with the landing event id', async () => {
     const send = vi.fn(async () => ({}));
     await music.handleMusicWebhookEvent({ type: 'checkout.session.completed', data: { object: { id: 'cs_t', mode: 'subscription', amount_total: 0, subscription: 'sub_t', customer_details: { email: 'a@b.co' }, metadata: { product: 'music', plan: 'pro_yearly', event_id: 'mr-trial-0001', twclid: 'tw9' } } } }, { db, send, env: {} });
