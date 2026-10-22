@@ -2056,3 +2056,6 @@ body {
 .rc-media, .clip, .media-x, .rc-badge {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Voice mic (VoiceButton.jsx) */
+.voice-btn.on { background: #c0392b; color: #fff; border-radius: 50%; }
