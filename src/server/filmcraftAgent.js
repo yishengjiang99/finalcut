@@ -133,7 +133,7 @@ const clip = (v, n) => { const s = typeof v === 'string' ? v : JSON.stringify(v 
 export function buildMessages({ prompt, state, history, snapshot }, tools) {
   const catalog = tools.map(e => `${e.kind === 'request' ? 'request' : 'execute'} ${e.id}(${e.a.map(([n, t, r]) => `${n}${r ? '' : '?'}:${t}`).join(', ')}) — ${e.d}`).join('\n');
   const system = `You control FilmCraft, an in-browser video editor, by planning tool calls the browser will run in order.
-Call the tool filmcraft_call once per step (several calls allowed), then call finish with a one-sentence explanation.
+Call the tool filmcraft_call once per step (several calls allowed, in execution order). Plan EVERY part of the request, then call finish with a one-sentence explanation. If a call is rejected, fix it.
 Only use these commands (kind then id, then params). "?" marks optional params:
 ${catalog}
 Time: params typed "ticks" are integers at ${TICKS_PER_SECOND} ticks per second (5 s = ${5 * TICKS_PER_SECOND}). Where a param allows "seconds", prefer {"seconds": n}.
@@ -201,9 +201,33 @@ export function createFilmcraftAgentRouter({ llm = callXai, limiter = filmcraftA
     if (!token()) return res.status(503).json({ error: 'LLM not configured' });
     try {
       const tools = selectTools(`${prompt} ${(history || []).map(h => h?.prompt || '').join(' ')}`);
-      const message = await llm(buildMessages({ prompt, state, history, snapshot }, tools));
-      const { raw, explanation, needsResults } = parsePlan(message);
-      const { calls, rejected } = validateCalls(raw, snapshot);
+      // Tool loop: acknowledge each call (or report why it was rejected, so the model can repair it)
+      // until it calls finish, at most 4 rounds. Still one HTTP request; nothing kept between requests.
+      const messages = buildMessages({ prompt, state, history, snapshot }, tools);
+      const calls = [], rejected = []; let explanation = '', needsResults = false;
+      for (let round = 0; round < 4; round += 1) {
+        const message = await llm(messages);
+        const plan = parsePlan(message);
+        explanation = plan.explanation || explanation; needsResults = plan.needsResults;
+        const toolCalls = message?.tool_calls || [];
+        if (!toolCalls.length) break;
+        messages.push({ role: 'assistant', content: message.content || '', tool_calls: toolCalls });
+        let finished = false;
+        for (const t of toolCalls) {
+          let reply = 'ok';
+          if (t.function?.name === 'finish') finished = true;
+          else {
+            let args = {}; try { args = JSON.parse(t.function?.arguments || '{}'); } catch { /* rejected below */ }
+            const v = validateCalls([args], snapshot);
+            calls.push(...v.calls);
+            if (v.rejected.length) { rejected.push(...v.rejected); reply = `rejected: ${v.rejected[0].reason}. Fix it with another filmcraft_call if possible.`; }
+            else reply = 'queued';
+          }
+          messages.push({ role: 'tool', tool_call_id: t.id, content: reply });
+        }
+        if (finished || calls.length >= LIMITS.calls) break;
+      }
+      calls.splice(LIMITS.calls);
       const step = (history || []).length + 1;
       // Step cap: the last allowed step is always final.
       res.json({ calls, explanation, done: !needsResults || !calls.length || step >= LIMITS.steps, step, maxSteps: LIMITS.steps, rejected });

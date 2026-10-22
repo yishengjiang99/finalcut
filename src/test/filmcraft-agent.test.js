@@ -140,3 +140,22 @@ describe('project snapshot', () => {
     } finally { await s2.close(); }
   });
 });
+
+describe('tool loop', () => {
+  it('keeps asking until finish and lets the model repair a rejected call', async () => {
+    const rounds = [
+      { tool_calls: [{ id: 'a', ...tc('filmcraft_call', { kind: 'execute', id: 'timeline.razor', params: {} }) }] },
+      { tool_calls: [{ id: 'b', ...tc('filmcraft_call', { kind: 'execute', id: 'timeline.razor', params: { seconds: 5, time: 1 } }) }] },
+      { tool_calls: [{ id: 'c', ...tc('filmcraft_call', { kind: 'execute', id: 'sequence.applyVideoTransition', params: {} }) }, { id: 'd', ...tc('finish', { explanation: 'done' }) }] },
+    ];
+    const seen = [];
+    const s2 = await serve({ llm: async (m) => { seen.push(m.at(-1)); return rounds.shift(); } });
+    try {
+      const body = await (await post(s2.base, { prompt: 'cut at 5 and fade' })).json();
+      expect(body.calls.map(c => c.id)).toEqual(['timeline.razor', 'sequence.applyVideoTransition']);
+      expect(body.explanation).toBe('done');
+      expect(seen[1]).toMatchObject({ role: 'tool', tool_call_id: 'a' });
+      expect(seen[1].content).toMatch(/rejected: missing required time/);
+    } finally { await s2.close(); }
+  });
+});
