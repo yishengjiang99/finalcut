@@ -92,3 +92,51 @@ describe('POST /api/filmcraft/agent', () => {
     expect((await post(srv.base, { prompt: 'hi' })).status).toBe(502);
   });
 });
+
+import { compactSnapshot, checkRefs } from '../server/filmcraftAgent.js';
+const snap = { tracks: [
+  { id: 'V1', kind: 'video', index: 0, name: 'Video 1', clips: [{ id: 7, name: 'a.mp4', start: 0, end: 5 }, { id: 8, name: 'b.mp4', start: 5, end: 9 }] },
+  { id: 'A1', kind: 'audio', index: 0, name: 'Music', clips: [{ id: 9, name: 'song.mp3', start: 0, end: 9 }] }],
+  media: [{ name: 'a.mp4', type: 'video', duration: 5, junk: 'x' }] };
+
+describe('project snapshot', () => {
+  it('normalizes and drops unknown fields', () => {
+    const s = compactSnapshot(snap);
+    expect(s.tracks[1]).toMatchObject({ id: 'A1', kind: 'audio', name: 'Music' });
+    expect(s.media[0]).toEqual({ name: 'a.mp4', type: 'video', duration: 5 });
+    expect(compactSnapshot('nope')).toBeNull();
+  });
+  it('caps long timelines keeping head and tail clips', () => {
+    const clips = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `clip-${i}-${'x'.repeat(60)}`, start: i, end: i + 1 }));
+    const s = compactSnapshot({ tracks: [{ id: 'V1', clips }] });
+    expect(JSON.stringify(s).length).toBeLessThanOrEqual(10000);
+    expect(s.tracks[0].clips[0].id).toBe('0');
+    expect(s.tracks[0].clips.at(-1).id).toBe('499');
+    expect(s.tracks[0].omittedClips).toBe(500 - s.tracks[0].clips.length);
+  });
+  it('checks clip and track refs against the snapshot', () => {
+    const s = compactSnapshot(snap);
+    expect(checkRefs({ clip: 8 }, s)).toBeNull();
+    expect(checkRefs({ clips: [7, 99] }, s)).toMatch(/clip 99/);
+    expect(checkRefs({ track: 'music' }, s)).toBeNull();
+    expect(checkRefs({ track: 'V9' }, s)).toMatch(/track V9/);
+    expect(checkRefs({ clip: 99 }, null)).toBeNull();
+  });
+  it('route injects the snapshot, rejects bad refs, and caps steps', async () => {
+    let seen;
+    const s2 = await serve({ llm: async (m) => { seen = m; return { tool_calls: [
+      tc('filmcraft_call', { kind: 'execute', id: 'timeline.razor', params: { time: 1, clip: 8 } }),
+      tc('filmcraft_call', { kind: 'execute', id: 'timeline.razor', params: { time: 1, clip: 42 } }),
+      tc('finish', { explanation: 'cut', needsResults: true })] }; } });
+    try {
+      let body = await (await post(s2.base, { prompt: 'cut the second clip', snapshot: snap })).json();
+      expect(seen.some(m => m.content.startsWith('Project snapshot') && m.content.includes('"Music"'))).toBe(true);
+      expect(body.calls).toEqual([{ kind: 'execute', id: 'timeline.razor', params: { time: 1, clip: 8 } }]);
+      expect(body.rejected[0].reason).toMatch(/clip 42/);
+      expect(body).toMatchObject({ done: false, step: 1, maxSteps: 6 });
+      const history = Array.from({ length: 5 }, () => ({ prompt: 'p', calls: [], results: [] }));
+      body = await (await post(s2.base, { prompt: 'continue', snapshot: snap, history })).json();
+      expect(body).toMatchObject({ done: true, step: 6 });
+    } finally { await s2.close(); }
+  });
+});

@@ -11,7 +11,65 @@ export const CATALOG = JSON.parse(readFileSync(new URL('./filmcraft/catalog.json
 const BY_KEY = new Map(CATALOG.map(e => [`${e.kind}:${e.id}`, e]));
 const BY_ID = new Map(CATALOG.map(e => [e.id, e]));
 
-export const LIMITS = { prompt: 2000, state: 12000, history: 8, historyChars: 8000, calls: 20, tools: 40 };
+export const LIMITS = { prompt: 2000, state: 12000, history: 8, historyChars: 8000, calls: 20, tools: 40,
+  snapshotChars: 10000, tracks: 24, clipsPerTrack: 40, media: 60, steps: 6 };
+
+const num = v => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 1000) / 1000 : undefined);
+const str = (v, n = 80) => (v === undefined || v === null ? undefined : String(v).slice(0, n));
+/** Keep the first and last clips of a long track, with a marker for the elided middle. */
+function headTail(list, max) {
+  if (list.length <= max) return { items: list, omitted: 0 };
+  const h = Math.ceil(max / 2);
+  return { items: [...list.slice(0, h), ...list.slice(list.length - (max - h))], omitted: list.length - max };
+}
+
+/**
+ * Normalize the client's compact project snapshot (docs/filmcraft-agent.md) and cap its size.
+ * Shape: {tracks:[{id,kind:'video'|'audio',index,name,muted,locked,clips:[{id,name,source,start,end,in,out}]}],
+ *         media:[{name,type,duration}], playhead?, duration?}. Times are seconds.
+ */
+export function compactSnapshot(raw, { clipsPerTrack = LIMITS.clipsPerTrack, maxChars = LIMITS.snapshotChars } = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const build = per => {
+    const tracks = (Array.isArray(raw.tracks) ? raw.tracks : []).slice(0, LIMITS.tracks).map((t, i) => {
+      const { items, omitted } = headTail(Array.isArray(t?.clips) ? t.clips : [], per);
+      const out = { id: str(t?.id ?? `${t?.kind === 'audio' ? 'A' : 'V'}${(t?.index ?? i) + 1}`, 40), kind: t?.kind === 'audio' ? 'audio' : 'video',
+        index: Number.isInteger(t?.index) ? t.index : i, name: str(t?.name), muted: t?.muted ? true : undefined, locked: t?.locked ? true : undefined,
+        clips: items.map(c => ({ id: str(c?.id, 40), name: str(c?.name), source: str(c?.source, 120),
+          start: num(c?.start), end: num(c?.end), in: num(c?.in), out: num(c?.out) })) };
+      if (omitted) out.omittedClips = omitted;
+      return out;
+    });
+    const media = (Array.isArray(raw.media) ? raw.media : []).slice(0, LIMITS.media)
+      .map(m => ({ name: str(m?.name, 120), type: str(m?.type, 20), duration: num(m?.duration) }));
+    return { tracks, media, playhead: num(raw.playhead), duration: num(raw.duration) };
+  };
+  let snap = build(clipsPerTrack);
+  while (JSON.stringify(snap).length > maxChars && clipsPerTrack > 2) snap = build(clipsPerTrack = Math.floor(clipsPerTrack / 2));
+  if (JSON.stringify(snap).length > maxChars) snap.media = snap.media.slice(0, 10);
+  return snap;
+}
+
+/** Clip/track ids known to the snapshot (track ids also match by name, case-insensitive). */
+function snapshotIds(snap) {
+  const clips = new Set(), tracks = new Set(), partial = snap.tracks.some(t => t.omittedClips);
+  for (const t of snap.tracks) {
+    tracks.add(String(t.id).toLowerCase()); if (t.name) tracks.add(t.name.toLowerCase());
+    for (const c of t.clips) if (c.id !== undefined) clips.add(String(c.id));
+  }
+  return { clips, tracks, partial };
+}
+
+/** Return a reason when params reference a clip/track id the snapshot does not have. */
+export function checkRefs(params, snap) {
+  if (!snap || !snap.tracks.length) return null;
+  const ids = snapshotIds(snap);
+  const clipRefs = [params.clip, ...(Array.isArray(params.clips) ? params.clips : [])].filter(v => v !== undefined && typeof v !== 'object');
+  if (!ids.partial) for (const c of clipRefs) if (!ids.clips.has(String(c))) return `clip ${c} is not in the project snapshot`;
+  const t = params.track;
+  if (t !== undefined && typeof t !== 'object' && !ids.tracks.has(String(t).toLowerCase())) return `track ${t} is not in the project snapshot`;
+  return null;
+}
 const TICKS_PER_SECOND = 254_016_000_000;
 
 // Always offered: the commands most edits need.
@@ -51,7 +109,7 @@ export function selectTools(prompt, max = LIMITS.tools) {
 }
 
 /** Validate/repair model calls against the catalog. Returns {calls, rejected}. */
-export function validateCalls(raw) {
+export function validateCalls(raw, snapshot = null) {
   const calls = [], rejected = [];
   for (const c of (Array.isArray(raw) ? raw : []).slice(0, LIMITS.calls)) {
     let id = String(c?.id ?? c?.method ?? '').trim().replace(/^control\./, '');
@@ -63,6 +121,8 @@ export function validateCalls(raw) {
     const missing = entry.a.filter(([name, type, req]) => req && !name.startsWith('…')
       && !alts(name, type).some(n => params[n] !== undefined)).map(([n]) => n);
     if (missing.length) { rejected.push({ call: c, reason: `missing required ${missing.join(', ')} for ${id}` }); continue; }
+    const refErr = checkRefs(params, snapshot);
+    if (refErr) { rejected.push({ call: c, reason: refErr }); continue; }
     calls.push(entry.kind === 'request' ? { kind: 'request', method: entry.id, params } : { kind: 'execute', id: entry.id, params });
   }
   return { calls, rejected };
@@ -70,7 +130,7 @@ export function validateCalls(raw) {
 
 const clip = (v, n) => { const s = typeof v === 'string' ? v : JSON.stringify(v ?? null); return s.length > n ? `${s.slice(0, n)}…[truncated]` : s; };
 
-export function buildMessages({ prompt, state, history }, tools) {
+export function buildMessages({ prompt, state, history, snapshot }, tools) {
   const catalog = tools.map(e => `${e.kind === 'request' ? 'request' : 'execute'} ${e.id}(${e.a.map(([n, t, r]) => `${n}${r ? '' : '?'}:${t}`).join(', ')}) — ${e.d}`).join('\n');
   const system = `You control FilmCraft, an in-browser video editor, by planning tool calls the browser will run in order.
 Call the tool filmcraft_call once per step (several calls allowed), then call finish with a one-sentence explanation.
@@ -78,8 +138,13 @@ Only use these commands (kind then id, then params). "?" marks optional params:
 ${catalog}
 Time: params typed "ticks" are integers at ${TICKS_PER_SECOND} ticks per second (5 s = ${5 * TICKS_PER_SECOND}). Where a param allows "seconds", prefer {"seconds": n}.
 Use clip/track ids from the editor state when given; if a needed id is unknown, plan a query (e.g. request ui.inspect) and finish with needsResults=true.
+Project snapshot (when given) lists tracks and clips with their real ids; times there are seconds. Resolve references like
+"the second clip" (order by start on V1 unless a track is named) or "the music track" (audio track by name/source) to those ids. Never invent ids.
+Work in batches: if a later step depends on the result of earlier calls (new clip ids after a cut, a query), plan only the first batch and
+finish with needsResults=true; the client runs it, re-snapshots and asks again.
 Never invent command ids.`;
   const messages = [{ role: 'system', content: system }];
+  if (snapshot) messages.push({ role: 'user', content: `Project snapshot:\n${JSON.stringify(snapshot)}` });
   if (state !== undefined) messages.push({ role: 'user', content: `Editor state (window.filmcraft.inspect()):\n${clip(state, LIMITS.state)}` });
   for (const h of (history || []).slice(-LIMITS.history)) {
     messages.push({ role: 'user', content: clip(h.prompt ?? '', 1000) });
@@ -129,16 +194,19 @@ export function createFilmcraftAgentRouter({ llm = callXai, limiter = filmcraftA
   }, limiter, express.json({ limit: '256kb' }), async (req, res) => {
     res.set('Cache-Control', 'no-store');
     const { prompt, state, history } = req.body || {};
+    const snapshot = compactSnapshot(req.body?.snapshot);
     if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'prompt (string) is required' });
     if (prompt.length > LIMITS.prompt) return res.status(413).json({ error: `prompt exceeds ${LIMITS.prompt} chars` });
     if (history !== undefined && !Array.isArray(history)) return res.status(400).json({ error: 'history must be an array' });
     if (!token()) return res.status(503).json({ error: 'LLM not configured' });
     try {
       const tools = selectTools(`${prompt} ${(history || []).map(h => h?.prompt || '').join(' ')}`);
-      const message = await llm(buildMessages({ prompt, state, history }, tools));
+      const message = await llm(buildMessages({ prompt, state, history, snapshot }, tools));
       const { raw, explanation, needsResults } = parsePlan(message);
-      const { calls, rejected } = validateCalls(raw);
-      res.json({ calls, explanation, done: !needsResults, rejected });
+      const { calls, rejected } = validateCalls(raw, snapshot);
+      const step = (history || []).length + 1;
+      // Step cap: the last allowed step is always final.
+      res.json({ calls, explanation, done: !needsResults || !calls.length || step >= LIMITS.steps, step, maxSteps: LIMITS.steps, rejected });
     } catch (error) {
       console.warn(`[filmcraft-agent] ${error.message}`);
       res.status(error.status || 502).json({ error: 'planning failed' });

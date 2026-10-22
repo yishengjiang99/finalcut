@@ -7,11 +7,37 @@ through `window.filmcraft` on grepawk.com/filmcraft (same origin, so no CORS or 
 
 ```json
 { "prompt": "cut the clip at 5 seconds and add a fade",
+  "snapshot": { "tracks": [ { "id": "V1", "kind": "video", "index": 0, "name": "Video 1", "muted": false, "locked": false,
+                              "clips": [ { "id": 7, "name": "intro.mp4", "source": "intro.mp4", "start": 0, "end": 12.5, "in": 0, "out": 12.5 } ] },
+                            { "id": "A2", "kind": "audio", "index": 1, "name": "Music", "clips": [ ... ] } ],
+                "media": [ { "name": "intro.mp4", "type": "video", "duration": 12.5 } ],
+                "playhead": 0, "duration": 12.5 },
   "state":   { "...": "optional window.filmcraft.inspect() snapshot (first 12k chars used)" },
   "history": [ { "prompt": "...", "calls": [ ... ], "results": [ ... ] } ] }
 ```
 
 Limits: prompt ≤ 2000 chars, body ≤ 256 KB, last 8 history steps, 60 requests / 15 min / IP.
+
+## Project snapshot (how the agent knows clips and tracks)
+
+The server is stateless. Each request carries a compact snapshot that the client builds fresh
+(`window.filmcraftAgentSnapshot()` in the helper) from `filmcraft.execute('sequence.inspect')` (tracks and
+their items), `filmcraft.execute('project.items', {recursive:true})` (bin) and `filmcraft.files()` (imported
+files). Times are **seconds**. The server re-normalizes it (unknown fields dropped, strings cut) and caps it at
+~10 KB: ≤24 tracks, ≤60 media rows; on a long timeline each track keeps its first and last clips and reports
+`omittedClips: n` (halving the per-track cap until it fits).
+
+It is injected into the prompt so the model resolves "the second clip", "the music track", etc. to real ids.
+Every returned call is then checked: a `clip`/`clips` id or `track` id (or track name) not present in the
+snapshot is moved to `rejected`. (Clip-id checks are skipped when clips were elided, since the id may be in
+the omitted middle.)
+
+## Multi-step
+
+When later calls depend on earlier results (new clip ids after a razor, a query), the model returns only the
+first batch with `done:false`. The client runs it, re-snapshots, and POSTs again with `history` (calls +
+results) and the new snapshot, until `done:true`. Steps are capped at 6 (`step`/`maxSteps` in the response;
+the 6th response is always `done:true`). The helper stops early on any failed call.
 
 ## Response
 
@@ -19,7 +45,7 @@ Limits: prompt ≤ 2000 chars, body ≤ 256 KB, last 8 history steps, 60 request
 { "calls": [ { "kind": "execute", "id": "timeline.razor", "params": { "time": 1270080000000 } },
              { "kind": "request", "method": "ui.inspect", "params": {} } ],
   "explanation": "Split at 5 s and applied a cross dissolve.",
-  "done": true,
+  "done": true, "step": 1, "maxSteps": 6,
   "rejected": [ { "call": { "...": "..." }, "reason": "unknown command made.up" } ] }
 ```
 
@@ -45,7 +71,7 @@ Errors: 400 bad input, 413 prompt too long, 429 rate limit, 502 LLM failure, 503
 
 ## Browser helper
 
-`/filmcraft-agent.js` (from `public/`) defines `window.filmcraftAgent(prompt, {maxSteps, dryRun})`:
+`/filmcraft-agent.js` (from `public/`) defines `window.filmcraftAgent(prompt, {maxSteps, dryRun})` (snapshot → plan → run → repeat) and `window.filmcraftAgentSnapshot()`:
 
 ```html
 <script src="/filmcraft-agent.js"></script>
