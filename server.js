@@ -17,7 +17,7 @@ import { createHealthRouter } from './src/server/health.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { iosSuggestionsAdminRouter } from './src/server/iosSuggestionsAdmin.js';
 import { filmcraftAgentRouter } from './src/server/filmcraftAgent.js';
-import { filmcraftVoiceRouter } from './src/server/filmcraftVoice.js';
+import { filmcraftVoiceRouter, finalcutVoiceRouter } from './src/server/filmcraftVoice.js';
 import { v2Router } from './src/server/v2.js';
 import { telemetryRouter, scheduleTelemetryPurge } from './src/server/telemetry.js';
 import { pushRouter, getPushStore } from './src/server/push/router.js';
@@ -50,6 +50,8 @@ app.use(telemetryRouter);
 app.use(filmcraftAgentRouter);
 // FilmCraft voice: signed ElevenLabs agent URL (503 until FILMCRAFT_VOICE_AGENT_ID is set).
 app.use(filmcraftVoiceRouter);
+// FinalCut chat voice: signed ElevenLabs agent URL (503 until FINALCUT_VOICE_AGENT_ID; off: FINALCUT_VOICE_DISABLED=true).
+app.use(finalcutVoiceRouter);
 if (process.env.NODE_ENV !== 'test') scheduleTelemetryPurge();
 
 let sessionStore;

@@ -3,6 +3,7 @@ import { systemPrompt } from './tools.js';
 import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, muxCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 import { useCallAPI } from './useCallAPI.js';
+import VoiceButton, { summarize } from './VoiceButton.jsx';
 import { setFetchAbortSignal } from './abortableFetch.js';
 import {
   fetchClientConfig,
@@ -707,7 +708,25 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     if (controller.signal.aborted) status = 'cancelled';
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: status || 'done', endedAt: Date.now() } : j));
     if (status === 'cancelled') toast(`Cancelled: “${text}”`);
+    return status || 'done';
   };
+
+  // Voice: run a spoken request through the same chat/edit flow, then return the reply to speak.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const busyRef = useRef(isCallingAPI);
+  busyRef.current = isCallingAPI;
+  const runVoicePrompt = async (text) => {
+    if (!text.trim()) return 'I did not catch an instruction.';
+    if (busyRef.current) return summarize('busy');
+    const before = messagesRef.current.length;
+    const status = await handleSendRef.current(text);
+    await new Promise(r => setTimeout(r, 0));
+    const reply = messagesRef.current.slice(before).filter(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()).pop();
+    return summarize(status, reply?.content);
+  };
+  const handleSendRef = useRef(null);
+  handleSendRef.current = handleSend;
 
   const cancelRunning = () => {
     currentJobRef.current?.controller.abort();
@@ -1332,6 +1351,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                   placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
                   aria-label="Message input"
                 />
+                <VoiceButton runPrompt={runVoicePrompt} disabled={false} onNotice={toast} />
                 <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); isCallingAPI ? cancelRunning() : handleSend(); }} disabled={!isCallingAPI && !chatInput.trim()}>
                   {isCallingAPI ? '■' : '↑'}
                 </button>
