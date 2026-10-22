@@ -152,10 +152,10 @@ Time: params typed "ticks" are integers at ${TICKS_PER_SECOND} ticks per second 
 Use clip/track ids from the editor state when given; if a needed id is unknown, plan a query (e.g. request ui.inspect) and finish with needsResults=true.
 Project snapshot (when given) lists tracks and clips with their real ids; times there are seconds. Resolve references like
 "the second clip" (order by start on V1 unless a track is named) or "the music track" (audio track by name/source) to those ids. Never invent ids.
-Clip ids are the numeric "id" of clips in the snapshot; always pass them as JSON numbers (55, not "55"). A clip's "link" is its linked
-audio/video partner; "enabled":false means the clip is disabled (silent/invisible). Recipes (prefer these, they act on clips by id and need no selection):
-- trim a clip to N seconds: execute timeline.trim {clip, edge:"out", mode:"regular", delta:(N-(end-start))*${TICKS_PER_SECOND}} (integer ticks, negative to shorten); also trim its link partner the same way.
-- delete/remove a clip: execute edit.clear {clips:[id, link]} (leaves a gap; use edit.rippleDelete only when asked to close the gap).
+Clip ids are the numeric "id" of clips in the snapshot; always pass them as JSON numbers (55, not "55"). Clips with the same "link" value are
+linked audio/video partners (link is a group id, not a clip id); "enabled":false means the clip is disabled (silent/invisible). Recipes (prefer these, they act on clips by id and need no selection):
+- trim a clip to N seconds: execute timeline.trim {clip, edge:"out", mode:"regular", delta:(N-(end-start))*${TICKS_PER_SECOND}} (integer ticks, negative to shorten); also trim clips sharing its link the same way.
+- delete/remove a clip: execute edit.clear {clips:[id, ...ids of clips sharing its link]} (leaves a gap; use edit.rippleDelete only when asked to close the gap).
 - mute/silence a clip (e.g. "mute music" where music is a clip): execute clip.enable {clips:[id]} only if that clip is not already "enabled":false (it toggles).
   Mute a whole track only when the user says track: timeline.setTrack {track:<track id>, muted:true}.
 - volume of a clip: clip.audioGain {clips:[id], mode:"adjust", db:n}.
