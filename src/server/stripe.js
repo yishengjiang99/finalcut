@@ -6,6 +6,8 @@ import {
   allowedStripePriceIds,
 } from './config.js';
 import { apiLimiter, getBaseUrlFromRequest } from './middleware.js';
+import { handleMusicWebhookEvent } from './musicBilling.js';
+import { FINALCUT_PRODUCT, productOf } from './products.js';
 
 // Stripe webhook router — must be mounted BEFORE express.json() body parsing
 // so Stripe signature verification receives the raw body.
@@ -33,6 +35,12 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
   }
 
   try {
+    // Non-FinalCut products (metadata.product, e.g. 'music') are handled on their own and never
+    // touch the FinalCut users.has_subscription flag. FinalCut events fall through unchanged.
+    if (await handleMusicWebhookEvent(event)) {
+      return res.json({ received: true });
+    }
+
     switch (event.type) {
       case 'checkout.session.completed':
         const session = event.data.object;
@@ -143,6 +151,11 @@ router.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     // Verify the session is valid and payment was successful
+    if (session && productOf(session) !== FINALCUT_PRODUCT) {
+      // Another product's session (music): never grants the FinalCut subscription.
+      return res.json({ verified: false, paymentStatus: session.payment_status, product: productOf(session) });
+    }
+
     if (session && session.payment_status === 'paid') {
       if (session.customer_email) {
         try {
