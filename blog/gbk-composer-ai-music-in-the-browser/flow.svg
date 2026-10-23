@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" font-family="sans-serif" font-size="15">
+<rect width="760" height="200" fill="#fff"/>
+<rect x="20" y="60" width="180" height="80" rx="10" fill="#e8f0fe" stroke="#3367d6"/><text x="110" y="95" text-anchor="middle">You type a request</text><text x="110" y="117" text-anchor="middle">in plain words</text>
+<rect x="290" y="60" width="180" height="80" rx="10" fill="#fef7e0" stroke="#e37400"/><text x="380" y="95" text-anchor="middle">Agent on the</text><text x="380" y="117" text-anchor="middle">compose server</text>
+<rect x="560" y="60" width="180" height="80" rx="10" fill="#e6f4ea" stroke="#137333"/><text x="650" y="95" text-anchor="middle">Your browser runs</text><text x="650" y="117" text-anchor="middle">gbk_* tools + SF2 synth</text>
+<path d="M200 100H285" stroke="#333" stroke-width="2" marker-end="url(#a)"/>
+<path d="M470 88H555" stroke="#333" stroke-width="2" marker-end="url(#a)"/><text x="512" y="78" text-anchor="middle" font-size="12">tool calls</text>
+<path d="M555 115H475" stroke="#333" stroke-width="2" marker-end="url(#a)"/><text x="512" y="135" text-anchor="middle" font-size="12">results</text>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#333"/></marker></defs>
+</svg>
