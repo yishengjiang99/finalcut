@@ -93,6 +93,8 @@ enum StoreKitPurchaseStub {
 /// Paywall copy and links required by App Review guideline 3.1.2 (auto-renewable subscriptions).
 enum PaywallCopy {
     static let title = "FinalCap Pro"
+    /// Headline when the paywall is presented at launch (v1.1).
+    static let launchTitle = "Unlock unlimited AI edits"
     static let fallbackPlanName = "FinalCap Pro Monthly"
     static let benefits = [
         "Unlimited AI edits",

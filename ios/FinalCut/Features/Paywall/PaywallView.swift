@@ -235,6 +235,8 @@ struct PaywallView: View {
         switch appModel.paywallReason {
         case .usageLimitReached:
             return "You've used today's free edits"
+        case .atLaunch:
+            return PaywallCopy.launchTitle
         case .upgradeTapped:
             return PaywallCopy.title
         }
