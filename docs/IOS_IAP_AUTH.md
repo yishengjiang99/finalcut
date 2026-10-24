@@ -20,11 +20,22 @@ Set these on the API server:
 ```dotenv
 APPLE_IAP_BUNDLE_ID=com.ragnus.w2
 APPLE_IAP_PRODUCT_ID=com.ragnus.w2.subscription.monthly
-APPLE_IAP_ENVIRONMENT=Production
-APPLE_IAP_APPLE_ID=6815060815
-APPLE_IAP_ROOT_CERTS_BASE64=<comma-separated-base64 Apple root certificates>
+# Optional overrides — the defaults below are compiled in:
+# APPLE_IAP_ENVIRONMENT=Production        (pin one verifier environment)
+# APPLE_IAP_APPLE_ID=6815060815           (FinalCap's app id; required for Production)
+# APPLE_IAP_ROOT_CERTS_BASE64=<...>       (replace the bundled Apple Root CAs)
 ```
 
-Use `APPLE_IAP_ENVIRONMENT=Sandbox` for TestFlight sandbox verification and `Xcode` for local StoreKit Configuration testing. Keep the Apple root certificates in deployment secrets, not in the repository. Until the certificates are configured, the verification endpoint intentionally returns `503` and does not unlock inference.
+The Apple Root CA certificates are public trust anchors (published by Apple
+at apple.com/certificateauthority), not secrets: they are bundled in
+`src/server/apple-root-cas.js` so verification works without any env setup.
+`APPLE_IAP_ROOT_CERTS_BASE64` remains as an override. (History: when the roots
+came only from that env var and production never set it, every verification
+returned `503` and no purchase was ever recorded.)
+
+Unless `APPLE_IAP_ENVIRONMENT` is pinned, the verifier environment is chosen
+per transaction from the JWS `environment` claim, so App Store (Production)
+and TestFlight (Sandbox) purchases both verify. Pin
+`APPLE_IAP_ENVIRONMENT=Xcode` for local StoreKit Configuration testing.
 
 An install UUID is intentionally not a durable cross-device account. StoreKit restore can re-associate an already verified original transaction with a new install; a fresh transaction must carry the current install's `appAccountToken`.
