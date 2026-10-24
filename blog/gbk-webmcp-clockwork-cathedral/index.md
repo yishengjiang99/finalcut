@@ -2,6 +2,7 @@
 title: GBK's WebMCP tools wrote a string fugue: The Clockwork Cathedral
 description: How an AI agent used GBK's gbk_* WebMCP tools to compose, voice, mix and render a D minor string fugue, and what the music does.
 date: 2026-10-23
+updated: 2026-10-24
 publish: true
 product: grepawk
 keyword: WebMCP tools
@@ -9,11 +10,11 @@ tags: [gbk, webmcp, music, fugue]
 hero: song.jpg
 heroAlt: The Clockwork Cathedral open in the GBK workstation, with Violin I, Violin II, Viola and Cello parts in the piano roll
 ---
-[The Clockwork Cathedral](https://compose.grepawk.com/s/the-clockwork-cathedral-crqebmyf) is a 32-bar fugue in D minor for string quartet. My AI agent composed it with GBK's WebMCP tools: it never touched GBK's source, it only called the `gbk_*` tools a web page offers to an agent. This post follows those tool calls from an empty project to a finished WAV, then looks at the music they produced.
+[The Clockwork Cathedral](https://compose.grepawk.com/s/the-clockwork-cathedral-mfnrsu7g) is a 32-bar fugue in D minor for string quartet. My AI agent composed it with GBK's WebMCP tools: it never touched GBK's source, it only called the `gbk_*` tools a web page offers to an agent. This post follows those tool calls from an empty project to a finished WAV, then looks at the music they produced.
 
 ![The Clockwork Cathedral opened from its share link in the GBK workstation, read-only, with four string tracks in the piano roll and a Fork button](song.jpg)
 
-Press play on the [song page](https://compose.grepawk.com/s/the-clockwork-cathedral-crqebmyf). Shared songs play for anyone, no code needed.
+Press play on the [song page](https://compose.grepawk.com/s/the-clockwork-cathedral-mfnrsu7g). Shared songs play for anyone, no code needed.
 
 The 60 second video below shows the Explore page, opens a shared song, edits in the studio, forks a song, and ends with the AI composer at work.
 
@@ -109,7 +110,8 @@ Most of what makes it sound like a quartet rather than a MIDI file came from the
 - **Vibrato.** CC1 curves on Violin I, the viola and the cello. Violin I goes from 8 up to a peak of 85 around the climax, then fades to 10 at the end. Violin II has no CC1 curve.
 - **Space.** CC91 reverb sends of 40, 40, 35 and 30 and CC93 chorus sends of 8, 8, 5 and 2, top voice to bottom, so the cello stays the driest.
 - **Bowing.** `gbk_propose_voice_patch` on Violin I set a 0.035 s attack, 0.35 s release, a 9,500 Hz filter cutoff and 5.3 Hz vibrato. The viola got 0.045 s, 0.4 s and 7,500 Hz, and the cello 0.025 s, 0.45 s and 6,800 Hz.
+- **Low-pass filter.** In v6, `gbk_propose_voice_patch` adds a low-pass filter on all four strings, including Violin II: a 4 kHz cutoff on the violins and viola, 3.2 kHz on the cello, and 3 dB of resonance. It cuts 11 to 16 dB above 8 kHz for a softer string tone.
 
 ## Compose your own
 
-Composing on [compose.grepawk.com](https://compose.grepawk.com) is invite-only for now: DM [@yishengjiang on X](https://x.com/yishengjiang) for an access code. Shared songs, including [The Clockwork Cathedral](https://compose.grepawk.com/s/the-clockwork-cathedral-crqebmyf), play for anyone, and you can fork one to make your own copy.
+Composing on [compose.grepawk.com](https://compose.grepawk.com) is invite-only for now: DM [@yishengjiang on X](https://x.com/yishengjiang) for an access code. Shared songs, including [The Clockwork Cathedral](https://compose.grepawk.com/s/the-clockwork-cathedral-mfnrsu7g), play for anyone, and you can fork one to make your own copy.
