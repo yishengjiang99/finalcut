@@ -40,7 +40,7 @@ async function setupPage(page, baseURL, chatQueue, { allowUpload = false } = {})
   await page.route('**/api/v2/config', r => r.fulfill({ json: CONFIG }));
   await page.route('**/api/v2/capabilities', r => r.fulfill({ json: EMPTY_CATALOG }));
   await page.route('**/api/sample-access-token', r => r.fulfill({ status: 404 }));
-  await page.route('**/BigBuckBunny.mp4', r => r.fulfill({ status: 404 }));
+  await page.route('**/sample-lake.mp4', r => r.fulfill({ status: 404 }));
   await page.route('**/api/v2/chat', async (route) => {
     const req = route.request();
     const body = req.postDataBuffer();
@@ -69,7 +69,7 @@ async function setupPage(page, baseURL, chatQueue, { allowUpload = false } = {})
   });
   const badResponses = [];
   page.on('response', (r) => {
-    if (r.status() >= 400 && !/favicon\.ico|sample-access-token|BigBuckBunny/.test(r.url())) badResponses.push(`${r.status()} ${r.url()}`);
+    if (r.status() >= 400 && !/favicon\.ico|sample-access-token|sample-lake/.test(r.url())) badResponses.push(`${r.status()} ${r.url()}`);
   });
   return { problems, uploads, badResponses };
 }

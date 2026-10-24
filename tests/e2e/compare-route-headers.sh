@@ -13,7 +13,7 @@
 #   tests/e2e/compare-route-headers.sh before.txt https://grepawk.com                  # snapshot vs live
 # Each side may be a base URL or a file written by --dump.
 set -euo pipefail
-paths=(/ /index.html /legal/privacy.html /api/health /BigBuckBunny.mp4.README /success /ffmpeg.wasm /ffmpeg.js)
+paths=(/ /index.html /legal/privacy.html /api/health /sample-lake.mp4.README /success /ffmpeg.wasm /ffmpeg.js)
 dump() {
   local base="$1" asset p
   asset="$(curl -fsS "$base/" | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)"

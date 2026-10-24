@@ -956,8 +956,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
   const loadSampleVideo = async () => {
     setShowLanding(false);
-    // Sample video path - using BigBuckBunny.mp4 as specified
-    const sampleVideoUrl = '/BigBuckBunny.mp4';
+    // Sample video path - bundled example clip (public/sample-lake.mp4)
+    const sampleVideoUrl = '/sample-lake.mp4';
 
     try {
       await getSampleAccessToken();
@@ -980,7 +980,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       setFileMimeType('video/mp4');
       setCurrentFileMimeType('video/mp4');
 
-      const uploadedMessage = { role: 'user', content: '', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'BigBuckBunny.mp4', id: messageIdCounterRef.current++ };
+      const uploadedMessage = { role: 'user', content: '', apiContent: 'A video file is available for editing.', videoUrl: url, videoType: 'original', mimeType: 'video/mp4', name: 'sample-lake.mp4', id: messageIdCounterRef.current++ };
       mediaBytesRef.current.set(uploadedMessage.id, data);
       activateMedia(uploadedMessage.id);
       setMessages(prev => [...prev, uploadedMessage]);

@@ -22,7 +22,7 @@ test('touch surfaces do not select on long press; chat and inputs still do; scru
   await page.route('**/api/v2/config', r => r.fulfill({ json: CONFIG }));
   await page.route('**/api/v2/capabilities', r => r.fulfill({ json: EMPTY }));
   await page.route('**/api/sample-access-token', r => r.fulfill({ status: 404 }));
-  await page.route('**/BigBuckBunny.mp4', r => r.fulfill({ status: 404 }));
+  await page.route('**/sample-lake.mp4', r => r.fulfill({ status: 404 }));
   await page.goto('/?engine=client');
   await expect(page.locator('.composer-input-row')).toBeVisible({ timeout: 15000 });
   await page.locator('.composer-input-row input[type=file]').setInputFiles(FIXTURE);

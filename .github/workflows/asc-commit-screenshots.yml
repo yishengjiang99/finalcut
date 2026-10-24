@@ -12,13 +12,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Generate BBB store screenshots
+      - name: Generate store screenshots
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           pip install -q pillow
-          test -f public/BigBuckBunny.mp4
+          test -f public/sample-lake.mp4
           python3 docs/asc/screenshots/en-US/make_store_screenshots.py
           ls -la docs/asc/screenshots/en-US/*.png
       - name: Commit PNGs
@@ -31,5 +31,5 @@ jobs:
             echo 'no screenshot changes'
             exit 0
           fi
-          git commit -m "asc: commit FinalCap BBB store screenshots (iphone-69 / ipad-13)"
+          git commit -m "asc: commit FinalCap store screenshots (iphone-69 / ipad-13)"
           git push origin HEAD

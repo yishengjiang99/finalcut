@@ -1,0 +1,8 @@
+This directory contains sample-lake.mp4, the example clip for the "Try with Sample Video" feature (web) and the bundled iOS sample.
+
+Video: "Breathtaking View of Lake Lucerne in Summer" by Flex Journey on Pexels
+Source: https://www.pexels.com/video/breathtaking-view-of-lake-lucerne-in-summer-29003611/
+License: Pexels License - free to use, no attribution required (https://www.pexels.com/license/)
+
+The shipped file is the 1080p original (1920x1080, 28 s, no audio) transcoded to
+H.264 yuv420p, CRF 27, maxrate 3500k, faststart (~9.4 MB).

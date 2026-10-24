@@ -249,7 +249,7 @@ All 47 tools in `tools.js`, with these changes:
 | Resource | Origin | Under COOP same-origin + COEP require-corp |
 |---|---|---|
 | App JS/CSS (`/assets/index-*.js`) | same | OK |
-| `/BigBuckBunny.mp4` sample, `/sampaudio.mp3` | same | OK |
+| `/sample-lake.mp4` sample, `/sampaudio.mp3` | same | OK |
 | Imported media, results, VTT/SRT | `blob:` (same-origin) | OK. `<video crossOrigin="anonymous">` with a blob: URL is fine. |
 | `/api/*`, `/auth/*` | same | OK |
 | `fetch('https://grepawk.com/api/sample-access-token')` in `index.html` and `App.jsx:102` | same on apex, **cross-origin on `www.grepawk.com`** | A CORS-mode fetch needs `Access-Control-Allow-Origin`. `server.js` imports `cors` but never uses it, so **this already fails on www**. COEP does not change that. Fix: make the URL relative and 301 `www` → apex. |
@@ -266,7 +266,7 @@ If you need them later, switch to `COEP: credentialless` (Chrome 96+, Firefox 11
 
 ### 5.2 Live findings (curl -I, 2026-10-09)
 
-- `/`, `/api/health`, `/BigBuckBunny.mp4`, `/ffmpeg.wasm`: COOP + COEP present. **The page is already crossOriginIsolated.**
+- `/`, `/api/health`, `/sample-lake.mp4`, `/ffmpeg.wasm`: COOP + COEP present. **The page is already crossOriginIsolated.**
 - `/ffmpeg.js` and all `*.js` (therefore `/assets/*.js` and the future `ffmpeg-core.js`/`worker.js`): **COOP/COEP missing**. Cause: `location ~* \.(js|css|…)$ { add_header Cache-Control …; }`. nginx does **not inherit** server-level `add_header` into a location that has its own `add_header`. The same happens for `/legal/`, which also loses `X-Frame-Options`/`nosniff`. Workers need COEP on their own script response, and CORP/same-origin for subresources.
 - `.wasm` is served as `application/octet-stream`. nginx 1.18 `mime.types` lacks wasm, so `instantiateStreaming` fails and falls back to slower ArrayBuffer compilation.
 - `Cache-Control` is duplicated on js (`expires 1y` + `add_header`).
@@ -348,7 +348,7 @@ try {
 4. Behind a flag (`?engine=wasm` or `VITE_ENGINE=wasm`): route `toolFunctions.trim_video` to wasm, with no fetch to `/api/process-video`.
 5. A tiny static server for tests (`tests/e2e/server.mjs`) that serves `dist/` with the nginx headers. Toggle `COEP=off` to force st. Stub `/api/chat` and `/api/auth/status` through Playwright `page.route` with a canned `tool_calls: trim_video {start:1,end:3}`, so no xAI key is needed.
 6. Playwright test `tests/e2e/wasm-trim.spec.js`, run for `{mt: headers on, st: headers off}`:
-   - Upload `src/test/fixtures/speech-hello.mp4` (or `public/BigBuckBunny.mp4`) through `setInputFiles`.
+   - Upload `src/test/fixtures/speech-hello.mp4` (or `public/sample-lake.mp4`) through `setInputFiles`.
    - Assert `await page.evaluate(() => crossOriginIsolated)` matches the mode, and the host reports mode `mt`/`st`.
    - Send "trim 1 to 3"; wait for the result `<video>`; read its blob, then ffprobe (wasm in page, or native `ffprobe` in CI) gives a duration of about 2.0 s ± 0.1.
    - **Network assertion** through `page.on('request')` and CDP `Network.requestWillBeSent`, which also catches worker requests (`context.on('request')` covers workers in Chromium):

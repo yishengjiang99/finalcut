@@ -71,7 +71,7 @@ They call `window.finalcutApp`, a small bridge in `App.jsx` over the handlers th
 | `finalcut.cancel` | Cancels the running edit. |
 | `finalcut.select_media(id)` | Makes a clip the target of the next edit. |
 | `finalcut.undo(id?)` | Goes back to the clip an edit was made from. |
-| `finalcut.add_media_from_url(url)` | Adds a same-origin media file (e.g. `/BigBuckBunny.mp4`). |
+| `finalcut.add_media_from_url(url)` | Adds a same-origin media file (e.g. `/sample-lake.mp4`). |
 | `finalcut.remove_media(id)` | Removes a clip. Asks the user first. |
 | `finalcut.export` | Exports the active clip (download or share sheet, with captions burned in when present). Asks the user first. |
 

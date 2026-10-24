@@ -101,7 +101,7 @@ final class VideoImportTests: XCTestCase {
 
         model.resetBundledTestVideoIfNeeded()
 
-        XCTAssertTrue(["BigBuckBunny.mp4", "finalcap-test-video.mp4"].contains(bundled.lastPathComponent), bundled.lastPathComponent)
+        XCTAssertTrue(["sample-lake.mp4", "finalcap-test-video.mp4"].contains(bundled.lastPathComponent), bundled.lastPathComponent)
         XCTAssertNil(model.localVideoURL)
         XCTAssertEqual(model.state, .empty)
         XCTAssertTrue(model.messages.isEmpty)

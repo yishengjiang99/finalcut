@@ -1,0 +1,71 @@
+name: iOS bundle sample clip
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Point Xcode target at public/sample-lake.mp4 and load it
+        run: |
+          set -euo pipefail
+          test -f public/sample-lake.mp4
+          PBX=ios/FinalCut.xcodeproj/project.pbxproj
+          EV=ios/FinalCut/Features/Editor/EditorView.swift
+          python3 - <<'PY'
+          from pathlib import Path
+          pbx = Path("ios/FinalCut.xcodeproj/project.pbxproj")
+          s = pbx.read_text()
+          # Works from either prior state: finalcap-test-video bundled from
+          # SampleMedia, or the retired BigBuckBunny.mp4 public bundle.
+          for old in ("finalcap-test-video.mp4", "BigBuckBunny.mp4"):
+              s = s.replace(
+                  f'7D42470D6EA843639F8EC21E /* {old} in Resources */ = {{isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* {old} */; }};',
+                  '7D42470D6EA843639F8EC21E /* sample-lake.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* sample-lake.mp4 */; };',
+              )
+              s = s.replace(
+                  f'59C829D9D1054B0D87489025 /* {old} */ = {{isa = PBXFileReference; lastKnownFileType = file; path = "{old}"; sourceTree = "<group>"; }};',
+                  '59C829D9D1054B0D87489025 /* sample-lake.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "sample-lake.mp4"; path = "../public/sample-lake.mp4"; sourceTree = SOURCE_ROOT; };',
+              )
+              s = s.replace(
+                  f'59C829D9D1054B0D87489025 /* {old} */ = {{isa = PBXFileReference; lastKnownFileType = file; name = "{old}"; path = "../public/{old}"; sourceTree = SOURCE_ROOT; }};',
+                  '59C829D9D1054B0D87489025 /* sample-lake.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "sample-lake.mp4"; path = "../public/sample-lake.mp4"; sourceTree = SOURCE_ROOT; };',
+              )
+              s = s.replace(f'59C829D9D1054B0D87489025 /* {old} */,', '59C829D9D1054B0D87489025 /* sample-lake.mp4 */,')
+              s = s.replace(f'7D42470D6EA843639F8EC21E /* {old} in Resources */,', '7D42470D6EA843639F8EC21E /* sample-lake.mp4 in Resources */,')
+          if 'path = "../public/sample-lake.mp4"' not in s:
+              raise SystemExit('pbx patch did not apply; fileRef layout changed')
+          pbx.write_text(s)
+          ev = Path("ios/FinalCut/Features/Editor/EditorView.swift")
+          t = ev.read_text()
+          t = t.replace('Bundle.main.url(forResource: "BigBuckBunny", withExtension: "mp4")',
+                        'Bundle.main.url(forResource: "sample-lake", withExtension: "mp4")')
+          if 'forResource: "sample-lake"' not in t:
+              old = 'Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")'
+              new = 'Bundle.main.url(forResource: "sample-lake", withExtension: "mp4")\n            ?? Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")'
+              if old not in t:
+                  raise SystemExit('EditorView sample URL not found')
+              t = t.replace(old, new, 1)
+          ev.write_text(t)
+          PY
+          echo "--- pbx refs ---"
+          grep -n 'sample-lake\|finalcap-test-video' "$PBX"
+          echo "--- editor ---"
+          grep -n 'sample-lake\|finalcap-test-video' "$EV"
+      - name: Commit if changed
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ios/FinalCut.xcodeproj/project.pbxproj ios/FinalCut/Features/Editor/EditorView.swift
+          if git diff --cached --quiet; then
+            echo 'no changes'
+          else
+            git commit -m 'ios: bundle public/sample-lake.mp4 as the sample clip'
+            git push
+          fi

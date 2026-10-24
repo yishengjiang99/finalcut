@@ -31,7 +31,7 @@
 		3BFA0055043342C584FB23D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD12BBC329E457BBA7331E4 /* AppTheme.swift */; };
 		2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 01F8F90184F0448FAD35E158 /* Assets.xcassets */; };
 		FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */; };
-		7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */; };
+		7D42470D6EA843639F8EC21E /* sample-lake.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* sample-lake.mp4 */; };
 		FC0A11B2C3D4E5F601020301 /* PaywallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */; };
 		FC0A11B2C3D4E5F601020303 /* PaywallScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */; };
 		876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */; };
@@ -130,7 +130,7 @@
 		1DD12BBC329E457BBA7331E4 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "finalcap-test-video.mp4"; sourceTree = "<group>"; };
-		59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "BigBuckBunny.mp4"; path = "../public/BigBuckBunny.mp4"; sourceTree = SOURCE_ROOT; };
+		59C829D9D1054B0D87489025 /* sample-lake.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "sample-lake.mp4"; path = "../public/sample-lake.mp4"; sourceTree = SOURCE_ROOT; };
 		FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallTests.swift; sourceTree = "<group>"; };
 		FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallScreenshotTests.swift; sourceTree = "<group>"; };
 		428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelsTests.swift; sourceTree = "<group>"; };
@@ -399,7 +399,7 @@
 		F57B83C1B2114DFCA5160D0A /* SampleMedia */ = {
 			isa = PBXGroup;
 			children = (
-				59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */,
+				59C829D9D1054B0D87489025 /* sample-lake.mp4 */,
 				FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */,
 			);
 			path = SampleMedia;
@@ -527,7 +527,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */,
-				7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */,
+				7D42470D6EA843639F8EC21E /* sample-lake.mp4 in Resources */,
 				FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */,
 				2B94E44A19E58365E3E10DF4 /* NotoSansCJK-OFL.txt in Resources */,
 				1A5E8B986C681D4767E46AFF /* NotoSansCJKsc-Bold.otf in Resources */,

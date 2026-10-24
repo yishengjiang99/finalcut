@@ -27,7 +27,7 @@ export const landingFeatures = [
 ];
 
 export const landingSteps = [
-  ['Open your video', 'Pick a video or audio file, or try the built-in sample. Opening a file does not upload it.', '"BigBuckBunny.mp4 attached ✓"'],
+  ['Open your video', 'Pick a video or audio file, or try the built-in sample. Opening a file does not upload it.', '"sample-lake.mp4 attached ✓"'],
   ['Describe the edit', "Type it the way you'd brief an editor. Ask follow-ups, stack changes, and go back to any earlier version.", '"Cut the boring middle and punch up the colors"'],
   ['Download the result', "FFmpeg renders the edit in your browser. Save the file when it's ready.", '"✓ Done. Download MP4"']
 ];

@@ -1748,7 +1748,7 @@ final class EditorViewModel: ObservableObject {
     }
 
     private var bundledTestVideoURL: URL? {
-        Bundle.main.url(forResource: "BigBuckBunny", withExtension: "mp4")
+        Bundle.main.url(forResource: "sample-lake", withExtension: "mp4")
             ?? Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
     }
 
