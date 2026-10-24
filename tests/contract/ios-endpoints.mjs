@@ -160,6 +160,7 @@ const mediaGates = [ // videoProcessLimiter routes; empty body
   ['POST', '/api/generate-captions-diarized', {}],
   ['POST', '/api/transition-videos', {}],
   ['POST', '/api/ffmpeg-cli', jsonBody({})],
+  ['POST', '/api/youtube-audio/fetch', jsonBody({})],
 ];
 for (const [method, path, o] of [...gates, ...(SKIP_GATES ? [] : mediaGates)]) {
   await check(`${method} ${path} (anonymous)`, () => call(method, path, o), authRequired, { deterministic: true });

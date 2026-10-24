@@ -245,6 +245,33 @@ async function runFfmpegOnServer(params, videoFileData, setVideoFileData, addMes
   return `FFmpeg command ran successfully (${command}). ${explanation}`;
 }
 
+// Fetches a YouTube link's audio (AAC/m4a) from POST /api/youtube-audio/fetch: the server runs
+// yt-dlp, the browser only ever receives audio bytes. Resolves to { bytes, duration, title,
+// videoId }; failures throw with the server's stable code on error.code (see
+// docs/api/YOUTUBE_SOUNDTRACK.md).
+async function fetchYouTubeAudio(url) {
+  const response = await fetch('/api/youtube-audio/fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...ffmpegCliAuthHeaders() },
+    body: JSON.stringify({ url })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const error = new Error(body.error || 'YouTube audio fetch failed');
+    error.code = body.code || null;
+    throw error;
+  }
+  const header = (name) => response.headers?.get?.(name) || '';
+  let title = '';
+  try { title = decodeURIComponent(header('X-Audio-Title')); } catch { title = header('X-Audio-Title'); }
+  return {
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    duration: Number(header('X-Audio-Duration')) || 0,
+    title,
+    videoId: header('X-Video-Id')
+  };
+}
+
 export const MAX_CLI_STRING_ATTEMPTS = 3;
 
 /**
@@ -1107,7 +1134,49 @@ export const toolFunctions = {
       return 'Failed to add audio track: ' + error.message;
     }
   },
-  
+
+  // A pasted YouTube link becomes the soundtrack: the server extracts the audio
+  // (POST /api/youtube-audio/fetch), the mix itself runs in ffmpeg.wasm like add_audio_track.
+  youtube_soundtrack: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      if ((currentFileMimeType || '').startsWith('image/')) {
+        throw new Error('YouTube soundtrack is not supported for photos');
+      }
+      const url = typeof args?.url === 'string' ? args.url.trim() : '';
+      if (!url) {
+        throw new Error('url is required');
+      }
+      const startOffset = args?.start_offset ?? 0;
+      if (typeof startOffset !== 'number' || Number.isNaN(startOffset) || startOffset < 0 || startOffset > 600) {
+        throw new Error('start_offset must be between 0 and 600');
+      }
+      const originalVolume = args?.original_volume ?? 0;
+      if (typeof originalVolume !== 'number' || Number.isNaN(originalVolume) || originalVolume < 0 || originalVolume > 1) {
+        throw new Error('original_volume must be between 0.0 and 1.0');
+      }
+
+      const fetched = await fetchYouTubeAudio(url);
+      if (fetched.duration > 0 && startOffset >= fetched.duration) {
+        throw new Error(`Start offset ${startOffset}s is past the end of that audio (${Math.round(fetched.duration)}s)`);
+      }
+      const data = await engine.addAudioTrack(
+        { mode: originalVolume > 0 ? 'mix' : 'replace', volume: 1, startOffset, originalVolume, padToVideoEnd: true },
+        videoFileData,
+        currentFileMimeType,
+        { bytes: fetched.bytes, extension: 'm4a' }
+      );
+      lastExecution.executedOn = 'browser';
+      setVideoFileData(data);
+      const label = fetched.title || 'YouTube audio';
+      addMessage({ text: `Processed video (soundtrack: ${label}):`, videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
+      return `Soundtrack applied: "${label}" from YouTube${startOffset > 0 ? `, starting at ${startOffset}s into the song` : ''}, trimmed to the video's length. The original audio is ${originalVolume > 0 ? `kept at ${Math.round(originalVolume * 100)}% under the music` : 'muted'}.`;
+    } catch (error) {
+      lastExecution.errorCode = lastExecution.errorCode || error?.code || null;
+      addMessage({ text: 'Error adding YouTube soundtrack: ' + error.message });
+      return 'Failed to add YouTube soundtrack: ' + error.message;
+    }
+  },
+
   convert_to_format: async (args, videoFileData, setVideoFileData, addMessage) => {
     try {
       addMessage({ text: 'Format conversion is not yet implemented on server-side' });

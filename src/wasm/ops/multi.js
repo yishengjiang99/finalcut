@@ -75,15 +75,30 @@ export function buildTransitionArgs({ transition, duration = 1 } = {}, clips = [
   ];
 }
 
-/** Replace the clip's audio with a new track, or mix the new track into it. */
-export function buildAddAudioTrackArgs({ mode = 'replace', volume = 1 } = {}, { video, audio, output, sourceHasAudio }) {
+/**
+ * Replace the clip's audio with a new track, or mix the new track into it.
+ * Soundtrack options (youtube_soundtrack): `startOffset` seeks into the new track before it is
+ * read; `originalVolume` (mix only) scales the clip's own audio under the new track;
+ * `padToVideoEnd` pads a shorter new track with silence so `-shortest` ends the output at the
+ * video's length instead of cutting the video where the track ends. With none of them set the
+ * argv is exactly what add_audio_track has always produced.
+ */
+export function buildAddAudioTrackArgs({ mode = 'replace', volume = 1, startOffset = 0, originalVolume, padToVideoEnd = false } = {}, { video, audio, output, sourceHasAudio }) {
   if (mode !== 'replace' && mode !== 'mix') throw new OpArgsError('Mode must be either "replace" or "mix"');
   if (typeof volume !== 'number' || Number.isNaN(volume) || volume < 0 || volume > 2) throw new OpArgsError('Volume must be between 0.0 and 2.0');
+  if (typeof startOffset !== 'number' || Number.isNaN(startOffset) || startOffset < 0) throw new OpArgsError('startOffset must be a number >= 0');
+  if (originalVolume !== undefined && (typeof originalVolume !== 'number' || Number.isNaN(originalVolume) || originalVolume < 0 || originalVolume > 1)) throw new OpArgsError('originalVolume must be between 0.0 and 1.0');
   const mix = mode === 'mix' && sourceHasAudio;
-  const graph = mix
-    ? `[1:a]volume=${volume}[newaudio];[0:a][newaudio]amix=inputs=2:duration=first:dropout_transition=2[outaudio]`
-    : `[1:a]volume=${volume}[outaudio]`;
-  return [...HEAD, '-i', video, '-i', audio, '-filter_complex', graph, '-map', '0:v:0', '-map', '[outaudio]', '-c:v', 'copy', '-c:a', 'aac', '-shortest', '-movflags', '+faststart', output];
+  const newChain = `[1:a]volume=${volume}${padToVideoEnd && !mix ? ',apad' : ''}[newaudio]`;
+  let graph;
+  if (mix) {
+    const scaledOriginal = originalVolume !== undefined;
+    graph = `${newChain};${scaledOriginal ? `[0:a]volume=${originalVolume}[origaudio];[origaudio]` : '[0:a]'}[newaudio]amix=inputs=2:duration=first:dropout_transition=2[outaudio]`;
+  } else {
+    graph = newChain.replace('[newaudio]', '[outaudio]');
+  }
+  const seek = startOffset > 0 ? ['-ss', String(startOffset)] : [];
+  return [...HEAD, '-i', video, ...seek, '-i', audio, '-filter_complex', graph, '-map', '0:v:0', '-map', '[outaudio]', '-c:v', 'copy', '-c:a', 'aac', '-shortest', '-movflags', '+faststart', output];
 }
 
 // ASS colour format is &HAABBGGRR. Alignment 2 = bottom centre, 8 = top centre.
