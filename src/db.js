@@ -152,6 +152,33 @@ export async function initDatabase() {
       )
     `);
 
+    // Product-scoped purchases (AI Music Radar web Stripe). FinalCut keeps users.has_subscription.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_entitlements (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        product VARCHAR(32) NOT NULL,
+        plan VARCHAR(32) NULL,
+        source VARCHAR(16) NOT NULL,
+        ref VARCHAR(255) NOT NULL,
+        stripe_customer_id VARCHAR(255) NULL,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_product_entitlements_ref (product, ref),
+        INDEX idx_product_entitlements_email (email, product)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS music_waitlist (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        attribution JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -331,6 +358,39 @@ export async function updateUserSubscription(email, hasSubscription, subscriptio
   );
 }
 
+export async function setProductEntitlement({ email, product, plan = null, source, ref, customerId = null, active = true }) {
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO product_entitlements (email, product, plan, source, ref, stripe_customer_id, active)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE email = VALUES(email), plan = VALUES(plan), stripe_customer_id = VALUES(stripe_customer_id), active = VALUES(active)`,
+    [String(email).toLowerCase(), product, plan, source, ref, customerId, active]
+  );
+}
+
+export async function setProductEntitlementByRef({ product, ref, active }) {
+  const pool = getPool();
+  await pool.query('UPDATE product_entitlements SET active = ? WHERE product = ? AND ref = ?', [active, product, ref]);
+}
+
+export async function hasProductEntitlement(email, product) {
+  if (!email) return false;
+  const pool = getPool();
+  const [rows] = await pool.query(
+    'SELECT 1 FROM product_entitlements WHERE email = ? AND product = ? AND active = TRUE LIMIT 1',
+    [String(email).toLowerCase(), product]
+  );
+  return rows.length > 0;
+}
+
+export async function addMusicWaitlist(email, attribution = {}) {
+  const pool = getPool();
+  await pool.query(
+    'INSERT INTO music_waitlist (email, attribution) VALUES (?, ?) ON DUPLICATE KEY UPDATE email = email',
+    [email, JSON.stringify(attribution)]
+  );
+}
+
 export function hashApiToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -463,6 +523,10 @@ export default {
   findUserByDeviceInstallId,
   createUser,
   updateUserSubscription,
+  setProductEntitlement,
+  setProductEntitlementByRef,
+  hasProductEntitlement,
+  addMusicWaitlist,
   saveAppleTransaction,
   findAppleTransaction,
   updateUserAppleSubscription,
