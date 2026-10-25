@@ -18,6 +18,7 @@
 		3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA517631199041918C1F9701 /* APIEndpoints.swift */; };
 		317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADB /* APIClient.swift */; };
 		FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728301 /* PushManager.swift */; };
+		FC5A0B1C2D3E4F5061728312 /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */; };
 		FC5A0B1C2D3E4F5061728304 /* PushManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */; };
 		317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */; };
 		B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30393A1FFA234AA49E7981C1 /* PaywallView.swift */; };
@@ -115,6 +116,7 @@
 		EA517631199041918C1F9701 /* APIEndpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpoints.swift; sourceTree = "<group>"; };
 		EC090C5F63F34E5687DD1ADB /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728301 /* PushManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManager.swift; sourceTree = "<group>"; };
+		FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManagerTests.swift; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728305 /* FinalCut.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinalCut.entitlements; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728306 /* FinalCutRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinalCutRelease.entitlements; sourceTree = "<group>"; };
@@ -302,6 +304,7 @@
 				EA517631199041918C1F9701 /* APIEndpoints.swift */,
 				EC090C5F63F34E5687DD1ADB /* APIClient.swift */,
 				FC5A0B1C2D3E4F5061728301 /* PushManager.swift */,
+				FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */,
 				EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */,
 			);
 			path = Networking;
@@ -581,6 +584,7 @@
 				3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */,
 				317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */,
 				FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */,
+				FC5A0B1C2D3E4F5061728312 /* Telemetry.swift in Sources */,
 				317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */,
 				B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */,
 				BBE32E010B504F31BC957E8B /* StoreKitPurchaseStub.swift in Sources */,
