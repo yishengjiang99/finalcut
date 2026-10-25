@@ -13,7 +13,7 @@
 #   tests/e2e/compare-route-headers.sh before.txt https://grepawk.com                  # snapshot vs live
 # Each side may be a base URL or a file written by --dump.
 set -euo pipefail
-paths=(/ /index.html /legal/privacy.html /api/health /BigBuckBunny.mp4.README /success /ffmpeg.wasm /ffmpeg.js)
+paths=(/ /index.html /legal/privacy.html /api/health /sample-lake.mp4.README /success /ffmpeg.wasm /ffmpeg.js)
 dump() {
   local base="$1" asset p
   asset="$(curl -fsS "$base/" | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
@@ -26,8 +26,25 @@ dump() {
 }
 side() { if [[ -f "$1" ]]; then cat "$1"; else dump "$1"; fi; }
 if [[ "${1:-}" == "--dump" ]]; then dump "$2"; exit 0; fi
+# A path that was a 404 before and a 200 after is an additive change (a newly shipped static file,
+# e.g. /sample-lake.mp4.README the first time it is deployed): report it and compare it as equal.
+# Any other difference, including header changes on routes that were already 200, still fails.
+normalise() {  # normalise <this-side-file> <other-side-file>: collapse 404->200 blocks into a marker
+  awk -v other="$2" -v me="$3" '
+    BEGIN { while ((getline l < other) > 0) { if (l ~ /^== /) c = l; else if (l ~ /^STATUS /) ost[c] = l } }
+    function flush() { if (p == "") return
+      if ((me == "A" && st == "STATUS 404" && ost[p] == "STATUS 200") || (me == "B" && st == "STATUS 200" && ost[p] == "STATUS 404")) {
+        print p; print "ADDITIVE 404->200"; if (me == "B") print "NOTE: " p " is new (404 -> 200), treated as additive" > "/dev/stderr"
+      } else printf "%s", buf
+      buf = "" }
+    /^== / { flush(); p = $0; st = ""; buf = $0 "\n"; next }
+    { if ($0 ~ /^STATUS /) st = $0; buf = buf $0 "\n" }
+    END { flush() }' "$1"
+}
 A="$1"; B="$2"
-if diff <(side "$A") <(side "$B"); then
+TA="$(mktemp)"; TB="$(mktemp)"; trap 'rm -f "$TA" "$TB"' EXIT
+side "$A" > "$TA"; side "$B" > "$TB"
+if diff <(normalise "$TA" "$TB" A) <(normalise "$TB" "$TA" B); then
   echo "existing routes: headers identical ($(side "$A" | grep -c '^== ') paths)"
 else
   echo "FAIL: headers differ"; exit 1

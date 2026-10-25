@@ -56,6 +56,10 @@ enum ToolCatalog {
         // unhandled request falls through to the cloud path instead of "unknown_tool"; never in
         // NativeToolParser.supportedTools, so on-device planning yields unsupportedOnDevice.
         "ffmpeg_cli": ["action"],
+        // YouTube soundtrack (docs/api/YOUTUBE_SOUNDTRACK.md): runs through
+        // `NativeToolParser` → `EditorViewModel.runYouTubeSoundtrack` (server fetch of
+        // the audio, on-device mix); never the jobs API.
+        "youtube_soundtrack": ["url"],
         "add_video_transition": ["transition"],
         "apply_color_filter": ["filter"],
         "adjust_contrast": ["contrast"],

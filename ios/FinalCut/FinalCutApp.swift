@@ -23,14 +23,17 @@ struct FinalCutApp: App {
 }
 
 /// Shared session state. The app launches straight into the Editor; there is no
-/// Landing / SignIn / Paywall gate. The paywall is a sheet presented from the Editor
-/// (Upgrade button, or when the server reports the free usage limit was hit).
+/// Landing / SignIn / Paywall gate. The paywall is a dismissible sheet presented
+/// from the Editor (Upgrade button, once per cold launch for non-subscribers,
+/// or when the server reports the free usage limit was hit).
 @MainActor
 final class AppModel: ObservableObject {
     /// Why the paywall sheet is showing (drives the headline copy).
-    enum PaywallReason: Equatable {
+    /// String-backed so telemetry can use `rawValue` as the stable reason prop.
+    enum PaywallReason: String, Equatable {
         case upgradeTapped
         case usageLimitReached
+        case atLaunch
     }
 
     @Published var isAuthenticated = false
@@ -47,10 +50,16 @@ final class AppModel: ObservableObject {
 
     private var didBootstrap = false
 
-    /// Runs silently in the background on launch — never blocks or gates the Editor.
+    /// UserDefaults key recording the last launch-paywall presentation (v1.1).
+    private static let lastLaunchPaywallShownKey = "paywall.lastLaunchShownAt"
+
+    /// Runs in the background on launch — never blocks or gates the Editor
+    /// (the launch paywall below is a dismissible sheet, not a gate).
     func bootstrap() async {
         guard !didBootstrap else { return }
         didBootstrap = true
+
+        Telemetry.shared.track("app_open")
 
         // Push: token upload only if notifications are already allowed (never asks here).
         PushManager.shared.configure(api: apiClient) { [weak self] in
@@ -70,6 +79,19 @@ final class AppModel: ObservableObject {
             return
         }
         await refreshQuota()
+        presentLaunchPaywallIfNeeded()
+    }
+
+    /// v1.1: present the paywall once per cold launch to non-subscribers.
+    /// Runs at the end of `bootstrap()`, after the first `/api/auth/status`
+    /// refresh, so subscription state is known and subscribers never see it.
+    /// Skipped when auth state is unknown (offline / status fetch failed)
+    /// rather than guessing. The presentation timestamp is recorded for
+    /// observability; the cadence is every cold launch, so it does not gate.
+    private func presentLaunchPaywallIfNeeded() {
+        guard isAuthenticated, !hasSubscription, !isPaywallPresented else { return }
+        UserDefaults.standard.set(Date(), forKey: Self.lastLaunchPaywallShownKey)
+        presentPaywall(reason: .atLaunch)
     }
 
     /// Refreshes subscription + free-quota state from `GET /api/auth/status`.
@@ -98,6 +120,9 @@ final class AppModel: ObservableObject {
         if reason == .usageLimitReached, !hasSubscription {
             dailyRemaining = 0
         }
+        // The single decision point for every presentation (Upgrade button,
+        // server 402/429 usage limit, launch, push tap).
+        Telemetry.shared.track("paywall_trigger", props: ["reason": reason.rawValue])
         isPaywallPresented = true
     }
 

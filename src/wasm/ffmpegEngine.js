@@ -317,12 +317,12 @@ export async function joinClips({ transition, duration }, clips) {
 }
 
 /** Replace or mix the audio track. `audio` is { bytes, extension }. */
-export async function addAudioTrack({ mode, volume }, videoBytes, mime, audio) {
+export async function addAudioTrack({ mode, volume, startOffset, originalVolume, padToVideoEnd }, videoBytes, mime, audio) {
   const video = toFile(videoBytes, mime);
   const sourceHasAudio = mode === 'mix' ? summarizeProbe(await probeFile(video)).hasAudio : false;
   const { data } = await run({
     inputs: [video, new File([audio.bytes], `track.${audio.extension || 'mp3'}`)],
-    buildArgv: ({ inputs, output }) => buildAddAudioTrackArgs({ mode, volume }, { video: inputs[0], audio: inputs[1], output, sourceHasAudio }),
+    buildArgv: ({ inputs, output }) => buildAddAudioTrackArgs({ mode, volume, startOffset, originalVolume, padToVideoEnd }, { video: inputs[0], audio: inputs[1], output, sourceHasAudio }),
   });
   return data;
 }

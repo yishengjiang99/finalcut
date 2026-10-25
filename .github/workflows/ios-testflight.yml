@@ -35,14 +35,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Bundle BigBuckBunny as the sample clip
+      - name: Bundle the sample clip
         run: |
           set -euo pipefail
-          test -f public/BigBuckBunny.mp4
+          test -f public/sample-lake.mp4
           mkdir -p ios/FinalCut/SampleMedia
-          cp public/BigBuckBunny.mp4 ios/FinalCut/SampleMedia/finalcap-test-video.mp4
-          cp public/BigBuckBunny.mp4 ios/FinalCut/SampleMedia/BigBuckBunny.mp4
-          ls -la ios/FinalCut/SampleMedia public/BigBuckBunny.mp4
+          cp public/sample-lake.mp4 ios/FinalCut/SampleMedia/finalcap-test-video.mp4
+          cp public/sample-lake.mp4 ios/FinalCut/SampleMedia/sample-lake.mp4
+          ls -la ios/FinalCut/SampleMedia public/sample-lake.mp4
           ffprobe -v error -show_entries stream=width,height,codec_type -of default=nw=1 ios/FinalCut/SampleMedia/finalcap-test-video.mp4 || true
 
       - name: Select Xcode
@@ -209,7 +209,7 @@ jobs:
             echo "### TestFlight upload"
             echo "- Bundle: \`$BUNDLE_ID\`"
             echo "- Build: \`${{ github.run_number }}\`"
-            echo "- Sample: BigBuckBunny.mp4 copied over finalcap-test-video.mp4"
+            echo "- Sample: sample-lake.mp4 copied over finalcap-test-video.mp4"
             echo "- Notes: ${{ github.event.inputs.notes }}"
             echo "- Version: ${{ github.event.inputs.marketing_version || '1.0.1' }} (${{ github.run_number }})"
             echo "- Wait a few minutes in App Store Connect for processing, then install the new build."

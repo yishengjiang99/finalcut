@@ -45,9 +45,11 @@ function restrictToMediaType(list, mediaType) {
 /**
  * Tools offered to a client: web/other UAs get src/tools.js (for a media type when given), the
  * same array/objects as before. FinalCap-iOS UAs pick from src/tools.js plus the iOS-only grouped
- * tools, filtered by the build allowlist (iosToolAllowlist.js). The server-side ffmpeg_cli
- * fallback is appended last for iOS so the model treats it as the last resort; the allowlist
- * (FFMPEG_CLI_MIN_BUILD) keeps it away from builds that can't execute it.
+ * tools, filtered by the build allowlist (iosToolAllowlist.js; youtube_soundtrack is a shared
+ * tool gated to YOUTUBE_SOUNDTRACK_MIN_BUILD there, with an iOS description override). The
+ * server-side ffmpeg_cli fallback is appended last for iOS so the
+ * model treats it as the last resort; the allowlist (FFMPEG_CLI_MIN_BUILD) keeps it away from
+ * builds that can't execute it.
  */
 export function offeredToolsFor({ userAgent, mediaType } = {}) {
   const isIos = parseFinalCapIosUserAgent(userAgent).isFinalCapIos;

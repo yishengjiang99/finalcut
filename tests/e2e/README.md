@@ -15,7 +15,7 @@ E2E_BENCH=1 npm run test:e2e:v2 -- v2-bench   # optional: 30 s 1080p benchmark (
   third-party request, any non-GET outside `ALLOWED_WRITE_ENDPOINTS`, any legacy media route, any
   body > 64 KB or with a media/multipart content type, or any body containing the fixture's bytes.
 - `check-v2-headers.sh <base>`: header smoke for `/v2` (also usable against production after a deploy).
-- `compare-route-headers.sh <baseline> <candidate>`: proves existing routes' headers are identical.
+- `compare-route-headers.sh <baseline> <candidate>`: proves existing routes' headers are identical (a path going 404 -> 200, i.e. a newly shipped file, is reported as additive and allowed).
 - Fixture: `fixtures/testclip-6s.mp4` (320x240, 25 fps, keyframe every 1 s, 440 Hz AAC), made with
   `ffmpeg -f lavfi -i testsrc2=size=320x240:rate=25:duration=6 -f lavfi -i sine=frequency=440:duration=6 -c:v libx264 -preset veryfast -g 25 -pix_fmt yuv420p -c:a aac -b:a 64k -movflags +faststart -shortest testclip-6s.mp4`.
 

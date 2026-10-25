@@ -34,6 +34,7 @@ import { tools } from '../tools.js';
 import {
   GROUPED_EFFECTS_MIN_BUILD,
   IOS_TOOL_ALLOWLIST,
+  YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION,
   filterToolsForUserAgent,
   iosBuildRange,
   isToolAllowedForIosBuild,
@@ -55,6 +56,11 @@ const readJson = (...p) => JSON.parse(readFileSync(path.join(repo, ...p), 'utf8'
 const snapshotFile = (name) => readFileSync(path.join(here, 'fixtures', 'tools-snapshots', `${name}.json`), 'utf8');
 
 const ios = (build) => `FinalCap-iOS/${build}`;
+// youtube_soundtrack's position in the shared tool list: right after lyric_captions.
+const withYouTube = (list) => {
+  const i = list.indexOf('lyric_captions');
+  return [...list.slice(0, i + 1), 'youtube_soundtrack', ...list.slice(i + 1)];
+};
 const names = (list) => list.map(t => t.function.name);
 const CUTOFF = GROUPED_EFFECTS_MIN_BUILD;
 const GROUPED = ['channel_mixer', 'color_adjust', 'apply_filter', 'stylize', 'blur_sharpen', 'lut', 'vignette_grain', 'segment', 'audio_effect'];
@@ -108,22 +114,24 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     });
   }
 
-  it('counts: iOS/10 = 22 tools (21 + lyric_captions), web and FinalCap/11 CFNetwork = 48 (with style_captions)', () => {
+  it('counts: iOS/10 = 22 tools (21 + lyric_captions), web and FinalCap/11 CFNetwork = 49 (with style_captions and youtube_soundtrack)', () => {
     expect(JSON.parse(snapshotFile('ios-build10')).schema.tools).toHaveLength(22);
-    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(48);
-    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(48);
+    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(49);
+    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(49);
   });
 
-  it('build cutoff-1 is the build-10 list plus the ffmpeg_cli fallback (no grouped tools leak)', () => {
+  it('build cutoff-1 is the build-10 list plus youtube_soundtrack and the ffmpeg_cli fallback (no grouped tools leak)', () => {
     const at10 = JSON.parse(snapshotFile('ios-build10'));
     const schema = buildToolsSchema({ userAgent: ios(CUTOFF - 1) });
-    expect(names(schema.tools)).toEqual([...names(at10.schema.tools), 'ffmpeg_cli']);
+    // youtube_soundtrack is a shared tool now: it sits at its src/tools.js position, right after lyric_captions.
+    expect(names(schema.tools)).toEqual([...withYouTube(names(at10.schema.tools)), 'ffmpeg_cli']);
     expect(schema.mediaTypes.ffmpeg_cli).toEqual(['video']);
+    expect(schema.mediaTypes.youtube_soundtrack).toEqual(['video']);
     for (const g of GROUPED) expect(names(schema.tools)).not.toContain(g);
     for (const mt of ['any', 'video', 'image']) {
       const expected = names(at10.offered[mt === 'any' ? 'any' : mt]);
       expect(names(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt === 'any' ? undefined : mt })))
-        .toEqual(mt === 'image' ? expected : [...expected, 'ffmpeg_cli']);
+        .toEqual(mt === 'image' ? expected : [...withYouTube(expected), 'ffmpeg_cli']);
     }
   });
 
@@ -152,11 +160,11 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
     expect(IOS_TOOL_ALLOWLIST.apply_color_filter).toBe(10); // kept
   });
 
-  it('gets 28 tools: the 22 minus the four adjust_* plus the 9 grouped plus ffmpeg_cli', () => {
+  it('gets 29 tools: the 22 minus the four adjust_* plus the 9 grouped plus youtube_soundtrack plus ffmpeg_cli', () => {
     const offered = names(offeredToolsFor({ userAgent: ios(CUTOFF) }));
     expect(build10).toHaveLength(22);
-    expect(offered).toEqual([...build10.filter(n => !RETIRED.includes(n)), ...GROUPED, 'ffmpeg_cli']);
-    expect(offered).toHaveLength(28);
+    expect(offered).toEqual([...withYouTube(build10.filter(n => !RETIRED.includes(n))), ...GROUPED, 'ffmpeg_cli']);
+    expect(offered).toHaveLength(29);
     expect(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) }))).toEqual(offered);
   });
 
@@ -181,7 +189,7 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
   it('non-iOS UAs never get grouped tools, whatever build they claim', () => {
     for (const ua of [undefined, 'Mozilla/5.0', `FinalCap/${CUTOFF} CFNetwork/1.0`, `finalcap-ios/${CUTOFF}`]) {
       const offered = names(offeredToolsFor({ userAgent: ua }));
-      expect(offered).toHaveLength(48);
+      expect(offered).toHaveLength(49);
       for (const g of GROUPED) expect(offered).not.toContain(g);
     }
   });
@@ -198,19 +206,36 @@ describe('GET /api/tools/schema applies the same filtering', () => {
     }
   });
 
-  it('cutoff build: 28 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
+  it('cutoff build: 29 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
     const body = await (await getSchema(ios(CUTOFF))).json();
     expect(body.schemaVersion).toBe('1');
     expect(body.tools).toEqual(JSON.parse(JSON.stringify(offeredToolsFor({ userAgent: ios(CUTOFF) }))));
-    expect(body.tools).toHaveLength(28);
+    expect(body.tools).toHaveLength(29);
     expect(Object.keys(body.mediaTypes)).toEqual(names(body.tools));
     expect(body.mediaTypes.audio_effect).toEqual(['video']);
     expect(body.mediaTypes.ffmpeg_cli).toEqual(['video']);
+    expect(body.mediaTypes.youtube_soundtrack).toEqual(['video']);
     for (const g of GROUPED.filter(n => n !== 'audio_effect')) expect(body.mediaTypes[g]).toEqual(['video', 'image']);
     const before = await (await getSchema(ios(CUTOFF - 1))).json();
-    expect(names(before.tools)).toHaveLength(23);
+    expect(names(before.tools)).toHaveLength(24);
     expect(names(before.tools)).not.toContain('lut');
     expect(names(before.tools)).toContain('ffmpeg_cli');
+    expect(names(before.tools)).toContain('youtube_soundtrack');
+  });
+
+  it('youtube_soundtrack: shared tool, gated to build 13+ on iOS (YOUTUBE_SOUNDTRACK_MIN_BUILD), with the iOS description override', () => {
+    expect(names(offeredToolsFor({ userAgent: ios(12) }))).not.toContain('youtube_soundtrack');
+    expect(names(offeredToolsFor({ userAgent: ios(13) }))).toContain('youtube_soundtrack');
+    expect(names(offeredToolsFor({ userAgent: ios(13), mediaType: 'image' }))).not.toContain('youtube_soundtrack');
+    // Web shipped it first: no-UA and browser UAs get the shared definition from src/tools.js.
+    expect(names(offeredToolsFor({ userAgent: undefined }))).toContain('youtube_soundtrack');
+    expect(names(offeredToolsFor({ userAgent: 'Mozilla/5.0' }))).toContain('youtube_soundtrack');
+    const webDef = offeredToolsFor({ userAgent: undefined }).find(t => t.function.name === 'youtube_soundtrack');
+    const iosDef = offeredToolsFor({ userAgent: ios(13) }).find(t => t.function.name === 'youtube_soundtrack');
+    expect(webDef).toBe(tools.find(t => t.function.name === 'youtube_soundtrack'));
+    expect(iosDef.function.description).toBe(YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION);
+    expect(iosDef.function.description).not.toBe(webDef.function.description);
+    expect(iosDef.function.parameters).toEqual(webDef.function.parameters);
   });
 });
 

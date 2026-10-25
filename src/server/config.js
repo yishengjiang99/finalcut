@@ -48,9 +48,18 @@ export const IOS_FREE_DAILY_INFERENCE_LIMIT = Math.max(
 export const APPLE_IAP_BUNDLE_ID = process.env.APPLE_IAP_BUNDLE_ID || 'com.ragnus.w2';
 export const APPLE_IAP_PRODUCT_ID = process.env.APPLE_IAP_PRODUCT_ID || 'com.ragnus.w2.subscription.monthly';
 export const APPLE_IAP_ENVIRONMENT = process.env.APPLE_IAP_ENVIRONMENT || 'Production';
+/** True when APPLE_IAP_ENVIRONMENT was explicitly set (an operator pin). When
+ * not pinned, apple-iap.js selects the verifier environment from each
+ * transaction's own `environment` claim so Sandbox (TestFlight) and Production
+ * purchases both verify. */
+export const APPLE_IAP_ENVIRONMENT_IS_PINNED = Boolean(process.env.APPLE_IAP_ENVIRONMENT);
+/** FinalCap's App Store app id (public; also in docs/IOS_IAP_AUTH.md). The
+ * Apple library requires it to construct a Production verifier, so it must
+ * have a default — leaving it undefined made every Production verification
+ * throw before the JWS was even checked. */
 export const APPLE_IAP_APPLE_ID = process.env.APPLE_IAP_APPLE_ID
   ? Number(process.env.APPLE_IAP_APPLE_ID)
-  : undefined;
+  : 6815060815;
 export const APPLE_IAP_ROOT_CERTS_BASE64 = process.env.APPLE_IAP_ROOT_CERTS_BASE64 || '';
 
 // Vitest sets VITEST=true; skip hard-exit so unit tests can import server modules

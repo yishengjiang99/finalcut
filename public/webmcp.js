@@ -53,7 +53,7 @@
     async ({ id }) => text((await (await app()).select(id)) ? "Selected." : "No such clip."));
   tool("finalcut.undo", "Undo an edit: go back to the clip it was made from (default: the active clip).", obj({ id: { type: "number" } }),
     async ({ id }) => text((await (await app()).undo(id)) ? "Undone." : "Nothing to undo."));
-  tool("finalcut.add_media_from_url", "Add a same-origin video or audio file (e.g. /BigBuckBunny.mp4) to the project.", obj({ url: { type: "string" } }, ["url"]),
+  tool("finalcut.add_media_from_url", "Add a same-origin video or audio file (e.g. /sample-lake.mp4) to the project.", obj({ url: { type: "string" } }, ["url"]),
     async ({ url }) => {
       const u = new URL(url, location.href); if (u.origin !== location.origin) throw new Error("Only same-origin URLs are allowed");
       const r = await fetch(u); if (!r.ok) throw new Error("HTTP " + r.status);

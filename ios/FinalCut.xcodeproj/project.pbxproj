@@ -18,6 +18,7 @@
 		3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA517631199041918C1F9701 /* APIEndpoints.swift */; };
 		317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADB /* APIClient.swift */; };
 		FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728301 /* PushManager.swift */; };
+		FC5A0B1C2D3E4F5061728312 /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */; };
 		FC5A0B1C2D3E4F5061728304 /* PushManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */; };
 		317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */; };
 		B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30393A1FFA234AA49E7981C1 /* PaywallView.swift */; };
@@ -31,7 +32,7 @@
 		3BFA0055043342C584FB23D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD12BBC329E457BBA7331E4 /* AppTheme.swift */; };
 		2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 01F8F90184F0448FAD35E158 /* Assets.xcassets */; };
 		FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */; };
-		7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */; };
+		7D42470D6EA843639F8EC21E /* sample-lake.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 59C829D9D1054B0D87489025 /* sample-lake.mp4 */; };
 		FC0A11B2C3D4E5F601020301 /* PaywallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */; };
 		FC0A11B2C3D4E5F601020303 /* PaywallScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */; };
 		876AA26A52734D81B2E5BD83 /* APIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */; };
@@ -115,6 +116,7 @@
 		EA517631199041918C1F9701 /* APIEndpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpoints.swift; sourceTree = "<group>"; };
 		EC090C5F63F34E5687DD1ADB /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728301 /* PushManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManager.swift; sourceTree = "<group>"; };
+		FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManagerTests.swift; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728305 /* FinalCut.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinalCut.entitlements; sourceTree = "<group>"; };
 		FC5A0B1C2D3E4F5061728306 /* FinalCutRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinalCutRelease.entitlements; sourceTree = "<group>"; };
@@ -130,7 +132,7 @@
 		1DD12BBC329E457BBA7331E4 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "finalcap-test-video.mp4"; sourceTree = "<group>"; };
-		59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "BigBuckBunny.mp4"; path = "../public/BigBuckBunny.mp4"; sourceTree = SOURCE_ROOT; };
+		59C829D9D1054B0D87489025 /* sample-lake.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "sample-lake.mp4"; path = "../public/sample-lake.mp4"; sourceTree = SOURCE_ROOT; };
 		FC0A11B2C3D4E5F601020302 /* PaywallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallTests.swift; sourceTree = "<group>"; };
 		FC0A11B2C3D4E5F601020304 /* PaywallScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallScreenshotTests.swift; sourceTree = "<group>"; };
 		428CB46DDF99468D8A06BB69 /* APIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelsTests.swift; sourceTree = "<group>"; };
@@ -302,6 +304,7 @@
 				EA517631199041918C1F9701 /* APIEndpoints.swift */,
 				EC090C5F63F34E5687DD1ADB /* APIClient.swift */,
 				FC5A0B1C2D3E4F5061728301 /* PushManager.swift */,
+				FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */,
 				EC090C5F63F34E5687DD1ADC /* DeviceIdentity.swift */,
 			);
 			path = Networking;
@@ -399,7 +402,7 @@
 		F57B83C1B2114DFCA5160D0A /* SampleMedia */ = {
 			isa = PBXGroup;
 			children = (
-				59C829D9D1054B0D87489025 /* BigBuckBunny.mp4 */,
+				59C829D9D1054B0D87489025 /* sample-lake.mp4 */,
 				FC0A11B2C3D4E5F601020306 /* finalcap-test-video.mp4 */,
 			);
 			path = SampleMedia;
@@ -527,7 +530,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2A0863C196D74804B4BB78BD /* Assets.xcassets in Resources */,
-				7D42470D6EA843639F8EC21E /* BigBuckBunny.mp4 in Resources */,
+				7D42470D6EA843639F8EC21E /* sample-lake.mp4 in Resources */,
 				FC0A11B2C3D4E5F601020305 /* finalcap-test-video.mp4 in Resources */,
 				2B94E44A19E58365E3E10DF4 /* NotoSansCJK-OFL.txt in Resources */,
 				1A5E8B986C681D4767E46AFF /* NotoSansCJKsc-Bold.otf in Resources */,
@@ -581,6 +584,7 @@
 				3DF0EC4D9EF74DB68A749E5B /* APIEndpoints.swift in Sources */,
 				317EACCDD8F7444D9854E760 /* APIClient.swift in Sources */,
 				FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */,
+				FC5A0B1C2D3E4F5061728312 /* Telemetry.swift in Sources */,
 				317EACCDD8F7444D9854E761 /* DeviceIdentity.swift in Sources */,
 				B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */,
 				BBE32E010B504F31BC957E8B /* StoreKitPurchaseStub.swift in Sources */,
@@ -691,7 +695,7 @@
 				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -710,7 +714,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -729,7 +733,7 @@
 				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCutRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -748,7 +752,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -765,10 +769,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -783,10 +787,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -799,11 +803,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -816,11 +820,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

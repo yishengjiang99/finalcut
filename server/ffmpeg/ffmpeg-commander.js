@@ -3,10 +3,23 @@ import { discovery as defaultDiscovery } from './ffmpeg-discovery.js';
 
 const FILTER_NAME = /^[A-Za-z0-9_]+$/;
 const CODEC_NAME = /^[A-Za-z0-9_]+$/;
-// Characters that could break out of a filter graph into other options/files.
-const FORBIDDEN_FILTER_NAMES = new Set(['movie', 'amovie', 'sendcmd', 'asendcmd', 'zmq', 'azmq', 'subtitles', 'ass', 'drawtext', 'readeia608', 'metadata', 'ametadata']);
+// Allow-list: the filters the app's own tools and prompts emit (src/tools.js handlers, iOS/web export
+// pipelines, the CLI-fallback tests), all of which only transform the streams they are given.
+// Anything that can open another file or device (movie, amovie, subtitles, ass, drawtext, lut3d,
+// sendcmd, zmq, …) is absent, so it is rejected even if the local FFmpeg build has it.
+export const ALLOWED_FILTERS = new Set([
+  // video geometry / timing
+  'scale', 'crop', 'pad', 'rotate', 'transpose', 'hflip', 'vflip', 'setsar', 'setdar', 'setpts', 'fps', 'format', 'trim', 'reverse', 'tpad', 'thumbnail', 'null', 'split',
+  // video look
+  'eq', 'hue', 'curves', 'colorbalance', 'colorchannelmixer', 'vibrance', 'negate', 'vignette', 'gblur', 'boxblur', 'unsharp', 'fade', 'xfade', 'overlay', 'concat',
+  // audio
+  'anull', 'asplit', 'atrim', 'asetpts', 'areverse', 'apad', 'afade', 'acrossfade', 'volume', 'atempo', 'aresample', 'amix', 'pan', 'loudnorm', 'dynaudnorm',
+  'acompressor', 'alimiter', 'agate', 'silenceremove', 'equalizer', 'highpass', 'lowpass', 'bass', 'treble', 'aecho', 'chorus', 'flanger', 'aphaser', 'vibrato', 'tremolo',
+]);
 const FORBIDDEN_PARAM_KEYS = /^(file|filename|textfile|fontfile|f|path|url|commands|filename_or_url)$/i;
-const FORBIDDEN_VALUE = /^(\/|(file|https?|tcp|udp|rtp|rtmp|ftp|pipe|concat|subfile|data|unix):)/i;
+// A filter value that names a file: absolute/home path, any "..", a URL/protocol, or "dir/name.ext".
+// (Plain expressions such as "iw/2" stay valid.)
+export const PATH_LIKE_VALUE = /^(\/|~)|\.\.|^[a-z][a-z0-9+.-]*:\/\/|^(file|https?|tcp|udp|rtp|rtmp|ftp|pipe|concat|subfile|data|unix|crypto|cache|tee|fd):|[A-Za-z0-9_-]\/[A-Za-z0-9_.-]*\.[A-Za-z0-9]{1,5}$/i;
 const MAX_FILTER_LEN = 2000;
 const MAX_OPTION_VALUE = 64;
 
@@ -55,17 +68,19 @@ export async function validateFilterChain(chain, discovery = defaultDiscovery) {
   for (const segment of splitChain(chain)) {
     const { name, params } = parseFilter(segment);
     if (!FILTER_NAME.test(name)) { errors.push(`Invalid filter name "${name}"`); continue; }
-    if (FORBIDDEN_FILTER_NAMES.has(name)) { errors.push(`Filter "${name}" is not allowed (can read arbitrary files)`); continue; }
-    if (!(await discovery.hasFilter(name))) {
-      errors.push(`Unknown filter "${name}"`);
-      suggestions[name] = await discovery.suggestFilters(name);
+    const installed = await discovery.hasFilter(name);
+    if (!ALLOWED_FILTERS.has(name) || !installed) {
+      // Known-but-unlisted filters (movie, drawtext, lut3d, …) are refused outright; typos get allowed suggestions.
+      const known = installed || /^(a?movie|subtitles|ass|drawtext|lut3d|lut1d|haldclut|sendcmd|asendcmd|a?zmq|readeia608|a?metadata|frei0r|ocr)$/.test(name);
+      errors.push(known && !ALLOWED_FILTERS.has(name) ? `Filter "${name}" is not allowed` : `Unknown filter "${name}"`);
+      suggestions[name] = (await discovery.suggestFilters(name, 20)).filter(f => ALLOWED_FILTERS.has(f)).slice(0, 5);
       continue;
     }
     for (const p of params) {
       const [k, ...rest] = p.split('=');
       if (rest.length && FORBIDDEN_PARAM_KEYS.test(k.trim())) { errors.push(`Parameter "${k.trim()}" of filter "${name}" is not allowed`); continue; }
       const value = (rest.length ? rest.join('=') : k).trim().replace(/^['"]|['"]$/g, '');
-      if (FORBIDDEN_VALUE.test(value)) errors.push(`Parameter value "${value.slice(0, 40)}" of filter "${name}" is not allowed`);
+      if (PATH_LIKE_VALUE.test(value)) errors.push(`Parameter value "${value.slice(0, 40)}" of filter "${name}" is not allowed`);
     }
   }
   return { errors, suggestions };

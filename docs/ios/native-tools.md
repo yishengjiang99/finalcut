@@ -145,6 +145,34 @@ Requires **Allow cloud processing**, like every other cloud step. Server gating:
 `FFMPEG_CLI_MIN_BUILD` in `src/server/iosToolAllowlist.js` — older builds are never offered
 the tool.
 
+## 5c. YouTube soundtrack (`youtube_soundtrack`, build 13+)
+
+> Status: the web editor shipped this tool first (same endpoint, ffmpeg.wasm mix).
+> The iOS executor has since landed on main (fetch layer in `APIClient`, the
+> `.soundtrack` op in `NativeComposer`, the runner in `EditorViewModel`); the
+> server gate (`YOUTUBE_SOUNDTRACK_MIN_BUILD`) and the iOS tool description were
+> already in place. One deliberate deviation from the original sketch below:
+> the edit's chat card carries NO controls — `original_volume` and
+> `start_offset` come only from the tool call, and calling the tool again
+> replaces the soundtrack (the latest edit wins).
+
+The user pastes a YouTube link in chat and the model calls `youtube_soundtrack` with the
+link (`url*`), an optional `start_offset` (seconds, default 0) and `original_volume`
+(0–1, default 0). The app sends **only the link** to `POST /api/youtube-audio/fetch`
+(JSON `{ url }`, same limiter/auth/inference-access chain as `ffmpeg_cli`); the server
+extracts the audio with yt-dlp, converts it to AAC, and returns the `.m4a` bytes with
+`X-Audio-Duration` / `X-Video-Id` / `X-Audio-Title` headers. Sources are capped at
+10 minutes; extracted files are cached server-side per video id for 24 h. The app saves
+the file and pushes an undoable `.soundtrack` edit: `NativeComposer` inserts the audio
+into the composition at `start_offset`, trimmed to the video's length, and the AVAudioMix
+plays it at full volume while the original track is scaled to `original_volume`
+(0 = the YouTube audio is the soundtrack). There are no in-app controls for the
+mix: `start_offset` and `original_volume` come only from the tool call.
+Requires **Allow cloud processing** (with it off the card is the muted
+`unsupported_on_device` one and nothing is fetched). Videos only; photos are rejected
+with `unsupported_for_photo`. Full contract: docs/api/YOUTUBE_SOUNDTRACK.md. Server
+gating: `YOUTUBE_SOUNDTRACK_MIN_BUILD` in `src/server/iosToolAllowlist.js`.
+
 ## 6. Privacy
 
 Media stays on the device. The model gets metadata and up to 4 thumbnails per chat turn. Full media is uploaded only when the user has turned on **Allow cloud processing** and a step needs it. See `docs/asc/PRIVACY_NUTRITION.md` and `public/legal/privacy.html`.

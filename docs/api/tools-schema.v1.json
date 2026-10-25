@@ -1168,6 +1168,38 @@
     {
       "type": "function",
       "function": {
+        "name": "youtube_soundtrack",
+        "description": "Use a YouTube video's audio as this video's soundtrack. Call this when the user pastes a YouTube link and asks for it as the music or soundtrack. The client fetches only the audio (links over 10 minutes and live streams are refused) and applies it in the editor: the YouTube audio plays from start_offset and is trimmed to the video's length. By default the original audio is replaced (muted); set original_volume between 0 and 1 to keep some of it under the music. Do NOT use add_audio_track for YouTube links, and never invent a link the user did not paste.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "The YouTube link the user pasted. Pass it exactly as given."
+            },
+            "start_offset": {
+              "type": "number",
+              "description": "Seconds into the YouTube audio where the soundtrack starts. Default 0 (the beginning).",
+              "minimum": 0,
+              "default": 0
+            },
+            "original_volume": {
+              "type": "number",
+              "description": "Volume of the video's original audio under the soundtrack, 0 (muted, the default) to 1 (full).",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0
+            }
+          },
+          "required": [
+            "url"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "style_captions",
         "description": "Change how the existing captions look (font, size, position) without transcribing or translating again: instant, nothing is uploaded and no new edit is used. Use it after lyric_captions or generate_captions when the user asks for a different font, a bigger or smaller size, higher or lower captions, or the top or middle of the picture. Send only the parts that change; everything else keeps its current value (the previous tool result states the current style). Do NOT call lyric_captions again for a style change. Videos only — not supported for photos.",
         "parameters": {
@@ -1485,6 +1517,9 @@
       "video"
     ],
     "lyric_captions": [
+      "video"
+    ],
+    "youtube_soundtrack": [
       "video"
     ],
     "style_captions": [

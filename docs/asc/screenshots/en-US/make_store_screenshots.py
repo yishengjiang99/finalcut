@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FinalCap App Store screenshots from public/BigBuckBunny.mp4.
+"""FinalCap App Store screenshots from public/sample-lake.mp4.
 
 Writes docs/asc/screenshots/en-US/iphone-69-*.png (1320x2868) and
 ipad-13-*.png (2064x2752) — same title style as photo-recipes.
@@ -14,9 +14,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
-BBB = Path('/tmp/bbb/BigBuckBunny.mp4')
+BBB = Path('/tmp/bbb/sample-lake.mp4')
 for p in [HERE, *HERE.parents]:
-    cand = p / 'public' / 'BigBuckBunny.mp4'
+    cand = p / 'public' / 'sample-lake.mp4'
     if cand.exists():
         BBB = cand; break
 

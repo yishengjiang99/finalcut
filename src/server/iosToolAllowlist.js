@@ -36,6 +36,14 @@ export const GROUPED_EFFECTS_MIN_BUILD = 1_000_000_000;
  */
 export const FFMPEG_CLI_MIN_BUILD = 11;
 
+/**
+ * First FinalCap-iOS build with the youtube_soundtrack executor: the user pastes a
+ * YouTube link in chat, the app fetches the audio via POST /api/youtube-audio/fetch
+ * (Cloud processing must be on) and mixes it on device as the video's soundtrack.
+ * Builds below this never get the tool offered.
+ */
+export const YOUTUBE_SOUNDTRACK_MIN_BUILD = 13;
+
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });
 
@@ -79,7 +87,26 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   audio_effect: GROUPED_EFFECTS_MIN_BUILD,
   // Server-side last resort: no AVFoundation tool can do it → upload, process, download.
   ffmpeg_cli: FFMPEG_CLI_MIN_BUILD,
+  // YouTube-link soundtrack: app fetches the audio from the server, mixes it on device.
+  youtube_soundtrack: YOUTUBE_SOUNDTRACK_MIN_BUILD,
 });
+
+/**
+ * iOS description of youtube_soundtrack. The tool itself is shared (src/tools.js —
+ * the web editor shipped it first, mixing the fetched audio in ffmpeg.wasm); on
+ * iOS the app runs it in client mode instead: the link goes to
+ * POST /api/youtube-audio/fetch, the audio comes back, the mix is on device.
+ * Gated by YOUTUBE_SOUNDTRACK_MIN_BUILD above. Server contract:
+ * docs/api/YOUTUBE_SOUNDTRACK.md.
+ */
+export const YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION = 'Give the video a soundtrack taken from a YouTube video: the user pastes a YouTube link and that video\'s audio becomes the video\'s soundtrack. ' +
+  'This is the tool when the user pastes a YouTube link (youtube.com, youtu.be, music.youtube.com, a Shorts link) and asks to use its audio, music or song as the soundtrack or background music, ' +
+  'or to replace the video\'s sound with it — e.g. "use this song as the soundtrack", "put this YouTube audio over my video", "add this as background music". The app sends only the link ' +
+  '(never the video) to FinalCap, which extracts the audio (sources up to 10 minutes); the app downloads it and mixes it on the phone. The YouTube audio plays from start_offset, trimmed to ' +
+  'the video\'s length, and by default the video\'s own audio is muted; set original_volume (0-1) when the user wants their audio kept under the music, and start_offset when they name a ' +
+  'point in the song ("start at 1:12" — convert mm:ss to seconds). The soundtrack card in chat lets the user adjust both afterwards. This needs Cloud processing on: if it is off, the ' +
+  'app shows a "Not available on iPhone yet" card and nothing is fetched — do not call it again this turn. If the user pastes a YouTube link without saying what to do with it, ask whether ' +
+  'they want its audio as the soundtrack. Videos only — not supported for photos.';
 
 /** iOS description of lyric_captions: same routing rules as the web one, plus the on-device flow. */
 export const LYRIC_CAPTIONS_IOS_DESCRIPTION = 'Translated captions, run by the app: the original line plus a translation, for speech and for songs. ' +
@@ -141,6 +168,10 @@ export const IOS_TOOL_OVERRIDES = Object.freeze({
   lyric_captions: {
     // The app runs it (client mode), not the server: the description says what the user will see.
     description: LYRIC_CAPTIONS_IOS_DESCRIPTION,
+  },
+  youtube_soundtrack: {
+    // Same split as lyric_captions: shared tool, app-specific wording for the on-device flow.
+    description: YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION,
   },
   apply_color_filter: {
     // Points film looks to lut, styles to stylize, amounts to color_adjust (grouped builds only).

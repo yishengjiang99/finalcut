@@ -4,8 +4,9 @@
 # server on grepawk.com. Can also be run manually (Actions → Run workflow).
 #
 # Guarded deploy (docs/DECISIONS.md D6/D9):
-#   1. GATE (before touching prod): iOS endpoint contract test against prod (21 checks, recorded as
-#      the baseline) + a header snapshot of existing routes. Any failure aborts here.
+#   1. BASELINE (before touching prod): record the iOS endpoint contract snapshot + a header
+#      snapshot of existing routes, used only as the step-7 no-drift baseline. Not a gate: a
+#      contract mismatch against prod never aborts the deploy (pre-deploy gate removed 2026-10-24).
 #   2. Build on the runner: npm run build && npm run build:v2 (pinned cores + verified GPL source).
 #   3. Installer tests: stubbed harness (/v2) + real nginx 1.18 in ubuntu:22.04 (site settings).
 #   4. PREFLIGHT over SSH, read-only: nginx -t passes, sudo works, exactly one nginx file holds
@@ -86,13 +87,16 @@ jobs:
           : "${APP_DIR:?DEPLOY_DIR variable required}"
           [[ -n "${{ vars.SERVER_NAME }}" && -n "${{ vars.DEPLOY_HOST }}" && -n "${{ vars.DEPLOY_USER }}" ]] || { echo "SERVER_NAME/DEPLOY_HOST/DEPLOY_USER variables required" >&2; exit 1; }
 
-      - name: "GATE (pre-deploy): iOS contract test against production"
+      - name: "Record pre-deploy baseline (contract snapshot + route headers; not a gate)"
         run: |
           set -euo pipefail
           mkdir -p deploy-gate
-          node tests/contract/ios-endpoints.mjs --base "$BASE" --record deploy-gate/contract-before.json
+          # Snapshot only: the post-deploy gate compares production against this baseline
+          # (no drift). This run's exit code is ignored on purpose: a contract mismatch
+          # against current production must not abort the deploy (gate removed 2026-10-24).
+          node tests/contract/ios-endpoints.mjs --base "$BASE" --record deploy-gate/contract-before.json || true
           tests/e2e/compare-route-headers.sh --dump "$BASE" > deploy-gate/route-headers-before.txt
-          echo "baseline recorded; production is healthy for the iOS app"
+          echo "baseline recorded"
 
       - run: npm ci
 

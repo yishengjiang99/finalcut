@@ -1,35 +1,42 @@
-name: ASC commit screenshots
+name: ASC screenshots (verify committed)
+
+# The store screenshots in docs/asc/screenshots/en-US are committed source
+# artifacts — the approved set. This workflow verifies THOSE files; it never
+# regenerates them. (The previous regenerate-and-commit behavior ran the
+# mock-UI generator, make_store_screenshots.py, and overwrote the approved
+# set; that is gone.)
+# Uploading the committed set to App Store Connect is the job of
+# asc-finalcap-upload.yml, which runs this same verification first.
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  commit-shots:
+  verify-shots:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Generate BBB store screenshots
+      - name: Verify committed store screenshots
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
           pip install -q pillow
-          test -f public/BigBuckBunny.mp4
-          python3 docs/asc/screenshots/en-US/make_store_screenshots.py
-          ls -la docs/asc/screenshots/en-US/*.png
-      - name: Commit PNGs
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/asc/screenshots/en-US/*.png
-          if git diff --cached --quiet; then
-            echo 'no screenshot changes'
-            exit 0
-          fi
-          git commit -m "asc: commit FinalCap BBB store screenshots (iphone-69 / ipad-13)"
-          git push origin HEAD
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          d = Path('docs/asc/screenshots/en-US')
+          want = {'iphone-69': (1320, 2868), 'ipad-13': (2064, 2752)}
+          for prefix, size in want.items():
+              files = sorted(d.glob(f'{prefix}-*.png'))
+              assert files, f'{prefix}: no pngs in {d}'
+              for n in range(1, 6):
+                  assert any(f.name.startswith(f'{prefix}-0{n}-') for f in files), f'{prefix}: frame 0{n} missing'
+              for f in files:
+                  im = Image.open(f)
+                  assert im.size == size and im.mode == 'RGB', f'{f.name}: {im.size} {im.mode}'
+                  print('OK', f.name, im.size)
+          print('Committed screenshot set verified')
+          PY

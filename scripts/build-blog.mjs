@@ -438,6 +438,7 @@ export async function buildBlog({ outDir = path.join(ROOT, 'dist'), dirs } = {})
       p.heroImg = p.hero ? await media.image(path.join(p.dir, p.hero)) : null;
       const og = await media.ogCard({ key: p.slug, title: p.title, product: PRODUCTS[p.product].name, accent: PRODUCTS[p.product].accent, accent2: PRODUCTS[p.product].accent2, hero: p.hero ? path.join(p.dir, p.hero) : null });
       p.og = og.og; p.card = og.card; p.minutes = readingTime(p.body);
+      if (p.ogImage) p.og = await media.ogImage({ key: p.slug, file: path.join(p.dir, p.ogImage) });
     } catch (e) { problems.push(e.message); }
   }
   if (problems.length) throw new Error(`blog: ${problems.length} problem(s)\n  ${problems.join('\n  ')}`);

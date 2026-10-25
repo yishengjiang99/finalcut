@@ -134,6 +134,17 @@ export class Media {
   }
 
   /** 1200x630 Open Graph card: product, title, site; the hero image (if any) on the right. */
+  /** A hand-made share card (front matter ogImage): a 1200x630 JPEG used as og:image and twitter:image. */
+  async ogImage({ key, file }) {
+    if (!existsSync(file)) throw new Error(`ogImage not found: ${file}`);
+    const buf = readFileSync(file);
+    const meta = await sharp(buf).metadata();
+    if (meta.width !== 1200 || meta.height !== 630 || meta.format !== 'jpeg') throw new Error(`${file}: ogImage must be a 1200x630 JPEG`);
+    const name = `og-${key}-${hash(buf)}.jpg`;
+    writeFileSync(path.join(this.dir, name), buf);
+    return `${MEDIA_URL}/${name}`;
+  }
+
   async ogCard({ key, title, product, accent = '#6a5ae0', accent2 = '#5b8def', hero }) {
     const W = 1200, H = 630;
     const heroW = hero ? 330 : 0;

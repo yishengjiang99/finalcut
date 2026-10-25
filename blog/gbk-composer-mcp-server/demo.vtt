@@ -1,0 +1,19 @@
+WEBVTT
+
+00:00.300 --> 00:07.000
+GBK Composer writes music with a set of composer tools, and those tools now run as an MCP server.
+
+00:07.400 --> 00:16.100
+Here the composer agent gets one prompt: a four voice Baroque fugue in D minor, with CC11 dynamics, rendered to WAV.
+
+00:16.700 --> 00:27.800
+It calls the same gbk tools that any MCP client, such as ChatGPT, can call. Create the project, generate the arrangement, assign the instruments.
+
+00:28.200 --> 00:33.400
+Every edit saves a new revision. Then the SoundFont engine renders the WAV in the browser.
+
+00:34.100 --> 00:37.100
+Publishing is a separate step, only when you ask.
+
+00:37.900 --> 00:41.700
+And the fugue plays. Try it at compose.grepawk.com.

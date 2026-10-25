@@ -224,15 +224,11 @@ Tips:
 
 ### Sample Video
 
-The application includes a "Try with Sample Video" feature on the landing page. To use this feature, you need to place a file named `BigBuckBunny.mp4` in the `finalcut/public/` directory.
+The application includes a "Try with Sample Video" feature on the landing page. The bundled example clip is `sample-lake.mp4` in the `finalcut/public/` directory: an aerial view of Lake Lucerne in summer, by Flex Journey on Pexels (free to use under the Pexels License, no attribution required).
 
-You can download Big Buck Bunny (a free sample video) from:
-```bash
-cd finalcut/public
-curl -o BigBuckBunny.mp4 "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-```
+Source: https://www.pexels.com/video/breathtaking-view-of-lake-lucerne-in-summer-29003611/
 
-Alternatively, you can use any MP4 video file and name it `BigBuckBunny.mp4`.
+To restore it, download the 1080p file from that page, transcode it to a web-sized H.264 MP4 with faststart, and save it as `public/sample-lake.mp4`. Alternatively, you can use any MP4 video file and name it `sample-lake.mp4`.
 
 ## More Documentation
 

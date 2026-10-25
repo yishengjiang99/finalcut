@@ -23,6 +23,9 @@ enum APIEndpoints {
     static let authGoogle = "/auth/google"
     static let authLogout = "/auth/logout"
 
+    /// YouTube soundtrack (docs/api/YOUTUBE_SOUNDTRACK.md): POST { url } → AAC bytes + X-Audio-* headers.
+    static let youtubeAudioFetch = "/api/youtube-audio/fetch"
+
     /// FFmpeg CLI fallback: JSON-only discover/plan (no media).
     static let ffmpegCli = "/api/ffmpeg-cli"
     /// FFmpeg CLI fallback: multipart video + args JSON → processed media bytes.

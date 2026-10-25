@@ -115,6 +115,10 @@ struct EditorView: View {
         .onChange(of: model.photosPickerItem) { _, item in
             Task { await model.loadPhotosPickerItem(item) }
         }
+        .onChange(of: model.localVideoURL) { _, url in
+            // The editor surface now has a project/clip loaded.
+            if url != nil { Telemetry.shared.track("editor_open") }
+        }
         .onAppear {
             model.refreshSuggestions()
             model.undoManager = undoManager
@@ -677,6 +681,15 @@ final class EditorViewModel: ObservableObject {
             messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
             return
         }
+        // A turn actually begins here (the photo-captions early return above
+        // never starts inference, so it stays out of the funnel).
+        let editSource: String
+        switch route {
+        case .chat: editSource = "chat"
+        case .tool: editSource = "chip"
+        case .captions: editSource = "captions"
+        }
+        Telemetry.shared.track("edit_start", props: ["source": editSource])
         switch route {
         case .captions(let intent):
             processingOverlay = Self.overlay(for: intent)
@@ -796,6 +809,7 @@ final class EditorViewModel: ObservableObject {
             captionArtifacts.srt = result.srt
             captionArtifacts.vtt = result.vtt
             captionArtifacts.language = result.language
+            noteEditSuccess()
             state = .ready
             processingOverlay = .editing
             messages.append(
@@ -840,6 +854,7 @@ final class EditorViewModel: ObservableObject {
             captionArtifacts.translatedSrt = result.srt
             captionArtifacts.translatedVtt = result.vtt
             captionArtifacts.targetLanguage = result.targetLanguage
+            noteEditSuccess()
             state = .ready
             processingOverlay = .editing
 
@@ -900,6 +915,7 @@ final class EditorViewModel: ObservableObject {
                 .appendingPathComponent("burned-\(UUID().uuidString).mp4")
             try burned.write(to: out)
             await rebaseStack(onto: out)
+            noteEditSuccess()
             state = .ready
             processingOverlay = .editing
 
@@ -950,6 +966,7 @@ final class EditorViewModel: ObservableObject {
 
     private func finishCaptionFailure(_ error: APIError, fallback: String? = nil) {
         if handlePaywallIfNeeded(error) { return }
+        noteEditError(kind: error.serverFailureKind)
         state = .failed
         processingOverlay = .editing
         let copy: String
@@ -1052,13 +1069,27 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Edit telemetry
+
+    private func noteEditSuccess() {
+        Telemetry.shared.track("edit_success")
+    }
+
+    /// Kind only — never the error's message text (may echo user content).
+    private func noteEditError(kind: EditFailureKind) {
+        Telemetry.shared.track("edit_error", props: ["kind": kind.rawValue])
+    }
+
     /// Ends a turn and shows at most one end-of-turn card (generic → Retry; invalid
     /// arguments only when nothing succeeded). Photo-unsupported cards were already shown.
     private func finishTurn() {
         processingOverlay = .editing
         activeJobId = nil
         if let card = turnOutcome.endOfTurnCard(prompt: turnPrompt) {
+            noteEditError(kind: card.kind)
             messages.append(.failure(card))
+        } else {
+            noteEditSuccess()
         }
         turnOutcome = EditTurnOutcome()
         if state == .processing || state == .failed {
@@ -1075,18 +1106,21 @@ final class EditorViewModel: ObservableObject {
         let apiError = error as? APIError
         if case .clientModeUnavailable = apiError {
             // Keep the clip usable; this is not an edit failure.
+            noteEditError(kind: .unavailable)
             state = localVideoURL == nil ? .empty : .ready
             messages.append(ChatMessage(role: .assistant, content: APIError.clientModeUnavailable.errorDescription ?? UXCopy.generic))
             return
         }
         let kind = apiError?.serverFailureKind ?? .generic
         if kind == .unsupportedImageFormat {
+            noteEditError(kind: .unsupportedImageFormat)
             showUnsupportedImageFormat()
             return
         }
         state = localVideoURL == nil ? .empty : .ready
         lastError = nil
         let card = EditFailureCard(kind: kind, retryPrompt: kind.allowsRetry ? turnPrompt : nil)
+        noteEditError(kind: card.kind)
         messages.append(.failure(card))
         turnOutcome = EditTurnOutcome()
     }
@@ -1162,6 +1196,8 @@ final class EditorViewModel: ObservableObject {
             return await runOnDeviceCaptions(call: call, stack: stack, language: language, burnIn: burnIn)
         case .success(.lyricCaptions(let request)):
             return await runLyricCaptions(call: call, stack: stack, request: request)
+        case .success(.youtubeSoundtrack(let url, let startOffset, let originalVolume)):
+            return await runYouTubeSoundtrack(call: call, url: url, startOffset: startOffset, originalVolume: originalVolume)
         case .success(.apply(let op)):
             stack.push(EditEntry(tool: tool, op: op, toolCallId: call.id))
             commitEdit(stack)
@@ -1476,6 +1512,7 @@ final class EditorViewModel: ObservableObject {
             "resize_video_preset": "Aspect ratio", "adjust_brightness": "Brightness", "adjust_contrast": "Contrast",
             "adjust_saturation": "Saturation", "adjust_hue": "Hue", "apply_color_filter": "Color filter",
             "add_text": "Text", "adjust_audio_volume": "Volume", "audio_fade": "Fade",
+            "youtube_soundtrack": "Soundtrack",
             "convert_video_format": "Format", "convert_image_format": "Format",
         ]
         return names[tool] ?? tool.replacingOccurrences(of: "_", with: " ").capitalized
@@ -1705,6 +1742,94 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    // MARK: - youtube_soundtrack (server-fetched audio, on-device mix)
+
+    /// `youtube_soundtrack`: sends ONLY the pasted link to `POST /api/youtube-audio/fetch`,
+    /// saves the returned AAC in the app's cache, and pushes an undoable `.soundtrack`
+    /// edit — the composer plays the song from `startOffset`, trimmed to the video's
+    /// length, with the original audio scaled to `originalVolume`. Requires Cloud
+    /// processing: with it off, the muted `unsupported_on_device` card shows and
+    /// nothing is fetched (docs/ios/native-tools.md §5c).
+    private func runYouTubeSoundtrack(call: ClientToolCall, url: String, startOffset: Double, originalVolume: Double) async -> ClientToolResult {
+        guard cloudProcessingEnabled else {
+            messages.append(.failure(EditFailureCard(kind: .unavailable)))
+            return record(.failure("unsupported_on_device", on: .device), kind: .unavailable)
+        }
+        guard let client = apiClient else {
+            return record(.failure("no_media", on: .server), kind: .generic)
+        }
+        do {
+            try await prepareAuth(client)
+        } catch {
+            return record(.failure("auth_failed", on: .server), kind: .generic)
+        }
+        state = .processing
+        isCloudStepRunning = true
+        processingOverlay = .editing
+        defer { isCloudStepRunning = false }
+        let fetched: APIClient.YouTubeAudioResult
+        do {
+            fetched = try await client.fetchYouTubeAudio(url: url)
+        } catch is CancellationError {
+            return .failure("cancelled", on: .server)
+        } catch {
+            if let apiError = error as? APIError, apiError.isPaywall {
+                handlePaywallIfNeeded(apiError)
+                return .failure("paywall", on: .server)
+            }
+            // The endpoint's stable codes (youtube_audio_too_long, invalid_youtube_url,
+            // youtube_fetch_failed, …) ride back to the model so it can react; the
+            // failure card follows the §8 rules via the recorded kind.
+            if let apiError = error as? APIError, let code = apiError.serverCode {
+                return record(.failure(code, on: .server), kind: apiError.serverFailureKind)
+            }
+            return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
+        }
+        // Same check the web tool makes: the offset must land inside the song.
+        if let duration = fetched.duration, duration > 0, startOffset >= duration {
+            return record(.failure(ServerErrorCode.invalidArguments, on: .device), kind: .invalidArguments)
+        }
+        let file: URL
+        do {
+            file = try Self.storeSoundtrack(data: fetched.data, videoId: fetched.videoId)
+        } catch {
+            return record(.failure("youtube_fetch_failed", on: .device), kind: .generic)
+        }
+        guard var current = editStack else {
+            return record(.failure("no_media", on: .device), kind: .generic)
+        }
+        current.push(EditEntry(
+            tool: "youtube_soundtrack",
+            op: .soundtrack(file: file, startOffset: startOffset, originalVolume: originalVolume),
+            toolCallId: call.id,
+            executedOn: .server
+        ))
+        commitEdit(current)
+        await refreshPreview()
+        messages.append(ChatMessage(role: .system, content: "\(Self.label(for: "youtube_soundtrack")) · \(UXCopy.cloud)"))
+        let canvas = current.canvas
+        var output: [String: JSONValue] = [
+            "width": .number(Double(canvas.width)),
+            "height": .number(Double(canvas.height)),
+            "duration": .number((canvas.duration * 1000).rounded() / 1000),
+        ]
+        if let title = fetched.title, !title.isEmpty { output["title"] = .string(title) }
+        if let duration = fetched.duration { output["audioDuration"] = .number(duration) }
+        return record(.success(on: .server, output: output), kind: nil)
+    }
+
+    /// Saves a fetched soundtrack in the Caches directory, named by YouTube video id
+    /// when the server sent one (repeat fetches of a song reuse the same file).
+    private static func storeSoundtrack(data: Data, videoId: String?) throws -> URL {
+        let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let dir = caches.appendingPathComponent("soundtracks", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let safeId = (videoId ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let file = dir.appendingPathComponent("\(safeId.isEmpty ? UUID().uuidString : safeId).m4a")
+        try data.write(to: file, options: .atomic)
+        return file
+    }
+
     /// Safe file extension for an ffmpeg_cli output format (server allowlist mirror).
     private static func ffmpegCliOutputExtension(for format: String) -> String {
         let known: Set<String> = ["mp4", "mov", "webm", "mkv", "gif", "mp3", "wav", "m4a", "aac", "ogg", "flac", "jpg", "png"]
@@ -1748,7 +1873,7 @@ final class EditorViewModel: ObservableObject {
     }
 
     private var bundledTestVideoURL: URL? {
-        Bundle.main.url(forResource: "BigBuckBunny", withExtension: "mp4")
+        Bundle.main.url(forResource: "sample-lake", withExtension: "mp4")
             ?? Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4")
     }
 

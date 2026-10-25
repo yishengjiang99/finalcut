@@ -75,6 +75,7 @@ final class APIClient {
     var streamingCaptionsTranslateURL: URL { url(for: APIEndpoints.streamingCaptionsTranslate) }
     var createCheckoutSessionURL: URL { url(for: APIEndpoints.createCheckoutSession) }
     var verifyCheckoutSessionURL: URL { url(for: APIEndpoints.verifyCheckoutSession) }
+    var youtubeAudioFetchURL: URL { url(for: APIEndpoints.youtubeAudioFetch) }
     var ffmpegCliURL: URL { url(for: APIEndpoints.ffmpegCli) }
     var ffmpegCliRunURL: URL { url(for: APIEndpoints.ffmpegCliRun) }
     var authGoogleURL: URL { url(for: APIEndpoints.authGoogle) }
@@ -382,6 +383,41 @@ final class APIClient {
 
     /// JSON-only `discover` / `plan` step of the ffmpeg_cli tool. No media involved;
     /// the raw JSON goes back to the model so it can decide the next step.
+    struct YouTubeAudioResult {
+        var data: Data
+        /// `X-Audio-Duration`: source audio length in seconds.
+        var duration: Double?
+        /// `X-Video-Id`: the parsed 11-char YouTube video id.
+        var videoId: String?
+        /// `X-Audio-Title`: percent-decoded video title (may be empty).
+        var title: String?
+    }
+
+    /// `youtube_soundtrack` fetch (`POST /api/youtube-audio/fetch`): sends ONLY the
+    /// pasted link; the server extracts the audio with yt-dlp and returns AAC (.m4a)
+    /// bytes plus `X-Audio-*` headers. Same auth + inference-access chain as the
+    /// ffmpeg-cli endpoints, so a fetch counts as one inference and usage-limit
+    /// responses surface as `.paywallRequired` via `throwIfNeeded`.
+    func fetchYouTubeAudio(url link: String) async throws -> YouTubeAudioResult {
+        let body = try JSONSerialization.data(withJSONObject: ["url": link], options: [])
+        var request = makeRequest(url: youtubeAudioFetchURL, method: "POST", auth: .bearerPreferred, body: body)
+        // Extraction on a cache miss can take minutes (server caps: 60s metadata,
+        // 180s download, 120s conversion).
+        request.timeoutInterval = 600
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        let http = response as? HTTPURLResponse
+        func header(_ name: String) -> String? {
+            http?.value(forHTTPHeaderField: name)?.removingPercentEncoding
+        }
+        return YouTubeAudioResult(
+            data: data,
+            duration: header("X-Audio-Duration").flatMap(Double.init),
+            videoId: header("X-Video-Id"),
+            title: header("X-Audio-Title")
+        )
+    }
+
     func ffmpegCliJSON(action: String, params: [String: Any]) async throws -> Data {
         var payload: [String: Any] = ["action": action]
         for (key, value) in params { payload[key] = value }

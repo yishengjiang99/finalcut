@@ -55,7 +55,10 @@ struct PaywallView: View {
         .background(AppTheme.background.ignoresSafeArea())
         .accessibilityIdentifier("Paywall")
         .task { await store.load() }
-        .onAppear { PushManager.shared.track("paywall_view") }
+        .onAppear {
+            PushManager.shared.track("paywall_view")
+            Telemetry.shared.track("paywall_view", props: ["reason": appModel.paywallReason.rawValue])
+        }
     }
 
     // MARK: - Sections
@@ -235,6 +238,8 @@ struct PaywallView: View {
         switch appModel.paywallReason {
         case .usageLimitReached:
             return "You've used today's free edits"
+        case .atLaunch:
+            return PaywallCopy.launchTitle
         case .upgradeTapped:
             return PaywallCopy.title
         }
@@ -245,9 +250,16 @@ struct PaywallView: View {
     private func buy(_ product: Product) async {
         isBusy = true
         defer { isBusy = false }
+        // One plan on this paywall: tapping Subscribe is both the plan selection
+        // and the purchase start.
+        Telemetry.shared.track("plan_select", props: ["product_id": product.id])
+        Telemetry.shared.track("purchase_start", props: ["product_id": product.id])
         let outcome = await StoreKitPurchaseStub.purchase(product)
         switch outcome {
         case .success(let jws):
+            // StoreKit purchase completed; fires at the same point as the
+            // server apple-iap sync below.
+            Telemetry.shared.track("purchase_success", props: ["product_id": product.id])
             do {
                 let status = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
                 statusMessage = "Purchase verified."
@@ -256,6 +268,7 @@ struct PaywallView: View {
                 statusMessage = "Purchase completed, but server verification is pending: \(error.localizedDescription)"
             }
         case .cancelled:
+            Telemetry.shared.track("purchase_cancelled", props: ["product_id": product.id])
             statusMessage = "Purchase cancelled."
         case .pending:
             statusMessage = "Purchase pending approval."
@@ -267,6 +280,7 @@ struct PaywallView: View {
     }
 
     private func restore() async {
+        Telemetry.shared.track("restore_tap")
         isBusy = true
         defer { isBusy = false }
         guard let jws = await StoreKitPurchaseStub.restoreEntitlementJWS(syncWithAppStore: true) else {
@@ -275,6 +289,7 @@ struct PaywallView: View {
         }
         do {
             let status = try await appModel.apiClient.syncAppleTransaction(jwsRepresentation: jws)
+            Telemetry.shared.track("restore_success")
             statusMessage = "Subscription restored."
             appModel.subscriptionActivated(status)
         } catch {

@@ -103,6 +103,7 @@ grep -q 'finalcut spa no-cache' "$E/sites-enabled/finalcut" || fail "spa no-cach
 [[ "$(C grepawk.com /nope)" == 404 ]] || fail "unknown path not 404"
 curl -sk --resolve grepawk.com:443:127.0.0.1 https://grepawk.com/nope | grep -q 'noindex' || fail "custom 404 page"
 [[ "$(C grepawk.com /success)" == 200 ]] || fail "/success"
+[[ "$(C grepawk.com /cb/github)" == 410 ]] || fail "/cb/github"
 [[ "$(C grepawk.com /legal/privacy.html)" == 200 ]] || fail "legal page"
 for slug in add-subtitles translate-subtitles add-lyrics-to-video; do
   h="$(H grepawk.com "/$slug")"; grep -q '^HTTP/[0-9.]* 200' <<<"$h" || fail "/$slug not 200"

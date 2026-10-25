@@ -146,6 +146,32 @@ final class NativeToolTests: XCTestCase {
         XCTAssertLessThan(start, baseRMS * 0.4)
     }
 
+    func testSoundtrackReplacesOriginalAudio() async throws {
+        // The bundled clip doubles as the fetched song (the same 880 Hz tone).
+        let song = try clip
+        let replaced = try await composed([.soundtrack(file: song, startOffset: 0, originalVolume: 0)])
+        let audioTracks = try await replaced.asset.loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audioTracks.count, 2)
+        XCTAssertNotNil(replaced.audioMix)
+        XCTAssertEqual(replaced.duration, 6, accuracy: 0.05)
+        // Original muted + song at full volume = the plain clip's level (an unmuted
+        // original summed with the identical song would roughly double it).
+        let base = try await composed([])
+        let baseRMS = try await AudioRenderer.rms(asset: base.asset, audioMix: base.audioMix, from: 1, to: 5)
+        let rms = try await AudioRenderer.rms(asset: replaced.asset, audioMix: replaced.audioMix, from: 1, to: 5)
+        XCTAssertEqual(rms / baseRMS, 1, accuracy: 0.15)
+    }
+
+    func testSoundtrackStartOffsetRunsOut() async throws {
+        let song = try clip
+        // A 4 s offset leaves 2 s of song; the original is muted, so the tail is silent.
+        let shifted = try await composed([.soundtrack(file: song, startOffset: 4, originalVolume: 0)])
+        let head = try await AudioRenderer.rms(asset: shifted.asset, audioMix: shifted.audioMix, from: 0.2, to: 1.8)
+        XCTAssertGreaterThan(head, 0.03)
+        let tail = try await AudioRenderer.rms(asset: shifted.asset, audioMix: shifted.audioMix, from: 3, to: 5)
+        XCTAssertLessThan(tail, 0.01)
+    }
+
     // MARK: - Export
 
     func testExportWritesEditedFile() async throws {
