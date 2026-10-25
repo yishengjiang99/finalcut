@@ -1,0 +1,104 @@
+name: ASC set What's New (FinalCap)
+
+# Write (and read back) the whatsNew field on one App Store version's en-US
+# localization. The submit workflow creates versions but never writes whatsNew,
+# and ASC refuses to submit an update version while whatsNew is empty
+# (ENTITY_ERROR.ATTRIBUTE.REQUIRED). Run this before asc-submit-app-store.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_string:
+        description: App Store versionString
+        required: true
+        type: string
+        default: "1.0.1"
+      whats_new:
+        description: What's New text to set on the en-US localization
+        required: true
+        type: string
+
+jobs:
+  set-whatsnew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set and verify whatsNew
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          VERSION_STRING: ${{ inputs.version_string }}
+          WHATS_NEW: ${{ inputs.whats_new }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, urllib.request, urllib.error, urllib.parse
+          import jwt
+
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          issuer = os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          version_string = os.environ['VERSION_STRING'].strip()
+          whats_new = os.environ['WHATS_NEW']
+          bundle_id = os.environ['BUNDLE_ID'].strip()
+
+          now = int(__import__('time').time())
+          token = jwt.encode(
+            {'iss': issuer, 'iat': now, 'exp': now + 1200, 'aud': 'appstoreconnect-v1'},
+            p8, algorithm='ES256', headers={'kid': key_id},
+          )
+
+          def api(method, path, body=None):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com' + path,
+              data=data, method=method,
+              headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
+            try:
+              with urllib.request.urlopen(req, timeout=90) as r:
+                raw = r.read().decode() or '{}'
+                return r.status, json.loads(raw)
+            except urllib.error.HTTPError as e:
+              err = e.read().decode()
+              raise SystemExit(f'{method} {path} -> {e.code}: {err[:2000]}')
+
+          _, apps = api('GET', f'/v1/apps?filter[bundleId]={urllib.parse.quote(bundle_id)}')
+          if not apps.get('data'):
+            raise SystemExit(f'App not found for bundleId {bundle_id}')
+          app_id = apps['data'][0]['id']
+          print('app', app_id)
+
+          _, versions = api('GET', f'/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20')
+          version = None
+          for v in versions.get('data', []):
+            attrs = v.get('attributes', {})
+            print('version', v['id'], attrs.get('versionString'), attrs.get('appStoreState'))
+            if attrs.get('versionString') == version_string:
+              version = v
+          if version is None:
+            raise SystemExit(f'No IOS version {version_string} found')
+          version_id = version['id']
+
+          _, locs = api('GET', f'/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations')
+          loc = next((L for L in locs.get('data', []) if L['attributes'].get('locale') == 'en-US'), None)
+          if loc is None:
+            _, created = api('POST', '/v1/appStoreVersionLocalizations', {'data': {'type': 'appStoreVersionLocalizations', 'attributes': {'locale': 'en-US'}, 'relationships': {'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': version_id}}}}})
+            loc = created['data']
+            print('created localization', loc['id'])
+          loc_id = loc['id']
+          print('localization', loc_id, 'whatsNew before=', repr(loc['attributes'].get('whatsNew')))
+
+          api('PATCH', f'/v1/appStoreVersionLocalizations/{loc_id}', {'data': {'type': 'appStoreVersionLocalizations', 'id': loc_id, 'attributes': {'whatsNew': whats_new}}})
+          print('patched localization', loc_id)
+
+          _, after = api('GET', f'/v1/appStoreVersionLocalizations/{loc_id}')
+          now_val = (after.get('data', {}).get('attributes') or {}).get('whatsNew')
+          print('WHATSNEW_NOW', repr(now_val))
+          if (now_val or '').strip() != whats_new.strip():
+            raise SystemExit('whatsNew read-back mismatch')
+          print('WHATSNEW_OK version=', version_string)
+          PY
