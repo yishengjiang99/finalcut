@@ -285,3 +285,23 @@ describe('ffmpeg CLI string fallback', () => {
     expect(ran).toHaveLength(1);
   });
 });
+
+describe('ffmpeg filter allow-list', () => {
+  it('only allow-listed filters pass, even when installed', async () => {
+    const { ALLOWED_FILTERS } = await import('../../server/ffmpeg/ffmpeg-commander.js');
+    const d = { hasFilter: async () => true, suggestFilters: async () => ['scale', 'movie'] };
+    for (const f of ['movie=x', 'amovie=x', 'drawtext=text=hi', 'subtitles=s.srt', 'lut3d=a.cube', 'sendcmd=c=x', 'zmq']) {
+      expect((await validateFilterChain(f, d)).errors[0]).toMatch(/not allowed/);
+    }
+    expect((await validateFilterChain('scale=iw/2:-1,hflip,eq=brightness=0.1', d)).errors).toEqual([]);
+    expect((await validateFilterChain('atempo=1.5,volume=2', d)).errors).toEqual([]);
+    expect(ALLOWED_FILTERS.has('movie')).toBe(false);
+  });
+  it('rejects path-like filter and option values', async () => {
+    const d = { hasFilter: async () => true, suggestFilters: async () => [] };
+    for (const f of ['scale=../x', 'hue=s=/etc/passwd', 'overlay=dir/logo.png', 'pad=~/x']) expect((await validateFilterChain(f, d)).errors.length).toBe(1);
+    const parse = (c) => parseCliString(c, { inputPath: '/tmp/in.mp4', outputPathFor: (e) => `/tmp/out.${e}` }, d).catch(e => e);
+    expect((await parse('ffmpeg -i input -r 30000/1001 -ss 00:00:01 output.mp4')).args).toBeTruthy();
+    for (const c of ['ffmpeg -i input -preset ../x output.mp4', 'ffmpeg -i input -tag:v a/b output.mp4', 'ffmpeg -i input -ss file:1 output.mp4']) expect(await parse(c)).toBeInstanceOf(CommandValidationError);
+  });
+});

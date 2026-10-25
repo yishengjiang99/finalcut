@@ -10,7 +10,8 @@ const OUTPUT_NAME = /^output\.([A-Za-z0-9]{1,5})$/;
 export const CLI_OUTPUT_FORMATS = new Set(['mp4', 'mov', 'webm', 'mkv', 'gif', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'jpg', 'png']);
 // Muxers that write exactly the one output file (no tee/segment/hls, no lavfi input device).
 const MUXERS = new Set(['mp4', 'mov', 'matroska', 'webm', 'gif', 'mp3', 'wav', 'ipod', 'adts', 'ogg', 'flac', 'image2', 'mjpeg', 'apng']);
-const FORBIDDEN_VALUE = /^(\/|~|(file|https?|tcp|udp|rtp|rtmp|ftp|pipe|concat|subfile|data|unix|crypto|cache|tee|fd):)|\.\.\//i;
+// Option values never name files: the only files are the input/output placeholders handled above.
+const FORBIDDEN_VALUE = /\.\.|^[\/~\\]|^[a-z][a-z0-9+.-]*:|[A-Za-z_-][\/\\]/i;
 const STREAM_SPECIFIER = /^(:[A-Za-z0-9_?#]+)*$/;
 const MAP_VALUE = /^(-?\d+(:[A-Za-z0-9_?#:]+)?\??|\[[A-Za-z0-9_]+\])$/;
 const MAX_INPUTS = 4;

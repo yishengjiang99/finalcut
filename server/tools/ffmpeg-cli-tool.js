@@ -9,7 +9,7 @@ import { TMP_DIR, XAI_API_TOKEN } from '../../src/server/config.js';
 import { XAI_UTILITY_MODEL, XAI_CHAT_COMPLETIONS_URL } from '../../src/server/xai.js';
 import { videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, upload } from '../../src/server/middleware.js';
 import { discovery as defaultDiscovery } from '../ffmpeg/ffmpeg-discovery.js';
-import { buildCommand, CommandValidationError } from '../ffmpeg/ffmpeg-commander.js';
+import { buildCommand, CommandValidationError, ALLOWED_FILTERS } from '../ffmpeg/ffmpeg-commander.js';
 import { executeCommand } from '../ffmpeg/ffmpeg-executor.js';
 import { parseCliString, buildCliStringMessages, extractCommand } from '../ffmpeg/ffmpeg-cli-string.js';
 
@@ -36,7 +36,7 @@ function intentFromArgs(a) {
 /** Discover step of the agentic loop: search capabilities and optionally fetch a filter's help. */
 export async function discoverCapabilities({ query, help_topic }, discovery = defaultDiscovery) {
   const result = {
-    filters: await discovery.getFiltersMatching(query, 10),
+    filters: (await discovery.getFiltersMatching(query, 40)).filter(f => ALLOWED_FILTERS.has(f.name ?? f)).slice(0, 10),
     encoders: await discovery.getEncodersMatching(query, 10),
     codecs: await discovery.getCodecsMatching(query, 10),
   };
