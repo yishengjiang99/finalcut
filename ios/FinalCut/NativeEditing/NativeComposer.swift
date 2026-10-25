@@ -101,8 +101,33 @@ enum NativeComposer {
                 audioTrack = replacement
             }
         }
+        // YouTube soundtrack: a second audio track holding the fetched song, inserted
+        // after the offline gain render so it is never baked into it. The song starts
+        // at the op's startOffset and is trimmed to the final timeline's length (or
+        // left short — the remainder is silence, like the web's pad-to-video-end).
+        let soundtrack = stack.soundtrack
+        var soundtrackTrack: AVMutableCompositionTrack?
+        if let soundtrack {
+            let song = AVURLAsset(url: soundtrack.file)
+            if let songAudio = try await song.loadTracks(withMediaType: .audio).first {
+                let songDuration = try await song.load(.duration)
+                let start = CMTime(seconds: soundtrack.startOffset, preferredTimescale: timescale)
+                let length = min(composition.duration, CMTimeSubtract(songDuration, start))
+                if length > .zero {
+                    let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+                    try track?.insertTimeRange(CMTimeRange(start: start, duration: length), of: songAudio, at: .zero)
+                    soundtrackTrack = track
+                }
+            }
+        }
+
         let mixVolume = Float(min(gain, 1))
-        let audioMix = audioTrack.flatMap { makeAudioMix(track: $0, volume: mixVolume, ops: stack.ops, duration: composition.duration) }
+        let audioMix = makeAudioMix(
+            track: audioTrack, volume: mixVolume,
+            soundtrackTrack: soundtrackTrack,
+            soundtrackOriginalVolume: soundtrack.map { Float($0.originalVolume) } ?? 0,
+            ops: stack.ops, duration: composition.duration
+        )
 
         // Frame ops: one Core Image chain per frame.
         let orientedRect = CGRect(origin: .zero, size: naturalSize).applying(transform)
@@ -132,35 +157,48 @@ enum NativeComposer {
         )
     }
 
-    /// Volume (≤ 1) and fades anchored to the final timeline.
-    static func makeAudioMix(track: AVCompositionTrack, volume: Float, ops: [NativeOp], duration: CMTime) -> AVAudioMix? {
+    /// Volume (≤ 1) and fades anchored to the final timeline. With a soundtrack
+    /// track, the original audio is additionally scaled to the soundtrack's
+    /// `originalVolume` (0 = the song replaces it) and the song plays at full volume.
+    static func makeAudioMix(track: AVCompositionTrack?, volume: Float, soundtrackTrack: AVCompositionTrack?, soundtrackOriginalVolume: Float, ops: [NativeOp], duration: CMTime) -> AVAudioMix? {
         let fades: [(isIn: Bool, duration: Double, start: Double?)] = ops.compactMap {
             if case .fade(let isIn, let d, let s) = $0 { return (isIn, d, s) }
             return nil
         }
-        guard volume < 0.9999 || !fades.isEmpty else { return nil }
-        let params = AVMutableAudioMixInputParameters(track: track)
-        let total = CMTimeGetSeconds(duration)
-        let fadeIn = fades.last { $0.isIn }
-        let fadeOut = fades.last { !$0.isIn }
-        func t(_ s: Double) -> CMTime { CMTime(seconds: max(0, min(s, total)), preferredTimescale: timescale) }
+        let originalVolume = soundtrackTrack != nil ? volume * soundtrackOriginalVolume : volume
+        guard soundtrackTrack != nil || originalVolume < 0.9999 || !fades.isEmpty else { return nil }
+        var allParams: [AVMutableAudioMixInputParameters] = []
+        if let track {
+            let params = AVMutableAudioMixInputParameters(track: track)
+            let total = CMTimeGetSeconds(duration)
+            let fadeIn = fades.last { $0.isIn }
+            let fadeOut = fades.last { !$0.isIn }
+            func t(_ s: Double) -> CMTime { CMTime(seconds: max(0, min(s, total)), preferredTimescale: timescale) }
 
-        params.setVolume(fadeIn == nil ? volume : 0, at: .zero)
-        if let fadeIn {
-            let start = fadeIn.start ?? 0
-            params.setVolumeRamp(fromStartVolume: 0, toEndVolume: volume,
-                                 timeRange: CMTimeRange(start: t(start), end: t(start + fadeIn.duration)))
-        }
-        if let fadeOut {
-            let start = fadeOut.start ?? max(0, total - fadeOut.duration)
-            params.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0,
-                                 timeRange: CMTimeRange(start: t(start), end: t(start + fadeOut.duration)))
-            if start + fadeOut.duration < total {
-                params.setVolume(0, at: t(start + fadeOut.duration))
+            params.setVolume(fadeIn == nil ? originalVolume : 0, at: .zero)
+            if let fadeIn {
+                let start = fadeIn.start ?? 0
+                params.setVolumeRamp(fromStartVolume: 0, toEndVolume: originalVolume,
+                                     timeRange: CMTimeRange(start: t(start), end: t(start + fadeIn.duration)))
             }
+            if let fadeOut {
+                let start = fadeOut.start ?? max(0, total - fadeOut.duration)
+                params.setVolumeRamp(fromStartVolume: originalVolume, toEndVolume: 0,
+                                     timeRange: CMTimeRange(start: t(start), end: t(start + fadeOut.duration)))
+                if start + fadeOut.duration < total {
+                    params.setVolume(0, at: t(start + fadeOut.duration))
+                }
+            }
+            allParams.append(params)
         }
+        if let soundtrackTrack {
+            let params = AVMutableAudioMixInputParameters(track: soundtrackTrack)
+            params.setVolume(1, at: .zero)
+            allParams.append(params)
+        }
+        guard !allParams.isEmpty else { return nil }
         let mix = AVMutableAudioMix()
-        mix.inputParameters = [params]
+        mix.inputParameters = allParams
         return mix
     }
 }

@@ -22,6 +22,10 @@ enum NativeOp: Equatable, Sendable {
     // Audio (video only)
     case volume(Double)
     case fade(isIn: Bool, duration: Double, start: Double?)
+    /// YouTube soundtrack (`youtube_soundtrack`): the fetched AAC in the app's cache,
+    /// played from `startOffset` and trimmed to the video's length by the composer;
+    /// the original audio is scaled to `originalVolume` (0 = replaced by the song).
+    case soundtrack(file: URL, startOffset: Double, originalVolume: Double)
     // Output settings (applied on export)
     case outputFormat(String)
     /// Burned-in captions (on-device `generate_captions`), timed on the timeline at the
@@ -45,7 +49,7 @@ enum NativeOp: Equatable, Sendable {
     }
 
     var isAudio: Bool {
-        switch self { case .volume, .fade: return true; default: return false }
+        switch self { case .volume, .fade, .soundtrack: return true; default: return false }
     }
 }
 

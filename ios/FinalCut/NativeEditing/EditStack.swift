@@ -61,6 +61,16 @@ struct EditStack: Equatable, Sendable {
         entries.reduce(baseCanvas) { $0.applying($1.op) }
     }
 
+    /// The active YouTube soundtrack edit, if any (the latest one wins, like captions).
+    var soundtrack: (file: URL, startOffset: Double, originalVolume: Double)? {
+        for entry in entries.reversed() {
+            if case .soundtrack(let file, let startOffset, let originalVolume) = entry.op {
+                return (file, startOffset, originalVolume)
+            }
+        }
+        return nil
+    }
+
     /// Last requested container/format (`mp4`/`mov` for video, `jpg`/`png` for photos).
     var outputFormat: String? {
         for entry in entries.reversed() {
