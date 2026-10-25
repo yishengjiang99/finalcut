@@ -20,7 +20,9 @@ final class NativeToolParserTests: XCTestCase {
     }
 
     func testAllowlistIsTheBuild10Twenty() {
-        XCTAssertEqual(NativeToolParser.supportedTools.count, 22)
+        // 22 from the build-10 allowlist + youtube_soundtrack (build 13, §5c).
+        XCTAssertEqual(NativeToolParser.supportedTools.count, 23)
+        XCTAssertTrue(NativeToolParser.isSupported("youtube_soundtrack"))
         XCTAssertTrue(NativeToolParser.isSupported("generate_captions"))
         XCTAssertFalse(NativeToolParser.isSupported("translate_captions"))
         XCTAssertFalse(NativeToolParser.isSupported("burn_subtitles"))
@@ -93,6 +95,22 @@ final class NativeToolParserTests: XCTestCase {
         silent.hasAudio = false
         XCTAssertTrue(isInvalid(plan("generate_captions", [:], silent)))
         XCTAssertEqual(plan("generate_captions", [:], photo), .failure(.unsupportedForPhoto))
+    }
+
+    func testYouTubeSoundtrackPlans() {
+        XCTAssertEqual(
+            plan("youtube_soundtrack", ["url": .string("https://youtu.be/dQw4w9WgXcQ")]),
+            .success(.youtubeSoundtrack(url: "https://youtu.be/dQw4w9WgXcQ", startOffset: 0, originalVolume: 0)))
+        XCTAssertEqual(
+            plan("youtube_soundtrack", ["url": .string("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+                                        "start_offset": .number(30), "original_volume": .number(0.25)]),
+            .success(.youtubeSoundtrack(url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", startOffset: 30, originalVolume: 0.25)))
+        XCTAssertTrue(isInvalid(plan("youtube_soundtrack", [:])))
+        XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("  ")])))
+        XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("x"), "start_offset": .number(-1)])))
+        XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("x"), "start_offset": .number(601)])))
+        XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("x"), "original_volume": .number(1.5)])))
+        XCTAssertEqual(plan("youtube_soundtrack", ["url": .string("x")], photo), .failure(.unsupportedForPhoto))
     }
 
     func testCanvasTracksEdits() {

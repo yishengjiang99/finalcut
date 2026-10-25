@@ -158,6 +158,9 @@ enum NativePlan: Equatable {
     case captions(language: String?, burnIn: Bool)
     /// `lyric_captions`: cloud transcription + translation, burned in as an overlay.
     case lyricCaptions(LyricCaptionRequest)
+    /// `youtube_soundtrack`: fetch the YouTube audio from the server, then push a
+    /// `.soundtrack` op with the mix settings (async, not a plain op).
+    case youtubeSoundtrack(url: String, startOffset: Double, originalVolume: Double)
 }
 
 /// Maps schema tool calls (docs/api/tools-schema.v1.json) onto `NativeOp`s, validating
@@ -170,6 +173,7 @@ enum NativeToolParser {
         "adjust_contrast", "adjust_saturation", "adjust_hue", "apply_color_filter", "add_text",
         "adjust_audio_volume", "audio_fade", "get_video_dimensions", "get_supported_formats",
         "convert_video_format", "convert_image_format", "generate_captions", "lyric_captions",
+        "youtube_soundtrack",
     ]
 
     static let photoTools: Set<String> = [
@@ -328,6 +332,17 @@ enum NativeToolParser {
             let colorName = a["color"]?.stringValue ?? "white"
             guard let color = RGBAColor.parse(colorName.isEmpty ? "white" : colorName) else { return bad("color") }
             return op(.text(text, x: x, y: y, fontSize: size, color: color))
+
+        case "youtube_soundtrack":
+            // Validation mirrors the web tool; the server re-validates the link
+            // (invalid_youtube_url) and the 10-minute cap on fetch.
+            guard let url = a["url"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !url.isEmpty, url.count <= 2048 else { return bad("url") }
+            let startOffset = a["start_offset"] == nil || a["start_offset"] == .null ? 0 : num("start_offset")
+            guard let startOffset, startOffset >= 0, startOffset <= 600 else { return bad("start_offset 0..600") }
+            let originalVolume = a["original_volume"] == nil || a["original_volume"] == .null ? 0 : num("original_volume")
+            guard let originalVolume, originalVolume >= 0, originalVolume <= 1 else { return bad("original_volume 0..1") }
+            return .success(.youtubeSoundtrack(url: url, startOffset: startOffset, originalVolume: originalVolume))
 
         case "adjust_audio_volume":
             guard canvas.hasAudio else { return bad("no audio track") }
