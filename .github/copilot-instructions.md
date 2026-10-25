@@ -52,3 +52,7 @@
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+## App Store submission
+
+The attached build's CFBundleShortVersionString must match the App Store version and be higher than the last approved version. 1.0.1 was rejected (ITMS-90062) on 2026-10-25 because build 13 (1.0) was attached instead of build 20 (1.0.1). The submit workflows (`asc-submit-app-store.yml`, `scripts/asc/submit_version_with_subscriptions.py`) now select by version: the highest non-expired build of `version_string`, or the requested `build_number` only if it belongs to that version, and fail loudly otherwise.
