@@ -150,3 +150,45 @@ If `STRIPE_SECRET_KEY` is not set, the server will:
 - Start normally with a warning message
 - Return 503 errors for Stripe endpoints
 - Continue to work for all other endpoints (video processing, xAI chat, etc.)
+
+## Products and entitlements (FinalCut + AI Music Radar)
+
+Every Checkout Session and Subscription carries `metadata.product`. No `product` means FinalCut, so
+every existing FinalCut session behaves exactly as before and still sets `users.has_subscription`.
+
+| Product | Where entitlement lives | Who writes it |
+|---|---|---|
+| FinalCut (`finalcut`, default) | `users.has_subscription` (unchanged) | `checkout.session.completed`, `customer.subscription.deleted`, `/api/verify-checkout-session` |
+| AI Music Radar (`music`) | `product_entitlements (email, product='music', plan, ref, active)` | `src/server/musicBilling.js` webhook handler only |
+
+So a FinalCut subscriber does not unlock music and a music buyer does not unlock FinalCut
+(`src/test/musicBilling.test.js` covers both directions; both of those tests fail on the old code).
+`hasProductEntitlement(email, 'music')` in `src/db.js` is the read side.
+
+### Music checkout
+
+`POST /api/music/checkout` (HTML form or JSON) with `plan` = `pro_monthly` | `pro_yearly` | `lifetime`,
+plus optional attribution fields `event_id`, `utm_source|medium|campaign|content|term`, `twclid`, `rdt_cid`,
+`landing`, which are copied into session (and subscription / payment intent) metadata.
+
+| Plan | Stripe price (env) | Mode |
+|---|---|---|
+| Pro monthly $4.99 | `MUSIC_STRIPE_PRICE_PRO_MONTHLY` (recurring, monthly) | `subscription`, 7-day trial |
+| Pro yearly $29.99 | `MUSIC_STRIPE_PRICE_PRO_YEARLY` (recurring, yearly) | `subscription`, 7-day trial |
+| Lifetime $49.99 | `MUSIC_STRIPE_PRICE_LIFETIME` (one-time) | `payment` |
+
+Success: `${MUSIC_SITE_URL}/thanks?plan=…&session_id={CHECKOUT_SESSION_ID}`; cancel: `${MUSIC_SITE_URL}/?checkout=cancel#pricing`.
+`MUSIC_SITE_URL` defaults to `https://music.grepawk.com` and must be a grepawk host.
+`POST /api/music/waitlist` (`email`) stores App Store waitlist sign-ups in `music_waitlist`.
+
+Webhook events to enable on the endpoint (in addition to FinalCut's): `checkout.session.completed`,
+`customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`.
+
+### Ad conversions (X + Reddit Conversions API)
+
+`src/server/adsConversions.js`, called from the music webhook handler:
+- `checkout.session.completed`: `start_trial` (Pro trial, value 0) or `purchase` (Lifetime, value), with
+  `conversion_id = metadata.event_id`, the same id the landing page's thanks page passes to the X / Reddit pixel, so each platform dedupes.
+- `invoice.paid` with an amount (trial converted, renewals): server-only `purchase`, id `inv_<invoice id>`.
+- Identifiers: `twclid` / `rdt_cid` from metadata, SHA-256 of the lowercased email.
+- Off switch: `ADS_TRACKING_ENABLED=0`. Each platform also stays off until its env vars are set (see `.env.example`).
