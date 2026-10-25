@@ -14,7 +14,7 @@ on:
         default: status
       version_string:
         description: App Store versionString
-        default: "1.0"
+        required: true
       build_number:
         description: CFBundleVersion
         default: ""

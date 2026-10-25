@@ -4,15 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       build_number:
-        description: CFBundleVersion / ASC build version (e.g. 26)
+        description: CFBundleVersion; blank = highest build of version_string
         required: false
         type: string
-        default: "26"
+        default: ""
       version_string:
-        description: App Store versionString (marketing version)
-        required: false
+        description: App Store versionString (must match the build's CFBundleShortVersionString)
+        required: true
         type: string
-        default: "1.0"
 
 jobs:
   submit:
@@ -90,21 +89,25 @@ jobs:
           app_id = apps['data'][0]['id']
           print('app', app_id, apps['data'][0].get('attributes', {}).get('name'))
 
-          # --- Build (must be VALID) ---
+          # --- Build: must have CFBundleShortVersionString == version_string ---
+          # (1.0.1 was rejected ITMS-90062 on 2026-10-25: build 13 (1.0) was attached.)
           _, builds = api(
             'GET',
-            f'/v1/builds?filter[app]={app_id}&filter[version]={urllib.parse.quote(build_number)}&limit=10&sort=-uploadedDate',
+            f'/v1/builds?filter[app]={app_id}&filter[preReleaseVersion.version]={urllib.parse.quote(version_string)}&filter[expired]=false&limit=200',
           )
-          match = None
-          for b in builds.get('data', []):
+          cands = sorted(builds.get('data', []), key=lambda b: int(b['attributes']['version']), reverse=True)
+          for b in cands:
             attrs = b.get('attributes', {})
-            print('candidate build', b['id'], attrs.get('version'), attrs.get('processingState'),
-                  'usesNonExemptEncryption=', attrs.get('usesNonExemptEncryption'))
-            if str(attrs.get('version')) == str(build_number):
-              match = b
-              break
-          if not match:
-            raise SystemExit(f'Build {build_number} not found')
+            print('candidate build', b['id'], version_string, attrs.get('version'), attrs.get('processingState'))
+          if build_number:
+            match = next((b for b in cands if str(b['attributes'].get('version')) == build_number), None)
+            if not match:
+              raise SystemExit(f'Build {build_number} is not a {version_string} build. '
+                               f'{version_string} builds: {[b["attributes"]["version"] for b in cands]}')
+          else:
+            match = cands[0] if cands else None
+            if not match:
+              raise SystemExit(f'No non-expired build with CFBundleShortVersionString {version_string}')
           build_id = match['id']
           battrs = match['attributes']
           if battrs.get('processingState') != 'VALID':

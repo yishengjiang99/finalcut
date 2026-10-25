@@ -20,7 +20,7 @@ Env: APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_AP
      BUNDLE_ID, VERSION_STRING, BUILD_NUMBER, MODE, CANCEL_SUBMISSION_ID
 """
 from __future__ import annotations
-import json, os, sys, time
+import json, os, sys, time, urllib.parse
 import jwt, requests
 
 BASE = "https://api.appstoreconnect.apple.com"
@@ -82,11 +82,28 @@ def must(method, path, body=None, ok=()):
     return j
 
 
-def find_build(app_id):
-    if not BUILD_NUMBER:
-        return None
-    bs = must("GET", f"/v1/builds?filter[app]={app_id}&filter[version]={BUILD_NUMBER}&limit=10")["data"]
-    return next((b for b in bs if not b["attributes"].get("expired")), None)
+def find_build(app_id, strict=True):
+    """Pick a non-expired build whose CFBundleShortVersionString == VERSION_STRING.
+
+    BUILD_NUMBER, if given, must be one of those builds; otherwise the highest build
+    number wins. Fails loudly on mismatch (1.0.1 was rejected ITMS-90062 on
+    2026-10-25 because build 13, a 1.0 build, was attached).
+    """
+    q = urllib.parse.quote(VERSION_STRING)
+    bs = must("GET", f"/v1/builds?filter[app]={app_id}&filter[preReleaseVersion.version]={q}&filter[expired]=false&limit=200")["data"]
+    bs = sorted((b for b in bs if not b["attributes"].get("expired")), key=lambda b: int(b["attributes"]["version"]), reverse=True)
+    if BUILD_NUMBER:
+        hit = next((b for b in bs if b["attributes"]["version"] == BUILD_NUMBER), None)
+        if not hit:
+            if not strict:
+                return None
+            raise SystemExit(f"build {BUILD_NUMBER} is not a {VERSION_STRING} build; {VERSION_STRING} builds: {[b['attributes']['version'] for b in bs]}")
+        return hit
+    if not bs:
+        if not strict:
+            return None
+        raise SystemExit(f"no non-expired build with CFBundleShortVersionString {VERSION_STRING}")
+    return bs[0]
 
 
 def find_group(app_id):
@@ -103,7 +120,7 @@ def get_version(app_id):
 
 def status(app_id):
     print("\n===== STATUS =====")
-    b = find_build(app_id)
+    b = find_build(app_id, strict=False)
     print("BUILD", BUILD_NUMBER or "-", b and (b["id"], b["attributes"].get("processingState"),
           "usesNonExemptEncryption=", b["attributes"].get("usesNonExemptEncryption"), b["attributes"].get("uploadedDate")))
     for v in must("GET", f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=5")["data"]:
@@ -229,7 +246,7 @@ def main():
 
     if MODE == "wait_build":
         for i in range(60):
-            b = find_build(app_id)
+            b = find_build(app_id, strict=False)
             st = b and b["attributes"].get("processingState")
             print(f"build {BUILD_NUMBER} poll {i + 1}: {st}", b and b["attributes"].get("usesNonExemptEncryption"))
             if st == "VALID":
