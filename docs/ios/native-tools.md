@@ -148,9 +148,13 @@ the tool.
 ## 5c. YouTube soundtrack (`youtube_soundtrack`, build 13+)
 
 > Status: the web editor shipped this tool first (same endpoint, ffmpeg.wasm mix).
-> The iOS executor described here lands in a later round — the server gate
-> (`YOUTUBE_SOUNDTRACK_MIN_BUILD`) and the iOS tool description are already in
-> place, and no shipped build has the executor yet.
+> The iOS executor has since landed on main (fetch layer in `APIClient`, the
+> `.soundtrack` op in `NativeComposer`, the runner in `EditorViewModel`); the
+> server gate (`YOUTUBE_SOUNDTRACK_MIN_BUILD`) and the iOS tool description were
+> already in place. One deliberate deviation from the original sketch below:
+> the edit's chat card carries NO controls — `original_volume` and
+> `start_offset` come only from the tool call, and calling the tool again
+> replaces the soundtrack (the latest edit wins).
 
 The user pastes a YouTube link in chat and the model calls `youtube_soundtrack` with the
 link (`url*`), an optional `start_offset` (seconds, default 0) and `original_volume`
@@ -162,8 +166,8 @@ extracts the audio with yt-dlp, converts it to AAC, and returns the `.m4a` bytes
 the file and pushes an undoable `.soundtrack` edit: `NativeComposer` inserts the audio
 into the composition at `start_offset`, trimmed to the video's length, and the AVAudioMix
 plays it at full volume while the original track is scaled to `original_volume`
-(0 = the YouTube audio is the soundtrack). The chat card for the edit carries the two
-controls (Original audio slider, Song starts at stepper) and updates the edit in place.
+(0 = the YouTube audio is the soundtrack). There are no in-app controls for the
+mix: `start_offset` and `original_volume` come only from the tool call.
 Requires **Allow cloud processing** (with it off the card is the muted
 `unsupported_on_device` one and nothing is fetched). Videos only; photos are rejected
 with `unsupported_for_photo`. Full contract: docs/api/YOUTUBE_SOUNDTRACK.md. Server

@@ -11,10 +11,10 @@ gate (`YOUTUBE_SOUNDTRACK_MIN_BUILD`) and iOS description override live in
 `src/server/iosToolAllowlist.js`. Tests: `src/test/youtube-audio-tool.test.js`
 (endpoint), `src/test/youtube-soundtrack-web.test.js` (web tool + argv builder).
 
-**Clients.** The web editor shipped first (see "Web flow"). The iOS app follows in
-a later round on the same endpoint: gate, description override and contract are
-in place (`docs/ios/native-tools.md` §5c describes the planned on-device flow);
-no shipped iOS build has an executor yet.
+**Clients.** The web editor shipped first (see "Web flow"). The iOS executor has
+since landed on main on the same endpoint: the app fetches with its device-session
+API client and mixes on device (`docs/ios/native-tools.md` §5c). No shipped iOS
+build includes it yet — build 13 is the first the gate below admits.
 
 ## Chat tool
 
