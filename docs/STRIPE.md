@@ -213,3 +213,17 @@ Entitlement lookup for the GBK server: `GET /api/compose/entitlement?email=…` 
 token unset the route 404s. Ad conversions use `COMPOSE_X_PIXEL_ID`, `COMPOSE_X_EVENT_ID_PURCHASE`,
 `COMPOSE_X_EVENT_ID_START_TRIAL`, `COMPOSE_REDDIT_PIXEL_ID` (shared X/Reddit API creds, same
 `ADS_TRACKING_ENABLED` off switch).
+
+## Stripe catalog
+
+GBK Composer Pro (live mode). Price IDs are not secret.
+
+| Product | Price ID | Nickname | Amount | Interval | Metadata |
+|---|---|---|---|---|---|
+| prod_VVXeK2j4Dq3rOX (GBK Composer Pro) | price_1UUWYlAUW7JlNziKc0FBS1p7 | GBK Pro Monthly | $5.99 USD | month (7-day trial added by server) | product=compose plan=pro_monthly |
+| prod_VVXeK2j4Dq3rOX | price_1UUWYlAUW7JlNziKCLQIzUrk | GBK Pro Yearly | $47.99 USD | year (7-day trial added by server) | product=compose plan=pro_yearly |
+| prod_VVXeK2j4Dq3rOX | price_1UUWYlAUW7JlNziKNb8YZgId | GBK Pro Lifetime | $99.00 USD | one-time | product=compose plan=lifetime |
+
+Env: `COMPOSE_STRIPE_PRICE_PRO_MONTHLY`, `COMPOSE_STRIPE_PRICE_PRO_YEARLY`, `COMPOSE_STRIPE_PRICE_LIFETIME`.
+
+The product is on Stripe account `acct_1StDNUAUW7JlNziK` (photo-recipes), not the account behind this server's `STRIPE_SECRET_KEY`. Compose checkout stays at 503 in prod until either the prices are recreated on FinalCut's account or compose gets its own key and webhook secret.
