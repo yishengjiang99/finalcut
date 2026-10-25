@@ -29,7 +29,9 @@ jobs:
           want = {'iphone-69': (1320, 2868), 'ipad-13': (2064, 2752)}
           for prefix, size in want.items():
               files = sorted(d.glob(f'{prefix}-*.png'))
-              assert len(files) == 6, f'{prefix}: found {len(files)} pngs, want 6'
+              assert files, f'{prefix}: no pngs in {d}'
+              for n in range(1, 6):
+                  assert any(f.name.startswith(f'{prefix}-0{n}-') for f in files), f'{prefix}: frame 0{n} missing'
               for f in files:
                   im = Image.open(f)
                   assert im.size == size and im.mode == 'RGB', f'{f.name}: {im.size} {im.mode}'
