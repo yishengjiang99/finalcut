@@ -65,6 +65,11 @@ final class ExportController: ObservableObject {
         guard !isRunning else { return }
         toast = nil
         photosPermissionDenied = false
+        var exportProps: [String: Any] = ["destination": destination.rawValue]
+        if let duration = stack?.canvas.duration, duration > 0 {
+            exportProps["duration_sec"] = (duration * 10).rounded() / 10
+        }
+        Telemetry.shared.track("export_start", props: exportProps)
         let isPhoto = Self.isPhoto(stack: stack, fallbackURL: fallbackURL)
         offerNotificationsIfNeeded()
         task = Task { [weak self] in
@@ -83,10 +88,12 @@ final class ExportController: ObservableObject {
                     self.toast = UXCopy.savedToPhotos
                     self.notifyIfInactive(success: true, isPhoto: isPhoto, savedToPhotos: true)
                     PushManager.shared.track("export_done")
+                    Telemetry.shared.track("export_success", props: ["destination": Destination.photos.rawValue])
                 case .files:
                     self.phase = .idle
                     self.filesPickerURL = url
                     PushManager.shared.track("export_done")
+                    Telemetry.shared.track("export_success", props: ["destination": Destination.files.rawValue])
                 }
             } catch NativeExporter.ExportError.cancelled {
                 self.phase = .idle

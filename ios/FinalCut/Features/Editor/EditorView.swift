@@ -115,6 +115,10 @@ struct EditorView: View {
         .onChange(of: model.photosPickerItem) { _, item in
             Task { await model.loadPhotosPickerItem(item) }
         }
+        .onChange(of: model.localVideoURL) { _, url in
+            // The editor surface now has a project/clip loaded.
+            if url != nil { Telemetry.shared.track("editor_open") }
+        }
         .onAppear {
             model.refreshSuggestions()
             model.undoManager = undoManager
@@ -677,6 +681,15 @@ final class EditorViewModel: ObservableObject {
             messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
             return
         }
+        // A turn actually begins here (the photo-captions early return above
+        // never starts inference, so it stays out of the funnel).
+        let editSource: String
+        switch route {
+        case .chat: editSource = "chat"
+        case .tool: editSource = "chip"
+        case .captions: editSource = "captions"
+        }
+        Telemetry.shared.track("edit_start", props: ["source": editSource])
         switch route {
         case .captions(let intent):
             processingOverlay = Self.overlay(for: intent)
@@ -796,6 +809,7 @@ final class EditorViewModel: ObservableObject {
             captionArtifacts.srt = result.srt
             captionArtifacts.vtt = result.vtt
             captionArtifacts.language = result.language
+            noteEditSuccess()
             state = .ready
             processingOverlay = .editing
             messages.append(
@@ -840,6 +854,7 @@ final class EditorViewModel: ObservableObject {
             captionArtifacts.translatedSrt = result.srt
             captionArtifacts.translatedVtt = result.vtt
             captionArtifacts.targetLanguage = result.targetLanguage
+            noteEditSuccess()
             state = .ready
             processingOverlay = .editing
 
@@ -900,6 +915,7 @@ final class EditorViewModel: ObservableObject {
                 .appendingPathComponent("burned-\(UUID().uuidString).mp4")
             try burned.write(to: out)
             await rebaseStack(onto: out)
+            noteEditSuccess()
             state = .ready
             processingOverlay = .editing
 
@@ -950,6 +966,7 @@ final class EditorViewModel: ObservableObject {
 
     private func finishCaptionFailure(_ error: APIError, fallback: String? = nil) {
         if handlePaywallIfNeeded(error) { return }
+        noteEditError(kind: error.serverFailureKind)
         state = .failed
         processingOverlay = .editing
         let copy: String
@@ -1052,13 +1069,27 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Edit telemetry
+
+    private func noteEditSuccess() {
+        Telemetry.shared.track("edit_success")
+    }
+
+    /// Kind only — never the error's message text (may echo user content).
+    private func noteEditError(kind: EditFailureKind) {
+        Telemetry.shared.track("edit_error", props: ["kind": kind.rawValue])
+    }
+
     /// Ends a turn and shows at most one end-of-turn card (generic → Retry; invalid
     /// arguments only when nothing succeeded). Photo-unsupported cards were already shown.
     private func finishTurn() {
         processingOverlay = .editing
         activeJobId = nil
         if let card = turnOutcome.endOfTurnCard(prompt: turnPrompt) {
+            noteEditError(kind: card.kind)
             messages.append(.failure(card))
+        } else {
+            noteEditSuccess()
         }
         turnOutcome = EditTurnOutcome()
         if state == .processing || state == .failed {
@@ -1075,18 +1106,21 @@ final class EditorViewModel: ObservableObject {
         let apiError = error as? APIError
         if case .clientModeUnavailable = apiError {
             // Keep the clip usable; this is not an edit failure.
+            noteEditError(kind: .unavailable)
             state = localVideoURL == nil ? .empty : .ready
             messages.append(ChatMessage(role: .assistant, content: APIError.clientModeUnavailable.errorDescription ?? UXCopy.generic))
             return
         }
         let kind = apiError?.serverFailureKind ?? .generic
         if kind == .unsupportedImageFormat {
+            noteEditError(kind: .unsupportedImageFormat)
             showUnsupportedImageFormat()
             return
         }
         state = localVideoURL == nil ? .empty : .ready
         lastError = nil
         let card = EditFailureCard(kind: kind, retryPrompt: kind.allowsRetry ? turnPrompt : nil)
+        noteEditError(kind: card.kind)
         messages.append(.failure(card))
         turnOutcome = EditTurnOutcome()
     }
