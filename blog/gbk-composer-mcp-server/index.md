@@ -8,6 +8,8 @@ keyword: MCP server
 tags: [gbk, mcp, music]
 updated: 2026-10-24
 hero: studio-playback.jpg
+ogImage: og-card.jpg
+image_alt: Share card reading GBK is now an MCP server, five songs an AI agent composed in parallel with its tools, beside a GBK piano roll
 heroAlt: A D minor fugue for violin, viola, cello and harpsichord playing in GBK Studio after the composer agent rendered it
 ---
 On Saturday, [GBK](https://compose.grepawk.com/) became a remote MCP server. The composer's `gbk_*` tools, which an agent could once call only from inside an open GBK page through WebMCP, now answer any client that speaks the Model Context Protocol. An MCP client can create a piece in a style, edit one passage at a time, show it in a player, and render a WAV and a MIDI file, with no GBK account. ChatGPT is one such client. To show what the tools can do, an AI agent wrote five new songs with them, linked just below. This post then covers what the server exposes, the hard question of the day (where does the audio get made?), and how we tested it.

@@ -121,7 +121,7 @@ Full examples: https://grepawk.com/blog/reference (not indexed).
 
 - Put image files next to the post: `blog/<slug>/shot.jpg`. Use plain Markdown: `![What the image shows](shot.jpg)`. Alt text is required; the build fails without it.
 - Originals must be 1.5 MB or less and 3000 px or less on the long side. Prefer JPEG around 900 to 1600 px wide. The build makes AVIF, WebP and a fallback with srcset, sizes and lazy loading.
-- Card and social image: add `hero: shot.jpg` and `heroAlt: ...` to the front matter.
+- Card and social image: add `hero: shot.jpg` and `heroAlt: ...` to the front matter. The build draws the 1200x630 share card from the title and hero. To use a hand-made card instead, add `ogImage: card.jpg` (a 1200x630 JPEG in the post folder) and `image_alt: ...`; it becomes og:image and twitter:image.
 - No remote images. No raw iframes or script tags.
 - Gallery, one image per line as `file | alt | caption`:
 
