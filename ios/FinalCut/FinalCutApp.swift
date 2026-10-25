@@ -29,7 +29,8 @@ struct FinalCutApp: App {
 @MainActor
 final class AppModel: ObservableObject {
     /// Why the paywall sheet is showing (drives the headline copy).
-    enum PaywallReason: Equatable {
+    /// String-backed so telemetry can use `rawValue` as the stable reason prop.
+    enum PaywallReason: String, Equatable {
         case upgradeTapped
         case usageLimitReached
         case atLaunch
@@ -57,6 +58,8 @@ final class AppModel: ObservableObject {
     func bootstrap() async {
         guard !didBootstrap else { return }
         didBootstrap = true
+
+        Telemetry.shared.track("app_open")
 
         // Push: token upload only if notifications are already allowed (never asks here).
         PushManager.shared.configure(api: apiClient) { [weak self] in
@@ -117,6 +120,9 @@ final class AppModel: ObservableObject {
         if reason == .usageLimitReached, !hasSubscription {
             dailyRemaining = 0
         }
+        // The single decision point for every presentation (Upgrade button,
+        // server 402/429 usage limit, launch, push tap).
+        Telemetry.shared.track("paywall_trigger", props: ["reason": reason.rawValue])
         isPaywallPresented = true
     }
 
