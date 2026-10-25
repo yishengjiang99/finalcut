@@ -160,6 +160,7 @@ every existing FinalCut session behaves exactly as before and still sets `users.
 |---|---|---|
 | FinalCut (`finalcut`, default) | `users.has_subscription` (unchanged) | `checkout.session.completed`, `customer.subscription.deleted`, `/api/verify-checkout-session` |
 | AI Music Radar (`music`) | `product_entitlements (email, product='music', plan, ref, active)` | `src/server/musicBilling.js` webhook handler only |
+| GBK Composer Pro (`compose`) | `product_entitlements (email, product='compose', …)` | same handler (`handleProductWebhookEvent`, `PRODUCT_SPECS` in `products.js`) |
 
 So a FinalCut subscriber does not unlock music and a music buyer does not unlock FinalCut
 (`src/test/musicBilling.test.js` covers both directions; both of those tests fail on the old code).
@@ -192,3 +193,23 @@ Webhook events to enable on the endpoint (in addition to FinalCut's): `checkout.
 - `invoice.paid` with an amount (trial converted, renewals): server-only `purchase`, id `inv_<invoice id>`.
 - Identifiers: `twclid` / `rdt_cid` from metadata, SHA-256 of the lowercased email.
 - Off switch: `ADS_TRACKING_ENABLED=0`. Each platform also stays off until its env vars are set (see `.env.example`).
+
+## GBK Composer Pro (`compose`)
+
+Checkout: `POST /api/compose/checkout` (form post from https://compose.grepawk.com/pricing), returns to
+`/pricing/thanks` or `/pricing?checkout=cancel` on compose.grepawk.com. The same webhook URL handles it;
+no new Stripe webhook endpoint is needed.
+
+Create in Stripe (one product, "GBK Composer Pro", three prices) and set:
+
+| Env | Price |
+| --- | --- |
+| `COMPOSE_STRIPE_PRICE_PRO_MONTHLY` | recurring $6/month (7-day trial is added by Checkout) |
+| `COMPOSE_STRIPE_PRICE_PRO_YEARLY` | recurring $48/year |
+| `COMPOSE_STRIPE_PRICE_LIFETIME` | one-time $99 |
+
+Entitlement lookup for the GBK server: `GET /api/compose/entitlement?email=…` with
+`Authorization: Bearer $COMPOSE_ENTITLEMENT_TOKEN` returns `{ product: 'compose', pro: true|false }`. With the
+token unset the route 404s. Ad conversions use `COMPOSE_X_PIXEL_ID`, `COMPOSE_X_EVENT_ID_PURCHASE`,
+`COMPOSE_X_EVENT_ID_START_TRIAL`, `COMPOSE_REDDIT_PIXEL_ID` (shared X/Reddit API creds, same
+`ADS_TRACKING_ENABLED` off switch).
