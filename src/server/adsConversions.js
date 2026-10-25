@@ -9,6 +9,7 @@
 //   X:      MUSIC_X_PIXEL_ID, MUSIC_X_EVENT_ID_PURCHASE, MUSIC_X_EVENT_ID_START_TRIAL,
 //           X_ADS_CONSUMER_KEY, X_ADS_CONSUMER_SECRET, X_ADS_ACCESS_TOKEN, X_ADS_ACCESS_TOKEN_SECRET
 //   Reddit: MUSIC_REDDIT_PIXEL_ID, REDDIT_CAPI_TOKEN
+// The MUSIC_ prefix is per product: conv.adsPrefix='COMPOSE' reads COMPOSE_X_PIXEL_ID etc. (API creds are shared).
 // Docs: https://docs.x.com/x-ads-api/measurement/web-conversions
 //       https://ads-api.reddit.com/docs/v3/guides/programs/capi/direct-integration
 import { createHash, createHmac, randomBytes } from 'crypto';
@@ -46,8 +47,9 @@ export function oauth1Header(method, url, creds, { nonce = randomBytes(16).toStr
 
 // conv: { kind: 'purchase'|'start_trial', eventId, value, currency, email, twclid, rdtCid, at: Date, sourceUrl }
 export function buildXRequest(conv, env = process.env) {
-  const pixelId = env.MUSIC_X_PIXEL_ID;
-  const eventId = conv.kind === 'start_trial' ? env.MUSIC_X_EVENT_ID_START_TRIAL : env.MUSIC_X_EVENT_ID_PURCHASE;
+  const px = conv.adsPrefix || 'MUSIC';
+  const pixelId = env[`${px}_X_PIXEL_ID`];
+  const eventId = conv.kind === 'start_trial' ? env[`${px}_X_EVENT_ID_START_TRIAL`] : env[`${px}_X_EVENT_ID_PURCHASE`];
   const creds = {
     consumerKey: env.X_ADS_CONSUMER_KEY, consumerSecret: env.X_ADS_CONSUMER_SECRET,
     token: env.X_ADS_ACCESS_TOKEN, tokenSecret: env.X_ADS_ACCESS_TOKEN_SECRET,
@@ -71,7 +73,7 @@ export function buildXRequest(conv, env = process.env) {
 }
 
 export function buildRedditRequest(conv, env = process.env) {
-  const pixelId = env.MUSIC_REDDIT_PIXEL_ID;
+  const pixelId = env[`${conv.adsPrefix || 'MUSIC'}_REDDIT_PIXEL_ID`];
   const token = env.REDDIT_CAPI_TOKEN;
   if (!pixelId || !token) return null;
   const ev = {

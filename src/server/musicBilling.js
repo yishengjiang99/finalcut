@@ -8,7 +8,7 @@
 import express from 'express';
 import { stripe as defaultStripe } from './config.js';
 import { apiLimiter } from './middleware.js';
-import { MUSIC_PRODUCT, resolveMusicPlan, musicPlans, musicSiteUrl, productOf } from './products.js';
+import { MUSIC_PRODUCT, PRODUCT_SPECS, resolveMusicPlan, musicSiteUrl, productOf } from './products.js';
 import { sendConversion } from './adsConversions.js';
 
 export const ATTRIBUTION_KEYS = ['event_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'twclid', 'rdt_cid', 'landing', 'ads_opt_out'];
@@ -28,14 +28,15 @@ export function attributionFrom(body = {}) {
 
 const wantsJson = (req) => (req.get('content-type') || '').includes('application/json');
 
-export function buildMusicCheckoutParams(plan, attribution, env = process.env) {
-  const site = musicSiteUrl(env);
-  const metadata = { product: MUSIC_PRODUCT, plan: plan.plan, ...attribution };
+// Shared by every product in PRODUCT_SPECS (music, compose).
+export function buildCheckoutParams(spec, plan, attribution, env = process.env, { customerEmail } = {}) {
+  const site = spec.siteUrl(env);
+  const metadata = { product: spec.product, plan: plan.plan, ...attribution };
   const params = {
     mode: plan.mode,
     line_items: [{ price: plan.priceId, quantity: 1 }],
-    success_url: `${site}/thanks?plan=${plan.plan}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${site}/?checkout=cancel#pricing`,
+    success_url: `${site}${spec.successPath}?plan=${plan.plan}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${site}${spec.cancelPath}`,
     allow_promotion_codes: true,
     client_reference_id: attribution.event_id || undefined,
     metadata,
@@ -47,7 +48,12 @@ export function buildMusicCheckoutParams(plan, attribution, env = process.env) {
     params.payment_intent_data = { metadata };
     params.customer_creation = 'always';
   }
+  if (customerEmail) params.customer_email = customerEmail;
   return params;
+}
+
+export function buildMusicCheckoutParams(plan, attribution, env = process.env) {
+  return buildCheckoutParams(PRODUCT_SPECS[MUSIC_PRODUCT], plan, attribution, env);
 }
 
 export function createMusicRouter({ stripe = defaultStripe, db, env = process.env } = {}) {
@@ -92,24 +98,25 @@ export function createMusicRouter({ stripe = defaultStripe, db, env = process.en
 const emailOf = (s) => s?.customer_details?.email || s?.customer_email || null;
 const subscriptionMetadataOfInvoice = (inv) => inv?.parent?.subscription_details?.metadata || inv?.subscription_details?.metadata || null;
 
-// Returns true when the event belonged to a non-FinalCut product and was handled here.
-export async function handleMusicWebhookEvent(event, { stripe = defaultStripe, db, env = process.env, send = sendConversion } = {}) {
+// Returns true when the event belonged to a non-FinalCut product (music, compose) and was handled here.
+export async function handleProductWebhookEvent(event, { stripe = defaultStripe, db, env = process.env, send = sendConversion } = {}) {
   const getDb = async () => db || (await import('../db.js'));
   const obj = event?.data?.object;
   switch (event?.type) {
     case 'checkout.session.completed': {
-      if (productOf(obj) !== MUSIC_PRODUCT) return false;
+      const spec = PRODUCT_SPECS[productOf(obj)];
+      if (!spec) return false;
       const email = emailOf(obj);
       const plan = obj.metadata?.plan || '';
       const { setProductEntitlement } = await getDb();
       if (email) {
-        await setProductEntitlement({ email, product: MUSIC_PRODUCT, plan, source: 'stripe', ref: obj.subscription || obj.payment_intent || obj.id, customerId: obj.customer || null, active: true });
+        await setProductEntitlement({ email, product: spec.product, plan, source: 'stripe', ref: obj.subscription || obj.payment_intent || obj.id, customerId: obj.customer || null, active: true });
       }
       if (obj.metadata?.ads_opt_out === '1') return true;
       const isTrial = obj.mode === 'subscription' && (obj.amount_total || 0) === 0;
-      const value = isTrial ? 0 : (obj.amount_total || 0) / 100 || (musicPlans(env)[plan]?.value ?? 0);
+      const value = isTrial ? 0 : (obj.amount_total || 0) / 100 || (spec.plans(env)[plan]?.value ?? 0);
       await send({
-        kind: isTrial ? 'start_trial' : 'purchase',
+        kind: isTrial ? 'start_trial' : 'purchase', adsPrefix: spec.adsPrefix,
         eventId: obj.metadata?.event_id || obj.id,
         value, currency: (obj.currency || 'usd').toUpperCase(), email,
         twclid: obj.metadata?.twclid, rdtCid: obj.metadata?.rdt_cid,
@@ -120,19 +127,21 @@ export async function handleMusicWebhookEvent(event, { stripe = defaultStripe, d
     }
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
-      if (productOf(obj) !== MUSIC_PRODUCT) return false;
+      const spec = PRODUCT_SPECS[productOf(obj)];
+      if (!spec) return false;
       const active = event.type === 'customer.subscription.updated' && ['active', 'trialing', 'past_due'].includes(obj.status);
       const { setProductEntitlementByRef } = await getDb();
-      await setProductEntitlementByRef({ product: MUSIC_PRODUCT, ref: obj.id, active });
+      await setProductEntitlementByRef({ product: spec.product, ref: obj.id, active });
       return true;
     }
     case 'invoice.paid': {
       const meta = subscriptionMetadataOfInvoice(obj);
-      if (!meta || meta.product !== MUSIC_PRODUCT) return false;
+      const spec = meta && PRODUCT_SPECS[meta.product];
+      if (!spec) return false;
       // First paid invoice after the trial (and every renewal): server-only Purchase, no pixel to dedupe with.
       if ((obj.amount_paid || 0) > 0 && meta.ads_opt_out !== '1') {
         await send({
-          kind: 'purchase', eventId: `inv_${obj.id}`, value: obj.amount_paid / 100,
+          kind: 'purchase', adsPrefix: spec.adsPrefix, eventId: `inv_${obj.id}`, value: obj.amount_paid / 100,
           currency: (obj.currency || 'usd').toUpperCase(), email: obj.customer_email,
           twclid: meta.twclid, rdtCid: meta.rdt_cid, at: new Date((obj.created || Math.floor(Date.now() / 1000)) * 1000),
         }, { env });
@@ -143,3 +152,6 @@ export async function handleMusicWebhookEvent(event, { stripe = defaultStripe, d
       return false;
   }
 }
+
+// Kept for callers/tests written against #118.
+export const handleMusicWebhookEvent = handleProductWebhookEvent;

@@ -6,6 +6,7 @@ import { setupAuth, authRouter } from './src/server/auth.js';
 import { MySQLSessionStore } from './src/server/sessionStore.js';
 import { stripeWebhookRouter, stripeRouter } from './src/server/stripe.js';
 import { createMusicRouter } from './src/server/musicBilling.js';
+import { createComposeRouter } from './src/server/composeBilling.js';
 import { captionsRouter } from './src/server/captions.js';
 import { videoRouter } from './src/server/video.js';
 import { ffmpegCliRouter } from './server/tools/ffmpeg-cli-tool.js';
@@ -82,6 +83,8 @@ app.use(authRouter);
 app.use(stripeRouter);
 // AI Music Radar web checkout + waitlist (form posts from music.grepawk.com; product-scoped entitlements).
 app.use(createMusicRouter());
+// GBK Composer Pro checkout (form posts from compose.grepawk.com/pricing) + server-to-server entitlement lookup.
+app.use(createComposeRouter());
 app.use(captionsRouter);
 app.use(videoRouter);
 app.use(ffmpegCliRouter);
