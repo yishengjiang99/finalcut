@@ -173,7 +173,7 @@ final class ProjectComposerTests: XCTestCase {
             VideoClip(id: UUID(), assetID: video.id, sourceStart: .zero, sourceEnd: .seconds(1)),
         ]
         let composed = try await NativeComposer.compose(project: project) { _ in videoURL }
-        let out = try await NativeExporter().export(composed, format: .mp4) { _ in }
+        let out = try await NativeExporter().export(composed, format: "mp4") { _ in }
         defer { try? FileManager.default.removeItem(at: out) }
         let exported = AVURLAsset(url: out)
         let duration = try await exported.load(.duration).seconds

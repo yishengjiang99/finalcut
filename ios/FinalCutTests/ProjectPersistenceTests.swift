@@ -66,7 +66,7 @@ final class ProjectPersistenceTests: XCTestCase {
 
     func testLegacyStackAdaptsToOneClipProject() {
         let url = URL(fileURLWithPath: "/tmp/base.mov")
-        var stack = EditStack(base: url, baseCanvas: NativeCanvas(width: 1920, height: 1080, duration: 20, hasAudio: true, isPhoto: false))
+        var stack = EditStack(base: url, baseCanvas: NativeCanvas(width: 1920, height: 1080, duration: 20, isPhoto: false, hasAudio: true))
         stack.push(EditEntry(tool: "trim_video", op: .trim(start: 2, end: 12)))
         stack.push(EditEntry(tool: "adjust_speed", op: .speed(2)))
         stack.push(EditEntry(tool: "adjust_brightness", op: .colorControls(brightness: 0.2, contrast: 1, saturation: 1)))
@@ -83,7 +83,7 @@ final class ProjectPersistenceTests: XCTestCase {
     func testSoundtrackOpBecomesMusicTrackClip() {
         let url = URL(fileURLWithPath: "/tmp/base.mov")
         let song = URL(fileURLWithPath: "/tmp/song.m4a")
-        var stack = EditStack(base: url, baseCanvas: NativeCanvas(width: 1920, height: 1080, duration: 20, hasAudio: true, isPhoto: false))
+        var stack = EditStack(base: url, baseCanvas: NativeCanvas(width: 1920, height: 1080, duration: 20, isPhoto: false, hasAudio: true))
         stack.push(EditEntry(tool: "youtube_soundtrack", op: .soundtrack(file: song, startOffset: 5, originalVolume: 0)))
         let project = stack.makeProject()
         XCTAssertEqual(project.audioTracks.count, 1)
