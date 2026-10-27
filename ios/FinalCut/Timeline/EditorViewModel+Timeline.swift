@@ -36,27 +36,109 @@ extension EditorViewModel {
         return project
     }
 
-    /// Reopens the most recently saved multi-clip project after a relaunch, but only
-    /// into an untouched empty editor (never over a session already in progress).
+    /// Reopens a saved project after a relaunch, but only into an untouched empty
+    /// editor (never over a session already in progress). Issue #125 Phase 1: the
+    /// restore target is the LAST-OPENED project — its id is persisted by
+    /// `ProjectLibrary` every time a project is opened. This replaces the old
+    /// implementation, which picked `loadAll().first(where:)` in unsorted
+    /// directory order (any saved project could come back) and skipped
+    /// single-clip projects entirely; that >1-clip / audio-track guard is gone,
+    /// so any saved project can be restored.
     func restoreSavedProjectIfEmpty() async {
         guard localVideoURL == nil, state == .empty, messages.isEmpty else { return }
-        let saved = ProjectStore.loadAll()
-        guard let project = saved.first(where: { $0.videoClips.count > 1 || !$0.audioTracks.isEmpty }),
-              let firstClip = project.videoClips.first,
-              let firstAsset = project.asset(firstClip.assetID) else { return }
+        if let lastID = ProjectLibrary.lastOpenedProjectID(),
+           let project = try? ProjectStore.load(lastID),
+           await openProject(project) {
+            return
+        }
+        // No usable last-opened id (first launch on this version, or that
+        // project was deleted): fall back to the most recently edited project
+        // so an upgraded install still lands in its newest work rather than an
+        // empty editor.
+        if let newest = ProjectLibrary.loadRows().first,
+           let project = try? ProjectStore.load(newest.id) {
+            await openProject(project)
+        }
+    }
+
+    /// Loads a saved project into the editor session by id (project library).
+    @discardableResult
+    func openProject(id: UUID) async -> Bool {
+        guard let project = try? ProjectStore.load(id) else { return false }
+        return await openProject(project)
+    }
+
+    /// Loads a saved project into the editor session, replacing the session
+    /// currently shown, and records it as the last-opened project (the next
+    /// relaunch restores it). The outgoing session is preserved first: a
+    /// timeline project is already saved after every mutation (saved again
+    /// here for safety), and a legacy single-clip video session is materialised
+    /// into a durable project so switching never silently drops it. Photo
+    /// sessions have no project form yet and are simply replaced. The chat
+    /// starts fresh with an "Opened …" line — transcripts are session-scoped
+    /// until Phase 2 persists them per project. Returns false when the project
+    /// can't be previewed (no video clips, or its first clip's file is gone).
+    @discardableResult
+    func openProject(_ project: EditorProject) async -> Bool {
+        if timelineProject?.id == project.id {
+            ProjectLibrary.markOpened(projectID: project.id)
+            return true
+        }
+        guard let firstClip = project.videoClips.first,
+              let firstAsset = project.asset(firstClip.assetID) else { return false }
         let baseURL = NativeComposer.resolveAssetURL(firstAsset, in: project)
         guard FileManager.default.fileExists(atPath: baseURL.path),
-              let canvas = await Self.loadCanvas(baseURL) else { return }
+              let canvas = await Self.loadCanvas(baseURL) else { return false }
+
+        if timelineProject != nil {
+            saveTimelineProject()
+        } else if localVideoURL != nil, !isPhoto {
+            _ = await ensureTimelineProject()
+        }
+
         var stack = EditStack(base: baseURL, baseCanvas: canvas)
         stack.project = project
+        undoManager?.removeAllActions(withTarget: self)
         localVideoURL = baseURL
         editStack = stack
+        captionArtifacts = CaptionArtifacts()
+        importError = nil
+        importStatus = nil
+        startNewProjectOnNextImport = false
         state = .ready
+        ProjectLibrary.setLastOpenedProjectID(project.id)
+        ProjectLibrary.markOpened(projectID: project.id)
         let missing = ProjectStore.missingAssets(project)
-        messages.append(ChatMessage(role: .system, content: missing.isEmpty
-            ? "Reopened your saved project (\(project.videoClips.count) clips)."
-            : "Reopened your saved project — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", "))."))
+        messages = [ChatMessage(role: .system, content: missing.isEmpty
+            ? "Opened \(project.name) (\(project.videoClips.count) clips)."
+            : "Opened \(project.name) — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", ")).")]
         await refreshPreview()
+        return true
+    }
+
+    /// Renames a project from the library. The open project is renamed in place
+    /// (and saved), so its in-memory copy can't clobber the new name on the
+    /// next autosave; any other project is renamed on disk via the library.
+    func renameProject(id: UUID, to newName: String) async {
+        if timelineProject?.id == id, var stack = editStack, stack.project != nil {
+            stack.project?.name = newName
+            editStack = stack
+            saveTimelineProject()
+        } else {
+            try? ProjectLibrary.rename(projectID: id, to: newName)
+        }
+    }
+
+    /// Deletes a project from the library (directory and copied media,
+    /// permanently). Deleting the project currently open first clears the
+    /// session via the same path as "New project", so the editor never keeps
+    /// editing a project whose files are gone. Returns the bytes freed.
+    @discardableResult
+    func deleteProject(id: UUID) throws -> Int64 {
+        if timelineProject?.id == id {
+            startNewTimelineProject()
+        }
+        return try ProjectLibrary.delete(projectID: id)
     }
 
     /// Saves the current project (called after every successful timeline mutation).

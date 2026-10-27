@@ -24,6 +24,7 @@
 		B54A0EA3A79A4DDA8260986E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30393A1FFA234AA49E7981C1 /* PaywallView.swift */; };
 		BE9592D7F57E46BAA68C3B35 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751EBD51C12C4CAA92EE20F6 /* EditorView.swift */; };
 		FBCD626AF515417B80A9F8F3 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 239CC4AAE2644796B435B528 /* TopBarView.swift */; };
+		A5A94A5CC1A2F777433E8265 /* ProjectLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2BBDB431B070BBE51007B0E /* ProjectLibraryView.swift */; };
 		58DF57BA5CED43BFA53F3018 /* PreviewPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D33353083EA42D7B3ED3397 /* PreviewPaneView.swift */; };
 		220E6EA97E884B71BA53F533 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6DFFAC21AA1436BB4F76594 /* ChatView.swift */; };
 		45BDFDAEC4D44C4CB3710D36 /* SampleChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9AA1956287D4F048AD584EF /* SampleChipsView.swift */; };
@@ -89,6 +90,7 @@
 		CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */; };
 		37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */; };
 		1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F58061DA341BBCB66512BC /* ProjectStore.swift */; };
+		8C8F6183FF43B54FC08DDF21 /* ProjectLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 334A23BED09239D76E43CF05 /* ProjectLibrary.swift */; };
 		9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */; };
 		7CB4F9939F2FC566F6809D40 /* ProjectComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */; };
 		EFCAF3B77E70E0156EE4FC4F /* ProjectVideoCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */; };
@@ -139,6 +141,7 @@
 		30393A1FFA234AA49E7981C1 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		751EBD51C12C4CAA92EE20F6 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		239CC4AAE2644796B435B528 /* TopBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopBarView.swift; sourceTree = "<group>"; };
+		E2BBDB431B070BBE51007B0E /* ProjectLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLibraryView.swift; sourceTree = "<group>"; };
 		5D33353083EA42D7B3ED3397 /* PreviewPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewPaneView.swift; sourceTree = "<group>"; };
 		F6DFFAC21AA1436BB4F76594 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		E9AA1956287D4F048AD584EF /* SampleChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleChipsView.swift; sourceTree = "<group>"; };
@@ -208,6 +211,7 @@
 		371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommand.swift; sourceTree = "<group>"; };
 		7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHistory.swift; sourceTree = "<group>"; };
 		C0F58061DA341BBCB66512BC /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		334A23BED09239D76E43CF05 /* ProjectLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLibrary.swift; sourceTree = "<group>"; };
 		53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditStackProjectAdapter.swift; sourceTree = "<group>"; };
 		3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposer.swift; sourceTree = "<group>"; };
 		AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectVideoCompositor.swift; sourceTree = "<group>"; };
@@ -371,6 +375,7 @@
 				F47CDA6DBB772CFE1A895B79 /* SettingsView.swift */,
 				751EBD51C12C4CAA92EE20F6 /* EditorView.swift */,
 				239CC4AAE2644796B435B528 /* TopBarView.swift */,
+				E2BBDB431B070BBE51007B0E /* ProjectLibraryView.swift */,
 				5D33353083EA42D7B3ED3397 /* PreviewPaneView.swift */,
 				F6DFFAC21AA1436BB4F76594 /* ChatView.swift */,
 				E9AA1956287D4F048AD584EF /* SampleChipsView.swift */,
@@ -472,6 +477,7 @@
 				3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */,
 				53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */,
 				C0F58061DA341BBCB66512BC /* ProjectStore.swift */,
+				334A23BED09239D76E43CF05 /* ProjectLibrary.swift */,
 				7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */,
 				371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */,
 				048CDA22B7176DD87977ECEB /* EditorProject.swift */,
@@ -605,6 +611,7 @@
 				7CB4F9939F2FC566F6809D40 /* ProjectComposer.swift in Sources */,
 				9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */,
 				1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */,
+				8C8F6183FF43B54FC08DDF21 /* ProjectLibrary.swift in Sources */,
 				37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */,
 				CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */,
 				0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */,
@@ -654,6 +661,7 @@
 				BBE32E010B504F31BC957E8B /* StoreKitPurchaseStub.swift in Sources */,
 				BE9592D7F57E46BAA68C3B35 /* EditorView.swift in Sources */,
 				FBCD626AF515417B80A9F8F3 /* TopBarView.swift in Sources */,
+				A5A94A5CC1A2F777433E8265 /* ProjectLibraryView.swift in Sources */,
 				58DF57BA5CED43BFA53F3018 /* PreviewPaneView.swift in Sources */,
 				220E6EA97E884B71BA53F533 /* ChatView.swift in Sources */,
 				45BDFDAEC4D44C4CB3710D36 /* SampleChipsView.swift in Sources */,

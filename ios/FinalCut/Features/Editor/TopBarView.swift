@@ -16,6 +16,10 @@ struct TopBarView: View {
     /// Remaining free requests today (shown subtly next to Upgrade when known).
     var freeRemaining: Int?
     var onSettings: () -> Void = {}
+    /// Project history (the library of saved projects, issue #125). Always
+    /// available — the library is also how a project is opened from an empty
+    /// editor, so unlike Export it doesn't depend on a loaded clip.
+    var onShowHistory: () -> Void = {}
     /// Undo/Redo show once media is loaded; each is disabled when there's nothing to undo/redo.
     var editControlsVisible = false
     var canUndo = false
@@ -63,6 +67,17 @@ struct TopBarView: View {
             }
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("Settings")
+
+            Button(action: onShowHistory) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 28, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .foregroundStyle(AppTheme.textPrimary)
+            .accessibilityLabel("Projects")
+            .accessibilityIdentifier("ProjectLibrary")
+
             Spacer(minLength: 0)
 
             if editControlsVisible {

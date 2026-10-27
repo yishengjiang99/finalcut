@@ -10,6 +10,8 @@ struct EditorView: View {
     @StateObject private var model = EditorViewModel()
     @State private var showExport = false
     @State private var showSettings = false
+    /// Project history library (issue #125, Phase 1), presented from the top bar.
+    @State private var showHistory = false
     @StateObject private var dictation = DictationController()
     /// Layout rethink (2026-10-27): with a timeline project open the editor is in
     /// edit focus (tall timeline, chat peeked) or chat focus (compact timeline strip,
@@ -32,6 +34,7 @@ struct EditorView: View {
                 showUpgrade: !appModel.hasSubscription,
                 freeRemaining: TopBarView.visibleFreeRemaining(unlimited: appModel.isUnlimited, remaining: appModel.dailyRemaining),
                 onSettings: { showSettings = true },
+                onShowHistory: { showHistory = true },
                 editControlsVisible: model.localVideoURL != nil,
                 canUndo: model.canUndo,
                 canRedo: model.canRedo,
@@ -108,6 +111,9 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showHistory) {
+            ProjectLibraryView(model: model)
         }
         .alert(
             model.pendingPrompt?.title ?? "",
