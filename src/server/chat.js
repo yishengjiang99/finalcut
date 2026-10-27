@@ -22,10 +22,23 @@ import {
   normalizeClientMessages,
   parseThumbnails,
   skippedToolsInTurn,
+  timelineTurnStats,
   toClientToolCalls,
   unsupportedToolsInTurn,
   validateMedia,
 } from './clientExecution.js';
+import {
+  projectContextText,
+  thumbnailRefsText,
+  validateProject,
+  validateThumbnailRefs,
+} from './projectContext.js';
+import {
+  IOS_TIMELINE_TOOL_NAMES,
+  TIMELINE_AGENT_INSTRUCTIONS,
+  validateBatchOperations,
+  validateTimelineToolArguments,
+} from './iosTimelineTools.js';
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { CAPTION_STYLE_GUIDANCE } from '../lyricShared.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
@@ -334,9 +347,15 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   let media;
   let thumbnails;
   let conversation;
+  let project;
+  let thumbnailRefs;
   try {
     media = validateMedia(req.body.media);
     thumbnails = parseThumbnails(req.body.thumbnails);
+    // Optional multi-clip project snapshot (top-level `project` or
+    // `media.project`); absent for every legacy/single-media request.
+    project = validateProject(req.body);
+    thumbnailRefs = validateThumbnailRefs(req.body.thumbnailRefs, { thumbnailCount: thumbnails.length, project });
     conversation = normalizeClientMessages(req.body.messages, { ios: parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
   } catch (error) {
     if (error instanceof ClientRequestError) {
@@ -355,6 +374,11 @@ export async function handleClientExecution(req, res, userId, profile = null) {
       messageCount: conversation.length,
       execution: 'client',
       mediaType: media?.type ?? null,
+      // Counts only — project content/labels are never logged.
+      projectPresent: Boolean(project),
+      projectAssetCount: project?.assets.length ?? null,
+      projectVideoClipCount: project?.videoClips.length ?? null,
+      projectAudioTrackCount: project?.audioTracks.length ?? null,
     },
   });
 
@@ -380,6 +404,18 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   if (offeredTools.some(t => t.function.name === FFMPEG_CLI_TOOL_NAME)) {
     contextLines.push(FFMPEG_FALLBACK_GUIDANCE_IOS);
   }
+  // Timeline context + agent rules, only when the client sent a project AND
+  // this build is actually offered timeline tools (never advertise tools the
+  // device cannot execute).
+  const timelineToolsOffered = offeredTools.some(t => IOS_TIMELINE_TOOL_NAMES.includes(t.function.name));
+  if (project && timelineToolsOffered) {
+    contextLines.push(projectContextText(project));
+    contextLines.push(TIMELINE_AGENT_INSTRUCTIONS);
+  } else if (project) {
+    contextLines.push('Project context: the client described a multi-clip project, but this app build has no timeline editing tools. Use only the offered tools (they act on the whole project output as before) and do not claim to reorder, trim, or mix individual clips or tracks.');
+  }
+  const refsLine = thumbnailRefsText(thumbnailRefs);
+  if (refsLine) contextLines.push(refsLine);
   if (skippedTools.length) {
     contextLines.push(`The user declined these steps this turn (not failures): ${skippedTools.join(', ')}. Do not call them again in this turn.`);
   }
@@ -527,14 +563,37 @@ export async function handleClientExecution(req, res, userId, profile = null) {
       turnId: turnIdFor(conversation),
       toolCallIds: assistantMessage.tool_calls.map(c => c.id),
     });
+    // Server-side schema validation for timeline calls (the device re-validates
+    // against the real project). A malformed call is returned with empty
+    // arguments + argumentsError so the device answers "invalid_arguments"
+    // through the normal result path and the model can correct itself.
+    let invalidTimelineCalls = 0;
+    const clientToolCalls = toClientToolCalls(assistantMessage.tool_calls).map((call) => {
+      if (call.argumentsError || !IOS_TIMELINE_TOOL_NAMES.includes(call.name)) return call;
+      const error = call.name === 'batch_timeline_edits'
+        ? validateBatchOperations(call.arguments)
+        : validateTimelineToolArguments(call.name, call.arguments);
+      if (!error) return call;
+      invalidTimelineCalls += 1;
+      return { ...call, arguments: {}, argumentsError: 'invalid_arguments', argumentsErrorDetail: error };
+    });
+    if (invalidTimelineCalls) {
+      enqueueChatInteraction({
+        userId,
+        interactionType: 'error',
+        content: `Rejected ${invalidTimelineCalls} malformed timeline tool call(s) from the model`,
+        metadata: { source: 'timeline_tool_validation', execution: 'client', invalidTimelineCalls },
+      });
+    }
     return res.json({
       schemaVersion: CLIENT_SCHEMA_VERSION,
       status: 'tool_calls',
-      toolCalls: toClientToolCalls(assistantMessage.tool_calls),
+      toolCalls: clientToolCalls,
       messages: [...conversation, assistantMessage],
       round: rounds + 1,
       maxRounds: MAX_TOOL_ROUNDS,
       thumbnailsSentAsImages: thumbnailsAsImages,
+      ...(project ? { project: { projectId: project.projectId, ...(project.revision !== undefined ? { revision: project.revision } : {}) } } : {}),
       ...(turnToken ? { turnToken } : {}),
     });
   }
@@ -558,6 +617,9 @@ export async function handleClientExecution(req, res, userId, profile = null) {
       okToolResults: countOkToolResultsInTurn(conversation),
       editTurnCompleted: countOkToolResultsInTurn(conversation) > 0,
       iosClient: isIosClient(req),
+      // Bounded agent telemetry: counts/codes only, no project content.
+      projectPresent: Boolean(project),
+      ...timelineTurnStats(conversation),
     },
   });
   return res.json({
@@ -566,6 +628,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
     message,
     messages: [...conversation, { role: 'assistant', content: message }],
     thumbnailsSentAsImages: thumbnailsAsImages,
+    ...(project ? { project: { projectId: project.projectId, ...(project.revision !== undefined ? { revision: project.revision } : {}) } } : {}),
   });
 }
 

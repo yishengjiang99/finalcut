@@ -2,6 +2,7 @@
 // the native client executes them on device (media is never uploaded) and posts
 // results back as OpenAI-style `role: "tool"` messages.
 import { TOOLS_SCHEMA_VERSION } from './toolsSchema.js';
+import { IOS_TIMELINE_TOOL_NAMES } from './iosTimelineTools.js';
 
 export const CLIENT_SCHEMA_VERSION = TOOLS_SCHEMA_VERSION;
 export const MAX_THUMBNAILS = 4;
@@ -15,6 +16,8 @@ export const MAX_TOOL_ROUNDS = 6;
 export const SKIPPED_BY_USER = 'skipped_by_user';
 /** Tool-result code meaning the device cannot run this tool (safety net for the UA allowlist). */
 export const UNSUPPORTED_ON_DEVICE = 'unsupported_on_device';
+/** Timeline tool-result code: the project changed after the edit was planned (stale revision). */
+export const PROJECT_REVISION_CONFLICT = 'project_revision_conflict';
 
 export class ClientRequestError extends Error {
   constructor(message, status = 400) {
@@ -300,6 +303,17 @@ export function annotateToolResult(content, toolName, { ios = false } = {}) {
         'available on the phone yet, continue with any remaining steps, and then give the final answer.',
     });
   }
+  if (result && result.ok === false && result.error === PROJECT_REVISION_CONFLICT) {
+    const current = result.output?.currentRevision;
+    return JSON.stringify({
+      ...result,
+      revisionConflict: true,
+      note: 'The project changed after this edit was planned, so the device rejected it and NOTHING was changed by this call. ' +
+        'Do not repeat the same call. Call get_project_timeline once to read the current state' +
+        (current !== undefined ? ` (current revision ${current})` : '') +
+        ', replan against it, and continue — or explain to the user why the edit cannot be completed.',
+    });
+  }
   return content;
 }
 
@@ -342,6 +356,32 @@ export function skippedToolsInTurn(messages) {
 /** Tool names the device reported as `unsupported_on_device` in the current turn. */
 export function unsupportedToolsInTurn(messages) {
   return toolsInTurnMatching(messages, isUnsupportedOnDevice);
+}
+
+const TIMELINE_TOOL_NAME_SET = new Set(IOS_TIMELINE_TOOL_NAMES);
+
+/**
+ * Bounded per-turn agent telemetry for timeline work, derived from the tool
+ * results already in the conversation (counts and codes only — never project
+ * content, labels, or media). Folded into the chat interaction metadata.
+ */
+export function timelineTurnStats(messages) {
+  const turn = currentTurn(messages);
+  const stats = { timelineToolResults: 0, timelineOk: 0, timelineFailed: 0, revisionConflicts: 0, batchResults: 0 };
+  for (const m of turn) {
+    if (m.role !== 'tool') continue;
+    const name = toolNameForCall(messages, m.tool_call_id);
+    if (!name || !TIMELINE_TOOL_NAME_SET.has(name)) continue;
+    const result = parseToolResult(m.content);
+    stats.timelineToolResults += 1;
+    if (name === 'batch_timeline_edits') stats.batchResults += 1;
+    if (result?.ok === true) stats.timelineOk += 1;
+    else {
+      stats.timelineFailed += 1;
+      if (result?.error === PROJECT_REVISION_CONFLICT) stats.revisionConflicts += 1;
+    }
+  }
+  return stats;
 }
 
 /** Map model tool_calls to the client contract `{ id, name, arguments }` (arguments parsed). */
