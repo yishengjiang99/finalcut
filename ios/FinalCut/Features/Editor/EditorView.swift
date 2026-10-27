@@ -262,6 +262,9 @@ final class EditorViewModel: ObservableObject {
     var startNewProjectOnNextImport = false
     /// Playhead target (seconds) requested from the timeline scrubber.
     @Published var seekSeconds: Double?
+    /// Idempotency cache for timeline tool calls (server contract): a retried call
+    /// carrying the same key returns the original result without re-applying.
+    var timelineIdempotencyCache: [String: ClientToolResult] = [:]
     @Published var showSampleChips = true
     @Published var lastError: String?
     @Published var activeJobId: String?

@@ -239,6 +239,11 @@ struct EditorProject: Codable, Equatable, Sendable {
     var audioTracks: [AudioTrack] = []
     var selectedClipID: UUID?
     var selectedAudioClipID: UUID?
+    /// Monotonic edit counter (the server contract's project revision): incremented
+    /// once per applied mutation (a batch counts once), including undo/redo. Models
+    /// plan against a revision and the executor rejects stale plans with
+    /// `project_revision_conflict`. Persisted with the project.
+    var revision: Int = 0
     /// Captions already on PROJECT time (e.g. migrated from a single-clip EditStack).
     var captions: [CaptionCue] = []
     var schemaVersion: Int = EditorProject.currentSchemaVersion
@@ -369,7 +374,7 @@ struct EditorProject: Codable, Equatable, Sendable {
             if asset.mediaType == .video, clip.sourceEnd.cmTime > asset.duration.cmTime + CMTime(seconds: 0.05, preferredTimescale: 600) {
                 issues.append("clip_range_exceeds_asset")
             }
-            if !(0.25...4).contains(clip.speed) { issues.append("clip_speed_out_of_range") }
+            if !(0.05...16).contains(clip.speed) { issues.append("clip_speed_out_of_range") }
             if !(0...4).contains(clip.audioGain) { issues.append("clip_gain_out_of_range") }
             if clip.audioFadeIn < 0 || clip.audioFadeOut < 0 { issues.append("clip_negative_fade") }
         }
@@ -408,6 +413,7 @@ struct EditorProject: Codable, Equatable, Sendable {
         let entries = layout
         return ProjectSummary(
             projectID: id.uuidString,
+            revision: revision,
             schemaVersion: schemaVersion,
             canvasWidth: canvas.width,
             canvasHeight: canvas.height,
@@ -465,6 +471,7 @@ struct ProjectSummary: Codable, Equatable, Sendable {
         var clips: [AudioClip]
     }
     var projectID: String
+    var revision: Int
     var schemaVersion: Int
     var canvasWidth: Int
     var canvasHeight: Int

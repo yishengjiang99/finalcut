@@ -122,6 +122,7 @@ struct EditStack: Equatable, Sendable {
             return false
         }
         redoStates.append(current)
+        bumpProjectRevision(past: current.project?.revision ?? 0)
         return true
     }
 
@@ -129,8 +130,18 @@ struct EditStack: Equatable, Sendable {
     @discardableResult
     mutating func redo() -> Bool {
         guard let next = redoStates.popLast() else { return false }
+        let currentRevision = project?.revision ?? 0
         restore(next)
+        bumpProjectRevision(past: currentRevision)
         return true
+    }
+
+    /// Undo/redo are mutations too (server contract): the restored project's revision
+    /// moves past every revision seen so far, so a stale plan can never silently match.
+    private mutating func bumpProjectRevision(past previous: Int) {
+        guard var working = project else { return }
+        working.revision = max(working.revision, previous) + 1
+        project = working
     }
 
     /// A cloud step's result becomes the new base; the old state stays in history for undo.
@@ -154,10 +165,33 @@ struct EditStack: Equatable, Sendable {
         guard var working = project else { throw ProjectCommandError.invalid("no_project") }
         let before = working
         let result = try ProjectCommandExecutor.apply(command, to: &working)
+        working.revision = before.revision + 1
         projectHistory.record(before: before)
         project = working
         redoStates.removeAll()
         return result
+    }
+
+    /// Applies a batch of timeline commands all-or-nothing (the `batch_timeline_edits`
+    /// contract): every command is validated/applied against a working copy first; if
+    /// any fails, the project is unchanged and the failing index is reported. A
+    /// successful batch is ONE undo step and ONE revision increment.
+    mutating func performProjectBatch(_ commands: [ProjectCommand]) throws -> (results: [ProjectCommandResult], failedIndex: Int?) {
+        guard var working = project else { throw ProjectCommandError.invalid("no_project") }
+        let before = working
+        var results: [ProjectCommandResult] = []
+        for (index, command) in commands.enumerated() {
+            do {
+                results.append(try ProjectCommandExecutor.apply(command, to: &working))
+            } catch {
+                return (results, index)
+            }
+        }
+        working.revision = before.revision + 1
+        projectHistory.record(before: before)
+        project = working
+        redoStates.removeAll()
+        return (results, nil)
     }
 
     /// Index of the latest captions entry (`generate_captions` or `lyric_captions`); the latest wins.

@@ -54,37 +54,25 @@ only when it has >1 video clip or any audio track. The old `youtube_soundtrack` 
 migrates to a normal clip on a "Soundtrack" lane; in timeline mode new soundtracks
 are inserted the same way.
 
-## AI tools (build ≥ 14)
+## AI tools (server contract on main; executor ships in build 14)
 
-25 tools are defined in `src/server/iosTimelineTools.js`, gated by
-`TIMELINE_MIN_BUILD = 14` in `iosToolAllowlist.js`, and offered only to iOS — web
-clients never see them. The client sends a bounded `media.project` summary (IDs,
-order, ranges, gains — no media, no paths); the server validates it
-(`clientExecution.validateProjectSummary`) and renders it into the model context.
-The app executes tools through `ProjectCommand` and returns a fresh summary plus
-affected/created IDs with every result, so the model can chain (split → trim the
-new clip; create lane → insert). Legacy single-clip tools used on a project are
-translated: frame/colour tools hit the selected clip, `resize_video` sets the
-canvas, trim/speed translate only when the project has exactly one clip (otherwise
-the model is told to use the clip tools with an ID).
-
-## Coordination: parallel server implementation (READ BEFORE MERGING)
-
-A sibling worktree (`finalcap-agentic-work`, branch `feat/agentic-timeline-server`,
-unpushed) implemented the server-side agentic orchestration for this feature from a
-separate spec: richer prompt rules, `batch_timeline_edits`, a project-revision /
-idempotency contract, and a DIFFERENT tool vocabulary (camelCase args;
-`get_project_timeline`, `create_audio_track`, `add_audio_clip`,
-`apply_audio_ducking`, …) in its own `src/server/iosTimelineTools.js`, gated by a
-placeholder `TIMELINE_TOOLS_MIN_BUILD`. **The two `iosTimelineTools.js` versions
-must not both land.** Its `docs/api/IOS_TIMELINE_TOOLS.md` carries the full
-reconciliation table; the recommended merge keeps that branch's orchestration,
-adopts this branch's `TIMELINE_MIN_BUILD = 14`, and picks ONE vocabulary — the
-device executor's names (this branch's iOS dispatch + `ToolCatalog`, following the
-§7.1 names in the iOS spec) are the binding constraint unless the executor is
-renamed before build 14 is cut. This branch does NOT implement the revision
-counter, `expectedRevision`/`idempotencyKey`, or batch edits; those come with the
-sibling's server work if adopted.
+30 tools are defined in `src/server/iosTimelineTools.js` **on main** (the server
+track landed first), gated by `TIMELINE_TOOLS_MIN_BUILD` in `iosToolAllowlist.js`
+— currently `2_000_000_000`, dark on every shipped build, to be flipped to 14 when
+this branch's executor ships in build 14. The client sends a bounded
+`media.project` summary (IDs, order, ranges, gains, `revision` — no media, no
+paths); the server validates it (`projectContext.js`) and renders it into the
+model context. This branch's executor (`Timeline/TimelineToolExecutor.swift`)
+implements the landed contract in full: camelCase arguments, the persisted
+project `revision` (one increment per command, per batch, or undo/redo),
+`expectedRevision` → `project_revision_conflict` with nothing applied,
+`idempotencyKey` replay, `batch_timeline_edits` (all-or-nothing), the
+`apply_audio_ducking` track semantics (dialogue = video-clip original audio +
+`againstTrackIds` tracks, voiceover tracks by default), and the contract result
+shape (`projectRevision`, affected/created IDs, fresh summary). Legacy
+single-clip tools used on a project are translated: frame/colour tools hit the
+selected clip, `resize_video` sets the canvas, trim/speed translate only when
+the project has exactly one clip (otherwise the model uses the clip tools).
 
 ## Known limits
 
