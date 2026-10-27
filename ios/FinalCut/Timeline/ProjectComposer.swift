@@ -47,6 +47,14 @@ extension NativeComposer {
     static func compose(project: EditorProject, resolve: (MediaAsset) -> URL) async throws -> ComposedVideo {
         let issues = project.validationIssues()
         if !issues.isEmpty { throw ProjectComposerError.invalidProject(issues) }
+        // A deleted media file fails the compose with the asset identified (the UI
+        // names it from ProjectStore.missingAssets) instead of an opaque load error.
+        for asset in project.assets {
+            let url = resolve(asset)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                throw ProjectComposerError.missingAsset(asset.id)
+            }
+        }
         let timescale = NativeComposer.timescale
         let composition = AVMutableComposition()
         let layout = project.layout
