@@ -1,8 +1,17 @@
 # iOS unit tests — gate for ios/** PRs (FinalCutTests).
+# Default runs execute only a smoke set (~10%: pure-logic suites, no UI tests);
+# dispatch manually with suite=full to run the entire suite.
 name: iOS Unit Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Test suite: smoke (~10%, default) or full'
+        type: choice
+        options: [smoke, full]
+        default: smoke
+        required: true
   pull_request:
     paths:
       - 'ios/**'
@@ -77,17 +86,35 @@ jobs:
         # UI tests check that the on-screen keyboard hides; a connected hardware keyboard hides it anyway.
         run: defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
 
-      - name: Run FinalCutTests + FinalCutUITests
+      - name: Run tests (smoke set by default; full suite on dispatch with suite=full)
         working-directory: ios
+        env:
+          SUITE: ${{ inputs.suite }}
         run: |
           set -euo pipefail
           set -o pipefail
+          if [[ "$SUITE" == "full" ]]; then
+            ONLY_TESTING=(
+              -only-testing:FinalCutTests
+              -only-testing:FinalCutUITests
+            )
+          else
+            # Smoke set (~10%): pure-logic suites only — no media rendering,
+            # no speech, no screenshots, no UI tests.
+            ONLY_TESTING=(
+              -only-testing:FinalCutTests/APIModelsTests
+              -only-testing:FinalCutTests/DictationEndpointerTests
+              -only-testing:FinalCutTests/EditRoutingAndMediaTypeTests
+              -only-testing:FinalCutTests/NativeToolParserTests
+              -only-testing:FinalCutTests/ProjectModelTests
+            )
+          fi
+          echo "Suite: ${SUITE:-smoke} -> ${ONLY_TESTING[*]}"
           xcodebuild \
             -project FinalCut.xcodeproj \
             -scheme FinalCut \
             -destination "${{ steps.sim.outputs.destination }}" \
-            -only-testing:FinalCutTests \
-            -only-testing:FinalCutUITests \
+            "${ONLY_TESTING[@]}" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             test
