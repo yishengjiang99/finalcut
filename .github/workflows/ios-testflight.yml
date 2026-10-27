@@ -8,9 +8,9 @@ on:
         required: false
         default: CI build
       marketing_version:
-        description: CFBundleShortVersionString (1.0 is in App Store review; use 1.0.1+)
+        description: CFBundleShortVersionString (1.0.1 is live in the App Store; use 1.1+)
         required: true
-        default: '1.0.1'
+        default: '1.1'
 
 concurrency:
   group: ios-testflight
@@ -139,7 +139,7 @@ jobs:
       - name: Archive
         working-directory: ios
         env:
-          MV: ${{ github.event.inputs.marketing_version || '1.0.1' }}
+          MV: ${{ github.event.inputs.marketing_version || '1.1' }}
         run: |
           set -euo pipefail
           # Never upload into the 1.0 train while 1.0 is in App Store review.
@@ -211,6 +211,6 @@ jobs:
             echo "- Build: \`${{ github.run_number }}\`"
             echo "- Sample: sample-lake.mp4 copied over finalcap-test-video.mp4"
             echo "- Notes: ${{ github.event.inputs.notes }}"
-            echo "- Version: ${{ github.event.inputs.marketing_version || '1.0.1' }} (${{ github.run_number }})"
+            echo "- Version: ${{ github.event.inputs.marketing_version || '1.1' }} (${{ github.run_number }})"
             echo "- Wait a few minutes in App Store Connect for processing, then install the new build."
           } >> "$GITHUB_STEP_SUMMARY"
