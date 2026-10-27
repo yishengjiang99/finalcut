@@ -398,7 +398,7 @@ export function projectContextText(project) {
     JSON.stringify(summary),
   ];
   if (summary.truncated) {
-    lines.push('NOTE: this project summary is TRUNCATED — it does not list every asset/clip/track. Do not assume you have seen the whole project; call get_timeline or list_project_assets for the parts you need.');
+    lines.push('NOTE: this project summary is TRUNCATED — it does not list every asset/clip/track. Do not assume you have seen the whole project; call get_project_timeline, list_project_assets, get_clip_details, or get_audio_track_details for the parts you need.');
   }
   return lines.join('\n');
 }

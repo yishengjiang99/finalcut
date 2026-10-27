@@ -314,36 +314,36 @@ anything else. Counts and byte limits are unchanged (≤ 4, ≤ 300 KB each).
 
 ## Timeline tools
 
-Multi-clip / multi-track editing runs through 25 iOS-only tool definitions
+Multi-clip / multi-track editing runs through iOS-only tool definitions
 (`src/server/iosTimelineTools.js`, catalogued in
-[`IOS_TIMELINE_TOOLS.md`](./IOS_TIMELINE_TOOLS.md)) whose names and argument
-shapes match the shipped device executor exactly (snake_case:
-`get_timeline`, `list_project_assets`, `get_clip_info`,
-`get_project_duration`; video mutations append/reorder/split/trim/remove/
-duplicate, `set_video_clip_speed`, `apply_clip_effect`,
-`set_video_clip_transition`; audio mutations `create_audio_lane`,
-`insert_audio_clip`, move/trim/remove, clip/track volume, `mute_audio_track`,
-`set_audio_fade`, `loop_audio_clip`, `set_audio_ducking`; and
-`set_project_canvas`). They are offered only to FinalCap-iOS builds ≥
-`TIMELINE_TOOLS_MIN_BUILD` (= 21, the first build of app version 1.2;
-`src/server/iosToolAllowlist.js`), only for video media, and never to web
-clients. Timeline system-prompt rules (scoping, timing, recovery, sequencing)
-are injected only when a project snapshot is present **and** the build is
-offered the tools; a snapshot sent to an older build changes nothing except a
-note that timeline tools are unavailable on that build.
+[`IOS_TIMELINE_TOOLS.md`](./IOS_TIMELINE_TOOLS.md)): inspection
+(`get_project_timeline`, `list_project_assets`, `get_clip_details`,
+`get_audio_track_details`, `get_project_info`, `get_project_duration`), video
+mutations (append/insert/reorder/split/trim/remove/duplicate, speed, effect,
+original audio, transition), audio mutations (tracks and clips, volume, mute,
+fades, loop, ducking), project canvas, and `batch_timeline_edits`
+(all-or-nothing, ≤ 20 operations). They are offered only to FinalCap-iOS
+builds ≥ `TIMELINE_TOOLS_MIN_BUILD` (`src/server/iosToolAllowlist.js`), only
+for video media, and never to web clients. Timeline system-prompt rules
+(scoping, timing, recovery, batching) are injected only when a project
+snapshot is present **and** the build is offered the tools; a snapshot sent to
+an older build changes nothing except a note that timeline tools are
+unavailable on that build.
 
-Successful mutation results carry the device's fresh project summary:
-`output: { project_duration, project, affected_ids?, created_id?, message? }`.
-Failures are `{ ok: false, error: "<code>" }` or `"<code>: <hint>"`. Stable
-timeline error codes: `invalid_arguments`, `asset_not_found`,
-`clip_not_found`, `audio_track_not_found`, `invalid_source_range`,
-`invalid_timeline_position`, `unsupported_on_device`,
-`resource_limit_exceeded`, `cancelled`, `no_media`.
+Mutation calls accept `expectedRevision` and `idempotencyKey`. Successful
+mutation results should report
+`output: { projectRevision, affectedClipIds?, duration?, videoClipCount?, audioTrackCount? }`.
+On a stale plan the device returns
+`{ ok: false, error: "project_revision_conflict", output: { currentRevision } }`;
+the server annotates that result for the model (inspect once, replan, never
+repeat the identical call). Stable timeline error codes:
+`invalid_arguments`, `asset_not_found`, `clip_not_found`,
+`audio_track_not_found`, `audio_clip_not_found`, `invalid_source_range`,
+`invalid_timeline_position`, `project_revision_conflict`,
+`unsupported_on_device`, `resource_limit_exceeded`, `cancelled`.
 
 The server also validates timeline call arguments against the declared
 schemas before returning them: a malformed call comes back with
 `arguments: {}` and `argumentsError: "invalid_arguments"`, so the device can
-answer through the normal tool-result path. The 6-round loop cap is
-unchanged; multi-step plans fit by sequencing calls and chaining on each
-result's fresh summary (batching/revision checks are deferred beyond v1.2 —
-the device executor does not implement them).
+answer through the normal tool-result path. The 6-round loop cap is unchanged
+— batching, not a higher cap, is how multi-step plans fit.

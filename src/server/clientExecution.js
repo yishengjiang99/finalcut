@@ -309,7 +309,7 @@ export function annotateToolResult(content, toolName, { ios = false } = {}) {
       ...result,
       revisionConflict: true,
       note: 'The project changed after this edit was planned, so the device rejected it and NOTHING was changed by this call. ' +
-        'Do not repeat the same call. Call get_timeline once to read the current state' +
+        'Do not repeat the same call. Call get_project_timeline once to read the current state' +
         (current !== undefined ? ` (current revision ${current})` : '') +
         ', replan against it, and continue — or explain to the user why the edit cannot be completed.',
     });
@@ -367,13 +367,14 @@ const TIMELINE_TOOL_NAME_SET = new Set(IOS_TIMELINE_TOOL_NAMES);
  */
 export function timelineTurnStats(messages) {
   const turn = currentTurn(messages);
-  const stats = { timelineToolResults: 0, timelineOk: 0, timelineFailed: 0, revisionConflicts: 0 };
+  const stats = { timelineToolResults: 0, timelineOk: 0, timelineFailed: 0, revisionConflicts: 0, batchResults: 0 };
   for (const m of turn) {
     if (m.role !== 'tool') continue;
     const name = toolNameForCall(messages, m.tool_call_id);
     if (!name || !TIMELINE_TOOL_NAME_SET.has(name)) continue;
     const result = parseToolResult(m.content);
     stats.timelineToolResults += 1;
+    if (name === 'batch_timeline_edits') stats.batchResults += 1;
     if (result?.ok === true) stats.timelineOk += 1;
     else {
       stats.timelineFailed += 1;

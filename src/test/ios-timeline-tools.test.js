@@ -4,6 +4,8 @@ import {
   IOS_TIMELINE_TOOLS,
   IOS_TIMELINE_TOOL_NAMES,
   TIMELINE_ERROR_CODES,
+  TIMELINE_MUTATION_TOOL_NAMES,
+  validateBatchOperations,
   validateTimelineToolArguments,
 } from '../server/iosTimelineTools.js';
 import {
@@ -13,19 +15,20 @@ import {
 import { buildToolsSchema, mediaTypesForTool, offeredToolsFor } from '../server/toolsSchema.js';
 import { tools } from '../tools.js';
 
-// The device executor's exact tool set (TimelineToolExecutor TimelineTools.names).
 const EXPECTED_TOOLS = [
-  'get_timeline', 'list_project_assets', 'get_clip_info', 'get_project_duration',
-  'append_video_clips', 'reorder_video_clips', 'split_video_clip', 'trim_video_clip',
-  'remove_video_clip', 'duplicate_video_clip', 'set_video_clip_speed', 'apply_clip_effect',
-  'set_video_clip_transition', 'create_audio_lane', 'insert_audio_clip', 'move_audio_clip',
-  'trim_audio_clip', 'remove_audio_clip', 'set_audio_clip_volume', 'set_audio_track_volume',
-  'mute_audio_track', 'set_audio_fade', 'loop_audio_clip', 'set_audio_ducking',
-  'set_project_canvas',
+  'get_project_timeline', 'list_project_assets', 'get_clip_details', 'get_audio_track_details',
+  'get_project_info', 'get_project_duration',
+  'append_video_clips', 'insert_video_clip', 'reorder_video_clips', 'split_video_clip',
+  'trim_video_clip', 'remove_video_clip', 'duplicate_video_clip', 'set_clip_speed',
+  'set_clip_effect', 'set_clip_original_audio', 'set_clip_transition',
+  'create_audio_track', 'add_audio_clip', 'move_audio_clip', 'trim_audio_clip',
+  'remove_audio_clip', 'set_audio_clip_volume', 'set_audio_track_volume', 'mute_audio_track',
+  'set_audio_clip_fade', 'loop_audio_clip', 'apply_audio_ducking', 'set_project_canvas',
+  'batch_timeline_edits',
 ];
 
 describe('timeline tool definitions', () => {
-  it('defines exactly the device executor tool set', () => {
+  it('defines exactly the specified tool set', () => {
     expect([...IOS_TIMELINE_TOOL_NAMES].sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
 
@@ -40,12 +43,18 @@ describe('timeline tool definitions', () => {
       for (const required of fn.parameters.required) {
         expect(fn.parameters.properties).toHaveProperty(required);
       }
+      // Mutation tools carry the revision + idempotency contract.
+      if (TIMELINE_MUTATION_TOOL_NAMES.includes(fn.name) || fn.name === 'batch_timeline_edits') {
+        expect(fn.parameters.properties).toHaveProperty('expectedRevision');
+        expect(fn.parameters.properties).toHaveProperty('idempotencyKey');
+      }
     }
   });
 
   it('documents the stable error codes', () => {
-    for (const code of ['invalid_arguments', 'asset_not_found', 'clip_not_found',
-      'unsupported_on_device', 'resource_limit_exceeded', 'cancelled', 'no_media']) {
+    for (const code of ['invalid_arguments', 'asset_not_found', 'clip_not_found', 'audio_track_not_found',
+      'invalid_source_range', 'invalid_timeline_position', 'project_revision_conflict',
+      'unsupported_on_device', 'resource_limit_exceeded', 'cancelled']) {
       expect(TIMELINE_ERROR_CODES).toContain(code);
     }
   });
@@ -61,21 +70,18 @@ describe('timeline tool definitions', () => {
   });
 });
 
-describe('build gating (app version 1.2)', () => {
-  it('the gate is the first build of app version 1.2 (ios-testflight run_number 21)', () => {
-    expect(TIMELINE_TOOLS_MIN_BUILD).toBe(21);
-  });
-
-  it('no pre-1.2 build receives timeline tools', () => {
-    for (const build of [10, 13, 14, 20]) {
+describe('build gating', () => {
+  it('no real installed build receives timeline tools yet (placeholder min build)', () => {
+    expect(TIMELINE_TOOLS_MIN_BUILD).toBe(2_000_000_000);
+    for (const build of [10, 13, 14, 84, 999]) {
       const offered = offeredToolsFor({ userAgent: `FinalCap-iOS/${build}`, mediaType: 'video' }).map(t => t.function.name);
       for (const name of IOS_TIMELINE_TOOL_NAMES) expect(offered).not.toContain(name);
       expect(isToolAllowedForIosBuild('trim_video_clip', build)).toBe(false);
     }
   });
 
-  it('build 21 (version 1.2) receives the full timeline set (and only for video)', () => {
-    const ua = 'FinalCap-iOS/21';
+  it('a build at the min build receives the full timeline set (and only for video)', () => {
+    const ua = `FinalCap-iOS/${TIMELINE_TOOLS_MIN_BUILD}`;
     const offered = offeredToolsFor({ userAgent: ua, mediaType: 'video' }).map(t => t.function.name);
     for (const name of IOS_TIMELINE_TOOL_NAMES) expect(offered).toContain(name);
     const photoOffered = offeredToolsFor({ userAgent: ua, mediaType: 'image' }).map(t => t.function.name);
@@ -91,24 +97,39 @@ describe('build gating (app version 1.2)', () => {
 });
 
 describe('validateTimelineToolArguments', () => {
-  it('accepts well-formed calls in the device argument shapes', () => {
-    expect(validateTimelineToolArguments('trim_video_clip', { clip_id: 'clip-2', start: 2, end: 7 })).toBeNull();
-    expect(validateTimelineToolArguments('set_audio_track_volume', { track_id: 'track-music', volume: 0.2 })).toBeNull();
-    expect(validateTimelineToolArguments('get_timeline', {})).toBeNull();
-    expect(validateTimelineToolArguments('reorder_video_clips', { clip_ids: ['a', 'b'] })).toBeNull();
-    expect(validateTimelineToolArguments('insert_audio_clip', { track_id: 't', asset_id: 'a', timeline_start: 12, volume: 0.2 })).toBeNull();
-    expect(validateTimelineToolArguments('mute_audio_track', { clip_id: 'clip-3' })).toBeNull();
-    expect(validateTimelineToolArguments('apply_clip_effect', { kind: 'color_filter', filter: 'warm', intensity: 0.8 })).toBeNull();
+  it('accepts well-formed calls', () => {
+    expect(validateTimelineToolArguments('trim_video_clip', { clipId: 'clip-2', sourceStart: 2, sourceEnd: 7, expectedRevision: 18 })).toBeNull();
+    expect(validateTimelineToolArguments('set_audio_track_volume', { trackId: 'track-music', volume: 0.2 })).toBeNull();
+    expect(validateTimelineToolArguments('get_project_timeline', {})).toBeNull();
+    expect(validateTimelineToolArguments('reorder_video_clips', { orderedClipIds: ['a', 'b'] })).toBeNull();
   });
 
   it('rejects missing required args, wrong types, out-of-range values, and unknown keys', () => {
-    expect(validateTimelineToolArguments('trim_video_clip', { clip_id: 'clip-2', start: 2 })).toMatch(/end is required/);
-    expect(validateTimelineToolArguments('set_video_clip_speed', { clip_id: 'c', speed: 99 })).toMatch(/<= 16/);
-    expect(validateTimelineToolArguments('set_audio_track_volume', { track_id: 't', volume: 'loud' })).toMatch(/finite number/);
-    expect(validateTimelineToolArguments('get_clip_info', { clip_id: 'c', path: '/etc/passwd' })).toMatch(/not a supported argument/);
-    expect(validateTimelineToolArguments('set_video_clip_transition', { clip_id: 'c', type: 'wipe' })).toMatch(/must be one of/);
-    expect(validateTimelineToolArguments('append_video_clips', { asset_ids: [] })).toMatch(/at least 1/);
+    expect(validateTimelineToolArguments('trim_video_clip', { clipId: 'clip-2', sourceStart: 2 })).toMatch(/sourceEnd is required/);
+    expect(validateTimelineToolArguments('set_clip_speed', { clipId: 'c', speed: 99 })).toMatch(/<= 16/);
+    expect(validateTimelineToolArguments('set_audio_track_volume', { trackId: 't', volume: 'loud' })).toMatch(/finite number/);
+    expect(validateTimelineToolArguments('get_clip_details', { clipId: 'c', path: '/etc/passwd' })).toMatch(/not a supported argument/);
+    expect(validateTimelineToolArguments('set_clip_transition', { clipId: 'c', kind: 'wipe' })).toMatch(/must be one of/);
     expect(validateTimelineToolArguments('nope_tool', {})).toMatch(/unknown timeline tool/);
-    expect(validateTimelineToolArguments('trim_video_clip', { clip_id: 'c', start: Number.NaN, end: 3 })).toMatch(/finite number/);
+    expect(validateTimelineToolArguments('trim_video_clip', { clipId: 'c', sourceStart: Number.NaN, sourceEnd: 3 })).toMatch(/finite number/);
+  });
+
+  it('validates batch operations against each operation tool schema', () => {
+    expect(validateBatchOperations({
+      expectedRevision: 18,
+      operations: [
+        { type: 'reorder_video_clips', arguments: { orderedClipIds: ['clip-3', 'clip-1', 'clip-2'] } },
+        { type: 'set_audio_track_volume', arguments: { trackId: 'track-music', volume: 0.25 } },
+      ],
+    })).toBeNull();
+    // Inspection tools and nested batches are not batchable.
+    expect(validateBatchOperations({ operations: [{ type: 'get_project_timeline', arguments: {} }] })).toMatch(/not a batchable/);
+    expect(validateBatchOperations({ operations: [{ type: 'batch_timeline_edits', arguments: { operations: [] } }] })).toMatch(/not a batchable/);
+    // An invalid inner call names the failing operation.
+    expect(validateBatchOperations({ operations: [{ type: 'trim_video_clip', arguments: { clipId: 'c' } }] })).toMatch(/operations\[0\] \(trim_video_clip\)/);
+    // Batch size is bounded.
+    expect(validateBatchOperations({
+      operations: Array.from({ length: 21 }, () => ({ type: 'mute_audio_track', arguments: { trackId: 't', muted: true } })),
+    })).toMatch(/at most 20/);
   });
 });

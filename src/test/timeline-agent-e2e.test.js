@@ -1,7 +1,6 @@
 // @vitest-environment node
 // Deterministic end-to-end mock of the agentic timeline workflow (spec §16):
-// a scripted Grok planner + a fake on-device executor (speaking the REAL
-// device vocabulary of TimelineToolExecutor.swift) drive the real
+// a scripted Grok planner + a fake on-device executor drive the real
 // POST /api/chat client-execution loop. No network, no ffmpeg, no media.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
@@ -86,10 +85,11 @@ beforeEach(() => {
   token = issue();
 });
 
-// ─── Fake device (mirrors TimelineToolExecutor result shapes) ────────────────
+// ─── Fake device ─────────────────────────────────────────────────────────────
 
 function makeDevice() {
   return {
+    revision: 18,
     assets: [
       { id: 'asset-beach', type: 'video', label: 'beach.mov', duration: 10, hasAudio: true },
       { id: 'asset-restaurant', type: 'video', label: 'restaurant.mov', duration: 8, hasAudio: true },
@@ -107,6 +107,7 @@ function makeDevice() {
       { id: 'track-voice', label: 'Narration', kind: 'voiceover', volume: 1, muted: false, clips: [] },
     ],
     audioSeq: 0,
+    beforeExecute: null, // test hook, runs before each mutation
   };
 }
 
@@ -114,8 +115,7 @@ function deviceDuration(device) {
   return device.videoClips.reduce((sum, c) => sum + (c.sourceEnd - c.sourceStart), 0);
 }
 
-/** The summary shape the device sends (media.project) and returns in output.project. */
-function summary(device) {
+function timelineOutput(device) {
   let cursor = 0;
   const videoClips = device.videoClips.map((c) => {
     const entry = { id: c.id, assetId: c.assetId, timelineStart: cursor, sourceStart: c.sourceStart, sourceEnd: c.sourceEnd, originalAudioEnabled: c.originalAudioEnabled };
@@ -123,96 +123,135 @@ function summary(device) {
     return entry;
   });
   return {
-    schemaVersion: 1,
-    projectId: 'project-vacation',
+    projectRevision: device.revision,
     duration: deviceDuration(device),
-    canvas: { width: 1920, height: 1080, fps: 30 },
-    assets: device.assets,
+    videoClipCount: device.videoClips.length,
+    audioTrackCount: device.audioTracks.length,
     videoClips,
-    audioTracks: device.audioTracks,
-    selectedClipId: device.videoClips[0]?.id,
+    audioTracks: device.audioTracks.map(t => ({ id: t.id, label: t.label, kind: t.kind, volume: t.volume, muted: t.muted, clips: t.clips })),
   };
 }
 
-function deviceSuccess(device, extra = {}) {
+function mutationOutput(device, affectedClipIds) {
+  device.revision += 1;
   return {
     ok: true, executedOn: 'device',
-    output: { project_duration: deviceDuration(device), project: summary(device), ...extra },
+    output: {
+      projectRevision: device.revision,
+      affectedClipIds,
+      duration: deviceDuration(device),
+      videoClipCount: device.videoClips.length,
+      audioTrackCount: device.audioTracks.length,
+    },
   };
 }
-function deviceFailure(error) {
-  return { ok: false, executedOn: 'device', error, output: {} };
-}
-function findAudioClip(device, clipId) {
-  for (const track of device.audioTracks) {
-    const clip = track.clips.find(c => c.id === clipId);
-    if (clip) return { track, clip };
+
+function checkRevision(device, args) {
+  if (args.expectedRevision !== undefined && args.expectedRevision !== device.revision) {
+    return { ok: false, executedOn: 'device', error: 'project_revision_conflict', output: { currentRevision: device.revision } };
   }
   return null;
 }
 
 function executeOnDevice(device, name, args) {
+  if (name === 'get_project_timeline' || name === 'get_project_info' || name === 'get_project_duration') {
+    return { ok: true, executedOn: 'device', output: timelineOutput(device) };
+  }
+  if (name === 'list_project_assets') {
+    return { ok: true, executedOn: 'device', output: { assets: device.assets } };
+  }
+  if (device.beforeExecute) device.beforeExecute(name, args);
+  const conflict = checkRevision(device, args);
+  if (conflict) return conflict;
   switch (name) {
-    case 'get_timeline':
-    case 'list_project_assets':
-      return deviceSuccess(device);
-    case 'get_project_duration':
-      return deviceSuccess(device, { duration: deviceDuration(device) });
-    case 'reorder_video_clips': {
-      const current = device.videoClips.map(c => c.id).sort();
-      const wanted = [...args.clip_ids].sort();
-      if (JSON.stringify(current) !== JSON.stringify(wanted)) return deviceFailure('invalid_arguments');
-      const byId = new Map(device.videoClips.map(c => [c.id, c]));
-      device.videoClips = args.clip_ids.map(id => byId.get(id));
-      return deviceSuccess(device, { affected_ids: args.clip_ids });
-    }
-    case 'trim_video_clip': {
-      const clip = device.videoClips.find(c => c.id === args.clip_id);
-      if (!clip) return deviceFailure('clip_not_found: call get_timeline for current clip IDs');
-      if (!(args.end > args.start)) return deviceFailure('invalid_source_range');
-      clip.sourceStart = args.start;
-      clip.sourceEnd = args.end;
-      return deviceSuccess(device, { affected_ids: [clip.id] });
-    }
-    case 'insert_audio_clip': {
-      const track = device.audioTracks.find(t => t.id === args.track_id);
-      if (!track) return deviceFailure('audio_track_not_found');
-      if (!device.assets.some(a => a.id === args.asset_id)) return deviceFailure('asset_not_found');
-      device.audioSeq += 1;
-      const clip = {
-        id: `audio-${device.audioSeq}`, assetId: args.asset_id, timelineStart: args.timeline_start,
-        sourceStart: args.source_start ?? 0,
-        sourceDuration: args.source_duration ?? (device.assets.find(a => a.id === args.asset_id).duration === 60 ? 27 : 8),
-        gain: args.volume ?? 1, fadeIn: 0, fadeOut: 0,
-      };
-      track.clips.push(clip);
-      return deviceSuccess(device, { created_id: clip.id, affected_ids: [clip.id] });
-    }
-    case 'set_audio_fade': {
-      const found = findAudioClip(device, args.clip_id);
-      if (!found) return deviceFailure('audio_clip_not_found');
-      if (args.type === 'in') found.clip.fadeIn = args.duration; else found.clip.fadeOut = args.duration;
-      return deviceSuccess(device, { affected_ids: [found.clip.id] });
-    }
-    case 'mute_audio_track': {
-      if (args.clip_id) {
-        const clip = device.videoClips.find(c => c.id === args.clip_id);
-        if (!clip) return deviceFailure('clip_not_found: call get_timeline for current clip IDs');
-        clip.originalAudioEnabled = !(args.muted ?? true);
-        return deviceSuccess(device, { affected_ids: [clip.id] });
+    case 'batch_timeline_edits': {
+      const affected = [];
+      for (const op of args.operations) {
+        const r = executeMutation(device, op.type, op.arguments);
+        if (!r.ok) return r;
+        affected.push(...(r.output.affectedClipIds || []));
       }
-      const track = device.audioTracks.find(t => t.id === args.track_id);
-      if (!track) return deviceFailure('audio_track_not_found');
-      track.muted = args.muted ?? true;
-      return deviceSuccess(device, { affected_ids: [track.id] });
+      device.revision += 1;
+      return {
+        ok: true, executedOn: 'device',
+        output: { projectRevision: device.revision, affectedClipIds: affected, duration: deviceDuration(device), appliedOperations: args.operations.length },
+      };
     }
     default:
-      return deviceFailure('unsupported_on_device');
+      return executeMutation(device, name, args);
+  }
+}
+
+function executeMutation(device, name, args) {
+  switch (name) {
+    case 'reorder_video_clips': {
+      const current = device.videoClips.map(c => c.id).sort();
+      const wanted = [...args.orderedClipIds].sort();
+      if (JSON.stringify(current) !== JSON.stringify(wanted)) {
+        return { ok: false, executedOn: 'device', error: 'invalid_arguments', output: {} };
+      }
+      const byId = new Map(device.videoClips.map(c => [c.id, c]));
+      device.videoClips = args.orderedClipIds.map(id => byId.get(id));
+      return mutationOutput(device, args.orderedClipIds);
+    }
+    case 'trim_video_clip': {
+      const clip = device.videoClips.find(c => c.id === args.clipId);
+      if (!clip) return { ok: false, executedOn: 'device', error: 'clip_not_found', output: {} };
+      if (!(args.sourceEnd > args.sourceStart)) return { ok: false, executedOn: 'device', error: 'invalid_source_range', output: {} };
+      clip.sourceStart = args.sourceStart;
+      clip.sourceEnd = args.sourceEnd;
+      return mutationOutput(device, [clip.id]);
+    }
+    case 'add_audio_clip': {
+      const track = device.audioTracks.find(t => t.id === args.trackId);
+      if (!track) return { ok: false, executedOn: 'device', error: 'audio_track_not_found', output: {} };
+      if (!device.assets.some(a => a.id === args.assetId)) return { ok: false, executedOn: 'device', error: 'asset_not_found', output: {} };
+      device.audioSeq += 1;
+      const clip = {
+        id: `audio-${device.audioSeq}`, assetId: args.assetId, timelineStart: args.timelineStart,
+        sourceStart: args.sourceStart ?? 0, sourceDuration: args.sourceDuration ?? 8, gain: args.gain ?? 1, fadeIn: 0, fadeOut: 0,
+      };
+      track.clips.push(clip);
+      const out = mutationOutput(device, [clip.id]);
+      out.output.createdClipId = clip.id;
+      out.output.createdTrackId = track.id;
+      return out;
+    }
+    case 'set_audio_clip_fade': {
+      for (const track of device.audioTracks) {
+        const clip = track.clips.find(c => c.id === args.clipId);
+        if (clip) {
+          if (args.fadeIn !== undefined) clip.fadeIn = args.fadeIn;
+          if (args.fadeOut !== undefined) clip.fadeOut = args.fadeOut;
+          return mutationOutput(device, [clip.id]);
+        }
+      }
+      return { ok: false, executedOn: 'device', error: 'audio_clip_not_found', output: {} };
+    }
+    case 'set_clip_original_audio': {
+      const clip = device.videoClips.find(c => c.id === args.clipId);
+      if (!clip) return { ok: false, executedOn: 'device', error: 'clip_not_found', output: {} };
+      if (args.enabled !== undefined) clip.originalAudioEnabled = args.enabled;
+      return mutationOutput(device, [clip.id]);
+    }
+    default:
+      return { ok: false, executedOn: 'device', error: 'unsupported_on_device', output: {} };
   }
 }
 
 function projectSnapshot(device) {
-  return summary(device);
+  const out = timelineOutput(device);
+  return {
+    schemaVersion: 1,
+    projectId: 'project-vacation',
+    revision: device.revision,
+    duration: out.duration,
+    canvas: { width: 1920, height: 1080, fps: 30 },
+    assets: device.assets,
+    videoClips: out.videoClips.map(c => ({ id: c.id, assetId: c.assetId, timelineStart: c.timelineStart, sourceStart: c.sourceStart, sourceEnd: c.sourceEnd })),
+    audioTracks: device.audioTracks,
+    selectedClipId: device.videoClips[0]?.id,
+  };
 }
 
 /** Drive one user turn through the real endpoint until the server answers `final`. */
@@ -269,38 +308,49 @@ function resultsByName(body) {
 // ─── Scenario 1: the §16 montage request ─────────────────────────────────────
 
 describe('agentic timeline editing (mocked Grok + device)', () => {
-  it('§16: beach/restaurant/hotel order kept, restaurant trimmed to 5s, music at 20%, narration at 12s, 2s fade-out → 27s', async () => {
+  it('§16: orders beach/restaurant/hotel, trims restaurant to 5s, music at 20%, narration at 12s, 2s fade-out → 27s', async () => {
     const device = makeDevice();
     let seq = 0;
     const nextId = () => `call_${(seq += 1)}`;
     xaiResponder = (body) => {
       const results = resultsByName(body);
       const names = results.map(r => r.name);
-      if (!names.includes('get_timeline')) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_timeline', {})] }));
+      const timelineResults = results.filter(r => r.name === 'get_project_timeline');
+      if (!names.includes('get_project_timeline')) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_project_timeline', {})] }));
       }
-      if (!names.includes('trim_video_clip')) {
-        const timeline = results.filter(r => r.name === 'get_timeline').at(-1).result.output.project;
+      if (!names.includes('batch_timeline_edits')) {
+        const timeline = timelineResults.at(-1).result.output;
+        const order = timeline.videoClips.map(c => c.id); // beach, restaurant, hotel (already the requested order)
         const restaurant = timeline.videoClips.find(c => c.assetId === 'asset-restaurant');
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'trim_video_clip', { clip_id: restaurant.id, start: 0, end: 5 })] }));
+        return jsonResponse(completion({
+          content: null,
+          tool_calls: [toolCall(nextId(), 'batch_timeline_edits', {
+            expectedRevision: timeline.projectRevision,
+            operations: [
+              { type: 'reorder_video_clips', arguments: { orderedClipIds: order } },
+              { type: 'trim_video_clip', arguments: { clipId: restaurant.id, sourceStart: 0, sourceEnd: 5 } },
+            ],
+          })],
+        }));
       }
-      const inserts = results.filter(r => r.name === 'insert_audio_clip');
-      if (inserts.length === 0) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'insert_audio_clip', { track_id: 'track-music', asset_id: 'asset-music', timeline_start: 0, volume: 0.2 })] }));
+      const adds = results.filter(r => r.name === 'add_audio_clip');
+      if (adds.length === 0) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'add_audio_clip', { trackId: 'track-music', assetId: 'asset-music', timelineStart: 0, gain: 0.2 })] }));
       }
-      if (inserts.length === 1) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'insert_audio_clip', { track_id: 'track-voice', asset_id: 'asset-narration', timeline_start: 12 })] }));
+      if (adds.length === 1) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'add_audio_clip', { trackId: 'track-voice', assetId: 'asset-narration', timelineStart: 12 })] }));
       }
-      if (!names.includes('set_audio_fade')) {
-        const musicClipId = inserts[0].result.output.created_id;
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'set_audio_fade', { clip_id: musicClipId, type: 'out', duration: 2 })] }));
+      if (!names.includes('set_audio_clip_fade')) {
+        const musicClipId = adds[0].result.output.createdClipId;
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'set_audio_clip_fade', { clipId: musicClipId, fadeOut: 2 })] }));
       }
-      if (results.filter(r => r.name === 'get_timeline').length < 2) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_timeline', {})] }));
+      if (timelineResults.length < 2) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_project_timeline', {})] }));
       }
-      const duration = results.filter(r => r.name === 'get_timeline').at(-1).result.output.project_duration;
+      const duration = timelineResults.at(-1).result.output.duration;
       return jsonResponse(completion({
-        content: `- Answer:\n  Done: beach first, restaurant second (trimmed to 5s), hotel last — ${duration} seconds total. Background music at 20% volume with a 2-second fade-out at the end, narration starting at 12s.\n- Lesson:\n  Every mutation returns the fresh project summary, so chaining stays accurate.`,
+        content: `- Answer:\n  Done: beach first, restaurant second (trimmed to 5s), hotel last — ${duration} seconds total. Background music at 20% volume with a 2-second fade-out at the end, narration starting at 12s.\n- Lesson:\n  Batching independent timeline edits keeps multi-step plans inside the round limit.`,
       }));
     };
 
@@ -335,23 +385,24 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     device.videoClips[1].sourceEnd = 5;
     device.audioTracks[0].clips.push({ id: 'audio-1', assetId: 'asset-music', timelineStart: 0, sourceStart: 0, sourceDuration: 27, gain: 0.2, fadeIn: 0, fadeOut: 2 });
     device.audioTracks[1].clips.push({ id: 'audio-2', assetId: 'asset-narration', timelineStart: 12, sourceStart: 0, sourceDuration: 8, gain: 1, fadeIn: 0, fadeOut: 0 });
+    device.revision = 24;
 
     let seq = 0;
     const nextId = () => `call_${(seq += 1)}`;
     xaiResponder = (body) => {
       const results = resultsByName(body);
       const names = results.map(r => r.name);
-      if (!names.includes('get_timeline')) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_timeline', {})] }));
+      if (!names.includes('get_project_timeline')) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_project_timeline', {})] }));
       }
       if (!names.includes('reorder_video_clips')) {
-        const timeline = results.filter(r => r.name === 'get_timeline').at(-1).result.output.project;
+        const timeline = results.filter(r => r.name === 'get_project_timeline').at(-1).result.output;
         const ids = timeline.videoClips.map(c => c.id);
         const hotel = timeline.videoClips.find(c => c.assetId === 'asset-hotel').id;
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'reorder_video_clips', { clip_ids: [hotel, ...ids.filter(id => id !== hotel)] })] }));
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'reorder_video_clips', { orderedClipIds: [hotel, ...ids.filter(id => id !== hotel)], expectedRevision: timeline.projectRevision })] }));
       }
-      if (!names.includes('mute_audio_track')) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'mute_audio_track', { clip_id: 'clip-hotel', muted: true })] }));
+      if (!names.includes('set_clip_original_audio')) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'set_clip_original_audio', { clipId: 'clip-hotel', enabled: false })] }));
       }
       return jsonResponse(completion({ content: '- Answer:\n  Moved the hotel clip to the beginning and muted its original audio. Music and narration are unchanged.\n- Lesson:\n  Original audio belongs to its clip.' }));
     };
@@ -371,27 +422,31 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     expect(device.audioTracks[1].clips[0]).toMatchObject({ timelineStart: 12 });
   });
 
-  it('recovers from a device "clip_not_found: <hint>" error by re-inspecting once and retrying', async () => {
+  it('recovers from a project_revision_conflict by re-inspecting once and replanning', async () => {
     const device = makeDevice();
+    let userTouchedProject = false;
+    device.beforeExecute = (name) => {
+      // The user edits the project on-device after the model planned its trim.
+      if (name === 'trim_video_clip' && !userTouchedProject) {
+        userTouchedProject = true;
+        device.revision += 1;
+      }
+    };
     let seq = 0;
     const nextId = () => `call_${(seq += 1)}`;
     xaiResponder = (body) => {
       const results = resultsByName(body);
-      const trims = results.filter(r => r.name === 'trim_video_clip');
-      const timelines = results.filter(r => r.name === 'get_timeline');
-      if (trims.length === 0) {
-        // First attempt uses a stale ID from an older snapshot.
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'trim_video_clip', { clip_id: 'clip-STALE', start: 0, end: 5 })] }));
+      const timelineResults = results.filter(r => r.name === 'get_project_timeline');
+      const trimResults = results.filter(r => r.name === 'trim_video_clip');
+      const conflicted = trimResults.some(r => r.result?.error === 'project_revision_conflict');
+      if (timelineResults.length === 0 || (conflicted && timelineResults.length < 2)) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_project_timeline', {})] }));
       }
-      const failed = trims.at(-1).result?.ok === false;
-      if (failed && timelines.length === 0) {
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'get_timeline', {})] }));
+      if (trimResults.every(r => r.result?.ok !== true)) {
+        const revision = timelineResults.at(-1).result.output.projectRevision;
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'trim_video_clip', { clipId: 'clip-restaurant', sourceStart: 0, sourceEnd: 5, expectedRevision: revision })] }));
       }
-      if (trims.every(r => r.result?.ok !== true)) {
-        const restaurant = timelines.at(-1).result.output.project.videoClips.find(c => c.assetId === 'asset-restaurant');
-        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'trim_video_clip', { clip_id: restaurant.id, start: 0, end: 5 })] }));
-      }
-      return jsonResponse(completion({ content: '- Answer:\n  The clip ID I had was stale, so I re-checked the timeline and then trimmed the restaurant clip to 5 seconds.\n- Lesson:\n  Device error hints tell you how to recover.' }));
+      return jsonResponse(completion({ content: '- Answer:\n  The project changed while I was planning, so I re-checked the timeline and then trimmed the restaurant clip to 5 seconds.\n- Lesson:\n  Revision checks turn stale plans into safe replans.' }));
     };
 
     const final = await runTurn({
@@ -402,13 +457,18 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     expect(final.status).toBe('final');
     expect(final.message).toContain('re-checked');
     expect(device.videoClips[1]).toMatchObject({ sourceEnd: 5 });
+    const timelineCalls = xaiCalls.flatMap(c => c.messages).filter(m => m.role === 'tool');
+    expect(timelineCalls.length).toBeGreaterThanOrEqual(3);
+    // The server annotated the conflict result for the model (in a later xAI request).
+    const annotated = xaiCalls.some(call => call.messages.some(m => m.role === 'tool' && String(m.content).includes('revisionConflict')));
+    expect(annotated).toBe(true);
   });
 
   it('returns malformed timeline calls with argumentsError instead of executing them', async () => {
     const device = makeDevice();
     xaiResponder = () => jsonResponse(completion({
       content: null,
-      tool_calls: [toolCall('call_bad', 'trim_video_clip', { clip_id: 'clip-restaurant', start: 0 })], // end missing
+      tool_calls: [toolCall('call_bad', 'trim_video_clip', { clipId: 'clip-restaurant', sourceStart: 0 })], // sourceEnd missing
     }));
     const res = await realFetch(`${base}/api/chat`, {
       method: 'POST',
@@ -425,15 +485,15 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     expect(body.toolCalls[0]).toMatchObject({ name: 'trim_video_clip', arguments: {}, argumentsError: 'invalid_arguments' });
   });
 
-  it('a pre-1.2 build gets no timeline tools and no timeline instructions, even with a project snapshot', async () => {
+  it('an older build gets no timeline tools and no timeline instructions, even with a project snapshot', async () => {
     const device = makeDevice();
     xaiResponder = () => jsonResponse(completion({
       content: '- Answer:\n  I can only edit the video as a whole on this build.\n- Lesson:\n  Old builds keep old tools.',
-      tool_calls: [toolCall('call_x', 'trim_video_clip', { clip_id: 'clip-restaurant', start: 0, end: 5 })],
+      tool_calls: [toolCall('call_x', 'trim_video_clip', { clipId: 'clip-restaurant', sourceStart: 0, sourceEnd: 5 })],
     }));
     const res = await realFetch(`${base}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'sample-access-token': token, 'user-agent': 'FinalCap-iOS/20' },
+      headers: { 'Content-Type': 'application/json', 'sample-access-token': token, 'user-agent': 'FinalCap-iOS/13' },
       body: JSON.stringify({
         execution: 'client',
         messages: [{ role: 'user', content: 'Trim the restaurant clip to five seconds.' }],
@@ -447,7 +507,7 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     const sent = xaiCalls[0];
     const offered = (sent.tools || []).map(t => t.function.name);
     expect(offered).not.toContain('trim_video_clip');
-    expect(offered).not.toContain('get_timeline');
+    expect(offered).not.toContain('batch_timeline_edits');
     expect(sent.messages[0].content).not.toContain('multi-clip PROJECT');
     expect(sent.messages[0].content).toContain('no timeline editing tools');
     expect(device.videoClips[1].sourceEnd).toBe(8); // untouched

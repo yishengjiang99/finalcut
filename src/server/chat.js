@@ -36,6 +36,7 @@ import {
 import {
   IOS_TIMELINE_TOOL_NAMES,
   TIMELINE_AGENT_INSTRUCTIONS,
+  validateBatchOperations,
   validateTimelineToolArguments,
 } from './iosTimelineTools.js';
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
@@ -569,7 +570,9 @@ export async function handleClientExecution(req, res, userId, profile = null) {
     let invalidTimelineCalls = 0;
     const clientToolCalls = toClientToolCalls(assistantMessage.tool_calls).map((call) => {
       if (call.argumentsError || !IOS_TIMELINE_TOOL_NAMES.includes(call.name)) return call;
-      const error = validateTimelineToolArguments(call.name, call.arguments);
+      const error = call.name === 'batch_timeline_edits'
+        ? validateBatchOperations(call.arguments)
+        : validateTimelineToolArguments(call.name, call.arguments);
       if (!error) return call;
       invalidTimelineCalls += 1;
       return { ...call, arguments: {}, argumentsError: 'invalid_arguments', argumentsErrorDetail: error };

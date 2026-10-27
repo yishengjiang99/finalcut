@@ -125,10 +125,8 @@ struct TopBarView: View {
         .frame(minHeight: Self.rowHeight)
         .photosPicker(isPresented: $showPhotos, selection: $photosPickerItem,
                       matching: EditorViewModel.pickerFilter, photoLibrary: .shared())
-        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.movie, .image, .audio, .mp3, .mpeg4Audio, .wav], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                for url in urls { onChooseFile(url) }
-            }
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.movie, .image]) { result in
+            if case .success(let url) = result { onChooseFile(url) }
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { url in

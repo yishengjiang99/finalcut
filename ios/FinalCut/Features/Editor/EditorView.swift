@@ -54,13 +54,9 @@ struct EditorView: View {
                     photo: model.previewPhoto,
                     showsDimmer: model.isCloudStepRunning,
                     canUndo: false,
-                    onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil,
-                    seekSeconds: model.seekSeconds
+                    onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil
                 )
                 .frame(maxHeight: 240)
-                if !model.isPhoto, model.localVideoURL != nil {
-                    TimelineView(model: model)
-                }
                 if let importError = model.importError {
                     ImportErrorBanner(message: importError, photosPickerItem: $model.photosPickerItem)
                 }
@@ -119,15 +115,11 @@ struct EditorView: View {
         .onChange(of: model.photosPickerItem) { _, item in
             Task { await model.loadPhotosPickerItem(item) }
         }
-        .onChange(of: model.photosPickerItems) { _, items in
-            Task { await model.loadPhotosPickerItems(items) }
-        }
         .onChange(of: model.localVideoURL) { _, url in
             // The editor surface now has a project/clip loaded.
             if url != nil { Telemetry.shared.track("editor_open") }
         }
         .onAppear {
-            Task { await model.restoreSavedProjectIfEmpty() }
             model.refreshSuggestions()
             model.undoManager = undoManager
             model.apiClient = appModel.apiClient
@@ -251,17 +243,6 @@ final class EditorViewModel: ObservableObject {
     @Published var composerText = ""
     @Published var localVideoURL: URL?
     @Published var photosPickerItem: PhotosPickerItem?
-    /// Multi-select Photos picker (timeline "Add" flows).
-    @Published var photosPickerItems: [PhotosPickerItem] = []
-    /// Compact timeline workspace visibility (chat-first layout: collapsed by default).
-    @Published var showTimeline = false
-    /// Progress / outcome line for multi-file imports ("Importing 2 of 5…", failures).
-    @Published var importStatus: String?
-    /// Set by "New project" in the timeline: the next base import starts a fresh
-    /// durable project instead of adapting the current session.
-    var startNewProjectOnNextImport = false
-    /// Playhead target (seconds) requested from the timeline scrubber.
-    @Published var seekSeconds: Double?
     @Published var showSampleChips = true
     @Published var lastError: String?
     @Published var activeJobId: String?
@@ -367,16 +348,10 @@ final class EditorViewModel: ObservableObject {
     }
 
     /// Choose File: security-scoped read, copied into the app sandbox by the shared import path.
-    /// With a session already open, a chosen file APPENDS to the timeline project
-    /// (audio included); in an empty editor it takes the legacy first-import path.
     func importFile(_ url: URL) async {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        if localVideoURL != nil {
-            _ = await appendImportedMedia(url)
-        } else {
-            await handleImport(.success([url]))
-        }
+        await handleImport(.success([url]))
     }
 
     private var processingTask: Task<Void, Never>?
@@ -401,12 +376,6 @@ final class EditorViewModel: ObservableObject {
                     try ImportedVideo.copy(from: url)
                 }.value
                 finishImport(video, message: "Imported \(video.url.lastPathComponent)")
-                // Multi-file imports: the first file takes the legacy path, the rest
-                // append to the (newly materialised) timeline project in order.
-                for extra in urls.dropFirst() {
-                    let copied = try await Task.detached { try ImportedVideo.copy(from: extra) }.value
-                    _ = await appendImportedMedia(copied.url)
-                }
             } catch {
                 failImport(isPhoto: MediaMIME.isImage(url: url) || error is PhotoTranscoder.TranscodeError)
             }
@@ -499,15 +468,6 @@ final class EditorViewModel: ObservableObject {
             previewPhoto = image
             previewItem = nil
             composedVideo = nil
-        } else if stack.isTimelineProject, let project = stack.project {
-            // Multi-clip preview comes straight from the project composition — no
-            // intermediate file is rendered. The generation counter drops results of
-            // superseded edits so an older build can't overwrite a newer preview.
-            guard let composed = try? await NativeComposer.compose(project: project) else { return }
-            guard generation == previewGeneration else { return }
-            composedVideo = composed
-            previewItem = composed.makePlayerItem()
-            previewPhoto = nil
         } else {
             guard let composed = try? await NativeComposer.compose(stack) else { return }
             guard generation == previewGeneration else { return }
@@ -641,23 +601,6 @@ final class EditorViewModel: ObservableObject {
         showSampleChips = true
         messages.append(ChatMessage(role: .system, content: "Loaded sample clip"))
         startEditing(url)
-    }
-
-    /// Clears the whole session for a fresh timeline project (used by the timeline's
-    /// "New project" action). Saved projects on disk are not touched.
-    func resetSessionForNewProject() {
-        processingTask?.cancel()
-        activeJobId = nil
-        localVideoURL = nil
-        editStack = nil
-        previewItem = nil
-        previewPhoto = nil
-        composedVideo = nil
-        captionArtifacts = CaptionArtifacts()
-        importError = nil
-        importStatus = nil
-        startNewProjectOnNextImport = true
-        state = .empty
     }
 
     func resetBundledTestVideoIfNeeded() {
@@ -1202,12 +1145,11 @@ final class EditorViewModel: ObservableObject {
             let fps = try? await AVURLAsset(url: stack.base).loadTracks(withMediaType: .video).first?.load(.nominalFrameRate)
             return ClientMedia(
                 type: "video",
-                duration: stack.project?.durationSeconds ?? canvas.duration,
-                width: stack.project?.canvas.width ?? canvas.width,
-                height: stack.project?.canvas.height ?? canvas.height,
+                duration: canvas.duration,
+                width: canvas.width,
+                height: canvas.height,
                 fps: fps.flatMap { $0 > 0 ? Double($0) : nil },
-                hasAudio: canvas.hasAudio,
-                project: stack.project?.summary()
+                hasAudio: canvas.hasAudio
             )
         }
         if MediaMIME.isImage(url: url) {
@@ -1246,16 +1188,6 @@ final class EditorViewModel: ObservableObject {
         }
         guard var stack = await ensureStack() else {
             return record(.failure("no_media", on: .device), kind: .generic)
-        }
-        // Multi-clip timeline tools dispatch to the shared ProjectCommand layer.
-        if TimelineTools.names.contains(tool) {
-            let result = await executeTimelineTool(call)
-            return record(result, kind: result.ok ? nil : .generic)
-        }
-        // Legacy single-clip tools on a timeline project are translated onto it
-        // (selected clip / canvas / one-clip disambiguation) when a translation exists.
-        if stack.isTimelineProject, let translated = await executeLegacyToolOnProject(call) {
-            return record(translated, kind: translated.ok ? nil : .generic)
         }
         switch NativeToolParser.plan(tool: tool, arguments: call.arguments, canvas: stack.canvas) {
         case .success(.query(let name)):
@@ -1865,22 +1797,6 @@ final class EditorViewModel: ObservableObject {
         }
         guard var current = editStack else {
             return record(.failure("no_media", on: .device), kind: .generic)
-        }
-        if current.project != nil {
-            // Timeline mode: the song becomes a normal audio clip on a Soundtrack
-            // lane (movable/trimmable/removable like any other audio clip).
-            guard await insertSoundtrackIntoTimeline(file: file, startOffset: startOffset, originalVolume: originalVolume) else {
-                return record(.failure("youtube_fetch_failed", on: .device), kind: .generic)
-            }
-            state = .ready
-            messages.append(ChatMessage(role: .system, content: "\(Self.label(for: "youtube_soundtrack")) · \(UXCopy.cloud)"))
-            let project = timelineProject
-            var output: [String: JSONValue] = [
-                "duration": .number(((project?.durationSeconds ?? 0) * 1000).rounded() / 1000),
-            ]
-            if let title = fetched.title, !title.isEmpty { output["title"] = .string(title) }
-            if let duration = fetched.duration { output["audioDuration"] = .number(duration) }
-            return record(.success(on: .server, output: output), kind: nil)
         }
         current.push(EditEntry(
             tool: "youtube_soundtrack",

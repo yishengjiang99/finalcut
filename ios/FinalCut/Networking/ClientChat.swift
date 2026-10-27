@@ -10,10 +10,6 @@ struct ClientMedia: Codable, Equatable {
     var height: Int?
     var fps: Double?
     var hasAudio: Bool?
-    /// Bounded multi-clip timeline summary (IDs, order, ranges, gains — never media
-    /// bytes or paths) so the model can plan timeline tool calls. Absent for plain
-    /// single-clip sessions until a project is materialised.
-    var project: ProjectSummary?
 }
 
 struct ClientChatRequest: Encodable {

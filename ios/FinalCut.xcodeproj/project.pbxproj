@@ -85,21 +85,6 @@
 		79D5A1BE0373C14BAFA8C2B8 /* StreamingCaptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */; };
 		1A5E8B986C681D4767E46AFF /* NotoSansCJKsc-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */; };
 		2B94E44A19E58365E3E10DF4 /* NotoSansCJK-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */; };
-		0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048CDA22B7176DD87977ECEB /* EditorProject.swift */; };
-		CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */; };
-		37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */; };
-		1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F58061DA341BBCB66512BC /* ProjectStore.swift */; };
-		9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */; };
-		7CB4F9939F2FC566F6809D40 /* ProjectComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */; };
-		EFCAF3B77E70E0156EE4FC4F /* ProjectVideoCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */; };
-		1FD1C413E1DB2E355F012DD6 /* AudioDucking.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE21E8673CABC1B000231B1F /* AudioDucking.swift */; };
-		08EC33E5C6F30F54A008A325 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */; };
-		B125B4C30989AEDBF53372EA /* EditorViewModel+Timeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */; };
-		5BA5C65EA516FB6EC6A06B59 /* TimelineToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */; };
-		2C1E877A18984C8C442B4ABE /* ProjectModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */; };
-		2D84149D68038A94A5A1DEEA /* ProjectCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */; };
-		59D7A1267FF1C56A8C7DF7E8 /* ProjectPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0D70F48FB6B7BA7AE5B12A /* ProjectPersistenceTests.swift */; };
-		099412012CC74F5A4BC9678F /* ProjectComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -204,21 +189,6 @@
 		FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCaptionsTests.swift; sourceTree = "<group>"; };
 		5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = NotoSansCJKsc-Bold.otf; sourceTree = "<group>"; };
 		5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = NotoSansCJK-OFL.txt; sourceTree = "<group>"; };
-		048CDA22B7176DD87977ECEB /* EditorProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorProject.swift; sourceTree = "<group>"; };
-		371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommand.swift; sourceTree = "<group>"; };
-		7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHistory.swift; sourceTree = "<group>"; };
-		C0F58061DA341BBCB66512BC /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
-		53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditStackProjectAdapter.swift; sourceTree = "<group>"; };
-		3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposer.swift; sourceTree = "<group>"; };
-		AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectVideoCompositor.swift; sourceTree = "<group>"; };
-		FE21E8673CABC1B000231B1F /* AudioDucking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDucking.swift; sourceTree = "<group>"; };
-		CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
-		65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel+Timeline.swift; sourceTree = "<group>"; };
-		8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineToolExecutor.swift; sourceTree = "<group>"; };
-		8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectModelTests.swift; sourceTree = "<group>"; };
-		F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandTests.swift; sourceTree = "<group>"; };
-		3A0D70F48FB6B7BA7AE5B12A /* ProjectPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectPersistenceTests.swift; sourceTree = "<group>"; };
-		57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -275,7 +245,6 @@
 				B364855EAC084A2C921B51CA /* ContentView.swift */,
 				20C48E7C3E9344C696A60148 /* Models */,
 				4E1A7C0E5B2D4F6A8C9D0E1F /* NativeEditing */,
-				955B599D065BD34D61733EC2 /* Timeline */,
 				DD18F136D60C47D9998EE31B /* Networking */,
 				11F090BD1B5F430B8644C27C /* Features */,
 				6571C841211B426E9DD9A1C4 /* Theme */,
@@ -363,7 +332,6 @@
 		E1D86FFA0C5F47868EBAFE01 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
-				CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */,
 				8BA7A4FFE6850A2948201185 /* CameraPicker.swift */,
 				1D4631ADFACF915E7BC1096B /* KeyboardDismiss.swift */,
 				F75730428B69D0391857303A /* DictationController.swift */,
@@ -400,10 +368,6 @@
 		31046C18DC344075B32836E8 /* FinalCutTests */ = {
 			isa = PBXGroup;
 			children = (
-				57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */,
-				3A0D70F48FB6B7BA7AE5B12A /* ProjectPersistenceTests.swift */,
-				F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */,
-				8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */,
 				6A4BD9E125BC712EE84A3615 /* SuggestionServiceTests.swift */,
 				DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */,
 				9C5E696A011F606B3C761265 /* ExportTests.swift */,
@@ -460,23 +424,6 @@
 				5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */,
 			);
 			path = Resources;
-			sourceTree = "<group>";
-		};
-		955B599D065BD34D61733EC2 /* Timeline */ = {
-			isa = PBXGroup;
-			children = (
-				8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */,
-				65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */,
-				FE21E8673CABC1B000231B1F /* AudioDucking.swift */,
-				AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */,
-				3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */,
-				53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */,
-				C0F58061DA341BBCB66512BC /* ProjectStore.swift */,
-				7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */,
-				371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */,
-				048CDA22B7176DD87977ECEB /* EditorProject.swift */,
-			);
-			path = Timeline;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -597,17 +544,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5BA5C65EA516FB6EC6A06B59 /* TimelineToolExecutor.swift in Sources */,
-				B125B4C30989AEDBF53372EA /* EditorViewModel+Timeline.swift in Sources */,
-				08EC33E5C6F30F54A008A325 /* TimelineView.swift in Sources */,
-				1FD1C413E1DB2E355F012DD6 /* AudioDucking.swift in Sources */,
-				EFCAF3B77E70E0156EE4FC4F /* ProjectVideoCompositor.swift in Sources */,
-				7CB4F9939F2FC566F6809D40 /* ProjectComposer.swift in Sources */,
-				9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */,
-				1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */,
-				37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */,
-				CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */,
-				0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */,
 				A82630A64F0E068F4A149637 /* CameraPicker.swift in Sources */,
 				63140D2471FF1CAB65DAA5AB /* SuggestionService.swift in Sources */,
 				E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */,
@@ -667,10 +603,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				099412012CC74F5A4BC9678F /* ProjectComposerTests.swift in Sources */,
-				59D7A1267FF1C56A8C7DF7E8 /* ProjectPersistenceTests.swift in Sources */,
-				2D84149D68038A94A5A1DEEA /* ProjectCommandTests.swift in Sources */,
-				2C1E877A18984C8C442B4ABE /* ProjectModelTests.swift in Sources */,
 				DCDDFB3797A5B85C02D6B68A /* SuggestionServiceTests.swift in Sources */,
 				5CCA836F4EF77DE8F68AA45E /* UndoRedoTests.swift in Sources */,
 				B54E2B173160D3E92D4F9C37 /* ExportTests.swift in Sources */,
@@ -763,7 +695,7 @@
 				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -782,7 +714,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -801,7 +733,7 @@
 				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCutRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -820,7 +752,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -837,10 +769,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -855,10 +787,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -871,11 +803,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -888,11 +820,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ragnus.w2.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

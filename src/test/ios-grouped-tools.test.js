@@ -47,7 +47,6 @@ import {
   isIosGroupedTool,
 } from '../server/iosGroupedTools.js';
 import { assertOperationSupported, ERROR_CODES } from '../server/ffmpegOps.js';
-import { IOS_TIMELINE_TOOL_NAMES } from '../server/iosTimelineTools.js';
 import { classifyAndValidateUpload, jobsRouter } from '../server/jobs.js';
 import { videoRouter } from '../server/video.js';
 
@@ -125,14 +124,14 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     const at10 = JSON.parse(snapshotFile('ios-build10'));
     const schema = buildToolsSchema({ userAgent: ios(CUTOFF - 1) });
     // youtube_soundtrack is a shared tool now: it sits at its src/tools.js position, right after lyric_captions.
-    expect(names(schema.tools)).toEqual([...withYouTube(names(at10.schema.tools)), ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
+    expect(names(schema.tools)).toEqual([...withYouTube(names(at10.schema.tools)), 'ffmpeg_cli']);
     expect(schema.mediaTypes.ffmpeg_cli).toEqual(['video']);
     expect(schema.mediaTypes.youtube_soundtrack).toEqual(['video']);
     for (const g of GROUPED) expect(names(schema.tools)).not.toContain(g);
     for (const mt of ['any', 'video', 'image']) {
       const expected = names(at10.offered[mt === 'any' ? 'any' : mt]);
       expect(names(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt === 'any' ? undefined : mt })))
-        .toEqual(mt === 'image' ? expected : [...withYouTube(expected), ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
+        .toEqual(mt === 'image' ? expected : [...withYouTube(expected), 'ffmpeg_cli']);
     }
   });
 
@@ -161,11 +160,11 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
     expect(IOS_TOOL_ALLOWLIST.apply_color_filter).toBe(10); // kept
   });
 
-  it('gets 54 tools: the 22 minus the four adjust_* plus the 9 grouped plus youtube_soundtrack plus the 25 timeline tools (CUTOFF >= TIMELINE_TOOLS_MIN_BUILD) plus ffmpeg_cli', () => {
+  it('gets 29 tools: the 22 minus the four adjust_* plus the 9 grouped plus youtube_soundtrack plus ffmpeg_cli', () => {
     const offered = names(offeredToolsFor({ userAgent: ios(CUTOFF) }));
     expect(build10).toHaveLength(22);
-    expect(offered).toEqual([...withYouTube(build10.filter(n => !RETIRED.includes(n))), ...GROUPED, ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
-    expect(offered).toHaveLength(54);
+    expect(offered).toEqual([...withYouTube(build10.filter(n => !RETIRED.includes(n))), ...GROUPED, 'ffmpeg_cli']);
+    expect(offered).toHaveLength(29);
     expect(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) }))).toEqual(offered);
   });
 
@@ -207,18 +206,18 @@ describe('GET /api/tools/schema applies the same filtering', () => {
     }
   });
 
-  it('cutoff build: 54 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
+  it('cutoff build: 29 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
     const body = await (await getSchema(ios(CUTOFF))).json();
     expect(body.schemaVersion).toBe('1');
     expect(body.tools).toEqual(JSON.parse(JSON.stringify(offeredToolsFor({ userAgent: ios(CUTOFF) }))));
-    expect(body.tools).toHaveLength(54);
+    expect(body.tools).toHaveLength(29);
     expect(Object.keys(body.mediaTypes)).toEqual(names(body.tools));
     expect(body.mediaTypes.audio_effect).toEqual(['video']);
     expect(body.mediaTypes.ffmpeg_cli).toEqual(['video']);
     expect(body.mediaTypes.youtube_soundtrack).toEqual(['video']);
     for (const g of GROUPED.filter(n => n !== 'audio_effect')) expect(body.mediaTypes[g]).toEqual(['video', 'image']);
     const before = await (await getSchema(ios(CUTOFF - 1))).json();
-    expect(names(before.tools)).toHaveLength(49);
+    expect(names(before.tools)).toHaveLength(24);
     expect(names(before.tools)).not.toContain('lut');
     expect(names(before.tools)).toContain('ffmpeg_cli');
     expect(names(before.tools)).toContain('youtube_soundtrack');
