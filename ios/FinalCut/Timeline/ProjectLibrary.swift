@@ -312,7 +312,7 @@ enum ProjectLibrary {
             return "Edited \(Int(seconds / 60))m ago"
         case ..<86400:
             return "Edited \(Int(seconds / 3600))h ago"
-        case ..<7 * 86400:
+        case ..<604_800:
             return "Edited \(Int(seconds / 86400))d ago"
         default:
             let formatter = DateFormatter()
