@@ -14,3 +14,12 @@ enum AppTheme {
     static let cornerRadius: CGFloat = 12
     static let chipRadius: CGFloat = 16
 }
+
+/// Feature switches.
+/// The multi-clip timeline surface is sidelined (2026-10-27, at the user's
+/// word) on both clients: the editor never renders the timeline view, so
+/// timeline mode can't be entered from the UI. All timeline code, projects,
+/// and the library stay in place — flip this back to re-enable.
+enum FeatureFlags {
+    static let timelineEnabled = false
+}

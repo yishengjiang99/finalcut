@@ -65,7 +65,7 @@ struct EditorView: View {
                     seekSeconds: model.seekSeconds
                 )
                 .frame(maxHeight: timelineExpandedActive ? (chatExpanded ? 64 : 200) : 240)
-                if !model.isPhoto, model.localVideoURL != nil {
+                if FeatureFlags.timelineEnabled, !model.isPhoto, model.localVideoURL != nil {
                     TimelineView(model: model,
                                  compact: timelineExpandedActive && chatExpanded,
                                  onExpand: { withAnimation(.easeInOut(duration: 0.25)) { chatExpanded = false } })
@@ -195,7 +195,7 @@ struct EditorView: View {
     /// the two layout modes (edit focus / chat focus) only apply then; the legacy
     /// single-video flow keeps the original layout untouched.
     private var timelineExpandedActive: Bool {
-        !model.isPhoto && model.localVideoURL != nil && model.showTimeline && model.timelineProject != nil
+        FeatureFlags.timelineEnabled && !model.isPhoto && model.localVideoURL != nil && model.showTimeline && model.timelineProject != nil
     }
 
     /// Grab-handle row between the timeline and the chat sheet: toggles edit focus

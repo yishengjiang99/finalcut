@@ -3,6 +3,11 @@ import { systemPrompt } from './tools.js';
 import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, muxCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 import TimelineStrip from './TimelineStrip.jsx';
+
+// The timeline strip is sidelined (2026-10-27, at the user's word) on both
+// clients: the editor never renders it. The component stays in the tree —
+// flip this back to re-enable.
+const TIMELINE_ENABLED = false;
 import { useCallAPI } from './useCallAPI.js';
 import VoiceButton, { summarize } from './VoiceButton.jsx';
 import { setFetchAbortSignal } from './abortableFetch.js';
@@ -1355,7 +1360,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             </div>
           )}
 
-          {view === 'editor' && activeMedia && !activeMedia.isAudio && (
+          {TIMELINE_ENABLED && view === 'editor' && activeMedia && !activeMedia.isAudio && (
             <TimelineStrip
               media={activeMedia}
               getVideoEl={() => previewElsRef.current.get(activeMediaIdRef.current)}
