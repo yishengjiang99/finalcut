@@ -71,9 +71,9 @@ describe('timeline tool definitions', () => {
 });
 
 describe('build gating', () => {
-  it('no real installed build receives timeline tools yet (placeholder min build)', () => {
-    expect(TIMELINE_TOOLS_MIN_BUILD).toBe(2_000_000_000);
-    for (const build of [10, 13, 14, 84, 999]) {
+  it('the gate is build 14 — the first build of app version 1.2 (PR #124 executor)', () => {
+    expect(TIMELINE_TOOLS_MIN_BUILD).toBe(14);
+    for (const build of [10, 13]) {
       const offered = offeredToolsFor({ userAgent: `FinalCap-iOS/${build}`, mediaType: 'video' }).map(t => t.function.name);
       for (const name of IOS_TIMELINE_TOOL_NAMES) expect(offered).not.toContain(name);
       expect(isToolAllowedForIosBuild('trim_video_clip', build)).toBe(false);

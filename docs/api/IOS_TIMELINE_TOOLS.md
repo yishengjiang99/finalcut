@@ -19,11 +19,10 @@ client-execution mode of `POST /api/chat` (see
 
 ## Build gating
 
-`TIMELINE_TOOLS_MIN_BUILD` is currently the placeholder `1_000_000_000` (the
-same pattern as `GROUPED_EFFECTS_MIN_BUILD`): **no installed build is offered
-timeline tools** until the native timeline executor ships. Enabling = set the
-constant to the first build that implements the executor below. Older builds
-keep exactly their previous tool set; web clients never see these tools;
+`TIMELINE_TOOLS_MIN_BUILD = 14`: gating is by app version — the timeline
+executor first ships in **app version 1.2, build 14** (PR #124;
+TestFlight-workflow builds stamp higher run_numbers and also pass). Builds
+≤ 13 keep exactly their previous tool set; web clients never see these tools;
 photo media never receives them.
 
 ## Tool catalog
@@ -126,10 +125,9 @@ the snapshot schema above, and does not edit anything under `src/server/`.
 `validateProjectSummary`, `get_timeline`/`create_audio_lane`-style names — was
 superseded by this contract and dropped.)
 
-The one open coordination item is the shipping build number: when the native
-timeline executor lands in a build, set `TIMELINE_TOOLS_MIN_BUILD` in
-`src/server/iosToolAllowlist.js` to that build (one line) — until then the
-placeholder keeps the tools dark on every shipped build.
+Coordination resolved 2026-10-27: the iOS track's PR #124 implements THIS
+camelCase contract on device (revision checks, idempotency, atomic batch),
+and the gate is set to its build, 14 (app version 1.2).
 
 ## Remaining native dependencies (not server work)
 

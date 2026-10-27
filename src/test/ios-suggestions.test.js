@@ -79,10 +79,12 @@ describe('default config (config/ios-suggestions.json, FinalCut Design set)', ()
     const chip = raw.video.find(e => e.id === 'v-captions-zh');
     expect(chip).toEqual({ id: 'v-captions-zh', label: 'Chinese captions', prompt: "Add Chinese captions translated from what's said in the video.", icon: 'character.bubble', tools: ['lyric_captions'], minBuild: 19 });
     expect(raw.video.map(e => e.id).slice(0, 2)).toEqual(['v-captions', 'v-captions-zh']);
-    for (const build of [10, 11, 12, 18]) expect(ids(await getJson(`?build=${build}&media=video`))).toEqual(VIDEO_IDS);
+    for (const build of [10, 11, 12, 13]) expect(ids(await getJson(`?build=${build}&media=video`))).toEqual(VIDEO_IDS);
+    // From build 14 (app version 1.2) the five timeline pills join (appended in config order).
+    for (const build of [14, 18]) expect(ids(await getJson(`?build=${build}&media=video`))).toEqual([...VIDEO_IDS, 'v-combine-clips', 'v-montage', 'v-bg-music', 'v-balance-audio', 'v-trim-each']);
     for (const build of [19, 20, 40]) {
       const body = await getJson(`?build=${build}&media=video`);
-      expect(ids(body)).toEqual(VIDEO_IDS_19);
+      expect(ids(body)).toEqual([...VIDEO_IDS_19, 'v-combine-clips', 'v-montage', 'v-bg-music', 'v-balance-audio', 'v-trim-each']);
       expect(body.suggestions[1]).toEqual({ id: 'v-captions-zh', label: 'Chinese captions', prompt: "Add Chinese captions translated from what's said in the video.", icon: 'character.bubble' }); // minBuild/tools never sent
     }
     expect(ids(await getJson('?build=19&media=photo'))).toEqual(PHOTO_IDS);
@@ -129,7 +131,7 @@ describe('default config (config/ios-suggestions.json, FinalCut Design set)', ()
       expect(got).toContain('p-vivid');
       expect(got).toEqual(PHOTO_IDS);
     }
-    expect(ids(await getJson(`?build=${CUTOFF}&media=video`))).toEqual(VIDEO_IDS_19);
+    expect(ids(await getJson(`?build=${CUTOFF}&media=video`))).toEqual([...VIDEO_IDS_19, 'v-combine-clips', 'v-montage', 'v-bg-music', 'v-balance-audio', 'v-trim-each']);
   });
 
   it('a build with no on-device tools (9) gets no pills', async () => {

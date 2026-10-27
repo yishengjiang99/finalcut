@@ -46,13 +46,15 @@ export const YOUTUBE_SOUNDTRACK_MIN_BUILD = 13;
 
 /**
  * First FinalCap-iOS build that runs the timeline tools (multi-clip projects,
- * multi-track audio; definitions in iosTimelineTools.js). Placeholder no real
- * build reaches until the native timeline executor ships: enabling is this one
- * line — replace the placeholder with that build number (coordinated with the
- * iOS multi-clip implementation). Until then NO installed build is offered a
- * timeline tool it cannot execute.
+ * multi-track audio; definitions in iosTimelineTools.js). Gating is by app
+ * VERSION: the timeline executor first ships in app version 1.2, whose build
+ * number is 14 (PR #124 sets CURRENT_PROJECT_VERSION = 14; TestFlight
+ * workflow builds stamp the run_number, >= 21, which also passes). Build
+ * numbers are monotonic, so build >= 14 is exactly "version 1.2 or later"
+ * for every distributed build — no pre-1.2 build (<= 13) is offered a
+ * timeline tool.
  */
-export const TIMELINE_TOOLS_MIN_BUILD = 2_000_000_000;
+export const TIMELINE_TOOLS_MIN_BUILD = 14;
 
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });
