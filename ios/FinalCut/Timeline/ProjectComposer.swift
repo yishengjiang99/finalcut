@@ -130,7 +130,11 @@ extension NativeComposer {
                     throw ProjectComposerError.noAudioTrack(asset.id)
                 }
                 let start = clip.timelineStart.cmTime
-                let end = CMTimeAdd(start, clip.outputDuration(projectEnd: projectEnd))
+                // Audio never extends the project: a 60s song under a 23s timeline is
+                // clamped to the project end (its fade-out then lands on the real end),
+                // it does not stretch the composition to 60s.
+                let end = CMTimeMinimum(CMTimeAdd(start, clip.outputDuration(projectEnd: projectEnd)), projectEnd)
+                guard end > start else { continue }
                 // First lane free at `start`, else a new composition track.
                 let laneIndex: Int
                 if let free = lanes.firstIndex(where: { $0.busyUntil <= start }) {
