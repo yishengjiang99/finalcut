@@ -44,6 +44,16 @@ export const FFMPEG_CLI_MIN_BUILD = 11;
  */
 export const YOUTUBE_SOUNDTRACK_MIN_BUILD = 13;
 
+/**
+ * First FinalCap-iOS build that runs the timeline tools (multi-clip projects,
+ * multi-track audio; definitions in iosTimelineTools.js). Placeholder no real
+ * build reaches until the native timeline executor ships: enabling is this one
+ * line — replace the placeholder with that build number (coordinated with the
+ * iOS multi-clip implementation). Until then NO installed build is offered a
+ * timeline tool it cannot execute.
+ */
+export const TIMELINE_TOOLS_MIN_BUILD = 2_000_000_000;
+
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });
 
@@ -89,6 +99,38 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   ffmpeg_cli: FFMPEG_CLI_MIN_BUILD,
   // YouTube-link soundtrack: app fetches the audio from the server, mixes it on device.
   youtube_soundtrack: YOUTUBE_SOUNDTRACK_MIN_BUILD,
+  // Timeline tools (iOS-only definitions, iosTimelineTools.js): multi-clip
+  // video editing and multi-track audio on the on-device project model.
+  get_project_timeline: TIMELINE_TOOLS_MIN_BUILD,
+  list_project_assets: TIMELINE_TOOLS_MIN_BUILD,
+  get_clip_details: TIMELINE_TOOLS_MIN_BUILD,
+  get_audio_track_details: TIMELINE_TOOLS_MIN_BUILD,
+  get_project_info: TIMELINE_TOOLS_MIN_BUILD,
+  get_project_duration: TIMELINE_TOOLS_MIN_BUILD,
+  append_video_clips: TIMELINE_TOOLS_MIN_BUILD,
+  insert_video_clip: TIMELINE_TOOLS_MIN_BUILD,
+  reorder_video_clips: TIMELINE_TOOLS_MIN_BUILD,
+  split_video_clip: TIMELINE_TOOLS_MIN_BUILD,
+  trim_video_clip: TIMELINE_TOOLS_MIN_BUILD,
+  remove_video_clip: TIMELINE_TOOLS_MIN_BUILD,
+  duplicate_video_clip: TIMELINE_TOOLS_MIN_BUILD,
+  set_clip_speed: TIMELINE_TOOLS_MIN_BUILD,
+  set_clip_effect: TIMELINE_TOOLS_MIN_BUILD,
+  set_clip_original_audio: TIMELINE_TOOLS_MIN_BUILD,
+  set_clip_transition: TIMELINE_TOOLS_MIN_BUILD,
+  create_audio_track: TIMELINE_TOOLS_MIN_BUILD,
+  add_audio_clip: TIMELINE_TOOLS_MIN_BUILD,
+  move_audio_clip: TIMELINE_TOOLS_MIN_BUILD,
+  trim_audio_clip: TIMELINE_TOOLS_MIN_BUILD,
+  remove_audio_clip: TIMELINE_TOOLS_MIN_BUILD,
+  set_audio_clip_volume: TIMELINE_TOOLS_MIN_BUILD,
+  set_audio_track_volume: TIMELINE_TOOLS_MIN_BUILD,
+  mute_audio_track: TIMELINE_TOOLS_MIN_BUILD,
+  set_audio_clip_fade: TIMELINE_TOOLS_MIN_BUILD,
+  loop_audio_clip: TIMELINE_TOOLS_MIN_BUILD,
+  apply_audio_ducking: TIMELINE_TOOLS_MIN_BUILD,
+  set_project_canvas: TIMELINE_TOOLS_MIN_BUILD,
+  batch_timeline_edits: TIMELINE_TOOLS_MIN_BUILD,
 });
 
 /**

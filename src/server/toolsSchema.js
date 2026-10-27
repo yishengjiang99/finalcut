@@ -4,6 +4,7 @@
 import { tools } from '../tools.js';
 import { parseFinalCapIosUserAgent } from './clientInfo.js';
 import { IOS_GROUPED_TOOLS, IOS_GROUPED_TOOL_MEDIA_TYPES } from './iosGroupedTools.js';
+import { IOS_TIMELINE_TOOLS, IOS_TIMELINE_TOOL_MEDIA_TYPES } from './iosTimelineTools.js';
 import { filterToolsForUserAgent } from './iosToolAllowlist.js';
 import { ffmpegCliToolDefinition } from '../ffmpegFallback.js';
 
@@ -31,6 +32,7 @@ const PHOTO_ONLY_TOOLS = new Set(['convert_image_format']);
 
 /** Which media types each tool accepts. */
 export function mediaTypesForTool(name) {
+  if (Object.prototype.hasOwnProperty.call(IOS_TIMELINE_TOOL_MEDIA_TYPES, name)) return [...IOS_TIMELINE_TOOL_MEDIA_TYPES[name]];
   if (Object.prototype.hasOwnProperty.call(IOS_GROUPED_TOOL_MEDIA_TYPES, name)) return [...IOS_GROUPED_TOOL_MEDIA_TYPES[name]];
   if (PHOTO_ONLY_TOOLS.has(name)) return ['image'];
   if (PHOTO_AND_VIDEO_TOOLS.has(name)) return ['video', 'image'];
@@ -53,7 +55,7 @@ function restrictToMediaType(list, mediaType) {
  */
 export function offeredToolsFor({ userAgent, mediaType } = {}) {
   const isIos = parseFinalCapIosUserAgent(userAgent).isFinalCapIos;
-  const candidates = isIos ? [...tools, ...IOS_GROUPED_TOOLS, ffmpegCliToolDefinition] : tools;
+  const candidates = isIos ? [...tools, ...IOS_GROUPED_TOOLS, ...IOS_TIMELINE_TOOLS, ffmpegCliToolDefinition] : tools;
   return filterToolsForUserAgent(restrictToMediaType(candidates, mediaType), userAgent);
 }
 
