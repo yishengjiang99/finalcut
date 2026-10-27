@@ -38,8 +38,8 @@ extension EditorViewModel {
     private func argID(_ args: [String: JSONValue], _ key: String) -> UUID? {
         args[key]?.stringValue.flatMap(UUID.init(uuidString:))
     }
-    private func argNum(_ args: [String: JSONValue], _ key: String) -> Double? { args[key]?.numberValue }
-    private func argInt(_ args: [String: JSONValue], _ key: String) -> Int? { args[key]?.numberValue.map(Int.init) }
+    private func argNum(_ args: [String: JSONValue], _ key: String) -> Double? { args[key]?.doubleValue }
+    private func argInt(_ args: [String: JSONValue], _ key: String) -> Int? { args[key]?.doubleValue.map(Int.init) }
 
     private func failure(_ code: String, output: [String: JSONValue] = [:]) -> ClientToolResult {
         var result = ClientToolResult.failure(code, on: .device)
@@ -362,20 +362,20 @@ extension EditorViewModel {
     private func clipEffect(from effect: [String: JSONValue]) -> ClipEffect? {
         switch effect["kind"]?.stringValue {
         case "color_controls":
-            return .colorControls(brightness: effect["brightness"]?.numberValue ?? 0,
-                                  contrast: effect["contrast"]?.numberValue ?? 1,
-                                  saturation: effect["saturation"]?.numberValue ?? 1)
+            return .colorControls(brightness: effect["brightness"]?.doubleValue ?? 0,
+                                  contrast: effect["contrast"]?.doubleValue ?? 1,
+                                  saturation: effect["saturation"]?.doubleValue ?? 1)
         case "hue":
-            return (effect["degrees"]?.numberValue).map { .hue(degrees: $0) }
+            return (effect["degrees"]?.doubleValue).map { .hue(degrees: $0) }
         case "color_filter":
             guard let filter = effect["filter"]?.stringValue else { return nil }
-            return .colorFilter(filter: filter, intensity: effect["intensity"]?.numberValue ?? 1)
+            return .colorFilter(filter: filter, intensity: effect["intensity"]?.doubleValue ?? 1)
         case "crop":
-            guard let x = effect["x"]?.numberValue, let y = effect["y"]?.numberValue,
-                  let w = effect["width"]?.numberValue, let h = effect["height"]?.numberValue else { return nil }
+            guard let x = effect["x"]?.doubleValue, let y = effect["y"]?.doubleValue,
+                  let w = effect["width"]?.doubleValue, let h = effect["height"]?.doubleValue else { return nil }
             return .crop(x: Int(x), y: Int(y), width: Int(w), height: Int(h))
         case "rotate":
-            return (effect["degrees"]?.numberValue).map { .rotate(degrees: $0) }
+            return (effect["degrees"]?.doubleValue).map { .rotate(degrees: $0) }
         case "flip_horizontal": return .flipHorizontal
         case "flip_vertical": return .flipVertical
         default: return nil
@@ -402,7 +402,7 @@ extension EditorViewModel {
                 return failure("invalid_arguments")
             }
             guard let r = await performTimelineCommand(.appendVideoClip(
-                assetID: asset, sourceStart: obj["sourceStart"]?.numberValue, sourceEnd: obj["sourceEnd"]?.numberValue)) else {
+                assetID: asset, sourceStart: obj["sourceStart"]?.doubleValue, sourceEnd: obj["sourceEnd"]?.doubleValue)) else {
                 return failure(lastError ?? "invalid_source_range")
             }
             last = r
@@ -418,7 +418,9 @@ extension EditorViewModel {
         var trackID = argID(args, "trackId")
         if trackID == nil {
             trackID = timelineProject?.audioTracks.first(where: { $0.kind == .music })?.id
-                ?? await performTimelineCommand(.createAudioTrack(name: "Music", kind: .music))?.createdID
+            if trackID == nil {
+                trackID = await performTimelineCommand(.createAudioTrack(name: "Music", kind: .music))?.createdID
+            }
         }
         guard let trackID else { return failure("audio_track_not_found") }
         guard let r = await performTimelineCommand(.insertAudioClip(
@@ -619,26 +621,26 @@ extension EditorViewModel {
                 return nil
             }
         case "resize_video":
-            guard let width = args["width"]?.numberValue, let height = args["height"]?.numberValue else { return nil }
+            guard let width = args["width"]?.doubleValue, let height = args["height"]?.doubleValue else { return nil }
             return await done(.setCanvas(width: Int(width), height: Int(height), fit: nil))
         case "trim_video":
             guard project.videoClips.count == 1, let clip = selected,
-                  let start = args["start"]?.numberValue, let end = args["end"]?.numberValue else {
+                  let start = args["start"]?.doubleValue, let end = args["end"]?.doubleValue else {
                 return failure("invalid_arguments")
             }
             return await done(.trimVideoClip(clipID: clip.id, sourceStart: start, sourceEnd: end))
         case "adjust_speed":
             guard project.videoClips.count == 1, let clip = selected,
-                  let speed = args["speed"]?.numberValue ?? args["factor"]?.numberValue else {
+                  let speed = args["speed"]?.doubleValue ?? args["factor"]?.doubleValue else {
                 return failure("invalid_arguments")
             }
             return await done(.setVideoClipSpeed(clipID: clip.id, speed: speed))
         case "adjust_audio_volume":
-            guard let clip = selected, let volume = args["volume"]?.numberValue else { return nil }
+            guard let clip = selected, let volume = args["volume"]?.doubleValue else { return nil }
             return await done(.setVideoClipOriginalAudio(clipID: clip.id, enabled: volume > 0, gain: volume))
         case "audio_fade":
             guard let clip = selected,
-                  let fadeIn = args["fade_in"]?.numberValue, let fadeOut = args["fade_out"]?.numberValue else { return nil }
+                  let fadeIn = args["fade_in"]?.doubleValue, let fadeOut = args["fade_out"]?.doubleValue else { return nil }
             return await done(.setVideoClipFades(clipID: clip.id, fadeIn: fadeIn, fadeOut: fadeOut))
         default:
             return nil
@@ -652,7 +654,7 @@ extension EditorViewModel {
             width: asset.map { Int($0.naturalSize.width) } ?? project.canvas.width,
             height: asset.map { Int($0.naturalSize.height) } ?? project.canvas.height,
             duration: first?.sourceDuration.seconds ?? project.durationSeconds,
-            hasAudio: asset?.hasAudio ?? false,
-            isPhoto: false)
+            isPhoto: false,
+            hasAudio: asset?.hasAudio ?? false)
     }
 }

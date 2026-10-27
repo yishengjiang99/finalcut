@@ -256,7 +256,7 @@ struct TimelineView: View {
                 .accessibilityLabel(track.muted ? "Unmute \(track.name)" : "Mute \(track.name)")
                 Slider(value: Binding(
                     get: { track.gain },
-                    set: { Task { _ = await model.performTimelineCommand(.setAudioTrackVolume(trackID: track.id, gain: $0)) } }),
+                    set: { newGain in Task { _ = await model.performTimelineCommand(.setAudioTrackVolume(trackID: track.id, gain: newGain)) } }),
                        in: 0...1.5)
                     .frame(maxWidth: 110)
                     .accessibilityLabel("\(track.name) volume")
@@ -297,7 +297,7 @@ struct TimelineView: View {
                 Text("Audio").font(.caption).foregroundStyle(AppTheme.textSecondary)
                 Slider(value: Binding(
                     get: { clip.gain },
-                    set: { Task { _ = await model.performTimelineCommand(.setAudioClipVolume(clipID: clip.id, gain: $0)) } }),
+                    set: { newGain in Task { _ = await model.performTimelineCommand(.setAudioClipVolume(clipID: clip.id, gain: newGain)) } }),
                        in: 0...1.5)
                     .accessibilityLabel("Audio clip volume")
                 controlButton("Delete", "trash") {
