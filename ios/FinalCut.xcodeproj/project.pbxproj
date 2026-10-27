@@ -96,6 +96,10 @@
 		08EC33E5C6F30F54A008A325 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */; };
 		B125B4C30989AEDBF53372EA /* EditorViewModel+Timeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */; };
 		5BA5C65EA516FB6EC6A06B59 /* TimelineToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */; };
+		2C1E877A18984C8C442B4ABE /* ProjectModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */; };
+		2D84149D68038A94A5A1DEEA /* ProjectCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */; };
+		59D7A1267FF1C56A8C7DF7E8 /* ProjectPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0D70F48FB6B7BA7AE5B12A /* ProjectPersistenceTests.swift */; };
+		099412012CC74F5A4BC9678F /* ProjectComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -211,6 +215,10 @@
 		CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
 		65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel+Timeline.swift; sourceTree = "<group>"; };
 		8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineToolExecutor.swift; sourceTree = "<group>"; };
+		8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectModelTests.swift; sourceTree = "<group>"; };
+		F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandTests.swift; sourceTree = "<group>"; };
+		3A0D70F48FB6B7BA7AE5B12A /* ProjectPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectPersistenceTests.swift; sourceTree = "<group>"; };
+		57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -392,6 +400,10 @@
 		31046C18DC344075B32836E8 /* FinalCutTests */ = {
 			isa = PBXGroup;
 			children = (
+				57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */,
+				3A0D70F48FB6B7BA7AE5B12A /* ProjectPersistenceTests.swift */,
+				F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */,
+				8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */,
 				6A4BD9E125BC712EE84A3615 /* SuggestionServiceTests.swift */,
 				DFC51573DB1076A0CEFDB3D3 /* UndoRedoTests.swift */,
 				9C5E696A011F606B3C761265 /* ExportTests.swift */,
@@ -655,6 +667,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				099412012CC74F5A4BC9678F /* ProjectComposerTests.swift in Sources */,
+				59D7A1267FF1C56A8C7DF7E8 /* ProjectPersistenceTests.swift in Sources */,
+				2D84149D68038A94A5A1DEEA /* ProjectCommandTests.swift in Sources */,
+				2C1E877A18984C8C442B4ABE /* ProjectModelTests.swift in Sources */,
 				DCDDFB3797A5B85C02D6B68A /* SuggestionServiceTests.swift in Sources */,
 				5CCA836F4EF77DE8F68AA45E /* UndoRedoTests.swift in Sources */,
 				B54E2B173160D3E92D4F9C37 /* ExportTests.swift in Sources */,
