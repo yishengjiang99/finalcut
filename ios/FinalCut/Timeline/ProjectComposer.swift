@@ -41,7 +41,7 @@ extension NativeComposer {
     }
 
     static func compose(project: EditorProject) async throws -> ComposedVideo {
-        try compose(project: project, resolve: { resolveAssetURL($0, in: project) })
+        try await compose(project: project, resolve: { resolveAssetURL($0, in: project) })
     }
 
     static func compose(project: EditorProject, resolve: (MediaAsset) -> URL) async throws -> ComposedVideo {
