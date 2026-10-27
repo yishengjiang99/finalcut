@@ -310,12 +310,12 @@ struct TimelineView: View {
             HStack(spacing: 16) {
                 Stepper("Fade in \(clip.fadeIn.formatted())s", value: Binding(
                     get: { clip.fadeIn },
-                    set: { Task { _ = await model.performTimelineCommand(.setAudioFade(clipID: clip.id, isIn: true, duration: $0)) } }),
+                    set: { newValue in Task { _ = await model.performTimelineCommand(.setAudioFade(clipID: clip.id, isIn: true, duration: newValue)) } }),
                         in: 0...5, step: 0.5)
                     .font(.caption)
                 Stepper("Fade out \(clip.fadeOut.formatted())s", value: Binding(
                     get: { clip.fadeOut },
-                    set: { Task { _ = await model.performTimelineCommand(.setAudioFade(clipID: clip.id, isIn: false, duration: $0)) } }),
+                    set: { newValue in Task { _ = await model.performTimelineCommand(.setAudioFade(clipID: clip.id, isIn: false, duration: newValue)) } }),
                         in: 0...5, step: 0.5)
                     .font(.caption)
             }
