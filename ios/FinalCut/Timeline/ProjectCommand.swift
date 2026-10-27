@@ -293,8 +293,18 @@ enum ProjectCommandExecutor {
             result.message = "canvas set"
 
         case .selectClip(let clipID):
-            if let clipID, p.clip(clipID) == nil, p.audioClip(clipID) == nil { throw bad("clip_not_found") }
-            p.selectedClipID = clipID
+            if let clipID {
+                if p.clip(clipID) != nil {
+                    p.selectedClipID = clipID
+                } else if p.audioClip(clipID) != nil {
+                    p.selectedAudioClipID = clipID
+                } else {
+                    throw bad("clip_not_found")
+                }
+            } else {
+                p.selectedClipID = nil
+                p.selectedAudioClipID = nil
+            }
             result.affectedIDs = clipID.map { [$0] } ?? []
             result.message = "selection changed"
         }

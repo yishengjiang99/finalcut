@@ -20,6 +20,8 @@ struct PreviewPaneView: View {
     var onUndo: () -> Void = {}
     /// Stops a cloud step in flight (translated captions); nil hides the button.
     var onCancel: (() -> Void)? = nil
+    /// Playhead target in seconds, set by the timeline scrubber.
+    var seekSeconds: Double? = nil
 
     @State private var player = AVPlayer()
 
@@ -86,6 +88,11 @@ struct PreviewPaneView: View {
         .onAppear { attach() }
         .onChange(of: videoURL) { _, _ in attach() }
         .onChange(of: playerItem) { _, _ in attach() }
+        .onChange(of: seekSeconds) { _, seconds in
+            guard let seconds, seconds.isFinite else { return }
+            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero)
+        }
         .onDisappear { player.pause() }
     }
 

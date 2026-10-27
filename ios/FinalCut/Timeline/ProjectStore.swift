@@ -162,6 +162,25 @@ enum ProjectStore {
         return nil
     }
 
+    /// Brings every asset whose file lives outside the project directory (e.g. an
+    /// adapter project built from a temp-dir base or a Caches-dir soundtrack) into the
+    /// project's Media directory, rewriting its `relativePath`. After adoption a saved
+    /// project is fully self-contained and durable.
+    static func adoptExternalAssets(_ project: inout EditorProject) throws {
+        try ensureDirectories(project.id)
+        for index in project.assets.indices {
+            let asset = project.assets[index]
+            let current = resolve(asset, in: project)
+            if FileManager.default.fileExists(atPath: current.path),
+               current.standardizedFileURL.path.hasPrefix(projectDirectory(project.id).standardizedFileURL.path) {
+                continue
+            }
+            let source = asset.relativePath.hasPrefix("/") ? URL(fileURLWithPath: asset.relativePath) : current
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            project.assets[index].relativePath = try copyIntoProject(source: source, projectID: project.id, assetID: asset.id)
+        }
+    }
+
     // MARK: Cleanup
 
     /// Deletes media files no asset in `project` references. Assets referenced only by
