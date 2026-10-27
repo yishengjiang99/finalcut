@@ -219,15 +219,68 @@ extension NativeComposer {
             audioMix = mix
         }
 
-        // MARK: Video composition instructions
+        // MARK: Video composition
         let renderSize = FrameRenderer.evenSize(project.canvas.cgSize)
-        let instructions = makeInstructions(project: project, layout: layout, visuals: visuals, renderSize: renderSize)
-        let videoComposition = AVMutableVideoComposition()
-        videoComposition.customVideoCompositorClass = ProjectVideoCompositor.self
-        videoComposition.renderSize = renderSize
         let fps = project.assets.map(\.nominalFrameRate).filter { $0 > 0 }.max() ?? 30
-        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(min(60, max(15, fps.rounded()))))
-        videoComposition.instructions = instructions
+        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(min(60, max(15, fps.rounded()))))
+        let videoComposition: AVMutableVideoComposition
+        if hasTransitions {
+            // Overlapping clips live on two composition tracks and need the
+            // custom compositor to blend both source frames per output frame.
+            let instructions = makeInstructions(project: project, layout: layout, visuals: visuals, renderSize: renderSize)
+            let composition2 = AVMutableVideoComposition()
+            composition2.customVideoCompositorClass = ProjectVideoCompositor.self
+            composition2.renderSize = renderSize
+            composition2.frameDuration = frameDuration
+            composition2.instructions = instructions
+            videoComposition = composition2
+        } else {
+            // Cut-only projects (the common case: one composition video track)
+            // render through the closure-based composition — the same mechanism
+            // the single-clip path uses, which is proven on device. The fully
+            // manual instruction + custom-compositor path built a composition
+            // that AVFoundation stopped on device with -11841 ("Operation
+            // Stopped") and rendered black in the preview, while composing
+            // without error — so the per-frame work (orientation, effects,
+            // canvas fit, captions) moves into the handler instead, keyed by
+            // the active layout entry at the requested time.
+            let captions = project.projectCaptions()
+            let captionRenderer = FrameRenderer(ops: [], sourceSize: renderSize, captions: captions)
+            let fit = project.canvas.fit
+            videoComposition = try await AVMutableVideoComposition.videoComposition(with: composition) { request in
+                let t = request.compositionTime
+                var image = request.sourceImage
+                let entry = layout.last(where: { $0.start <= t }) ?? layout.first
+                if let entry, let visual = visuals[entry.clipID] {
+                    if visual.transform != .identity,
+                       abs(image.extent.width - visual.naturalSize.width) < 1,
+                       abs(image.extent.height - visual.naturalSize.height) < 1,
+                       abs(visual.naturalSize.width - visual.orientedSize.width) > 1 {
+                        image = image.transformed(by: visual.transform)
+                    }
+                    image = image.transformed(by: CGAffineTransform(translationX: -image.extent.origin.x, y: -image.extent.origin.y))
+                    image = visual.renderer.apply(to: image)
+                    let frameSize = image.extent.size
+                    if frameSize.width > 0, frameSize.height > 0 {
+                        let scaleX = renderSize.width / frameSize.width
+                        let scaleY = renderSize.height / frameSize.height
+                        let scale = fit == .aspectFill ? max(scaleX, scaleY) : min(scaleX, scaleY)
+                        let dx = (renderSize.width - frameSize.width * scale) / 2
+                        let dy = (renderSize.height - frameSize.height * scale) / 2
+                        let fitted = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)
+                            .concatenating(CGAffineTransform(translationX: dx, y: dy)))
+                        image = fitted.cropped(to: CGRect(origin: .zero, size: renderSize))
+                            .composited(over: CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: renderSize)))
+                    }
+                }
+                if !captions.isEmpty {
+                    image = captionRenderer.apply(to: image, time: CMTimeGetSeconds(t))
+                }
+                request.finish(with: image, context: nil)
+            }
+            videoComposition.renderSize = renderSize
+            videoComposition.frameDuration = frameDuration
+        }
 
         return ComposedVideo(
             asset: composition,
