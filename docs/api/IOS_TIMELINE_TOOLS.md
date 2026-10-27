@@ -116,32 +116,20 @@ its field names (`durationSeconds` → `duration`, `assetID` → `assetId`,
 `gain` → `volume`, …). See `src/server/projectContext.js` for the canonical
 shape and limits.
 
-## Coordination status with the in-flight iOS implementation (2026-10-26)
+## Coordination status (2026-10-26)
 
-The parallel iOS multi-clip work (worktree `finalcap-multiclip-work`, based on
-remote main `1ba751d`, not yet pushed) independently implemented a first cut of
-the server side of this contract. The two cuts **diverge and must be
-reconciled before either lands**:
+Ownership split set by the user: this server contract is the single source of
+truth for the timeline feature. The iOS multi-clip implementation builds its
+Phase E dispatch against these tool names, argument shapes, error codes, and
+the snapshot schema above, and does not edit anything under `src/server/`.
+(The iOS worktree's earlier independent server cut — `TIMELINE_MIN_BUILD`,
+`validateProjectSummary`, `get_timeline`/`create_audio_lane`-style names — was
+superseded by this contract and dropped.)
 
-| Area | This branch (spec) | iOS worktree |
-| --- | --- | --- |
-| Min build constant | `TIMELINE_TOOLS_MIN_BUILD` = placeholder 2_000_000_000 | `TIMELINE_MIN_BUILD` = **14** (the coordinated first timeline build) |
-| Project validation | `src/server/projectContext.js` (chat-level; top-level `project` or `media.project`; aliases normalized; bounded summary; thumbnailRefs) | `validateProjectSummary` inside `validateMedia` (`media.project` only, native field names kept) |
-| Inspection names | `get_project_timeline`, `get_clip_details`, `get_audio_track_details`, `get_project_info` | `get_timeline`, `get_clip_info` (no track-details / project-info tools) |
-| Video names | `set_clip_speed`, `set_clip_effect` | `set_video_clip_speed`, `apply_clip_effect` |
-| Audio names | `create_audio_track`, `add_audio_clip`, `set_audio_clip_fade`, `apply_audio_ducking` | `create_audio_lane`, `insert_audio_clip`, `set_audio_fade`, `set_audio_ducking` |
-| Argument style | camelCase (`clipId`, `assetId`, `timelineStart`) | snake_case (`clip_id`, `asset_id`) |
-| Batch / revision / idempotency | `batch_timeline_edits`, `expectedRevision`, `idempotencyKey`, conflict annotation | not present |
-| Prompt/orchestration | timeline agent instructions + telemetry in `chat.js` | not present (`chat.js` untouched) |
-
-Recommended merge: keep this branch's orchestration (prompt rules, batch,
-revision contract, summary/truncation, telemetry, E2E tests); adopt the iOS
-side's `TIMELINE_MIN_BUILD = 14` by setting `TIMELINE_TOOLS_MIN_BUILD` to 14
-at merge time; pick ONE tool-name/argument vocabulary — the device executor's
-(ToolCatalog/dispatch) is the binding constraint, so rename the server
-definitions to match the shipped executor, or update the executor to the
-spec names before build 14 is cut. Do not merge both `iosTimelineTools.js`
-versions.
+The one open coordination item is the shipping build number: when the native
+timeline executor lands in a build, set `TIMELINE_TOOLS_MIN_BUILD` in
+`src/server/iosToolAllowlist.js` to that build (one line) — until then the
+placeholder keeps the tools dark on every shipped build.
 
 ## Remaining native dependencies (not server work)
 
