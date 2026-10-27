@@ -4,10 +4,10 @@ import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType,
 import VideoPreview from './VideoPreview.jsx';
 import TimelineStrip from './TimelineStrip.jsx';
 
-// The timeline strip is sidelined (2026-10-27, at the user's word) on both
-// clients: the editor never renders it. The component stays in the tree —
-// flip this back to re-enable.
-const TIMELINE_ENABLED = false;
+// Timeline strip switch. (It was briefly set false on 2026-10-27 under a
+// misread instruction and restored the same day — the feature ordered off
+// was the project history list, which the web editor doesn't have.)
+const TIMELINE_ENABLED = true;
 import { useCallAPI } from './useCallAPI.js';
 import VoiceButton, { summarize } from './VoiceButton.jsx';
 import { setFetchAbortSignal } from './abortableFetch.js';

@@ -16,10 +16,12 @@ enum AppTheme {
 }
 
 /// Feature switches.
-/// The multi-clip timeline surface is sidelined (2026-10-27, at the user's
-/// word) on both clients: the editor never renders the timeline view, so
-/// timeline mode can't be entered from the UI. All timeline code, projects,
-/// and the library stay in place — flip this back to re-enable.
+/// The project history list is turned off (2026-10-27, at the user's word):
+/// the Projects button is hidden, so the library can't be opened from the
+/// editor. ProjectLibrary code and all saved projects stay in place — flip
+/// this back to re-enable. (timelineEnabled exists as a switch from the same
+/// day and is ON — the timeline itself was never ordered off.)
 enum FeatureFlags {
-    static let timelineEnabled = false
+    static let timelineEnabled = true
+    static let projectLibraryEnabled = false
 }

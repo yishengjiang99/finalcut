@@ -68,15 +68,17 @@ struct TopBarView: View {
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("Settings")
 
-            Button(action: onShowHistory) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 28, height: 34)
-                    .contentShape(Rectangle())
+            if FeatureFlags.projectLibraryEnabled {
+                Button(action: onShowHistory) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 28, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(AppTheme.textPrimary)
+                .accessibilityLabel("Projects")
+                .accessibilityIdentifier("ProjectLibrary")
             }
-            .foregroundStyle(AppTheme.textPrimary)
-            .accessibilityLabel("Projects")
-            .accessibilityIdentifier("ProjectLibrary")
 
             Spacer(minLength: 0)
 
