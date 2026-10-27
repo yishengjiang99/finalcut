@@ -40,14 +40,14 @@ export function musicSiteUrl(env = process.env) {
 // GBK Composer (compose.grepawk.com) Pro. Price IDs from env, same rules as music:
 //   COMPOSE_STRIPE_PRICE_PRO_MONTHLY  recurring $5.99/month
 //   COMPOSE_STRIPE_PRICE_PRO_YEARLY   recurring $47.99/year
-//   COMPOSE_STRIPE_PRICE_LIFETIME     one-time  $99
+//   COMPOSE_STRIPE_PRICE_LIFETIME     one-time  $99.99 (aligned with iOS, gbk #117)
 export const COMPOSE_TRIAL_DAYS = 7;
 
 export function composePlans(env = process.env) {
   return {
     pro_monthly: { product: COMPOSE_PRODUCT, plan: 'pro_monthly', priceId: env.COMPOSE_STRIPE_PRICE_PRO_MONTHLY || '', mode: 'subscription', trialDays: COMPOSE_TRIAL_DAYS, value: 5.99 },
     pro_yearly: { product: COMPOSE_PRODUCT, plan: 'pro_yearly', priceId: env.COMPOSE_STRIPE_PRICE_PRO_YEARLY || '', mode: 'subscription', trialDays: COMPOSE_TRIAL_DAYS, value: 47.99 },
-    lifetime: { product: COMPOSE_PRODUCT, plan: 'lifetime', priceId: env.COMPOSE_STRIPE_PRICE_LIFETIME || '', mode: 'payment', trialDays: 0, value: 99 },
+    lifetime: { product: COMPOSE_PRODUCT, plan: 'lifetime', priceId: env.COMPOSE_STRIPE_PRICE_LIFETIME || '', mode: 'payment', trialDays: 0, value: 99.99 },
   };
 }
 
