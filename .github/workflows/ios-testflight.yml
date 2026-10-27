@@ -8,9 +8,9 @@ on:
         required: false
         default: CI build
       marketing_version:
-        description: CFBundleShortVersionString (1.0.1 is live in the App Store; use 1.1+)
+        description: CFBundleShortVersionString — 'auto' (default) resolves the open train from ASC, or bumps the minor past the live version; or pin a version e.g. 1.1
         required: true
-        default: '1.1'
+        default: 'auto'
 
 concurrency:
   group: ios-testflight
@@ -136,12 +136,68 @@ jobs:
           sed -i '' 's/^          //' "$GITHUB_WORKSPACE/ExportOptions.plist"
           plutil -lint "$GITHUB_WORKSPACE/ExportOptions.plist"
 
-      - name: Archive
-        working-directory: ios
+      - name: Resolve marketing version
         env:
-          MV: ${{ github.event.inputs.marketing_version || '1.1' }}
+          MV_INPUT: ${{ github.event.inputs.marketing_version }}
         run: |
           set -euo pipefail
+          if [[ -n "${MV_INPUT:-}" && "$MV_INPUT" != "auto" ]]; then
+            echo "MV=$MV_INPUT" >> "$GITHUB_ENV"
+            echo "Marketing version pinned by input: $MV_INPUT"
+            exit 0
+          fi
+          # Auto: ask App Store Connect. If an open (not live) App Store train
+          # exists — editable or in review — upload into the highest one. If
+          # every App Store version is live, bump the minor of the highest
+          # live version (1.0.1 -> 1.1). TestFlight-only trains are ignored on
+          # purpose: the next train always derives from the App Store version
+          # list, never from a stray TestFlight upload. No hardcoded default
+          # to go stale again; an ASC failure fails the run loudly.
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request
+          import jwt
+          key_id = os.environ["APP_STORE_CONNECT_KEY_ID"].strip()
+          issuer = os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip()
+          p8 = open(os.environ["ASC_KEY_PATH"]).read().strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": issuer, "iat": now, "exp": now + 600, "aud": "appstoreconnect-v1"}, p8, algorithm="ES256", headers={"kid": key_id, "typ": "JWT"})
+          def api(path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+              with urllib.request.urlopen(req, timeout=90) as r:
+                  return json.loads(r.read().decode() or "{}")
+          apps = api(f"/v1/apps?filter[bundleId]={os.environ['BUNDLE_ID']}")
+          app_id = apps["data"][0]["id"]
+          states = {}
+          live = set()
+          vers = api(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=50")
+          for v in vers.get("data", []):
+              s = v["attributes"]["versionString"]
+              states[s] = v["attributes"].get("appStoreState")
+              if states[s] == "READY_FOR_SALE":
+                  live.add(s)
+          def keyf(s):
+              parts = [int(x) for x in s.split(".")]
+              return parts + [0] * (3 - len(parts))
+          versions = sorted(states, key=keyf)
+          if not versions:
+              raise SystemExit("No versions found in App Store Connect")
+          open_trains = [v for v in versions if v not in live]
+          if open_trains:
+              nxt, why = open_trains[-1], "open train"
+          else:
+              top = keyf(versions[-1])
+              nxt, why = f"{top[0]}.{top[1] + 1}", f"newest {versions[-1]} is live, minor bump"
+          print(f"Auto marketing version: {nxt} ({why}); ASC states: {states}")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"MV={nxt}\n")
+          PY
+
+      - name: Archive
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          test -n "${MV:-}" || { echo "::error::MV is unset — the Resolve marketing version step did not run"; exit 1; }
           # Never upload into the 1.0 train while 1.0 is in App Store review.
           [[ "$MV" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ && "$MV" != "1.0" && "$MV" != "1.0.0" ]] || { echo "::error::marketing_version must be a valid version other than 1.0 (got '$MV')"; exit 1; }
           mkdir -p "$(dirname "$ARCHIVE_PATH")"
@@ -211,6 +267,6 @@ jobs:
             echo "- Build: \`${{ github.run_number }}\`"
             echo "- Sample: sample-lake.mp4 copied over finalcap-test-video.mp4"
             echo "- Notes: ${{ github.event.inputs.notes }}"
-            echo "- Version: ${{ github.event.inputs.marketing_version || '1.1' }} (${{ github.run_number }})"
+            echo "- Version: $MV (${{ github.run_number }})"
             echo "- Wait a few minutes in App Store Connect for processing, then install the new build."
           } >> "$GITHUB_STEP_SUMMARY"
