@@ -2059,3 +2059,85 @@ body {
 
 /* Voice mic (VoiceButton.jsx) */
 .voice-btn.on { background: #c0392b; color: #fff; border-radius: 50%; }
+
+/* Timeline strip (TimelineStrip.jsx) — the layout rethink applied to the web
+   editor: the active clip's timeline docked above the composer. */
+.tl-strip {
+  margin: 10px 32px 0;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 12px 10px;
+  position: relative;
+  z-index: 30;
+}
+.tl-slim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 64px);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+.tl-slim:hover { border-color: var(--accent); }
+.tl-slim-caret { color: var(--text-dim); font-size: 12px; }
+.tl-slim-label { font-weight: 600; font-size: 13px; }
+.tl-slim-meta { color: var(--text-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-head { display: flex; align-items: center; gap: 8px; }
+.tl-collapse {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-size: 13px; padding: 2px 4px; line-height: 1;
+}
+.tl-title { font-weight: 650; font-size: 13.5px; }
+.tl-meta { color: var(--text-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-head-spacer { flex: 1; }
+.tl-sel-readout { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.tl-ruler { position: relative; height: 16px; margin: 6px 0 2px; }
+.tl-tick {
+  position: absolute; transform: translateX(-50%);
+  font-size: 9.5px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+}
+.tl-tick::after {
+  content: ''; position: absolute; left: 50%; top: 12px;
+  width: 1px; height: 4px; background: var(--text-faint); opacity: 0.6;
+}
+.tl-lane {
+  position: relative; height: 76px; border-radius: 10px; overflow: hidden;
+  background: #000; cursor: pointer; touch-action: none;
+  border: 1px solid var(--line-soft);
+}
+.tl-film { position: absolute; inset: 0; display: flex; }
+.tl-film img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; pointer-events: none; }
+.tl-film-empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint); font-size: 12px; background: var(--bg-3);
+}
+.tl-dim { position: absolute; top: 0; bottom: 0; background: rgba(4, 6, 10, 0.68); pointer-events: none; }
+.tl-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: #ff5147; pointer-events: none; z-index: 3;
+}
+.tl-playhead-tag {
+  position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
+  background: #ff5147; color: #fff; font-size: 9.5px; font-weight: 700;
+  padding: 1px 5px; border-radius: 5px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.tl-handle {
+  position: absolute; top: 0; bottom: 0; width: 15px; margin-left: -7.5px;
+  background: var(--accent); color: #fff; z-index: 4;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; cursor: ew-resize; touch-action: none;
+  user-select: none; -webkit-user-select: none;
+}
+.tl-handle-start { border-radius: 9px 0 0 9px; }
+.tl-handle-end { border-radius: 0 9px 9px 0; }
+.tl-actions { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.tl-actions-hint { color: var(--text-faint); font-size: 11.5px; }
+@media (max-width: 720px) {
+  .tl-strip { margin: 8px 12px 0; }
+  .tl-slim { width: calc(100% - 24px); }
+  .tl-sel-readout { display: none; }
+  .tl-actions-hint { display: none; }
+}

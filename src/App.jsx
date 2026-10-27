@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useSyncExternalStore } fro
 import { systemPrompt } from './tools.js';
 import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, muxCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
+import TimelineStrip from './TimelineStrip.jsx';
 import { useCallAPI } from './useCallAPI.js';
 import VoiceButton, { summarize } from './VoiceButton.jsx';
 import { setFetchAbortSignal } from './abortableFetch.js';
@@ -248,6 +249,15 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   // clip (an upload or an earlier result) can become the edit target again.
   const [activeMediaId, setActiveMediaId] = useState(null);
   const activeMediaIdRef = useRef(null);
+  // Timeline strip (layout rethink): expanded ⇄ slim, and the registry of live
+  // preview <video> elements by message id so the strip can follow/scrub the
+  // active card's preview.
+  const [stripOpen, setStripOpen] = useState(true);
+  const previewElsRef = useRef(new Map()); // message id → <video> element
+  const registerPreviewEl = (id, el) => {
+    if (el) previewElsRef.current.set(id, el);
+    else previewElsRef.current.delete(id);
+  };
   const mediaBytesRef = useRef(new Map()); // message id → Uint8Array
   const pendingResultBytesRef = useRef(null); // set by a tool just before it posts its result message
 
@@ -1077,6 +1087,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             mimeType={msg.mimeType}
             vttUrl={msg.vttUrl || null}
             captionTrack={trackOfMedia(item.id)}
+            onVideoMount={(el) => registerPreviewEl(msg.id, el)}
           />
           {item.kind !== 'result' && (
             <div className="rc-overlay">
@@ -1342,6 +1353,16 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                 ))}
               </div>
             </div>
+          )}
+
+          {view === 'editor' && activeMedia && !activeMedia.isAudio && (
+            <TimelineStrip
+              media={activeMedia}
+              getVideoEl={() => previewElsRef.current.get(activeMediaIdRef.current)}
+              onTrimPrompt={handleSampleClick}
+              open={stripOpen}
+              onToggle={() => setStripOpen((v) => !v)}
+            />
           )}
 
           <div className="composer-zone" ref={composerZoneRef}>

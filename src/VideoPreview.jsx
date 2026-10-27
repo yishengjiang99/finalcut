@@ -3,7 +3,7 @@ import { activeLine, overlayFontPx, overlayPlacement, overlayFontFamily } from '
 
 const FPS_STEPS = [24, 25, 30, 60];
 
-export default function VideoPreview({ captionTrack = null, videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English' }) {
+export default function VideoPreview({ captionTrack = null, videoUrl, title = 'Video Preview', defaultCollapsed = false, mimeType = null, vttUrl = null, subtitleLang = 'en', subtitleLabel = 'English', onVideoMount = null }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewH, setViewH] = useState(0); // rendered picture height, to size the caption overlay
   const [currentTime, setCurrentTime] = useState(0);
@@ -24,6 +24,16 @@ export default function VideoPreview({ captionTrack = null, videoUrl, title = 'V
   const [corsError, setCorsError] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  // Optional: hand the live <video> element to the parent (the timeline strip
+  // follows it and scrubs it). Read through a ref so a changing callback
+  // identity never re-runs these effects; the element only exists once the
+  // thumbnail is opened, which the showThumb/isCollapsed deps track.
+  const mountCbRef = useRef(null);
+  mountCbRef.current = onVideoMount;
+  useEffect(() => {
+    mountCbRef.current?.(videoRef.current);
+  }, [showThumb, isCollapsed]);
+  useEffect(() => () => { mountCbRef.current?.(null); }, []);
   const rafRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
