@@ -213,7 +213,7 @@
 		AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectVideoCompositor.swift; sourceTree = "<group>"; };
 		FE21E8673CABC1B000231B1F /* AudioDucking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDucking.swift; sourceTree = "<group>"; };
 		CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
-		65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel+Timeline.swift; sourceTree = "<group>"; };
+		65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+Timeline.swift"; sourceTree = "<group>"; };
 		8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineToolExecutor.swift; sourceTree = "<group>"; };
 		8CE1BCE87258C8FF7FF2C1D1 /* ProjectModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectModelTests.swift; sourceTree = "<group>"; };
 		F38E20C55929B8E08218E292 /* ProjectCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandTests.swift; sourceTree = "<group>"; };
