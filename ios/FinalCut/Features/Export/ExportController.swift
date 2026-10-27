@@ -116,12 +116,24 @@ final class ExportController: ObservableObject {
     }
 
     /// Renders once per session (cached). No edits → the original file.
+    /// A timeline project ALWAYS renders through the project composer, even with zero
+    /// stack entries: the old "no edits → return the base file" shortcut would silently
+    /// drop every clip after the first and every independent audio track.
     func render(stack: EditStack?, fallbackURL: URL?) async throws -> URL {
         if let renderedURL { return renderedURL }
         let isPhoto = Self.isPhoto(stack: stack, fallbackURL: fallbackURL)
         guard let base = stack?.base ?? fallbackURL else { throw NativeExporter.ExportError.failed }
         let url: URL
-        if let stack, !stack.entries.isEmpty {
+        if let stack, stack.isTimelineProject, let project = stack.project {
+            beginBackground()
+            phase = .rendering(0)
+            let composed = try await NativeComposer.compose(project: project)
+            url = try await exporter.export(composed, format: stack.outputFormat) { [weak self] value in
+                guard let self, case .rendering = self.phase else { return }
+                self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
+            }
+            try Task.checkCancellation()
+        } else if let stack, !stack.entries.isEmpty {
             beginBackground()
             if isPhoto {
                 phase = .saving
