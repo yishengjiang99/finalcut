@@ -6,6 +6,7 @@ final class NativeExporter: @unchecked Sendable {
     enum ExportError: Error, Equatable {
         case cannotCreateSession
         case failed
+        case failedWithReason(String)
         case cancelled
     }
 
@@ -50,6 +51,11 @@ final class NativeExporter: @unchecked Sendable {
         case .cancelled:
             throw ExportError.cancelled
         default:
+            // Keep the AVFoundation reason: a bare "failed" made export bugs
+            // undiagnosable from the sheet's generic failure copy.
+            if let error = session.error as NSError? {
+                throw ExportError.failedWithReason("\(error.domain) \(error.code): \(error.localizedDescription)")
+            }
             throw ExportError.failed
         }
     }

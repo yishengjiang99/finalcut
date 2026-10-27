@@ -559,7 +559,16 @@ final class EditorViewModel: ObservableObject {
             // Multi-clip preview comes straight from the project composition — no
             // intermediate file is rendered. The generation counter drops results of
             // superseded edits so an older build can't overwrite a newer preview.
-            guard let composed = try? await NativeComposer.compose(project: project) else { return }
+            // A compose failure leaves the preview black; report it (it was
+            // previously swallowed by try?, which made export/preview failures
+            // in opened projects undiagnosable).
+            let composed: ComposedVideo
+            do {
+                composed = try await NativeComposer.compose(project: project)
+            } catch {
+                Telemetry.shared.track("preview_compose_fail", props: ["detail": "\(error)"])
+                return
+            }
             guard generation == previewGeneration else { return }
             composedVideo = composed
             previewItem = composed.makePlayerItem()

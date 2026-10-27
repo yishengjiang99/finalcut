@@ -102,8 +102,20 @@ final class ExportController: ObservableObject {
             } catch PhotoLibrarySaver.SaveError.notAuthorized {
                 self.phase = .idle
                 self.photosPermissionDenied = true
+            } catch let error as ProjectComposerError {
+                // Name the actual problem in the sheet (a missing file, an
+                // invalid project) instead of the generic failure copy, and
+                // report it so the next failure is diagnosable server-side.
+                self.phase = .failed(Self.composerFailureCopy(error))
+                Telemetry.shared.track("export_fail", props: ["reason": Self.composerFailureReason(error)])
+                self.notifyIfInactive(success: false, isPhoto: isPhoto, savedToPhotos: false)
+            } catch NativeExporter.ExportError.failedWithReason(let reason) {
+                self.phase = .failed(UXCopy.notifFailedTitle)
+                Telemetry.shared.track("export_fail", props: ["reason": "export_session", "detail": reason])
+                self.notifyIfInactive(success: false, isPhoto: isPhoto, savedToPhotos: false)
             } catch {
                 self.phase = .failed(UXCopy.notifFailedTitle)
+                Telemetry.shared.track("export_fail", props: ["reason": "other", "detail": "\(error)"])
                 self.notifyIfInactive(success: false, isPhoto: isPhoto, savedToPhotos: false)
             }
             self.endBackground()
@@ -156,6 +168,34 @@ final class ExportController: ObservableObject {
 
     static func isPhoto(stack: EditStack?, fallbackURL: URL?) -> Bool {
         stack?.isPhoto ?? fallbackURL.map { MediaMIME.isImage(url: $0) } ?? false
+    }
+
+    /// User-facing copy for a project-composition failure during export.
+    static func composerFailureCopy(_ error: ProjectComposerError) -> String {
+        switch error {
+        case .missingAsset(_):
+            return "A media file in this project is missing."
+        case .invalidProject(let issues):
+            return "This project couldn't be exported (\(issues.first ?? "invalid project"))."
+        case .noVideoTrack(_):
+            return "One of the clips in this project has no video track."
+        case .noAudioTrack(_):
+            return "One of the clips in this project has no audio track."
+        }
+    }
+
+    /// Telemetry reason string for a project-composition failure during export.
+    static func composerFailureReason(_ error: ProjectComposerError) -> String {
+        switch error {
+        case .missingAsset(_):
+            return "missing_asset"
+        case .invalidProject(let issues):
+            return "invalid_project: " + issues.joined(separator: ",")
+        case .noVideoTrack(_):
+            return "no_video_track"
+        case .noAudioTrack(_):
+            return "no_audio_track"
+        }
     }
 
     // MARK: - Notifications (Design §6)
