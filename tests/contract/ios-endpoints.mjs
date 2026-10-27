@@ -101,7 +101,7 @@ for (const media of ['video', 'photo']) {
   }, { deterministic: true });
 }
 
-let iosToolCount = 0;
+let iosToolNames = [];
 await check('GET /api/tools/schema (iOS UA)', () => call('GET', '/api/tools/schema'), (r) => {
   assert(r.status === 200, `status ${r.status}`);
   isJson(r);
@@ -110,13 +110,28 @@ await check('GET /api/tools/schema (iOS UA)', () => call('GET', '/api/tools/sche
   for (const t of r.json.tools) assert(t.type === 'function' && t.function?.name && t.function?.parameters, 'tool shape');
   assert(r.json.mediaTypes && typeof r.json.mediaTypes === 'object', 'mediaTypes');
   assert(/User-Agent/i.test(r.headers.vary || ''), 'Vary: User-Agent');
-  iosToolCount = r.json.tools.length;
+  iosToolNames = r.json.tools.map((t) => t.function.name);
 }, { deterministic: true });
 
-await check('GET /api/tools/schema (web UA)', () => call('GET', '/api/tools/schema', { headers: { 'User-Agent': WEB_UA } }), (r) => {
+// The web editor must keep every SHARED tool. iOS-only offerings (the
+// ffmpeg_cli client fallback since build 11, the timeline tools since app
+// 1.2 / build 14) are offered to iOS builds only, so a raw count comparison
+// (web >= iOS) is wrong by design. The oldest supported build's tool list
+// (FinalCap-iOS/10) is exactly the shared set: web must contain all of it,
+// and newer iOS builds must be a superset of it (iOS only ever gains tools).
+const LEGACY_IOS_UA = 'FinalCap-iOS/10';
+await check('GET /api/tools/schema (web UA)', async () => {
+  const web = await call('GET', '/api/tools/schema', { headers: { 'User-Agent': WEB_UA } });
+  const legacy = await call('GET', '/api/tools/schema', { headers: { 'User-Agent': LEGACY_IOS_UA } });
+  return { ...web, legacyNames: legacy.json?.tools?.map((t) => t.function.name) };
+}, (r) => {
   assert(r.status === 200, `status ${r.status}`);
   assert(r.json.schemaVersion === '1', 'schemaVersion');
-  assert(r.json.tools.length >= iosToolCount, 'web gets all tools (>= iOS allowlist)');
+  assert(Array.isArray(r.legacyNames) && r.legacyNames.length > 0, 'legacy iOS tool list readable');
+  const webNames = new Set(r.json.tools.map((t) => t.function.name));
+  for (const name of r.legacyNames) assert(webNames.has(name), `web schema is missing shared tool ${name}`);
+  const iosNames = new Set(iosToolNames);
+  for (const name of r.legacyNames) assert(iosNames.has(name), `current iOS schema lost legacy tool ${name}`);
 }, { deterministic: true });
 
 await check('GET /api/auth/status (no auth)', () => call('GET', '/api/auth/status'), (r) => {
