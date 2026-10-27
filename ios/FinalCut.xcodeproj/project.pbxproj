@@ -85,6 +85,11 @@
 		79D5A1BE0373C14BAFA8C2B8 /* StreamingCaptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */; };
 		1A5E8B986C681D4767E46AFF /* NotoSansCJKsc-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */; };
 		2B94E44A19E58365E3E10DF4 /* NotoSansCJK-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */; };
+		0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048CDA22B7176DD87977ECEB /* EditorProject.swift */; };
+		CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */; };
+		37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */; };
+		1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F58061DA341BBCB66512BC /* ProjectStore.swift */; };
+		9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -189,6 +194,11 @@
 		FB9B8AA0861BD58C00B5ACDA /* StreamingCaptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCaptionsTests.swift; sourceTree = "<group>"; };
 		5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = NotoSansCJKsc-Bold.otf; sourceTree = "<group>"; };
 		5E868075F224767B251969D6 /* NotoSansCJK-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = NotoSansCJK-OFL.txt; sourceTree = "<group>"; };
+		048CDA22B7176DD87977ECEB /* EditorProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorProject.swift; sourceTree = "<group>"; };
+		371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommand.swift; sourceTree = "<group>"; };
+		7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHistory.swift; sourceTree = "<group>"; };
+		C0F58061DA341BBCB66512BC /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditStackProjectAdapter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -245,6 +255,7 @@
 				B364855EAC084A2C921B51CA /* ContentView.swift */,
 				20C48E7C3E9344C696A60148 /* Models */,
 				4E1A7C0E5B2D4F6A8C9D0E1F /* NativeEditing */,
+				955B599D065BD34D61733EC2 /* Timeline */,
 				DD18F136D60C47D9998EE31B /* Networking */,
 				11F090BD1B5F430B8644C27C /* Features */,
 				6571C841211B426E9DD9A1C4 /* Theme */,
@@ -426,6 +437,18 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		955B599D065BD34D61733EC2 /* Timeline */ = {
+			isa = PBXGroup;
+			children = (
+				53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */,
+				C0F58061DA341BBCB66512BC /* ProjectStore.swift */,
+				7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */,
+				371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */,
+				048CDA22B7176DD87977ECEB /* EditorProject.swift */,
+			);
+			path = Timeline;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -544,6 +567,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */,
+				1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */,
+				37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */,
+				CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */,
+				0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */,
 				A82630A64F0E068F4A149637 /* CameraPicker.swift in Sources */,
 				63140D2471FF1CAB65DAA5AB /* SuggestionService.swift in Sources */,
 				E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */,

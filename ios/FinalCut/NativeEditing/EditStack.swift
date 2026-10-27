@@ -23,6 +23,21 @@ struct EditStack: Equatable, Sendable {
     var base: URL
     var baseCanvas: NativeCanvas
     var entries: [EditEntry] = []
+    /// Multi-clip timeline project (Timeline/EditorProject.swift), once the session has
+    /// been upgraded by an import of additional media or a timeline tool. Single-clip
+    /// sessions leave this nil and behave exactly as before.
+    var project: EditorProject?
+    /// History of project states for undo/redo of timeline commands (value snapshots of
+    /// the project only — never media files).
+    var projectHistory = ProjectHistory()
+
+    /// True when preview/export must be composed from `project`: more than one video
+    /// clip, or any independent audio track. A one-clip project with no audio tracks
+    /// keeps the original single-source composer path.
+    var isTimelineProject: Bool {
+        guard let project else { return false }
+        return project.videoClips.count > 1 || !project.audioTracks.isEmpty
+    }
     /// Pre-cloud states (cloud steps flatten the stack into a new base).
     var history: [HistoryState] = []
     /// States undone since the last new edit, most recent last (Redo pops from here).
@@ -34,10 +49,13 @@ struct EditStack: Equatable, Sendable {
         var baseCanvas: NativeCanvas
         var entries: [EditEntry]
         var history: [HistoryState]
+        var project: EditorProject?
+        var projectHistory: ProjectHistory
     }
 
     private var snapshot: Snapshot {
-        Snapshot(base: base, baseCanvas: baseCanvas, entries: entries, history: history)
+        Snapshot(base: base, baseCanvas: baseCanvas, entries: entries, history: history,
+                 project: project, projectHistory: projectHistory)
     }
 
     private mutating func restore(_ state: Snapshot) {
@@ -45,6 +63,8 @@ struct EditStack: Equatable, Sendable {
         baseCanvas = state.baseCanvas
         entries = state.entries
         history = state.history
+        project = state.project
+        projectHistory = state.projectHistory
     }
 
     struct HistoryState: Equatable, Sendable {
@@ -96,6 +116,8 @@ struct EditStack: Equatable, Sendable {
             base = previous.base
             baseCanvas = previous.baseCanvas
             entries = previous.entries
+        } else if let currentProject = project, let restored = projectHistory.undo(current: currentProject) {
+            project = restored
         } else {
             return false
         }
@@ -120,8 +142,23 @@ struct EditStack: Equatable, Sendable {
         redoStates.removeAll()
     }
 
-    var canUndo: Bool { !entries.isEmpty || !history.isEmpty }
+    var canUndo: Bool { !entries.isEmpty || !history.isEmpty || projectHistory.canUndo }
     var canRedo: Bool { !redoStates.isEmpty }
+
+    /// Runs one timeline command through the shared command layer (the same executor the
+    /// timeline UI and the AI tools use), recording the pre-change project for undo.
+    /// The caller is responsible for having materialised `project` (see
+    /// `EditStackProjectAdapter.makeProject`); a failed command changes nothing.
+    @discardableResult
+    mutating func performProjectCommand(_ command: ProjectCommand) throws -> ProjectCommandResult {
+        guard var working = project else { throw ProjectCommandError.invalid("no_project") }
+        let before = working
+        let result = try ProjectCommandExecutor.apply(command, to: &working)
+        projectHistory.record(before: before)
+        project = working
+        redoStates.removeAll()
+        return result
+    }
 
     /// Index of the latest captions entry (`generate_captions` or `lyric_captions`); the latest wins.
     private var latestCaptionIndex: Int? {
