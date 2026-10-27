@@ -93,6 +93,9 @@
 		7CB4F9939F2FC566F6809D40 /* ProjectComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */; };
 		EFCAF3B77E70E0156EE4FC4F /* ProjectVideoCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */; };
 		1FD1C413E1DB2E355F012DD6 /* AudioDucking.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE21E8673CABC1B000231B1F /* AudioDucking.swift */; };
+		08EC33E5C6F30F54A008A325 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */; };
+		B125B4C30989AEDBF53372EA /* EditorViewModel+Timeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */; };
+		5BA5C65EA516FB6EC6A06B59 /* TimelineToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -205,6 +208,9 @@
 		3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposer.swift; sourceTree = "<group>"; };
 		AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectVideoCompositor.swift; sourceTree = "<group>"; };
 		FE21E8673CABC1B000231B1F /* AudioDucking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDucking.swift; sourceTree = "<group>"; };
+		CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
+		65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel+Timeline.swift; sourceTree = "<group>"; };
+		8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineToolExecutor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -349,6 +355,7 @@
 		E1D86FFA0C5F47868EBAFE01 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
+				CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */,
 				8BA7A4FFE6850A2948201185 /* CameraPicker.swift */,
 				1D4631ADFACF915E7BC1096B /* KeyboardDismiss.swift */,
 				F75730428B69D0391857303A /* DictationController.swift */,
@@ -446,6 +453,8 @@
 		955B599D065BD34D61733EC2 /* Timeline */ = {
 			isa = PBXGroup;
 			children = (
+				8AD0FCC901F56A539F420B07 /* TimelineToolExecutor.swift */,
+				65D61F1BC12D34868AAC03EA /* EditorViewModel+Timeline.swift */,
 				FE21E8673CABC1B000231B1F /* AudioDucking.swift */,
 				AF295D43045901A52F25A6CF /* ProjectVideoCompositor.swift */,
 				3AE16D8BEE9175B2245A4C7A /* ProjectComposer.swift */,
@@ -576,6 +585,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5BA5C65EA516FB6EC6A06B59 /* TimelineToolExecutor.swift in Sources */,
+				B125B4C30989AEDBF53372EA /* EditorViewModel+Timeline.swift in Sources */,
+				08EC33E5C6F30F54A008A325 /* TimelineView.swift in Sources */,
 				1FD1C413E1DB2E355F012DD6 /* AudioDucking.swift in Sources */,
 				EFCAF3B77E70E0156EE4FC4F /* ProjectVideoCompositor.swift in Sources */,
 				7CB4F9939F2FC566F6809D40 /* ProjectComposer.swift in Sources */,
@@ -735,7 +747,7 @@
 				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -773,7 +785,7 @@
 				CODE_SIGN_ENTITLEMENTS = FinalCut/FinalCutRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FinalCut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FinalCap;
@@ -809,7 +821,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.1;
@@ -827,7 +839,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.1;
@@ -843,7 +855,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -860,7 +872,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 83D36RPMUM;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
