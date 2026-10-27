@@ -18,6 +18,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { tools } from '../tools.js';
 import { IOS_GROUPED_TOOLS } from './iosGroupedTools.js';
+import { IOS_TIMELINE_TOOLS } from './iosTimelineTools.js';
 import { offeredToolsFor } from './toolsSchema.js';
 
 export const DEFAULT_SUGGESTIONS_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'config', 'ios-suggestions.json');
@@ -30,8 +31,8 @@ export const CHECK_INTERVAL_MS = 5000;
 export const FALLBACK_BUILD = 10;
 export const MEDIA = Object.freeze(['video', 'photo']);
 
-/** Every tool name a pill may list: src/tools.js plus the iOS-only grouped tools (gated separately). */
-export const KNOWN_TOOL_NAMES = Object.freeze(new Set([...tools, ...IOS_GROUPED_TOOLS].map(t => t.function.name)));
+/** Every tool name a pill may list: src/tools.js plus the iOS-only grouped and timeline tools (gated separately). */
+export const KNOWN_TOOL_NAMES = Object.freeze(new Set([...tools, ...IOS_GROUPED_TOOLS, ...IOS_TIMELINE_TOOLS].map(t => t.function.name)));
 
 const nonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
 const isBuildBound = (v) => v === undefined || (Number.isSafeInteger(v) && v >= 0);

@@ -9,7 +9,12 @@
     { "id": "v-slowmo", "label": "Slow motion", "prompt": "Play the video at half speed.", "icon": "tortoise", "tools": ["adjust_speed"] },
     { "id": "v-speed-2x", "label": "Speed up 2×", "prompt": "Play the video at 2× speed.", "icon": "hare", "tools": ["adjust_speed"] },
     { "id": "v-warm", "label": "Warmer look", "prompt": "Give the video warmer tones.", "icon": "thermometer.sun", "tools": ["apply_color_filter"] },
-    { "id": "v-mute", "label": "Mute audio", "prompt": "Mute the audio.", "icon": "speaker.slash", "tools": ["adjust_audio_volume"] }
+    { "id": "v-mute", "label": "Mute audio", "prompt": "Mute the audio.", "icon": "speaker.slash", "tools": ["adjust_audio_volume"] },
+    { "id": "v-combine-clips", "label": "Combine my clips", "prompt": "Combine my imported clips into one video, in the order they appear on the timeline.", "icon": "rectangle.stack", "tools": ["append_video_clips", "get_project_timeline"], "minBuild": 2000000000 },
+    { "id": "v-montage", "label": "Create a montage", "prompt": "Create a short montage from my clips: trim each clip to its best few seconds and arrange them in a good order.", "icon": "film.stack", "tools": ["batch_timeline_edits", "get_project_timeline"], "minBuild": 2000000000 },
+    { "id": "v-bg-music", "label": "Add background music", "prompt": "Add my music as background music at 20% volume, underneath the original audio.", "icon": "music.note", "tools": ["add_audio_clip", "list_project_assets"], "minBuild": 2000000000 },
+    { "id": "v-balance-audio", "label": "Balance dialogue & music", "prompt": "Lower the background music whenever somebody is speaking, but keep voices loud.", "icon": "slider.horizontal.3", "tools": ["apply_audio_ducking"], "minBuild": 2000000000 },
+    { "id": "v-trim-each", "label": "Trim each clip", "prompt": "Trim the boring parts from each clip on my timeline.", "icon": "scissors", "tools": ["trim_video_clip", "get_project_timeline"], "minBuild": 2000000000 }
   ],
   "photo": [
     { "id": "p-bw", "label": "Black and white", "prompt": "Make the photo black and white.", "icon": "circle.lefthalf.filled", "tools": ["apply_color_filter"] },

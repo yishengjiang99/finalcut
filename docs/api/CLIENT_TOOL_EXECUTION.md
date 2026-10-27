@@ -239,3 +239,111 @@ same model as the streaming chat (`XAI_CHAT_MODEL`, default `grok-4.3`) and thum
 stay on the server: only the metadata is used and `thumbnailsSentAsImages` is `false`.
 Set `XAI_CLIENT_MODEL` to a vision-capable Grok model (for example `grok-4.3`) to
 forward the thumbnails. The response then reports `thumbnailsSentAsImages: true`.
+
+## Project context (multi-clip projects)
+
+Timeline-enabled clients may attach a metadata-only snapshot of the whole
+editing project to a client-execution request — as a top-level `project` field,
+or as `media.project` (the shape the native `ProjectSummary` Codable emits).
+It is optional; requests without it behave exactly as before. The snapshot
+carries IDs, labels, durations and ranges only — never media bytes and never
+local file paths (any `path`/`url`-style key is rejected with 400).
+
+```json
+{
+  "execution": "client",
+  "messages": [],
+  "media": { "type": "video", "duration": 27, "width": 1920, "height": 1080, "hasAudio": true },
+  "project": {
+    "schemaVersion": 1,
+    "projectId": "project-123",
+    "revision": 18,
+    "duration": 27,
+    "canvas": { "width": 1920, "height": 1080, "fps": 30 },
+    "assets": [
+      { "id": "asset-beach", "type": "video", "label": "beach.mov", "duration": 10, "hasAudio": true },
+      { "id": "asset-music", "type": "audio", "label": "music.m4a", "duration": 60 }
+    ],
+    "videoClips": [
+      { "id": "clip-1", "assetId": "asset-beach", "timelineStart": 0, "sourceStart": 0, "sourceEnd": 10 }
+    ],
+    "audioTracks": [
+      { "id": "track-music", "label": "Background Music", "kind": "music", "volume": 0.2, "muted": false,
+        "clips": [{ "id": "audio-1", "assetId": "asset-music", "timelineStart": 0, "sourceStart": 0, "sourceDuration": 27 }] }
+    ],
+    "selectedClipId": "clip-1"
+  }
+}
+```
+
+The native summary's field names (`projectID`, `durationSeconds`, `assetID`,
+`timelineStartSeconds`, `gain`, …) are accepted as aliases and normalized to
+the shape above. All times are **seconds**: `source*` fields are in
+source-media time, `timelineStart` is in project-timeline time.
+
+Validation (server, `src/server/projectContext.js`): serialized snapshot ≤
+64 KB; ≤ 200 assets, ≤ 500 video clips, ≤ 64 audio tracks, ≤ 500 audio clips
+per track (≤ 1000 total); IDs must be stable ID strings (no spaces/paths);
+times must be finite and non-negative; clip → asset references must resolve;
+IDs must be unique; `selectedClipId` must name a real clip. Violations are
+400 (413 for size/count limits). The server does not persist the snapshot.
+
+The model receives a **bounded summary** of the snapshot in the system prompt
+(≤ 60 assets, ≤ 40 video clips windowed around the selected clip, ≤ 16 audio
+tracks, ≤ 20 audio clips per track). When anything is cut, the summary is
+flagged `truncated` and the prompt tells the model explicitly that it has not
+seen the whole project and must use the inspection tools. Labels are
+JSON-encoded into the prompt and marked as data, not instructions.
+
+Responses (`tool_calls` and `final`) echo `project: { projectId, revision? }`
+when a snapshot was sent.
+
+### Thumbnail associations (`thumbnailRefs`)
+
+With multiple clips, a thumbnail's identity must not depend on array position.
+Clients may send `thumbnailRefs` alongside `thumbnails`:
+
+```json
+{ "thumbnailRefs": [{ "thumbnailIndex": 0, "assetId": "asset-beach", "sourceTime": 3.0 }] }
+```
+
+`thumbnailIndex` must reference a provided thumbnail; `assetId`/`clipId` must
+match the project snapshot when one is sent. The model is told exactly which
+asset/clip each thumbnail shows, and that it has not visually inspected
+anything else. Counts and byte limits are unchanged (≤ 4, ≤ 300 KB each).
+
+## Timeline tools
+
+Multi-clip / multi-track editing runs through iOS-only tool definitions
+(`src/server/iosTimelineTools.js`, catalogued in
+[`IOS_TIMELINE_TOOLS.md`](./IOS_TIMELINE_TOOLS.md)): inspection
+(`get_project_timeline`, `list_project_assets`, `get_clip_details`,
+`get_audio_track_details`, `get_project_info`, `get_project_duration`), video
+mutations (append/insert/reorder/split/trim/remove/duplicate, speed, effect,
+original audio, transition), audio mutations (tracks and clips, volume, mute,
+fades, loop, ducking), project canvas, and `batch_timeline_edits`
+(all-or-nothing, ≤ 20 operations). They are offered only to FinalCap-iOS
+builds ≥ `TIMELINE_TOOLS_MIN_BUILD` (`src/server/iosToolAllowlist.js`), only
+for video media, and never to web clients. Timeline system-prompt rules
+(scoping, timing, recovery, batching) are injected only when a project
+snapshot is present **and** the build is offered the tools; a snapshot sent to
+an older build changes nothing except a note that timeline tools are
+unavailable on that build.
+
+Mutation calls accept `expectedRevision` and `idempotencyKey`. Successful
+mutation results should report
+`output: { projectRevision, affectedClipIds?, duration?, videoClipCount?, audioTrackCount? }`.
+On a stale plan the device returns
+`{ ok: false, error: "project_revision_conflict", output: { currentRevision } }`;
+the server annotates that result for the model (inspect once, replan, never
+repeat the identical call). Stable timeline error codes:
+`invalid_arguments`, `asset_not_found`, `clip_not_found`,
+`audio_track_not_found`, `audio_clip_not_found`, `invalid_source_range`,
+`invalid_timeline_position`, `project_revision_conflict`,
+`unsupported_on_device`, `resource_limit_exceeded`, `cancelled`.
+
+The server also validates timeline call arguments against the declared
+schemas before returning them: a malformed call comes back with
+`arguments: {}` and `argumentsError: "invalid_arguments"`, so the device can
+answer through the normal tool-result path. The 6-round loop cap is unchanged
+— batching, not a higher cap, is how multi-step plans fit.

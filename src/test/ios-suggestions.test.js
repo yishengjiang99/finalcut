@@ -148,7 +148,9 @@ describe('default config (config/ios-suggestions.json, FinalCut Design set)', ()
     const warn = vi.fn();
     const config = validateSuggestionsConfig(raw, { warn });
     expect(warn).not.toHaveBeenCalled();
-    expect(config.video.map(e => e.id)).toEqual(VIDEO_IDS_19);
+    // The five timeline pills (v-combine-clips … v-trim-each) are appended after the
+    // existing set, gated by minBuild = TIMELINE_TOOLS_MIN_BUILD (no real build yet).
+    expect(config.video.map(e => e.id)).toEqual([...VIDEO_IDS_19, 'v-combine-clips', 'v-montage', 'v-bg-music', 'v-balance-audio', 'v-trim-each']);
     expect(config.photo.map(e => e.id)).toEqual(PHOTO_IDS);
     const prop = (tool, param) => tools.find(t => t.function.name === tool).function.parameters.properties[param];
     expect(prop('apply_color_filter', 'filter').enum).toEqual(expect.arrayContaining(['warm', 'grayscale', 'black_and_white']));
