@@ -11,6 +11,10 @@ struct EditorView: View {
     @State private var showExport = false
     @State private var showSettings = false
     @StateObject private var dictation = DictationController()
+    /// Layout rethink (2026-10-27): with a timeline project open the editor is in
+    /// edit focus (tall timeline, chat peeked) or chat focus (compact timeline strip,
+    /// full chat) — toggled by the grab handle above the chat.
+    @State private var chatExpanded = false
     /// Observed so chips and routing refresh when Settings → Cloud processing changes.
     @AppStorage(NativeSettings.cloudProcessingKey) private var cloudProcessing = false
     /// The window's undo manager: shake to undo / redo drives the edit stack.
@@ -57,9 +61,11 @@ struct EditorView: View {
                     onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil,
                     seekSeconds: model.seekSeconds
                 )
-                .frame(maxHeight: 240)
+                .frame(maxHeight: timelineExpandedActive ? (chatExpanded ? 64 : 200) : 240)
                 if !model.isPhoto, model.localVideoURL != nil {
-                    TimelineView(model: model)
+                    TimelineView(model: model,
+                                 compact: timelineExpandedActive && chatExpanded,
+                                 onExpand: { withAnimation(.easeInOut(duration: 0.25)) { chatExpanded = false } })
                 }
                 if let importError = model.importError {
                     ImportErrorBanner(message: importError, photosPickerItem: $model.photosPickerItem)
@@ -68,13 +74,17 @@ struct EditorView: View {
 
             Divider().overlay(AppTheme.border)
 
+            if timelineExpandedActive {
+                chatHandle
+            }
+
             ChatView(
                 messages: model.messages,
                 onRetry: { model.retry($0) },
                 queuedIDs: Set(model.queuedPromptIDs),
                 isWorking: model.isBusy
             )
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: (timelineExpandedActive && !chatExpanded) ? 132 : .infinity)
 
             if model.showSampleChips && model.localVideoURL != nil {
                 SampleChipsView(pills: model.suggestions) { pill in
@@ -148,6 +158,9 @@ struct EditorView: View {
         .onDisappear { dictation.stop() }
         .onChange(of: undoManager) { _, manager in model.undoManager = manager }
         .onChange(of: model.isPhoto) { _, _ in model.refreshSuggestions() }
+        .onChange(of: model.showTimeline) { _, shown in
+            if !shown { chatExpanded = false }
+        }
         .overlay(alignment: .top) {
             if model.state == .failed, model.importError == nil, let err = model.lastError {
                 Text(err)
@@ -168,6 +181,38 @@ struct EditorView: View {
     /// Launch / empty state shows the import panel in place of the preview.
     private var showsImportPanel: Bool {
         model.localVideoURL == nil && (model.state == .empty || model.state == .failed)
+    }
+
+    /// True while a multi-clip timeline project is the editor's focus surface —
+    /// the two layout modes (edit focus / chat focus) only apply then; the legacy
+    /// single-video flow keeps the original layout untouched.
+    private var timelineExpandedActive: Bool {
+        !model.isPhoto && model.localVideoURL != nil && model.showTimeline && model.timelineProject != nil
+    }
+
+    /// Grab-handle row between the timeline and the chat sheet: toggles edit focus
+    /// and chat focus.
+    private var chatHandle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.25)) { chatExpanded.toggle() }
+        } label: {
+            VStack(spacing: 3) {
+                Capsule().fill(AppTheme.border).frame(width: 38, height: 4.5)
+                HStack(spacing: 5) {
+                    Image(systemName: "text.bubble")
+                    Text(chatExpanded ? "Back to editing" : "Chat")
+                    Image(systemName: chatExpanded ? "chevron.down" : "chevron.up")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 5)
+            .background(AppTheme.surface)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(chatExpanded ? "Back to editing" : "Expand chat")
     }
 }
 
