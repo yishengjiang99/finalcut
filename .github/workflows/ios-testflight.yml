@@ -153,7 +153,12 @@ jobs:
           # purpose: the next train always derives from the App Store version
           # list, never from a stray TestFlight upload. No hardcoded default
           # to go stale again; an ASC failure fails the run loudly.
-          pip install -q PyJWT cryptography
+          # Same interpreter for install and run: on macos runners bare `pip`
+          # and `python3` are different Pythons (the repo's other ASC workflows
+          # get away with it on ubuntu, where they coincide) — run 40478182279
+          # died on ModuleNotFoundError: jwt for exactly that reason.
+          python3 -m pip install -q PyJWT cryptography
+          python3 -c "import jwt, sys; print('PyJWT ready:', sys.executable)"
           python3 <<'PY'
           import json, os, time, urllib.request
           import jwt
