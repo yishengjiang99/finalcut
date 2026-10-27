@@ -174,7 +174,15 @@ extension EditorViewModel {
             if Task.isCancelled { break }
             importStatus = "Importing \(index + 1) of \(urls.count)…"
             let accessed = url.startAccessingSecurityScopedResource()
-            let ok = await appendImportedMedia(url)
+            // Into an EMPTY editor the first video/photo takes the legacy first-import
+            // path (it becomes the session base); everything else appends.
+            let ok: Bool
+            if localVideoURL == nil, !["m4a", "mp3", "wav", "aac", "caf", "aif", "aiff"].contains(url.pathExtension.lowercased()) {
+                await handleImport(.success([url]))
+                ok = localVideoURL != nil
+            } else {
+                ok = await appendImportedMedia(url)
+            }
             if accessed { url.stopAccessingSecurityScopedResource() }
             if !ok { failures.append(url.lastPathComponent) }
         }
