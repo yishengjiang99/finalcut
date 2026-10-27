@@ -143,7 +143,9 @@ struct EditorView: View {
             if url != nil { Telemetry.shared.track("editor_open") }
         }
         .onAppear {
-            Task { await model.restoreSavedProjectIfEmpty() }
+            // No project is auto-restored on launch: every relaunch starts a
+            // new project (issue #125 owner decision, 2026-10-27); past
+            // projects live in the library behind the top bar's Projects button.
             model.refreshSuggestions()
             model.undoManager = undoManager
             model.apiClient = appModel.apiClient

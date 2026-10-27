@@ -36,30 +36,12 @@ extension EditorViewModel {
         return project
     }
 
-    /// Reopens a saved project after a relaunch, but only into an untouched empty
-    /// editor (never over a session already in progress). Issue #125 Phase 1: the
-    /// restore target is the LAST-OPENED project — its id is persisted by
-    /// `ProjectLibrary` every time a project is opened. This replaces the old
-    /// implementation, which picked `loadAll().first(where:)` in unsorted
-    /// directory order (any saved project could come back) and skipped
-    /// single-clip projects entirely; that >1-clip / audio-track guard is gone,
-    /// so any saved project can be restored.
-    func restoreSavedProjectIfEmpty() async {
-        guard localVideoURL == nil, state == .empty, messages.isEmpty else { return }
-        if let lastID = ProjectLibrary.lastOpenedProjectID(),
-           let project = try? ProjectStore.load(lastID),
-           await openProject(project) {
-            return
-        }
-        // No usable last-opened id (first launch on this version, or that
-        // project was deleted): fall back to the most recently edited project
-        // so an upgraded install still lands in its newest work rather than an
-        // empty editor.
-        if let newest = ProjectLibrary.loadRows().first,
-           let project = try? ProjectStore.load(newest.id) {
-            await openProject(project)
-        }
-    }
+    // Launch model (issue #125, owner decision 2026-10-27): a relaunch always
+    // starts a NEW project — no saved project is auto-restored into the editor.
+    // Past projects live in the project library (the Projects button in the
+    // editor top bar) and are loaded from there via openProject below. The
+    // last-opened id ProjectLibrary persists drives only the library's row
+    // ordering and its "Open now" marker.
 
     /// Loads a saved project into the editor session by id (project library).
     @discardableResult
@@ -69,8 +51,8 @@ extension EditorViewModel {
     }
 
     /// Loads a saved project into the editor session, replacing the session
-    /// currently shown, and records it as the last-opened project (the next
-    /// relaunch restores it). The outgoing session is preserved first: a
+    /// currently shown, and records it as the most recently opened project for
+    /// the library. The outgoing session is preserved first: a
     /// timeline project is already saved after every mutation (saved again
     /// here for safety), and a legacy single-clip video session is materialised
     /// into a durable project so switching never silently drops it. Photo

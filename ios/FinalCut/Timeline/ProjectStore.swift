@@ -67,7 +67,9 @@ enum ProjectStore {
         return project
     }
 
-    /// All saved projects, newest file first; corrupt entries are skipped, not fatal.
+    /// All saved projects in unsorted directory order — callers needing recency
+    /// order sort by file modification time (ProjectLibrary does); corrupt
+    /// entries are skipped, not fatal.
     static func loadAll() -> [EditorProject] {
         guard let dirs = try? FileManager.default.contentsOfDirectory(at: projectsRoot, includingPropertiesForKeys: nil) else { return [] }
         return dirs.compactMap { dir -> EditorProject? in
