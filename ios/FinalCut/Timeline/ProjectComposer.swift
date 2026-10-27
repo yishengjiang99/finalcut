@@ -274,7 +274,12 @@ extension NativeComposer {
                     let earlier = first.element
                     let later = last.element
                     let overlap = later.overlapWithPrevious
-                    guard overlap > .zero else { if index != last.offset { continue }; else { layers.append(layer(visual, 1, 1)); continue } }
+                    if overlap <= .zero {
+                        // Two clips "active" only at a shared boundary instant (no real
+                        // overlap): keep the incoming clip at full opacity.
+                        if index == last.offset { layers.append(layer(visual, 1, 1)) }
+                        continue
+                    }
                     let pStart = Float(min(1, max(0, CMTimeGetSeconds(CMTimeSubtract(start, later.start)) / CMTimeGetSeconds(overlap))))
                     let pEnd = Float(min(1, max(0, CMTimeGetSeconds(CMTimeSubtract(end, later.start)) / CMTimeGetSeconds(overlap))))
                     let kind = project.videoClips[first.offset].transitionOut.kind
