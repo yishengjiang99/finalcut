@@ -68,6 +68,24 @@ translated: frame/colour tools hit the selected clip, `resize_video` sets the
 canvas, trim/speed translate only when the project has exactly one clip (otherwise
 the model is told to use the clip tools with an ID).
 
+## Coordination: parallel server implementation (READ BEFORE MERGING)
+
+A sibling worktree (`finalcap-agentic-work`, branch `feat/agentic-timeline-server`,
+unpushed) implemented the server-side agentic orchestration for this feature from a
+separate spec: richer prompt rules, `batch_timeline_edits`, a project-revision /
+idempotency contract, and a DIFFERENT tool vocabulary (camelCase args;
+`get_project_timeline`, `create_audio_track`, `add_audio_clip`,
+`apply_audio_ducking`, …) in its own `src/server/iosTimelineTools.js`, gated by a
+placeholder `TIMELINE_TOOLS_MIN_BUILD`. **The two `iosTimelineTools.js` versions
+must not both land.** Its `docs/api/IOS_TIMELINE_TOOLS.md` carries the full
+reconciliation table; the recommended merge keeps that branch's orchestration,
+adopts this branch's `TIMELINE_MIN_BUILD = 14`, and picks ONE vocabulary — the
+device executor's names (this branch's iOS dispatch + `ToolCatalog`, following the
+§7.1 names in the iOS spec) are the binding constraint unless the executor is
+renamed before build 14 is cut. This branch does NOT implement the revision
+counter, `expectedRevision`/`idempotencyKey`, or batch edits; those come with the
+sibling's server work if adopted.
+
 ## Known limits
 
 - One sequential video track (no picture-in-picture / overlay video track yet).
