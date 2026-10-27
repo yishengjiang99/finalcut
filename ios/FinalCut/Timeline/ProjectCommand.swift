@@ -10,6 +10,8 @@ enum ProjectCommand: Equatable, Sendable {
     // Assets / import
     case addAsset(MediaAsset)
     case appendVideoClip(assetID: UUID, sourceStart: Double?, sourceEnd: Double?)
+    case insertVideoClip(assetID: UUID, atIndex: Int, sourceStart: Double?, sourceEnd: Double?)
+    case clearClipEffects(clipID: UUID?) // nil = every clip
     // Video timeline
     case reorderVideoClips(orderedIDs: [UUID])
     case splitVideoClip(clipID: UUID, atProjectTime: Double)
@@ -79,7 +81,7 @@ enum ProjectCommandExecutor {
             guard asset.mediaType == .video else { throw bad("asset_not_video") }
             let start = sourceStart ?? 0
             let end = sourceEnd ?? asset.duration.seconds
-            guard start >= 0, end > start, end <= asset.duration.seconds + 0.05 else { throw bad("range") }
+            guard start >= 0, end > start, end <= asset.duration.seconds + 0.05 else { throw bad("invalid_source_range") }
             let clip = VideoClip(id: UUID(), assetID: assetID,
                                  sourceStart: .seconds(start), sourceEnd: .seconds(min(end, asset.duration.seconds)),
                                  originalAudioEnabled: asset.hasAudio)
@@ -87,6 +89,32 @@ enum ProjectCommandExecutor {
             p.selectedClipID = clip.id
             result.affectedIDs = [clip.id]; result.createdID = clip.id
             result.message = "clip appended"
+
+        case .insertVideoClip(let assetID, let atIndex, let sourceStart, let sourceEnd):
+            guard let asset = p.asset(assetID) else { throw bad("asset_not_found") }
+            guard asset.mediaType == .video else { throw bad("asset_not_video") }
+            let start = sourceStart ?? 0
+            let end = sourceEnd ?? asset.duration.seconds
+            guard start >= 0, end > start, end <= asset.duration.seconds + 0.05 else { throw bad("invalid_source_range") }
+            let clip = VideoClip(id: UUID(), assetID: assetID,
+                                 sourceStart: .seconds(start), sourceEnd: .seconds(min(end, asset.duration.seconds)),
+                                 originalAudioEnabled: asset.hasAudio)
+            let index = min(max(0, atIndex), p.videoClips.count)
+            p.videoClips.insert(clip, at: index)
+            p.selectedClipID = clip.id
+            result.affectedIDs = [clip.id]; result.createdID = clip.id
+            result.message = "clip inserted"
+
+        case .clearClipEffects(let clipID):
+            if let clipID {
+                guard let index = p.clipIndex(clipID) else { throw bad("clip_not_found") }
+                p.videoClips[index].effects.removeAll()
+                result.affectedIDs = [clipID]
+            } else {
+                for i in p.videoClips.indices { p.videoClips[i].effects.removeAll() }
+                result.affectedIDs = p.videoClips.map(\.id)
+            }
+            result.message = "effects cleared"
 
         case .reorderVideoClips(let orderedIDs):
             guard orderedIDs.count == p.videoClips.count, Set(orderedIDs) == Set(p.videoClips.map(\.id)) else {
@@ -153,7 +181,7 @@ enum ProjectCommandExecutor {
 
         case .setVideoClipSpeed(let clipID, let speed):
             guard let index = p.clipIndex(clipID) else { throw bad("clip_not_found") }
-            guard (0.25...4).contains(speed) else { throw bad("speed 0.25-4") }
+            guard (0.05...16).contains(speed) else { throw bad("speed 0.05-16") }
             p.videoClips[index].speed = speed
             result.affectedIDs = [clipID]
             result.message = "clip speed set"
@@ -200,12 +228,12 @@ enum ProjectCommandExecutor {
             result.message = "audio track created"
 
         case .insertAudioClip(let trackID, let assetID, let timelineStart, let sourceStart, let sourceDuration, let gain, let loop, let repeatUntil):
-            guard let trackIndex = p.audioTracks.firstIndex(where: { $0.id == trackID }) else { throw bad("track_not_found") }
+            guard let trackIndex = p.audioTracks.firstIndex(where: { $0.id == trackID }) else { throw bad("audio_track_not_found") }
             guard let asset = p.asset(assetID) else { throw bad("asset_not_found") }
             guard asset.mediaType == .audio || asset.mediaType == .video else { throw bad("asset_has_no_audio") }
             let start = sourceStart ?? 0
             let length = sourceDuration ?? min(asset.duration.seconds - start, max(0, asset.duration.seconds))
-            guard timelineStart >= 0, start >= 0, length > 0, start + length <= asset.duration.seconds + 0.05 else { throw bad("range") }
+            guard timelineStart >= 0, start >= 0, length > 0, start + length <= asset.duration.seconds + 0.05 else { throw bad("invalid_source_range") }
             if let gain, !(0...4).contains(gain) { throw bad("gain 0-4") }
             let clip = AudioClip(id: UUID(), assetID: assetID,
                                  sourceStart: .seconds(start), sourceDuration: .seconds(min(length, asset.duration.seconds)),
@@ -220,7 +248,7 @@ enum ProjectCommandExecutor {
             guard timelineStart >= 0 else { throw bad("negative_start") }
             guard let found = p.audioClip(clipID) else { throw bad("audio_clip_not_found") }
             let destinationID = toTrackID ?? found.track.id
-            guard p.audioTrack(destinationID) != nil else { throw bad("track_not_found") }
+            guard p.audioTrack(destinationID) != nil else { throw bad("audio_track_not_found") }
             for t in p.audioTracks.indices { p.audioTracks[t].clips.removeAll { $0.id == clipID } }
             var clip = found.clip
             clip.timelineStart = .seconds(timelineStart)
@@ -257,12 +285,12 @@ enum ProjectCommandExecutor {
 
         case .setAudioTrackVolume(let trackID, let gain):
             guard (0...4).contains(gain) else { throw bad("gain 0-4") }
-            guard let t = p.audioTracks.firstIndex(where: { $0.id == trackID }) else { throw bad("track_not_found") }
+            guard let t = p.audioTracks.firstIndex(where: { $0.id == trackID }) else { throw bad("audio_track_not_found") }
             p.audioTracks[t].gain = gain
             result.affectedIDs = [trackID]; result.message = "track volume set"
 
         case .setAudioTrackMuted(let trackID, let muted):
-            guard let t = p.audioTracks.firstIndex(where: { $0.id == trackID }) else { throw bad("track_not_found") }
+            guard let t = p.audioTracks.firstIndex(where: { $0.id == trackID }) else { throw bad("audio_track_not_found") }
             p.audioTracks[t].muted = muted
             result.affectedIDs = [trackID]; result.message = "track mute set"
 
