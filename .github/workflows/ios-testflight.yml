@@ -156,8 +156,11 @@ jobs:
           # Same interpreter for install and run: on macos runners bare `pip`
           # and `python3` are different Pythons (the repo's other ASC workflows
           # get away with it on ubuntu, where they coincide) — run 40478182279
-          # died on ModuleNotFoundError: jwt for exactly that reason.
-          python3 -m pip install -q PyJWT cryptography
+          # died on ModuleNotFoundError: jwt for exactly that reason. And the
+          # runner python is PEP 668 externally-managed, so the install needs
+          # --break-system-packages (run 40478357724); the runner is ephemeral,
+          # there is no system install to protect.
+          python3 -m pip install -q --break-system-packages PyJWT cryptography
           python3 -c "import jwt, sys; print('PyJWT ready:', sys.executable)"
           python3 <<'PY'
           import json, os, time, urllib.request
