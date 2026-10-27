@@ -18,12 +18,13 @@ import Foundation
 /// dedicated two-line lyric renderer is not used for migrated projects.
 extension EditStack {
     /// Builds the equivalent one-clip project. `resolveRelativePath` maps an absolute
-    /// media URL to the path stored on its asset (ProjectStore supplies real relative
-    /// paths for durable projects; the default keeps the last path component, which is
-    /// enough for in-memory preview/export sessions).
+    /// media URL to the path stored on its asset (ProjectStore-backed projects pass a
+    /// resolver that returns real project-relative paths; the default stores the
+    /// absolute path, which `ProjectComposer.resolveAssetURL` also honours, so in-memory
+    /// sessions preview/export without a store round-trip).
     func makeProject(
         name: String = "Untitled",
-        resolveRelativePath: (URL) -> String = { $0.lastPathComponent }
+        resolveRelativePath: (URL) -> String = { $0.path }
     ) -> EditorProject {
         let baseAsset = MediaAsset(
             id: UUID(), relativePath: resolveRelativePath(base), name: base.lastPathComponent,
