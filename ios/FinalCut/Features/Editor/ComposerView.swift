@@ -4,7 +4,8 @@ import UIKit
 
 struct ComposerView: View {
     @Binding var text: String
-    @Binding var photosPickerItem: PhotosPickerItem?
+    /// Photos multi-select (photos or videos), in pick order.
+    @Binding var importPickerItems: [PhotosPickerItem]
     var onSend: () -> Void
     var importEnabled = true
     /// On-device dictation; nil hides the mic (previews/tests).
@@ -16,7 +17,8 @@ struct ComposerView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 10) {
                 PhotosPicker(
-                    selection: $photosPickerItem,
+                    selection: $importPickerItems,
+                    selectionBehavior: .ordered,
                     matching: EditorViewModel.pickerFilter,
                     photoLibrary: .shared()
                 ) {
@@ -25,7 +27,7 @@ struct ComposerView: View {
                         .foregroundStyle(AppTheme.accent)
                 }
                 .accessibilityLabel("Import")
-                .accessibilityHint("Choose a photo or video from Photos")
+                .accessibilityHint("Choose photos or videos from Photos")
                 .disabled(!importEnabled)
                 .opacity(importEnabled ? 1 : 0.35)
 
@@ -173,5 +175,5 @@ private struct DictationStopButton: View {
 }
 
 #Preview {
-    ComposerView(text: .constant(""), photosPickerItem: .constant(nil), onSend: {})
+    ComposerView(text: .constant(""), importPickerItems: .constant([]), onSend: {})
 }

@@ -31,12 +31,27 @@ struct EditStack: Equatable, Sendable {
     /// the project only — never media files).
     var projectHistory = ProjectHistory()
 
-    /// True when preview/export must be composed from `project`: more than one video
-    /// clip, or any independent audio track. A one-clip project with no audio tracks
-    /// keeps the original single-source composer path.
+    /// Set while `project` was adapted from this stack (`makeProject`) and no timeline
+    /// command has changed it since: the project only mirrors `base` + `entries`, so
+    /// preview/export stay on the single-source path and the editor re-derives the project
+    /// when chat edits move on. The first content-changing timeline command clears it.
+    var projectMirror: ProjectMirror?
+
+    struct ProjectMirror: Equatable, Sendable {
+        var base: URL
+        var entryIDs: [UUID]
+    }
+
+    /// What `projectMirror` must equal for the mirrored project to be current.
+    var currentProjectMirror: ProjectMirror {
+        ProjectMirror(base: base, entryIDs: entries.map(\.id))
+    }
+
+    /// True when preview/export must be composed from `project`: any project that is not
+    /// just a mirror of the single-clip stack — a timeline edit (even on one clip), an
+    /// opened project, or one with media appended.
     var isTimelineProject: Bool {
-        guard let project else { return false }
-        return project.videoClips.count > 1 || !project.audioTracks.isEmpty
+        project != nil && projectMirror == nil
     }
     /// Pre-cloud states (cloud steps flatten the stack into a new base).
     var history: [HistoryState] = []
@@ -110,7 +125,11 @@ struct EditStack: Equatable, Sendable {
     @discardableResult
     mutating func undo() -> Bool {
         let current = snapshot
-        if !entries.isEmpty {
+        // Once the timeline drives the preview, its edits are the visible ones: undo them
+        // first, so Undo never silently pops a single-clip entry the project ignores.
+        if isTimelineProject, let currentProject = project, let restored = projectHistory.undo(current: currentProject) {
+            project = restored
+        } else if !entries.isEmpty {
             entries.removeLast()
         } else if let previous = history.popLast() {
             base = previous.base
@@ -169,6 +188,7 @@ struct EditStack: Equatable, Sendable {
         projectHistory.record(before: before)
         project = working
         redoStates.removeAll()
+        if !command.isSelectionOnly { projectMirror = nil }
         return result
     }
 
@@ -191,6 +211,7 @@ struct EditStack: Equatable, Sendable {
         projectHistory.record(before: before)
         project = working
         redoStates.removeAll()
+        if commands.contains(where: { !$0.isSelectionOnly }) { projectMirror = nil }
         return (results, nil)
     }
 

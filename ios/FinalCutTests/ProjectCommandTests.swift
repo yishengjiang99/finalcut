@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import FinalCut
 
@@ -173,21 +174,136 @@ final class ProjectCommandTests: XCTestCase {
         let (model, project) = try await makeTimelineModel()
         let result = await model.executeToolCall(ClientToolCall(id: "p1", name: "seek_playhead", arguments: ["seconds": .number(1.5)]))
         XCTAssertTrue(result.ok)
-        XCTAssertEqual(model.seekSeconds ?? -1, 1.5, accuracy: 0.001)
+        XCTAssertEqual(model.playhead.seconds, 1.5, accuracy: 0.001)
         XCTAssertEqual(result.output?["playheadSeconds"], .number(1.5))
         XCTAssertEqual(model.timelineProject?.revision, project.revision) // view state only
 
         // Past the end clamps to the project duration; negative is rejected and changes nothing.
         let far = await model.executeToolCall(ClientToolCall(id: "p2", name: "seek_playhead", arguments: ["seconds": .number(10_000)]))
         XCTAssertTrue(far.ok)
-        XCTAssertEqual(model.seekSeconds ?? -1, project.durationSeconds, accuracy: 0.001)
+        XCTAssertEqual(model.playhead.seconds, project.durationSeconds, accuracy: 0.001)
         let negative = await model.executeToolCall(ClientToolCall(id: "p3", name: "seek_playhead", arguments: ["seconds": .number(-1)]))
         XCTAssertFalse(negative.ok)
         XCTAssertEqual(negative.error, "invalid_arguments")
-        XCTAssertEqual(model.seekSeconds ?? -1, project.durationSeconds, accuracy: 0.001)
+        XCTAssertEqual(model.playhead.seconds, project.durationSeconds, accuracy: 0.001)
 
         // The next chat request tells the model where the playhead is.
         let media = await model.currentMedia()
         XCTAssertEqual(media?.project?.playheadSeconds ?? -1, project.durationSeconds, accuracy: 0.001)
+    }
+
+    // MARK: One-clip timeline edits reach preview / export; chat edits reach the timeline
+
+    @MainActor
+    func testOneClipTimelineTrimDrivesThePreview() async throws {
+        let (model, project) = try await makeTimelineModel()
+        XCTAssertFalse(try XCTUnwrap(model.editStack).isTimelineProject) // mirror: single-clip path
+        let clipID = try XCTUnwrap(project.videoClips.first?.id)
+
+        // Selecting doesn't hand the preview to the project.
+        _ = await model.performTimelineCommand(.selectClip(clipID: clipID))
+        XCTAssertFalse(try XCTUnwrap(model.editStack).isTimelineProject)
+
+        let result = await model.performTimelineCommand(.trimVideoClip(clipID: clipID, sourceStart: 1, sourceEnd: 3))
+        XCTAssertNotNil(result)
+        XCTAssertTrue(try XCTUnwrap(model.editStack).isTimelineProject)
+        let item = try XCTUnwrap(model.previewItem)
+        let previewDuration = try await item.asset.load(.duration).seconds
+        XCTAssertEqual(previewDuration, 2, accuracy: 0.1) // was the untrimmed 6s before the fix
+    }
+
+    @MainActor
+    func testChatEditsBeforeATimelineEditShowOnTheTimeline() async throws {
+        let (model, project) = try await makeTimelineModel()
+        let clipID = try XCTUnwrap(project.videoClips.first?.id)
+        let trim = await model.executeToolCall(ClientToolCall(id: "t1", name: "trim_video",
+                                                              arguments: ["start": .number(1), "end": .number(4)]))
+        XCTAssertTrue(trim.ok)
+        let mirrored = try XCTUnwrap(model.timelineProject)
+        XCTAssertEqual(mirrored.durationSeconds, 3, accuracy: 0.01)
+        XCTAssertEqual(mirrored.id, project.id)                    // same durable project
+        XCTAssertEqual(mirrored.videoClips.first?.id, clipID)      // same clip for the UI / plans
+        XCTAssertGreaterThan(mirrored.revision, project.revision)  // stale plans are rejected
+
+        // The timeline edit then builds on the chat edit instead of dropping it.
+        _ = await model.performTimelineCommand(.setVideoClipSpeed(clipID: clipID, speed: 2))
+        XCTAssertEqual(model.timelineProject?.durationSeconds ?? -1, 1.5, accuracy: 0.01)
+        let item = try XCTUnwrap(model.previewItem)
+        let previewDuration = try await item.asset.load(.duration).seconds
+        XCTAssertEqual(previewDuration, 1.5, accuracy: 0.1)
+    }
+
+    func testUndoAfterATimelineEditUndoesTheTimelineEdit() throws {
+        let url = URL(fileURLWithPath: "/tmp/base.mov")
+        var stack = EditStack(base: url, baseCanvas: NativeCanvas(width: 1280, height: 720, duration: 6, isPhoto: false, hasAudio: true))
+        let red = EditEntry(tool: "apply_color_filter", op: .colorFilter(filter: "red", intensity: 1))
+        stack.push(red)
+        stack.project = stack.makeProject()
+        stack.projectMirror = stack.currentProjectMirror
+        let clipID = try XCTUnwrap(stack.project?.videoClips.first?.id)
+        try stack.performProjectCommand(.setVideoClipSpeed(clipID: clipID, speed: 2))
+        XCTAssertTrue(stack.isTimelineProject)
+
+        XCTAssertTrue(stack.undo())
+        XCTAssertEqual(stack.project?.videoClips.first?.speed, 1) // the visible edit was undone
+        XCTAssertEqual(stack.entries, [red])                       // the chat edit is kept
+        XCTAssertTrue(stack.redo())
+        XCTAssertEqual(stack.project?.videoClips.first?.speed, 2)
+    }
+
+    @MainActor
+    func testScrubbingToTheSameTimeTwiceIssuesTwoSeeks() async throws {
+        let (model, _) = try await makeTimelineModel()
+        model.seekPlayhead(to: 2)
+        let first = try XCTUnwrap(model.seekRequest)
+        model.playhead.seconds = 4 // playback moved on
+        model.seekPlayhead(to: 2)
+        let second = try XCTUnwrap(model.seekRequest)
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(second.seconds, 2)
+        XCTAssertEqual(model.playhead.seconds, 2)
+    }
+
+    // MARK: Photos multi-select import
+
+    private func importedSampleVideo() throws -> ImportedVideo {
+        let sample = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
+        return try ImportedVideo.copy(from: sample, contentType: .mpeg4Movie)
+    }
+
+    private func importedPhoto() throws -> ImportedVideo {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("pick-\(UUID().uuidString).png")
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+        }
+        try XCTUnwrap(image.pngData()).write(to: url)
+        return try ImportedVideo.copy(from: url, contentType: .png)
+    }
+
+    @MainActor
+    func testMultiSelectImportsVideosInOrderAndSkipsPhotos() async throws {
+        let model = EditorViewModel()
+        let first = try importedSampleVideo()
+        let second = try importedSampleVideo()
+        await model.importSelection(videos: [first, second], photos: [try importedPhoto()], failures: 1)
+
+        XCTAssertEqual(model.localVideoURL, first.url) // the first video is the base
+        XCTAssertFalse(model.isPhoto)
+        XCTAssertEqual(model.timelineProject?.videoClips.count, 2)
+        XCTAssertTrue(try XCTUnwrap(model.editStack).isTimelineProject)
+        let notes = model.messages.map(\.content).joined(separator: "\n")
+        XCTAssertTrue(notes.contains("1 photo(s) weren't added"), notes)
+        XCTAssertTrue(notes.contains("1 item(s) couldn't be imported"), notes)
+    }
+
+    @MainActor
+    func testMultiSelectOfOnlyPhotosOpensTheFirstPhoto() async throws {
+        let model = EditorViewModel()
+        let first = try importedPhoto()
+        await model.importSelection(videos: [], photos: [first, try importedPhoto()], failures: 0)
+        XCTAssertEqual(model.localVideoURL, first.url)
+        XCTAssertTrue(model.isPhoto)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("1 more photo(s) weren't opened") })
     }
 }

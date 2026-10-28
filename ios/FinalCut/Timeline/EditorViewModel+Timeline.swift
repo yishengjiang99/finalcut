@@ -21,8 +21,33 @@ extension EditorViewModel {
     @discardableResult
     func ensureTimelineProject() async -> EditorProject? {
         guard var stack = await ensureStack() else { return nil }
-        if let existing = stack.project { return existing }
+        if stack.project != nil {
+            syncMirroredProject()
+            return editStack?.project
+        }
         var project = stack.makeProject(name: stack.base.lastPathComponent)
+        storeAdaptedProject(&project)
+        stack.project = project
+        stack.projectMirror = stack.currentProjectMirror
+        editStack = stack
+        return project
+    }
+
+    /// While the project only mirrors the single-clip stack (no timeline edit yet),
+    /// re-derives it after chat edits / undo moved the stack on, so the timeline lanes show
+    /// what the preview plays. A no-op once the timeline drives the preview.
+    func syncMirroredProject() {
+        guard var stack = editStack, let existing = stack.project, let mirror = stack.projectMirror,
+              mirror != stack.currentProjectMirror else { return }
+        var project = stack.makeProject(keepingIdentityOf: existing, sameBase: mirror.base == stack.base)
+        storeAdaptedProject(&project)
+        stack.project = project
+        stack.projectMirror = stack.currentProjectMirror
+        editStack = stack
+    }
+
+    /// Adopts an adapted project's media into durable storage and saves it.
+    private func storeAdaptedProject(_ project: inout EditorProject) {
         do {
             try ProjectStore.adoptExternalAssets(&project)
             try ProjectStore.save(project)
@@ -31,9 +56,6 @@ extension EditorViewModel {
             // assets still resolve by absolute path) and surface the failure in chat.
             messages.append(ChatMessage(role: .system, content: "Couldn't save the project file — editing continues, but reopen the app with care."))
         }
-        stack.project = project
-        editStack = stack
-        return project
     }
 
     // Launch model (issue #125, owner decision 2026-10-27): a relaunch always
@@ -87,7 +109,7 @@ extension EditorViewModel {
         importError = nil
         importStatus = nil
         startNewProjectOnNextImport = false
-        seekSeconds = nil
+        resetPlayhead()
         state = .ready
         ProjectLibrary.setLastOpenedProjectID(project.id)
         ProjectLibrary.markOpened(projectID: project.id)
@@ -160,12 +182,20 @@ extension EditorViewModel {
 
     /// Moves the timeline playhead and the preview to a project time, clamped to the
     /// project. View state only: nothing is edited, saved, or put on the undo stack.
+    /// `exact: false` (a scrub drag in flight) lets the player land on a nearby frame.
     @discardableResult
-    func seekPlayhead(to seconds: Double) -> Double {
+    func seekPlayhead(to seconds: Double, exact: Bool = true) -> Double {
         let duration = timelineProject?.durationSeconds ?? editStack?.canvas.duration ?? 0
         let clamped = min(max(0, seconds), max(0, duration))
-        seekSeconds = clamped
+        playhead.seconds = clamped
+        seekRequest = PlayheadSeek(id: (seekRequest?.id ?? 0) + 1, seconds: clamped, exact: exact)
         return clamped
+    }
+
+    /// Clears the playhead for a new or reopened session.
+    func resetPlayhead() {
+        playhead.seconds = 0
+        seekRequest = nil
     }
 
     // MARK: Import — append flows
@@ -309,4 +339,18 @@ extension EditorViewModel {
         resetSessionForNewProject()
         messages.append(ChatMessage(role: .system, content: "New project — import clips to begin. Your previous project is still saved."))
     }
+}
+
+/// The playhead position (project seconds) — where the preview is, kept on its own object
+/// so the player's ~15 Hz time updates re-render only the playhead, not the editor.
+final class PlayheadClock: ObservableObject {
+    @Published var seconds: Double = 0
+}
+
+/// One seek the preview should perform. The id makes a repeat seek to the same time
+/// (after playback moved on) a new request.
+struct PlayheadSeek: Equatable {
+    let id: Int
+    let seconds: Double
+    let exact: Bool
 }

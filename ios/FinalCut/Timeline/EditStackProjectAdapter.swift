@@ -125,4 +125,44 @@ extension EditStack {
         }
         return project
     }
+
+    /// Re-derives a mirrored project after chat edits moved the stack on, keeping the
+    /// identity the timeline UI, the model's plans and ProjectStore rely on: project id,
+    /// clip / track ids, and already-stored media. The revision moves past `existing` so a
+    /// plan made against the old content is rejected as stale.
+    func makeProject(keepingIdentityOf existing: EditorProject, sameBase: Bool) -> EditorProject {
+        var project = makeProject(name: existing.name)
+        project.id = existing.id
+        project.revision = existing.revision + 1
+        if sameBase, let oldBase = existing.assets.first, let newBase = project.assets.first {
+            project.assets[0].id = oldBase.id
+            project.assets[0].relativePath = oldBase.relativePath
+            for index in project.videoClips.indices where project.videoClips[index].assetID == newBase.id {
+                project.videoClips[index].assetID = oldBase.id
+            }
+        }
+        if let oldClip = existing.videoClips.first, !project.videoClips.isEmpty {
+            project.videoClips[0].id = oldClip.id
+            project.selectedClipID = oldClip.id
+        }
+        // Soundtrack: reuse the stored song (same file name) and the track / clip ids.
+        for index in project.assets.indices.dropFirst() {
+            let fresh = project.assets[index]
+            guard let stored = existing.assets.first(where: { $0.mediaType == .audio && $0.name == fresh.name }) else { continue }
+            project.assets[index].id = stored.id
+            project.assets[index].relativePath = stored.relativePath
+            for t in project.audioTracks.indices {
+                for c in project.audioTracks[t].clips.indices where project.audioTracks[t].clips[c].assetID == fresh.id {
+                    project.audioTracks[t].clips[c].assetID = stored.id
+                }
+            }
+        }
+        if let oldTrack = existing.audioTracks.first, !project.audioTracks.isEmpty {
+            project.audioTracks[0].id = oldTrack.id
+            if let oldClip = oldTrack.clips.first, !project.audioTracks[0].clips.isEmpty {
+                project.audioTracks[0].clips[0].id = oldClip.id
+            }
+        }
+        return project
+    }
 }
