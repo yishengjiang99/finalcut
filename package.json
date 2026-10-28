@@ -21,6 +21,8 @@
     "fixture:elevenlabs-caption": "node scripts/generate-elevenlabs-caption-fixture.js",
     "ios": "./scripts/run-ios-device.sh",
     "ios:simulator": "./scripts/run-ios-simulator.sh",
+    "ios:build": "./scripts/xcode-ios.sh build",
+    "ios:test": "./scripts/xcode-ios.sh test",
     "schema:tools": "node scripts/generate-tools-schema.js",
     "test:e2e:v2": "playwright test -c tests/e2e/playwright.config.mjs",
     "test:contract:ios": "node tests/contract/ios-endpoints.mjs",
