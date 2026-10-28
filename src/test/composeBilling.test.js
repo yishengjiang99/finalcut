@@ -11,6 +11,13 @@ const db = vi.hoisted(() => ({
   setProductEntitlementByRef: vi.fn(async () => {}),
   hasProductEntitlement: vi.fn(async (email, product) => email === 'pro@example.com' && product === 'compose'),
   addMusicWaitlist: vi.fn(async () => {}),
+  setProductSubscriptionState: vi.fn(async () => {}),
+  getProductEntitlement: vi.fn(async () => null),
+  recordProductEvent: vi.fn(async () => true),
+  hasProductEvent: vi.fn(async () => false),
+  findProductEntitlementByRef: vi.fn(async () => null),
+  findProductEntitlementByCustomer: vi.fn(async () => null),
+  listProductEvents: vi.fn(async () => []),
 }));
 vi.mock('../db.js', () => db);
 
@@ -100,8 +107,8 @@ describe('compose checkout + entitlement', () => {
     const get = (email, auth) => fetch(`${srv.base}/api/compose/entitlement?email=${encodeURIComponent(email)}`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
     expect((await get('pro@example.com')).status).toBe(401);
     expect((await get('pro@example.com', 'wrong')).status).toBe(401);
-    expect(await (await get('Pro@Example.com', 'tok_secret_123')).json()).toEqual({ product: 'compose', pro: true });
-    expect(await (await get('free@example.com', 'tok_secret_123')).json()).toEqual({ product: 'compose', pro: false });
+    expect(await (await get('Pro@Example.com', 'tok_secret_123')).json()).toEqual({ product: 'compose', pro: true, plan: null, status: null, current_period_end: null, cancel_at_period_end: false });
+    expect(await (await get('free@example.com', 'tok_secret_123')).json()).toEqual({ product: 'compose', pro: false, plan: null, status: null, current_period_end: null, cancel_at_period_end: false });
     expect((await get('bad', 'tok_secret_123')).status).toBe(400);
     await srv.close();
   });

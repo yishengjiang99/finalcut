@@ -170,6 +170,40 @@ export async function initDatabase() {
       )
     `);
 
+    // Compose subscription state for the entitlement lookup (#121). Additive, like device_install_id.
+    for (const col of [
+      'ADD COLUMN status VARCHAR(16) NULL',
+      'ADD COLUMN current_period_end BIGINT NULL',
+      'ADD COLUMN cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE',
+    ]) {
+      try {
+        await pool.query(`ALTER TABLE product_entitlements ${col}`);
+      } catch (error) {
+        if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+      }
+    }
+
+    // Billing lifecycle events (trial_start, trial_convert, renewal, cancel, refund, email_*) for the
+    // GBK funnel report (#122). UNIQUE(type, ref) makes webhook retries and one-time emails idempotent.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_events (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        product VARCHAR(32) NOT NULL,
+        type VARCHAR(32) NOT NULL,
+        ref VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NULL,
+        plan VARCHAR(32) NULL,
+        amount_cents INT NOT NULL DEFAULT 0,
+        currency VARCHAR(8) NULL,
+        subscription_ref VARCHAR(255) NULL,
+        occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_product_events_type_ref (type, ref),
+        INDEX idx_product_events_product_time (product, occurred_at),
+        INDEX idx_product_events_sub (subscription_ref)
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS music_waitlist (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -383,6 +417,68 @@ export async function hasProductEntitlement(email, product) {
   return rows.length > 0;
 }
 
+export async function setProductSubscriptionState({ product, ref, status = null, currentPeriodEnd = null, cancelAtPeriodEnd = false }) {
+  const pool = getPool();
+  await pool.query(
+    'UPDATE product_entitlements SET status = ?, current_period_end = ?, cancel_at_period_end = ? WHERE product = ? AND ref = ?',
+    [status, currentPeriodEnd, Boolean(cancelAtPeriodEnd), product, ref]
+  );
+}
+
+// Most relevant row for an email: active first, then most recently updated.
+export async function getProductEntitlement(email, product) {
+  if (!email) return null;
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT plan, ref, stripe_customer_id, active, status, current_period_end, cancel_at_period_end
+       FROM product_entitlements WHERE email = ? AND product = ?
+      ORDER BY active DESC, updated_at DESC, id DESC LIMIT 1`,
+    [String(email).toLowerCase(), product]
+  );
+  return rows[0] || null;
+}
+
+export async function findProductEntitlementByRef(product, ref) {
+  const pool = getPool();
+  const [rows] = await pool.query('SELECT email, plan, ref, stripe_customer_id FROM product_entitlements WHERE product = ? AND ref = ? LIMIT 1', [product, ref]);
+  return rows[0] || null;
+}
+
+export async function findProductEntitlementByCustomer(product, customerId) {
+  if (!customerId) return null;
+  const pool = getPool();
+  const [rows] = await pool.query('SELECT email, plan, ref, stripe_customer_id FROM product_entitlements WHERE product = ? AND stripe_customer_id = ? ORDER BY id DESC LIMIT 1', [product, customerId]);
+  return rows[0] || null;
+}
+
+// Returns true when the event was new (false on a duplicate type+ref, e.g. a webhook retry).
+export async function recordProductEvent({ product, type, ref, email = null, plan = null, amountCents = 0, currency = null, subscriptionRef = null, occurredAt = new Date() }) {
+  const pool = getPool();
+  const [result] = await pool.query(
+    `INSERT IGNORE INTO product_events (product, type, ref, email, plan, amount_cents, currency, subscription_ref, occurred_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [product, type, String(ref), email ? String(email).toLowerCase() : null, plan, amountCents, currency, subscriptionRef, occurredAt]
+  );
+  return result.affectedRows > 0;
+}
+
+export async function hasProductEvent({ subscriptionRef, types }) {
+  const pool = getPool();
+  const [rows] = await pool.query('SELECT 1 FROM product_events WHERE subscription_ref = ? AND type IN (?) LIMIT 1', [subscriptionRef, types]);
+  return rows.length > 0;
+}
+
+export async function listProductEvents({ product, since, until, limit = 1000 }) {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT type, email, plan, amount_cents, currency, subscription_ref, occurred_at
+       FROM product_events WHERE product = ? AND occurred_at >= ? AND occurred_at < ?
+      ORDER BY occurred_at ASC LIMIT ?`,
+    [product, since, until, limit]
+  );
+  return rows;
+}
+
 export async function addMusicWaitlist(email, attribution = {}) {
   const pool = getPool();
   await pool.query(
@@ -526,6 +622,13 @@ export default {
   setProductEntitlement,
   setProductEntitlementByRef,
   hasProductEntitlement,
+  setProductSubscriptionState,
+  getProductEntitlement,
+  findProductEntitlementByRef,
+  findProductEntitlementByCustomer,
+  recordProductEvent,
+  hasProductEvent,
+  listProductEvents,
   addMusicWaitlist,
   saveAppleTransaction,
   findAppleTransaction,

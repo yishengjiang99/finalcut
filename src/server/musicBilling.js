@@ -8,8 +8,9 @@
 import express from 'express';
 import { stripe as defaultStripe } from './config.js';
 import { apiLimiter } from './middleware.js';
-import { MUSIC_PRODUCT, PRODUCT_SPECS, resolveMusicPlan, musicSiteUrl, productOf } from './products.js';
+import { MUSIC_PRODUCT, COMPOSE_PRODUCT, PRODUCT_SPECS, resolveMusicPlan, musicSiteUrl, productOf } from './products.js';
 import { sendConversion } from './adsConversions.js';
+import * as lifecycle from './composeLifecycle.js';
 
 export const ATTRIBUTION_KEYS = ['event_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'twclid', 'rdt_cid', 'landing', 'ads_opt_out'];
 
@@ -99,7 +100,8 @@ const emailOf = (s) => s?.customer_details?.email || s?.customer_email || null;
 const subscriptionMetadataOfInvoice = (inv) => inv?.parent?.subscription_details?.metadata || inv?.subscription_details?.metadata || null;
 
 // Returns true when the event belonged to a non-FinalCut product (music, compose) and was handled here.
-export async function handleProductWebhookEvent(event, { stripe = defaultStripe, db, env = process.env, send = sendConversion } = {}) {
+// Compose additionally records funnel events + subscription state and sends lifecycle emails (composeLifecycle.js).
+export async function handleProductWebhookEvent(event, { stripe = defaultStripe, db, env = process.env, send = sendConversion, sendEmail = lifecycle.sendResendEmail } = {}) {
   const getDb = async () => db || (await import('../db.js'));
   const obj = event?.data?.object;
   switch (event?.type) {
@@ -112,6 +114,7 @@ export async function handleProductWebhookEvent(event, { stripe = defaultStripe,
       if (email) {
         await setProductEntitlement({ email, product: spec.product, plan, source: 'stripe', ref: obj.subscription || obj.payment_intent || obj.id, customerId: obj.customer || null, active: true });
       }
+      if (spec.product === COMPOSE_PRODUCT) await lifecycle.recordCheckoutCompleted(obj, await getDb());
       if (obj.metadata?.ads_opt_out === '1') return true;
       const isTrial = obj.mode === 'subscription' && (obj.amount_total || 0) === 0;
       const value = isTrial ? 0 : (obj.amount_total || 0) / 100 || (spec.plans(env)[plan]?.value ?? 0);
@@ -132,12 +135,14 @@ export async function handleProductWebhookEvent(event, { stripe = defaultStripe,
       const active = event.type === 'customer.subscription.updated' && ['active', 'trialing', 'past_due'].includes(obj.status);
       const { setProductEntitlementByRef } = await getDb();
       await setProductEntitlementByRef({ product: spec.product, ref: obj.id, active });
+      if (spec.product === COMPOSE_PRODUCT) await lifecycle.recordSubscriptionChange(event, await getDb());
       return true;
     }
     case 'invoice.paid': {
       const meta = subscriptionMetadataOfInvoice(obj);
       const spec = meta && PRODUCT_SPECS[meta.product];
       if (!spec) return false;
+      if (spec.product === COMPOSE_PRODUCT) await lifecycle.recordInvoicePaid(obj, await getDb());
       // First paid invoice after the trial (and every renewal): server-only Purchase, no pixel to dedupe with.
       if ((obj.amount_paid || 0) > 0 && meta.ads_opt_out !== '1') {
         await send({
@@ -148,6 +153,19 @@ export async function handleProductWebhookEvent(event, { stripe = defaultStripe,
       }
       return true;
     }
+    // Compose-only events. Anything else (music, FinalCut) returns false and falls through unchanged.
+    case 'checkout.session.expired': {
+      if (productOf(obj) !== COMPOSE_PRODUCT) return false;
+      await lifecycle.onCheckoutExpired(obj, await getDb(), { env, sendEmail });
+      return true;
+    }
+    case 'customer.subscription.trial_will_end': {
+      if (productOf(obj) !== COMPOSE_PRODUCT) return false;
+      await lifecycle.onTrialWillEnd(obj, await getDb(), { env, sendEmail, stripe });
+      return true;
+    }
+    case 'charge.refunded':
+      return lifecycle.recordRefund(obj, await getDb());
     default:
       return false;
   }
