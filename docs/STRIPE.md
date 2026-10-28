@@ -222,7 +222,9 @@ GBK Composer Pro (live mode). Price IDs are not secret.
 |---|---|---|---|---|---|
 | prod_VVXpcLHC6Ahg5t (GBK Composer Pro) | price_1UUWjt4OymfcnKESqqY2SpC4 | GBK Pro Monthly | $5.99 USD | month (7-day trial added by server) | product=compose plan=pro_monthly |
 | prod_VVXpcLHC6Ahg5t | price_1UUWjt4OymfcnKESKn99TpqY | GBK Pro Yearly | $47.99 USD | year (7-day trial added by server) | product=compose plan=pro_yearly |
-| prod_VVXpcLHC6Ahg5t | price_1UUWjt4OymfcnKES8fWconiv | GBK Pro Lifetime | $99.00 USD | one-time | product=compose plan=lifetime |
+| prod_VVXpcLHC6Ahg5t | price_1UVND54OymfcnKESIgTy5Oc2 | GBK Pro Lifetime | $99.99 USD | one-time | product=compose plan=lifetime |
+
+(Superseded 2026-10-27, issue #117 price parity: the original lifetime price `price_1UUWjt4OymfcnKES8fWconiv` was $99.00 while the site and iOS showed $99.99. `COMPOSE_STRIPE_PRICE_LIFETIME` now points at the $99.99 price above; the $99.00 price is left in place, unused.)
 
 Env: `COMPOSE_STRIPE_PRICE_PRO_MONTHLY`, `COMPOSE_STRIPE_PRICE_PRO_YEARLY`, `COMPOSE_STRIPE_PRICE_LIFETIME`.
 
