@@ -45,6 +45,16 @@ export const FFMPEG_CLI_MIN_BUILD = 11;
 export const YOUTUBE_SOUNDTRACK_MIN_BUILD = 13;
 
 /**
+ * Last FinalCap-iOS build offered youtube_soundtrack — turned OFF in the
+ * agentic layer for the App Store 1.1 release (2026-10-28, at the user's
+ * word). The { minBuild, maxBuild } range below is empty on purpose: no
+ * build is offered the tool, so the on-device executor cannot be reached
+ * from chat. The web YouTube overlay is a separate path and unaffected.
+ * Re-enable by restoring the plain minBuild entry.
+ */
+export const YOUTUBE_SOUNDTRACK_MAX_BUILD = 12;
+
+/**
  * First FinalCap-iOS build that runs the timeline tools (multi-clip projects,
  * multi-track audio; definitions in iosTimelineTools.js). Gating is by app
  * VERSION: the timeline executor first ships in app version 1.2, whose build
@@ -100,7 +110,7 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   // Server-side last resort: no AVFoundation tool can do it → upload, process, download.
   ffmpeg_cli: FFMPEG_CLI_MIN_BUILD,
   // YouTube-link soundtrack: app fetches the audio from the server, mixes it on device.
-  youtube_soundtrack: YOUTUBE_SOUNDTRACK_MIN_BUILD,
+  youtube_soundtrack: { minBuild: YOUTUBE_SOUNDTRACK_MIN_BUILD, maxBuild: YOUTUBE_SOUNDTRACK_MAX_BUILD },
   // Timeline tools (iOS-only definitions, iosTimelineTools.js): multi-clip
   // video editing and multi-track audio on the on-device project model.
   get_project_timeline: TIMELINE_TOOLS_MIN_BUILD,
