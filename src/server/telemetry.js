@@ -14,6 +14,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { getPool } from '../db.js';
+import { forwardConversion } from './adConversions.js';
 
 export const TELEMETRY_TABLE = 'finalcut_telemetry_events';
 
@@ -29,7 +30,17 @@ export const TELEMETRY_EVENTS = Object.freeze(new Set([
   'signup',           // returned from Google sign-in
   'upgrade',          // checkout started / subscription confirmed
   'page_view',        // a static guide page was viewed (props.path = '/<slug>')
+  'sample_start',     // the sample video started loading
+  'first_edit',       // first chat edit (tool) of the session completed
+  'captions_start',   // caption generation started
+  'translate',        // caption/subtitle translation started
+  'export_done',      // an export/download finished
 ]));
+
+// Ad click ids (X twclid, Reddit rdt_cid). Accepted only to forward server-side to the ad
+// platform (src/server/adConversions.js); stripped from the row before it is stored.
+const CLICK_ID = /^[A-Za-z0-9_\-.]{1,128}$/;
+export const CLICK_ID_KEYS = Object.freeze(['twclid', 'rdt_cid']);
 
 // Allowed prop keys and the shape of their values. Anything else is dropped.
 const TOKEN = /^[A-Za-z0-9_.:\-/+ ]{1,64}$/;   // short machine tokens: tool names, buckets, formats
@@ -39,6 +50,10 @@ const PROP_RULES = Object.freeze({
   utm_source: (v) => typeof v === 'string' && TOKEN.test(v),
   utm_medium: (v) => typeof v === 'string' && TOKEN.test(v),
   utm_campaign: (v) => typeof v === 'string' && TOKEN.test(v),
+  utm_content: (v) => typeof v === 'string' && TOKEN.test(v),
+  utm_term: (v) => typeof v === 'string' && TOKEN.test(v),
+  twclid: (v) => typeof v === 'string' && CLICK_ID.test(v),
+  rdt_cid: (v) => typeof v === 'string' && CLICK_ID.test(v),
   cta: (v) => typeof v === 'string' && TOKEN.test(v),
   source: (v) => typeof v === 'string' && TOKEN.test(v),
   kind: (v) => typeof v === 'string' && TOKEN.test(v),
@@ -165,7 +180,19 @@ export const telemetryLimiter = rateLimit({
   message: { error: 'Too many telemetry events' },
 });
 
-export function createTelemetryRouter({ insert = insertTelemetryEvent, limiter = telemetryLimiter, summary } = {}) {
+/** Split click ids out of a sanitized row so they are never stored. */
+export function extractClickIds(row) {
+  const clickIds = {};
+  if (row && row.props) {
+    for (const k of CLICK_ID_KEYS) {
+      if (row.props[k]) { clickIds[k] = row.props[k]; delete row.props[k]; }
+    }
+    if (!Object.keys(row.props).length) row.props = null;
+  }
+  return clickIds;
+}
+
+export function createTelemetryRouter({ insert = insertTelemetryEvent, limiter = telemetryLimiter, summary, forward = forwardConversion } = {}) {
   const router = express.Router();
   // sendBeacon posts a Blob; accept JSON sent as application/json or text/plain.
   const parse = express.json({ limit: MAX_BODY_BYTES, type: ['application/json', 'text/plain'] });
@@ -174,6 +201,13 @@ export function createTelemetryRouter({ insert = insertTelemetryEvent, limiter =
     res.set('Cache-Control', 'no-store');
     const { row, error } = sanitizeTelemetryEvent(req.body);
     if (error) return res.status(400).json({ error });
+    const clickIds = extractClickIds(row);
+    // Fire-and-forget; no-op unless ad env vars are set. Never blocks or fails the response.
+    try {
+      forward({ ...row, props: row.props ? { ...row.props } : null }, {
+        clickIds, ip: req.ip, userAgent: req.get('user-agent') || '', testHeader: Boolean(req.get('x-finalcut-test')),
+      });
+    } catch { /* never */ }
     try {
       await insert(row);
       return res.status(204).end();
