@@ -152,6 +152,9 @@ describe('validateTimelineToolArguments', () => {
     // Inspection tools and nested batches are not batchable.
     expect(validateBatchOperations({ operations: [{ type: 'get_project_timeline', arguments: {} }] })).toMatch(/not a batchable/);
     expect(validateBatchOperations({ operations: [{ type: 'batch_timeline_edits', arguments: { operations: [] } }] })).toMatch(/not a batchable/);
+    // Device-special executors (no batch case on device) are not batchable either.
+    expect(validateBatchOperations({ operations: [{ type: 'append_video_clips', arguments: { clips: [] } }] })).toMatch(/not a batchable/);
+    expect(validateBatchOperations({ operations: [{ type: 'add_audio_clip', arguments: {} }] })).toMatch(/not a batchable/);
     // An invalid inner call names the failing operation.
     expect(validateBatchOperations({ operations: [{ type: 'trim_video_clip', arguments: { clipId: 'c' } }] })).toMatch(/operations\[0\] \(trim_video_clip\)/);
     // Batch size is bounded.

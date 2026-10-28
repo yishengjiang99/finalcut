@@ -182,6 +182,10 @@ export const IOS_TIMELINE_TOOLS = deepFreeze([
           degrees: { type: 'number', description: 'For hue (color shift) or rotate.' },
           filter: { type: 'string', maxLength: 64, description: 'For color_filter: a filter/look name the device supports.' },
           intensity: { type: 'number', minimum: 0, maximum: 1, description: 'For color_filter: 0..1.' },
+          x: { type: 'number', minimum: 0, description: 'For crop: left edge in pixels, in the clip source frame.' },
+          y: { type: 'number', minimum: 0, description: 'For crop: top edge in pixels, in the clip source frame.' },
+          width: { type: 'number', minimum: 0, description: 'For crop: width in pixels.' },
+          height: { type: 'number', minimum: 0, description: 'For crop: height in pixels.' },
         },
         required: ['kind'],
       },
@@ -308,7 +312,7 @@ export const IOS_TIMELINE_TOOLS = deepFreeze([
 
   // ── Batch ─────────────────────────────────────────────────────────────────
   tool('batch_timeline_edits',
-    'Apply several INDEPENDENT timeline edits as ONE device transaction: the device validates the whole batch first and applies all-or-nothing — if any operation is invalid, none are applied and the result names the failing operation index. Prefer this over many sequential calls when the edits do not depend on each other\'s results (it saves tool rounds). Do NOT batch when a later edit needs an ID created by an earlier one (e.g. adding a clip to a track you are also creating) — do those sequentially. Max 20 operations.',
+    'Apply several INDEPENDENT timeline edits as ONE device transaction: the device validates the whole batch first and applies all-or-nothing — if any operation is invalid, none are applied and the result names the failing operation index. Prefer this over many sequential calls when the edits do not depend on each other\'s results (it saves tool rounds). Do NOT batch when a later edit needs an ID created by an earlier one (e.g. adding a clip to a track you are also creating) — do those sequentially. Max 20 operations. append_video_clips and add_audio_clip are NOT batchable (the device runs them as special executors outside the batch transaction) — call them directly.',
     {
       operations: {
         type: 'array', minItems: 1, maxItems: 20,
@@ -320,10 +324,10 @@ export const IOS_TIMELINE_TOOLS = deepFreeze([
               type: 'string',
               description: 'The mutation tool name to run (video/audio/project mutations only — no inspection tools, no nested batch).',
               enum: [
-                'append_video_clips', 'insert_video_clip', 'reorder_video_clips', 'split_video_clip',
+                'insert_video_clip', 'reorder_video_clips', 'split_video_clip',
                 'trim_video_clip', 'remove_video_clip', 'duplicate_video_clip', 'set_clip_speed',
                 'set_clip_effect', 'set_clip_original_audio', 'set_clip_transition',
-                'create_audio_track', 'add_audio_clip', 'move_audio_clip', 'trim_audio_clip',
+                'create_audio_track', 'move_audio_clip', 'trim_audio_clip',
                 'remove_audio_clip', 'set_audio_clip_volume', 'set_audio_track_volume',
                 'mute_audio_track', 'set_audio_clip_fade', 'loop_audio_clip', 'apply_audio_ducking',
                 'set_project_canvas',
@@ -455,12 +459,17 @@ export function validateBatchOperations(args) {
   return null;
 }
 
-/** Timeline tools that change the project (batchable; inspection and view-only tools are not). */
+/** Timeline tools that change the project inside the device batch transaction
+ * (inspection and view-only tools are not batchable — and neither are
+ * append_video_clips / add_audio_clip: the device runs those as special
+ * non-transactional executors with no batch case, so they are direct
+ * calls only; offering them in a batch failed the whole batch). */
 export const TIMELINE_MUTATION_TOOL_NAMES = deepFreeze(
   IOS_TIMELINE_TOOL_NAMES.filter(n => ![
     'get_project_timeline', 'list_project_assets', 'get_clip_details',
     'get_audio_track_details', 'get_project_info', 'get_project_duration',
     'seek_playhead', 'batch_timeline_edits',
+    'append_video_clips', 'add_audio_clip',
   ].includes(n)),
 );
 
