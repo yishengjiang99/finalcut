@@ -25,7 +25,7 @@ struct EditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             TopBarView(
-                photosPickerItem: $model.photosPickerItem,
+                importPickerItems: $model.importPickerItems,
                 onExport: { showExport = true },
                 onUpgrade: { appModel.presentPaywall(reason: .upgradeTapped) },
                 importEnabled: importEnabled,
@@ -47,7 +47,7 @@ struct EditorView: View {
 
             if showsImportPanel {
                 ImportPanelView(
-                    photosPickerItem: $model.photosPickerItem,
+                    importPickerItems: $model.importPickerItems,
                     onTrySample: { model.loadSampleClip() },
                     importError: model.importError
                 )
@@ -62,7 +62,8 @@ struct EditorView: View {
                     showsDimmer: model.isCloudStepRunning,
                     canUndo: false,
                     onCancel: model.lyricStatus != nil ? { model.cancelStreamingCaptions() } : nil,
-                    seekSeconds: model.seekSeconds
+                    seek: model.seekRequest,
+                    onTimeChange: { [playhead = model.playhead] seconds in playhead.seconds = seconds }
                 )
                 .frame(maxHeight: timelineExpandedActive ? (chatExpanded ? 64 : 200) : 240)
                 if FeatureFlags.timelineEnabled, !model.isPhoto, model.localVideoURL != nil {
@@ -71,7 +72,7 @@ struct EditorView: View {
                                  onExpand: { withAnimation(.easeInOut(duration: 0.25)) { chatExpanded = false } })
                 }
                 if let importError = model.importError {
-                    ImportErrorBanner(message: importError, photosPickerItem: $model.photosPickerItem)
+                    ImportErrorBanner(message: importError, importPickerItems: $model.importPickerItems)
                 }
             }
 
@@ -97,7 +98,7 @@ struct EditorView: View {
 
             ComposerView(
                 text: $model.composerText,
-                photosPickerItem: $model.photosPickerItem,
+                importPickerItems: $model.importPickerItems,
                 onSend: { model.sendMessage() },
                 importEnabled: importEnabled,
                 dictation: dictation
@@ -132,8 +133,8 @@ struct EditorView: View {
             PaywallView()
                 .environmentObject(appModel)
         }
-        .onChange(of: model.photosPickerItem) { _, item in
-            Task { await model.loadPhotosPickerItem(item) }
+        .onChange(of: model.importPickerItems) { _, items in
+            Task { await model.loadImportPickerItems(items) }
         }
         .onChange(of: model.photosPickerItems) { _, items in
             Task { await model.loadPhotosPickerItems(items) }
@@ -226,7 +227,7 @@ struct EditorView: View {
 
 /// Empty-state panel: pick a video from Photos (primary) or try the bundled sample clip.
 struct ImportPanelView: View {
-    @Binding var photosPickerItem: PhotosPickerItem?
+    @Binding var importPickerItems: [PhotosPickerItem]
     var onTrySample: () -> Void
     /// Import-step error (`import.failed.format`), shown with "Choose another".
     var importError: String? = nil
@@ -249,7 +250,8 @@ struct ImportPanelView: View {
                         .accessibilityIdentifier("ImportError")
                 }
                 PhotosPicker(
-                    selection: $photosPickerItem,
+                    selection: $importPickerItems,
+                    selectionBehavior: .ordered,
                     matching: EditorViewModel.pickerFilter,
                     photoLibrary: .shared()
                 ) {
@@ -275,7 +277,7 @@ struct ImportPanelView: View {
 /// Import-step error while a clip is still loaded: copy + "Choose another" (reopens Photos).
 struct ImportErrorBanner: View {
     var message: String
-    @Binding var photosPickerItem: PhotosPickerItem?
+    @Binding var importPickerItems: [PhotosPickerItem]
 
     var body: some View {
         HStack(spacing: 10) {
@@ -283,7 +285,7 @@ struct ImportErrorBanner: View {
                 .font(.footnote)
                 .foregroundStyle(AppTheme.textPrimary)
             Spacer(minLength: 8)
-            PhotosPicker(selection: $photosPickerItem, matching: EditorViewModel.pickerFilter, photoLibrary: .shared()) {
+            PhotosPicker(selection: $importPickerItems, selectionBehavior: .ordered, matching: EditorViewModel.pickerFilter, photoLibrary: .shared()) {
                 Text(UXCopy.chooseAnother)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(AppTheme.accent)
@@ -303,7 +305,8 @@ final class EditorViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var composerText = ""
     @Published var localVideoURL: URL?
-    @Published var photosPickerItem: PhotosPickerItem?
+    /// Photos multi-select for a new session (top bar, composer, import panel).
+    @Published var importPickerItems: [PhotosPickerItem] = []
     /// Multi-select Photos picker (timeline "Add" flows).
     @Published var photosPickerItems: [PhotosPickerItem] = []
     /// Compact timeline workspace visibility (chat-first layout: collapsed by default).
@@ -313,9 +316,11 @@ final class EditorViewModel: ObservableObject {
     /// Set by "New project" in the timeline: the next base import starts a fresh
     /// durable project instead of adapting the current session.
     var startNewProjectOnNextImport = false
-    /// Timeline playhead (project seconds): set by the ruler scrubber and the
-    /// seek_playhead tool via `seekPlayhead(to:)`; the preview seeks when it changes.
-    @Published var seekSeconds: Double?
+    /// Timeline playhead (project seconds): follows the preview's playback, and is moved
+    /// by the ruler scrubber and the seek_playhead tool via `seekPlayhead(to:)`.
+    let playhead = PlayheadClock()
+    /// The latest seek for the preview to perform (`seekPlayhead(to:)`).
+    @Published var seekRequest: PlayheadSeek?
     /// Idempotency cache for timeline tool calls (server contract): a retried call
     /// carrying the same key returns the original result without re-applying.
     var timelineIdempotencyCache: [String: ClientToolResult] = [:]
@@ -446,7 +451,7 @@ final class EditorViewModel: ObservableObject {
     }
 
     /// Imports a local file URL (copied into app-owned temp storage). The UI imports from
-    /// Photos via `PhotosPicker` → `loadPhotosPickerItem`; this path is kept for tests/local URLs.
+    /// Photos via `PhotosPicker` → `loadImportPickerItems`; this path is kept for tests/local URLs.
     func handleImport(_ result: Result<[URL], Error>) async {
         switch result {
         case .success(let urls):
@@ -472,26 +477,67 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    func loadPhotosPickerItem(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
+    /// Photos multi-select import: starts a new session from the selection, in pick order.
+    /// The first video becomes the base and the other videos append to its timeline; a photo
+    /// opens (photo mode) only when no video was picked, since photos can't join a video
+    /// project. Items that are skipped or fail to load are named in one chat line.
+    func loadImportPickerItems(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
         state = .importing
         lastError = nil
-        // Reset selection so choosing the same video again triggers another import.
-        defer { photosPickerItem = nil }
-        let pickedPhoto = item.supportedContentTypes.contains { $0.conforms(to: .image) }
-            && !item.supportedContentTypes.contains { $0.conforms(to: .movie) }
-        do {
-            guard let video = try await item.loadTransferable(type: ImportedVideo.self) else {
-                throw APIError.message(UXCopy.videoImportFailed)
+        // Reset selection so choosing the same items again triggers another import.
+        defer { importPickerItems = [] }
+        var videos: [ImportedVideo] = []
+        var photos: [ImportedVideo] = []
+        var failures = 0
+        var photoFailed = false
+        for (index, item) in items.enumerated() {
+            if Task.isCancelled { break }
+            if items.count > 1 { importStatus = "Importing \(index + 1) of \(items.count)…" }
+            let pickedPhoto = item.supportedContentTypes.contains { $0.conforms(to: .image) }
+                && !item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            do {
+                guard let video = try await item.loadTransferable(type: ImportedVideo.self) else {
+                    throw APIError.message(UXCopy.videoImportFailed)
+                }
+                if video.isPhoto { photos.append(video) } else { videos.append(video) }
+            } catch {
+                failures += 1
+                photoFailed = photoFailed || pickedPhoto || error is PhotoTranscoder.TranscodeError
             }
-            finishImport(video, message: video.isPhoto ? "Imported photo from Photos" : "Imported from Photos")
-        } catch {
-            failImport(isPhoto: pickedPhoto || error is PhotoTranscoder.TranscodeError)
+        }
+        importStatus = nil
+        await importSelection(videos: videos, photos: photos, failures: failures, photoFailed: photoFailed)
+    }
+
+    /// Applies a loaded multi-select (see `loadImportPickerItems`); split out so the
+    /// ordering rules are testable without a Photos library.
+    func importSelection(videos: [ImportedVideo], photos: [ImportedVideo], failures: Int, photoFailed: Bool = false) async {
+        guard let base = videos.first ?? photos.first else {
+            failImport(isPhoto: photoFailed)
+            return
+        }
+        let extraVideos = videos.dropFirst()
+        finishImport(base, message: base.isPhoto ? "Imported photo from Photos"
+                     : extraVideos.isEmpty ? "Imported from Photos" : "Imported \(videos.count) videos from Photos")
+        for video in extraVideos {
+            _ = await appendImportedMedia(video.url)
+        }
+        let skippedPhotos = base.isPhoto ? photos.count - 1 : photos.count
+        var notes: [String] = []
+        if skippedPhotos > 0 {
+            notes.append(base.isPhoto ? "\(skippedPhotos) more photo(s) weren't opened — photos are edited one at a time."
+                                      : "\(skippedPhotos) photo(s) weren't added — photos can't join a video project.")
+        }
+        if failures > 0 { notes.append("\(failures) item(s) couldn't be imported.") }
+        if !notes.isEmpty {
+            messages.append(ChatMessage(role: .system, content: notes.joined(separator: " ")))
         }
     }
 
     private func finishImport(_ video: ImportedVideo, message: String) {
         localVideoURL = video.url
+        resetPlayhead()
         captionArtifacts = CaptionArtifacts()
         importError = nil
         state = .ready
@@ -517,6 +563,9 @@ final class EditorViewModel: ObservableObject {
         guard let url = localVideoURL else { return nil }
         if let stack = editStack, stack.base == url { return stack }
         guard let canvas = await Self.loadCanvas(url) else { return nil }
+        // Another caller may have created the stack while the canvas loaded (an import
+        // appending clips right after `startEditing`); replacing it would drop its project.
+        if let stack = editStack, stack.base == url { return stack }
         let stack = EditStack(base: url, baseCanvas: canvas)
         editStack = stack
         await refreshPreview()
@@ -547,6 +596,7 @@ final class EditorViewModel: ObservableObject {
     /// Rebuilds the preview from the stack. Video: new composed `AVPlayerItem` (instant,
     /// nothing is rendered). Photo: Core Image render of the edited photo.
     func refreshPreview() async {
+        syncMirroredProject()
         guard let stack = editStack else { return }
         previewGeneration += 1
         let generation = previewGeneration
@@ -681,7 +731,7 @@ final class EditorViewModel: ObservableObject {
         messages = []
         composerText = ""
         localVideoURL = url
-        photosPickerItem = nil
+        importPickerItems = []
         lastError = nil
         captionArtifacts = CaptionArtifacts()
         processingOverlay = .editing
@@ -723,7 +773,7 @@ final class EditorViewModel: ObservableObject {
         importError = nil
         importStatus = nil
         startNewProjectOnNextImport = true
-        seekSeconds = nil
+        resetPlayhead()
         state = .empty
     }
 
@@ -735,7 +785,7 @@ final class EditorViewModel: ObservableObject {
         messages = []
         composerText = ""
         self.localVideoURL = nil
-        photosPickerItem = nil
+        importPickerItems = []
         lastError = nil
         captionArtifacts = CaptionArtifacts()
         processingOverlay = .editing
@@ -1268,7 +1318,7 @@ final class EditorViewModel: ObservableObject {
             }
             let fps = try? await AVURLAsset(url: stack.base).loadTracks(withMediaType: .video).first?.load(.nominalFrameRate)
             var project = stack.project?.summary()
-            project?.playheadSeconds = seekSeconds
+            project?.playheadSeconds = playhead.seconds
             return ClientMedia(
                 type: "video",
                 duration: stack.project?.durationSeconds ?? canvas.duration,

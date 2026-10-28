@@ -20,10 +20,13 @@ struct PreviewPaneView: View {
     var onUndo: () -> Void = {}
     /// Stops a cloud step in flight (translated captions); nil hides the button.
     var onCancel: (() -> Void)? = nil
-    /// Playhead target in seconds, set by the timeline scrubber.
-    var seekSeconds: Double? = nil
+    /// Seek requested by the timeline scrubber / seek_playhead tool.
+    var seek: PlayheadSeek? = nil
+    /// Reports the player's time (~15 Hz) so the timeline playhead follows playback.
+    var onTimeChange: (Double) -> Void = { _ in }
 
     @State private var player = AVPlayer()
+    @State private var timeObserver: Any?
 
     private var isPhoto: Bool {
         videoURL.map { MediaMIME.isImage(url: $0) } ?? false
@@ -85,15 +88,31 @@ struct PreviewPaneView: View {
             }
         }
         .accessibilityIdentifier("Preview")
-        .onAppear { attach() }
+        .onAppear {
+            attach()
+            if timeObserver == nil {
+                let report = onTimeChange
+                timeObserver = player.addPeriodicTimeObserver(
+                    forInterval: CMTime(value: 1, timescale: 15), queue: .main) { time in
+                    if time.isValid, time.seconds.isFinite { report(time.seconds) }
+                }
+            }
+        }
         .onChange(of: videoURL) { _, _ in attach() }
         .onChange(of: playerItem) { _, _ in attach() }
-        .onChange(of: seekSeconds) { _, seconds in
-            guard let seconds, seconds.isFinite else { return }
-            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
-                        toleranceBefore: .zero, toleranceAfter: .zero)
+        .onChange(of: seek) { _, seek in
+            guard let seek, seek.seconds.isFinite else { return }
+            // A drag in flight takes any nearby frame (keeps up with the finger); the
+            // final seek lands exactly.
+            let tolerance = seek.exact ? CMTime.zero : CMTime(value: 1, timescale: 10)
+            player.seek(to: CMTime(seconds: seek.seconds, preferredTimescale: 600),
+                        toleranceBefore: tolerance, toleranceAfter: tolerance)
         }
-        .onDisappear { player.pause() }
+        .onDisappear {
+            player.pause()
+            if let timeObserver { player.removeTimeObserver(timeObserver) }
+            timeObserver = nil
+        }
     }
 
     private var emptyState: some View {

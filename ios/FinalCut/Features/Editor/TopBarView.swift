@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 /// is loaded) · Upgrade (trailing). One row at 375 pt: the title collapses to its gear and the
 /// free counter disappears before anything wraps; the Upgrade capsule never wraps.
 struct TopBarView: View {
-    @Binding var photosPickerItem: PhotosPickerItem?
+    /// Photos multi-select (photos or videos), in pick order.
+    @Binding var importPickerItems: [PhotosPickerItem]
     var onExport: () -> Void
     var onUpgrade: () -> Void
     var importEnabled = true
@@ -140,7 +141,7 @@ struct TopBarView: View {
         }
         .padding(.horizontal, Self.horizontalPadding)
         .frame(minHeight: Self.rowHeight)
-        .photosPicker(isPresented: $showPhotos, selection: $photosPickerItem,
+        .photosPicker(isPresented: $showPhotos, selection: $importPickerItems, selectionBehavior: .ordered,
                       matching: EditorViewModel.pickerFilter, photoLibrary: .shared())
         .fileImporter(isPresented: $showFiles, allowedContentTypes: [.movie, .image, .audio, .mp3, .mpeg4Audio, .wav], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
@@ -233,7 +234,7 @@ struct FreeRemainingLabel: View {
 
 #Preview {
     TopBarView(
-        photosPickerItem: .constant(nil),
+        importPickerItems: .constant([]),
         onExport: {},
         onUpgrade: {},
         exportVisible: true,

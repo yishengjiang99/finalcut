@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import CoreMedia
 import XCTest
 @testable import FinalCut
@@ -21,7 +22,7 @@ final class ProjectComposerTests: XCTestCase {
 
     // MARK: Media generation (AVAssetWriter; no bundled fixtures needed)
 
-    private func makeVideo(name: String, seconds: Double = 3, rotate: Bool = false) async throws -> URL {
+    private func makeVideo(name: String, seconds: Double = 3, rotate: Bool = false, gray: UInt8 = 0) async throws -> URL {
         let url = dir.appendingPathComponent(name)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -41,17 +42,16 @@ final class ProjectComposerTests: XCTestCase {
         CVPixelBufferCreate(kCFAllocatorDefault, 64, 48, kCVPixelFormatType_32ARGB, nil, &buffer)
         let frame = try XCTUnwrap(buffer)
         CVPixelBufferLockBaseAddress(frame, [])
-        memset(CVPixelBufferGetBaseAddress(frame), 0, CVPixelBufferGetDataSize(frame))
+        memset(CVPixelBufferGetBaseAddress(frame), Int32(gray), CVPixelBufferGetDataSize(frame))
         CVPixelBufferUnlockBaseAddress(frame, [])
-        let frames = Int(seconds * 10)
-        for index in 0..<frames {
+        // Video frames and silence buffers covering the same span, interleaved: the writer
+        // stops accepting one track until the other catches up, so writing all video first
+        // waits forever for `isReadyForMoreMediaData`.
+        for index in 0..<Int(seconds * 10) {
             while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(5)) }
             XCTAssertTrue(adaptor.append(frame, withPresentationTime: CMTime(value: Int64(index), timescale: 10)))
-        }
-        // Silence buffers covering the same span.
-        for chunk in 0..<Int(seconds * 10) {
             while !audioInput.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(5)) }
-            let sample = try Self.silentSampleBuffer(start: CMTime(value: Int64(chunk * 4410), timescale: 44_100), frames: 4410)
+            let sample = try Self.silentSampleBuffer(start: CMTime(value: Int64(index * 4410), timescale: 44_100), frames: 4410)
             XCTAssertTrue(audioInput.append(sample))
         }
         input.markAsFinished()
@@ -182,5 +182,41 @@ final class ProjectComposerTests: XCTestCase {
         let size = try await track?.load(.naturalSize)
         XCTAssertEqual(size?.width ?? 0, 128, accuracy: 1)
         XCTAssertEqual(size?.height ?? 0, 96, accuracy: 1)
+    }
+
+    // MARK: Regression: a timeline edit must not turn the preview / export black
+
+    private func meanLuma(_ cgImage: CGImage) -> Double {
+        let image = CIImage(cgImage: cgImage)
+        let average = image.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: image.extent)])
+        var pixel = [UInt8](repeating: 0, count: 4)
+        CIContext().render(average, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                           format: .RGBA8, colorSpace: nil)
+        return (Double(pixel[0]) + Double(pixel[1]) + Double(pixel[2])) / 3
+    }
+
+    func testSplitProjectPreviewAndExportFramesAreNotBlack() async throws {
+        let videoURL = try await makeVideo(name: "gray.mp4", seconds: 4, gray: 0x90)
+        var stack = EditStack(base: videoURL, baseCanvas: NativeCanvas(width: 64, height: 48, duration: 4, isPhoto: false, hasAudio: true))
+        stack.project = stack.makeProject()
+        let clipID = try XCTUnwrap(stack.project?.videoClips.first?.id)
+        try stack.performProjectCommand(.splitVideoClip(clipID: clipID, atProjectTime: 2))
+        XCTAssertTrue(stack.isTimelineProject)
+        let project = try XCTUnwrap(stack.project)
+        XCTAssertEqual(project.videoClips.count, 2)
+
+        let composed = try await NativeComposer.compose(project: project) { _ in videoURL }
+        let generator = composed.makeImageGenerator()
+        for t in [0.5, 3.0] { // one frame from each half of the split
+            let frame = try await generator.image(at: CMTime(seconds: t, preferredTimescale: 600)).image
+            XCTAssertGreaterThan(meanLuma(frame), 60, "preview frame at \(t)s is black")
+        }
+        let out = try await NativeExporter().export(composed, format: "mp4") { _ in }
+        defer { try? FileManager.default.removeItem(at: out) }
+        let exported = AVAssetImageGenerator(asset: AVURLAsset(url: out))
+        exported.requestedTimeToleranceBefore = .zero
+        exported.requestedTimeToleranceAfter = .zero
+        let frame = try await exported.image(at: CMTime(seconds: 3, preferredTimescale: 600)).image
+        XCTAssertGreaterThan(meanLuma(frame), 60, "exported frame is black")
     }
 }

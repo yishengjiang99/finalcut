@@ -603,8 +603,7 @@ extension EditorViewModel {
     /// timeline-seconds semantics are unambiguous; on a multi-clip project the model
     /// is told to use the clip tools instead.
     func executeLegacyToolOnProject(_ call: ClientToolCall) async -> ClientToolResult? {
-        guard let project = timelineProject,
-              project.videoClips.count > 1 || !project.audioTracks.isEmpty else { return nil }
+        guard editStack?.isTimelineProject == true, let project = timelineProject else { return nil }
         let args = call.arguments
         let selected = project.selectedClipID.flatMap { project.clip($0) } ?? project.videoClips.first
         func done(_ command: ProjectCommand) async -> ClientToolResult {

@@ -29,7 +29,7 @@ final class ComposerMicTests: XCTestCase {
     func testComposerWithMicFitsNarrowPhones() {
         for width in [375.0, 320.0] {
             for status in [DictationController.Status.idle, .permissionDenied] {
-                let view = ComposerView(text: .constant(""), photosPickerItem: .constant(nil), onSend: {},
+                let view = ComposerView(text: .constant(""), importPickerItems: .constant([]), onSend: {},
                                         dictation: DictationController(status: status))
                 let host = UIHostingController(rootView: view)
                 let size = host.sizeThatFits(in: CGSize(width: width, height: 400))

@@ -22,7 +22,8 @@ struct TimelineView: View {
     /// Ruler position while a scrub drag is in flight; the model's playhead otherwise.
     @State private var scrubPosition: Double?
     @State private var showAudioImporter = false
-    @State private var thumbnails: [UUID: [UIImage]] = [:]
+    /// Filmstrip frames per clip and source range (a trimmed clip gets fresh frames).
+    @State private var thumbnails: [ThumbnailKey: [UIImage]] = [:]
     @State private var zoom: Double = 1
     @State private var zoomAnchor: Double? = nil
     @State private var trimClipID: UUID?
@@ -32,8 +33,10 @@ struct TimelineView: View {
     private var project: EditorProject? { model.timelineProject }
     private var duration: Double { project?.durationSeconds ?? model.editStack?.canvas.duration ?? 0 }
     private var pointsPerSecond: Double { 16 * zoom }
-    /// The playhead lives on the model (`seekSeconds`) so the seek_playhead tool moves it too.
-    private var playhead: Double { scrubPosition ?? model.seekSeconds ?? 0 }
+    /// The playhead lives on the model (`playhead`, which follows the preview's playback)
+    /// so the seek_playhead tool moves it too. Read here only at action time; the overlay
+    /// observes it, so playback doesn't re-render the lanes.
+    private var playhead: Double { scrubPosition ?? model.playhead.seconds }
     private var videoLaneHeight: CGFloat { compact ? 52 : 84 }
     private var audioLaneHeight: CGFloat { compact ? 26 : 40 }
 
@@ -126,7 +129,8 @@ struct TimelineView: View {
                         }
                     }
                     .frame(width: contentWidth, alignment: .leading)
-                    playheadOverlay
+                    PlayheadOverlay(clock: model.playhead, scrubPosition: scrubPosition,
+                                    pointsPerSecond: pointsPerSecond, label: timeLabel)
                 }
             }
             .simultaneousGesture(magnificationGesture)
@@ -172,7 +176,9 @@ struct TimelineView: View {
         .highPriorityGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    scrubPosition = min(max(0, Double(value.location.x) / pointsPerSecond), duration)
+                    let position = min(max(0, Double(value.location.x) / pointsPerSecond), duration)
+                    scrubPosition = position
+                    model.seekPlayhead(to: position, exact: false) // the preview follows the finger
                 }
                 .onEnded { _ in
                     if let scrubPosition { model.seekPlayhead(to: scrubPosition) }
@@ -180,24 +186,6 @@ struct TimelineView: View {
                 }
         )
         .accessibilityLabel("Playhead")
-    }
-
-    private var playheadOverlay: some View {
-        let x = CGFloat(playhead * pointsPerSecond)
-        return ZStack(alignment: .topLeading) {
-            Rectangle()
-                .fill(Color.red)
-                .frame(width: 2)
-            Text(timeLabel(playhead))
-                .font(.system(size: 9.5, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 44)
-                .padding(.vertical, 1.5)
-                .background(Capsule().fill(Color.red))
-                .offset(x: -22)
-        }
-        .offset(x: x - 1)
-        .allowsHitTesting(false)
     }
 
     private func timeLabel(_ t: Double) -> String {
@@ -226,7 +214,7 @@ struct TimelineView: View {
         let controlsHere = !compact && selectedVideoClip(project)?.id == clip.id
         let assetDuration = project.asset(clip.assetID)?.duration.seconds ?? clip.sourceEnd.seconds
         return ZStack(alignment: .bottomLeading) {
-            if let frames = thumbnails[clip.id], !frames.isEmpty {
+            if let frames = thumbnails[ThumbnailKey(clip)], !frames.isEmpty {
                 HStack(spacing: 1) {
                     ForEach(Array(frames.enumerated()), id: \.offset) { _, image in
                         Image(uiImage: image)
@@ -277,7 +265,7 @@ struct TimelineView: View {
         }
         .accessibilityLabel("Clip \(index + 1), \(String(format: "%.1f", outSeconds)) seconds")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .task {
+        .task(id: ThumbnailKey(clip)) {
             await loadThumbnails(for: clip, project: project, width: width)
         }
     }
@@ -286,7 +274,8 @@ struct TimelineView: View {
     /// filmstrip instead of one stretched thumbnail, at a decode size matched to the
     /// card so the frames stay legible.
     private func loadThumbnails(for clip: VideoClip, project: EditorProject, width: CGFloat) async {
-        guard thumbnails[clip.id] == nil, let asset = project.asset(clip.assetID) else { return }
+        let key = ThumbnailKey(clip)
+        guard thumbnails[key] == nil, let asset = project.asset(clip.assetID) else { return }
         let url = NativeComposer.resolveAssetURL(asset, in: project)
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
         generator.appliesPreferredTrackTransform = true
@@ -303,7 +292,7 @@ struct TimelineView: View {
             }
         }
         if !frames.isEmpty {
-            thumbnails[clip.id] = frames
+            thumbnails[key] = frames
         }
     }
 
@@ -579,5 +568,44 @@ struct TimelineView: View {
             Text(label).font(.caption2)
         }
         .foregroundStyle(AppTheme.textPrimary)
+    }
+}
+
+private struct ThumbnailKey: Hashable {
+    let clipID: UUID
+    let sourceStart: Double
+    let sourceEnd: Double
+
+    init(_ clip: VideoClip) {
+        clipID = clip.id
+        sourceStart = clip.sourceStart.seconds
+        sourceEnd = clip.sourceEnd.seconds
+    }
+}
+
+/// The red playhead line + time label. Observes the clock on its own so the player's
+/// time updates redraw only this, not the filmstrip lanes.
+private struct PlayheadOverlay: View {
+    @ObservedObject var clock: PlayheadClock
+    var scrubPosition: Double?
+    var pointsPerSecond: Double
+    var label: (Double) -> String
+
+    var body: some View {
+        let playhead = scrubPosition ?? clock.seconds
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .fill(Color.red)
+                .frame(width: 2)
+            Text(label(playhead))
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 44)
+                .padding(.vertical, 1.5)
+                .background(Capsule().fill(Color.red))
+                .offset(x: -22)
+        }
+        .offset(x: CGFloat(playhead * pointsPerSecond) - 1)
+        .allowsHitTesting(false)
     }
 }

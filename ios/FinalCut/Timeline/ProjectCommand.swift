@@ -39,6 +39,12 @@ enum ProjectCommand: Equatable, Sendable {
     // Project
     case setCanvas(width: Int, height: Int, fit: CanvasFit?)
     case selectClip(clipID: UUID?)
+
+    /// Selection changes what the timeline highlights, never what renders.
+    var isSelectionOnly: Bool {
+        if case .selectClip = self { return true }
+        return false
+    }
 }
 
 struct ProjectCommandResult: Equatable, Sendable {

@@ -24,7 +24,7 @@ final class TopBarLayoutTests: XCTestCase {
 
     private func fullBar(freeRemaining: Int? = 12) -> TopBarView {
         TopBarView(
-            photosPickerItem: .constant(nil),
+            importPickerItems: .constant([]),
             onExport: {},
             onUpgrade: {},
             exportVisible: true,
@@ -46,7 +46,7 @@ final class TopBarLayoutTests: XCTestCase {
     }
 
     func testHeaderWithoutMediaStaysOneRow() {
-        let bar = TopBarView(photosPickerItem: .constant(nil), onExport: {}, onUpgrade: {},
+        let bar = TopBarView(importPickerItems: .constant([]), onExport: {}, onUpgrade: {},
                              showUpgrade: true, freeRemaining: 12)
         for type in sizes {
             let size = fittingSize(bar, width: 375, type: type)
