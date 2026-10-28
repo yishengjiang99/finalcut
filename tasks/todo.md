@@ -29,3 +29,11 @@ Deliberately not exposed: Photos/Files import (needs the user's picker), New pro
 ## Review
 
 <!-- Add review notes here after completing tasks -->
+
+## Web `concat_videos` (2026-10-27)
+- [x] Engine: `buildConcatArgs` (ops/multi.js) + `concatClips` (ffmpegEngine.js), hard-cut join with the transition normalization
+- [x] Web-only tool `concat_videos` in v2.js (not tools.js: no schema bump, iOS unaffected) + guidance
+- [x] Client sends `clips` [{id,label}] (clientTurn.js); server validates (`validateClips`) and adds a context line for the web profile only
+- [x] App.jsx `project.listClips/loadClips` via a ref so clips added mid-turn count
+- [x] Tests: concat.test.js; v2-api web tool list; full `vitest --run` passes (1171)
+- Review: v2-api's tool count was already stale (48 vs 49 at HEAD); corrected to 49. Not yet exercised in a real browser with ffmpeg.wasm.
