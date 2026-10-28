@@ -5,19 +5,15 @@ date: 2026-10-28
 publish: true
 product: finalcap
 keyword: Chinese captions
-hero: timeline-chinese-captions.jpg
-heroAlt: FinalCap iPhone screen with a multi-clip timeline, playhead at 0:11, and a chat bubble asking for Chinese captions translated from the video
 tags: [FinalCap, iPhone, captions, timeline]
 properNouns: [FinalCap, iPhone]
 ---
 
 FinalCap on iPhone now has a timeline that shows every clip, and it can turn the speech in a video into Chinese captions. You type the request in the chat and watch the progress.
 
-![FinalCap iPhone editor: four clips on a timeline, a red playhead at 0:11, and a chat message asking for Chinese captions translated from what is said in the video](timeline-chinese-captions.jpg "The iPhone editor with the timeline open and a translation in progress.")
-
 ## The timeline shows every clip
 
-The timeline lists the clips in order with their lengths. In the screen above the project is 41.5 seconds long with four clips and no audio track. You can drag the ruler to scrub, and pinch to zoom. Tools under the timeline let you split a clip, duplicate it, move it left or right, change its speed, or add a transition.
+The timeline lists the clips in order with their lengths. In the screen the project is 41.5 seconds long with four clips and no audio track. You can drag the ruler to scrub, and pinch to zoom. Tools under the timeline let you split a clip, duplicate it, move it left or right, change its speed, or add a transition.
 
 The playhead sits at 0:11 on the third clip, which is 15.0 seconds long. The other clips are 4.4 seconds and 10.6 seconds.
 
