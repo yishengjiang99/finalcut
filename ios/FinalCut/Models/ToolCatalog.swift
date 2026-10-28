@@ -204,13 +204,14 @@ enum ToolCatalog {
 
     private static func basePlan(tool rawName: String, arguments: [String: JSONValue], mediaDuration: Double?) -> Plan {
         let tool = canonicalName(rawName)
+        // Known web tools with no iOS path say so, rather than looking unknown.
+        if unavailableOnIOS.contains(tool) {
+            return .reject(error: "not_available_on_ios")
+        }
         guard requiredArgs[tool] != nil else { return .reject(error: "unknown_tool") }
         let missing = missingRequiredArgs(tool: tool, arguments: arguments)
         if !missing.isEmpty {
             return .reject(error: "missing_required_args: \(missing.joined(separator: ", "))")
-        }
-        if unavailableOnIOS.contains(tool) {
-            return .reject(error: "not_available_on_ios")
         }
         switch tool {
         case "get_video_dimensions", "get_supported_formats":
