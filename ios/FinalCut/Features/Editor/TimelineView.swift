@@ -21,7 +21,12 @@ struct TimelineView: View {
 
     /// Ruler position while a scrub drag is in flight; the model's playhead otherwise.
     @State private var scrubPosition: Double?
+    /// Horizontal scroll of the lanes. A plain reference in @State (not observed here), so
+    /// scrolling redraws only the ruler and playhead, which observe it.
+    @State private var scrollOffset = TimelineScrollOffset()
     @State private var showAudioImporter = false
+    /// Short feedback for a refused action (e.g. Split at a clip edge).
+    @State private var notice: String?
     /// Filmstrip frames per clip and source range (a trimmed clip gets fresh frames).
     @State private var thumbnails: [ThumbnailKey: [UIImage]] = [:]
     @State private var zoom: Double = 1
@@ -114,32 +119,54 @@ struct TimelineView: View {
         }
     }
 
-    // MARK: Lanes (one shared scroll view: ruler + video + audio stay in sync)
+    // MARK: Lanes (one shared scroll view: video + audio stay in sync)
 
+    /// The ruler sits OUTSIDE the scroll view, tracking its offset: inside it, a scrollable
+    /// timeline (any clip wider than the screen) took every horizontal drag and the ruler
+    /// never scrubbed. The playhead line is drawn over ruler and lanes alike.
     private func lanesStack(_ project: EditorProject) -> some View {
         let contentWidth = CGFloat(max(duration * pointsPerSecond, 1))
         return ZStack(alignment: .topLeading) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 6) {
+                TimelineRuler(scroll: scrollOffset, duration: duration, pointsPerSecond: pointsPerSecond,
+                              step: rulerStep, label: timeLabel,
+                              onScrub: { seconds in
+                                  let position = min(max(0, seconds), duration)
+                                  scrubPosition = position
+                                  model.seekPlayhead(to: position, exact: false) // the preview follows the finger
+                              },
+                              onEnd: {
+                                  if let scrubPosition { model.seekPlayhead(to: scrubPosition) }
+                                  scrubPosition = nil
+                              })
+                ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 6) {
-                        ruler(width: contentWidth)
                         videoLane(project)
                         ForEach(project.audioTracks) { track in
                             audioTrackBlock(track, project: project, contentWidth: contentWidth)
                         }
                     }
                     .frame(width: contentWidth, alignment: .leading)
-                    PlayheadOverlay(clock: model.playhead, scrubPosition: scrubPosition,
-                                    pointsPerSecond: pointsPerSecond, label: timeLabel)
+                    .background(GeometryReader { geometry in
+                        Color.clear.preference(key: TimelineScrollKey.self,
+                                               value: -geometry.frame(in: .named(Self.scrollSpace)).minX)
+                    })
                 }
+                .coordinateSpace(name: Self.scrollSpace)
+                .onPreferenceChange(TimelineScrollKey.self) { x in scrollOffset.x = x }
+                .simultaneousGesture(magnificationGesture)
             }
-            .simultaneousGesture(magnificationGesture)
+            PlayheadOverlay(clock: model.playhead, scroll: scrollOffset, scrubPosition: scrubPosition,
+                            pointsPerSecond: pointsPerSecond, label: timeLabel)
         }
+        .clipped()
         .contentShape(Rectangle())
         .onTapGesture {
             if compact { onExpand?() }
         }
     }
+
+    private static let scrollSpace = "TimelineLanes"
 
     private var magnificationGesture: some Gesture {
         MagnificationGesture()
@@ -153,39 +180,6 @@ struct TimelineView: View {
     private var rulerStep: Double {
         let target = 48 / max(pointsPerSecond, 1)
         return [1, 2, 5, 10, 15, 30, 60].first { $0 >= target } ?? 60
-    }
-
-    private func ruler(width: CGFloat) -> some View {
-        let ticks = Array(stride(from: 0.0, through: max(duration, rulerStep), by: rulerStep))
-        return ZStack(alignment: .topLeading) {
-            Color.clear
-            ForEach(ticks, id: \.self) { t in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(timeLabel(t))
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(AppTheme.textSecondary)
-                    Rectangle()
-                        .fill(AppTheme.textSecondary.opacity(0.6))
-                        .frame(width: 1, height: 5)
-                }
-                .offset(x: CGFloat(t * pointsPerSecond))
-            }
-        }
-        .frame(width: width, height: 24, alignment: .leading)
-        .contentShape(Rectangle())
-        .highPriorityGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let position = min(max(0, Double(value.location.x) / pointsPerSecond), duration)
-                    scrubPosition = position
-                    model.seekPlayhead(to: position, exact: false) // the preview follows the finger
-                }
-                .onEnded { _ in
-                    if let scrubPosition { model.seekPlayhead(to: scrubPosition) }
-                    scrubPosition = nil
-                }
-        )
-        .accessibilityLabel("Playhead")
     }
 
     private func timeLabel(_ t: Double) -> String {
@@ -347,13 +341,21 @@ struct TimelineView: View {
     private func videoClipControls(_ clip: VideoClip, project: EditorProject) -> some View {
         let index = project.clipIndex(clip.id) ?? 0
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Clip \(index + 1) of \(project.videoClips.count) · \(String(format: "%.1fs", clip.outputDuration.seconds))")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.textSecondary)
+            HStack(spacing: 8) {
+                Text("Clip \(index + 1) of \(project.videoClips.count) · \(String(format: "%.1fs", clip.outputDuration.seconds))")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                if let notice {
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.danger)
+                        .lineLimit(1)
+                }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
                     controlButton("Split", "scissors") {
-                        await model.performTimelineCommand(.splitVideoClip(clipID: clip.id, atProjectTime: playhead))
+                        await splitAtPlayhead(project)
                     }
                     controlButton("Duplicate", "plus.square.on.square") {
                         await model.performTimelineCommand(.duplicateVideoClip(clipID: clip.id))
@@ -401,6 +403,27 @@ struct TimelineView: View {
                 }
                 .padding(.vertical, 2)
             }
+        }
+    }
+
+    /// Splits the clip under the playhead (not the selected one, which may be elsewhere).
+    /// A refused split — the playhead on or too close to a clip edge — says why instead of
+    /// doing nothing.
+    private func splitAtPlayhead(_ project: EditorProject) async {
+        let time = CMTime(seconds: playhead, preferredTimescale: 600)
+        let entry = project.layout.last { $0.start <= time && time < $0.end } ?? project.layout.last
+        guard let entry,
+              await model.performTimelineCommand(.splitVideoClip(clipID: entry.clipID, atProjectTime: playhead)) != nil else {
+            show("Move the playhead inside a clip to split")
+            return
+        }
+    }
+
+    private func show(_ message: String) {
+        notice = message
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if notice == message { notice = nil }
         }
     }
 
@@ -587,6 +610,7 @@ private struct ThumbnailKey: Hashable {
 /// time updates redraw only this, not the filmstrip lanes.
 private struct PlayheadOverlay: View {
     @ObservedObject var clock: PlayheadClock
+    @ObservedObject var scroll: TimelineScrollOffset
     var scrubPosition: Double?
     var pointsPerSecond: Double
     var label: (Double) -> String
@@ -605,7 +629,58 @@ private struct PlayheadOverlay: View {
                 .background(Capsule().fill(Color.red))
                 .offset(x: -22)
         }
-        .offset(x: CGFloat(playhead * pointsPerSecond) - 1)
+        .offset(x: CGFloat(playhead * pointsPerSecond) - scroll.x - 1)
         .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Playhead time")
+        .accessibilityValue(label(playhead))
+    }
+}
+
+final class TimelineScrollOffset: ObservableObject {
+    @Published var x: CGFloat = 0
+}
+
+private struct TimelineScrollKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// Time ruler above the lanes, offset to match their scroll. Drag anywhere on it to scrub.
+private struct TimelineRuler: View {
+    @ObservedObject var scroll: TimelineScrollOffset
+    var duration: Double
+    var pointsPerSecond: Double
+    var step: Double
+    var label: (Double) -> String
+    var onScrub: (Double) -> Void
+    var onEnd: () -> Void
+
+    var body: some View {
+        let ticks = Array(stride(from: 0.0, through: max(duration, step), by: step))
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(ticks, id: \.self) { t in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label(t))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppTheme.textSecondary)
+                    Rectangle()
+                        .fill(AppTheme.textSecondary.opacity(0.6))
+                        .frame(width: 1, height: 5)
+                }
+                .offset(x: CGFloat(t * pointsPerSecond) - scroll.x)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .leading)
+        .clipped()
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in onScrub(Double(value.location.x + scroll.x) / pointsPerSecond) }
+                .onEnded { _ in onEnd() }
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Playhead")
     }
 }

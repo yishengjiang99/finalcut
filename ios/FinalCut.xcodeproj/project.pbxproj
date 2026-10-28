@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA11BB22CC33DD44EE55FF01 /* TimelineScrubUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF02 /* TimelineScrubUITests.swift */; };
 		029FF0AD96E5E8AE02A9809F /* NoUploadWordingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */; };
 		0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048CDA22B7176DD87977ECEB /* EditorProject.swift */; };
 		08B2347A4DD41246349469D9 /* ClientChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A430886E967E8C735A5982D4 /* ClientChat.swift */; };
@@ -122,6 +123,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AA11BB22CC33DD44EE55FF02 /* TimelineScrubUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrubUITests.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		048CDA22B7176DD87977ECEB /* EditorProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorProject.swift; sourceTree = "<group>"; };
 		0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardAndMicUITests.swift; sourceTree = "<group>"; };
@@ -422,6 +424,7 @@
 			children = (
 				8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */,
 				0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */,
+				AA11BB22CC33DD44EE55FF02 /* TimelineScrubUITests.swift */,
 			);
 			path = FinalCutUITests;
 			sourceTree = "<group>";
@@ -604,6 +607,7 @@
 			files = (
 				029FF0AD96E5E8AE02A9809F /* NoUploadWordingUITests.swift in Sources */,
 				FBE881DDA0C9EB05D6BD3BDD /* KeyboardAndMicUITests.swift in Sources */,
+				AA11BB22CC33DD44EE55FF01 /* TimelineScrubUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
