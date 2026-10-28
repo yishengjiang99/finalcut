@@ -14,6 +14,7 @@ import jwt
 
 APPLE_ID = os.environ.get("APP_APPLE_ID", "6815060815").strip()
 BUNDLE_HINT = "com.ragnus.w2"
+VERSION_STRING = os.environ.get("VERSION_STRING", "1.0").strip()
 SHOT_DIR = Path(os.environ.get("SHOT_DIR", "docs/asc/screenshots/en-US"))
 
 LISTING_JSON = Path(os.environ.get("LISTING_JSON", "docs/asc/listing.en-US.json"))
@@ -167,10 +168,10 @@ def main():
     version = None
     for v in vers.get("data", []):
         print("VERSION", v["id"], v["attributes"].get("versionString"), v["attributes"].get("appStoreState"))
-        if v["attributes"].get("versionString") == "1.0":
+        if v["attributes"].get("versionString") == VERSION_STRING:
             version = v
     if version is None:
-        st, created = api("POST", "/v1/appStoreVersions", {"data": {"type": "appStoreVersions", "attributes": {"platform": "IOS", "versionString": "1.0"}, "relationships": {"app": {"data": {"type": "apps", "id": app_id}}}}})
+        st, created = api("POST", "/v1/appStoreVersions", {"data": {"type": "appStoreVersions", "attributes": {"platform": "IOS", "versionString": VERSION_STRING}, "relationships": {"app": {"data": {"type": "apps", "id": app_id}}}}})
         version = created["data"]
         print("created version", version["id"])
     version_id = version["id"]

@@ -44,6 +44,7 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           APP_APPLE_ID: "6815060815"
+          VERSION_STRING: "1.1"
           LISTING_JSON: docs/asc/listing.en-US.json
           SHOT_DIR: docs/asc/screenshots/en-US
           UPLOAD_SCREENSHOTS: ${{ inputs.screenshots }}
@@ -80,7 +81,7 @@ jobs:
             return r.json() if r.text else {}
           app=api('GET','/v1/apps?filter[bundleId]=com.ragnus.w2')['data'][0]
           aid=app['id']
-          ver=api('GET',f'/v1/apps/{aid}/appStoreVersions?filter[platform]=IOS&filter[versionString]=1.0')['data'][0]
+          ver=api('GET',f'/v1/apps/{aid}/appStoreVersions?filter[platform]=IOS&filter[versionString]=1.1')['data'][0]
           vid=ver['id']
           api('PATCH',f'/v1/appStoreVersions/{vid}',{'data':{'type':'appStoreVersions','id':vid,'attributes':{'copyright':'2026 Yisheng Jiang'}}})
           print('copyright set')

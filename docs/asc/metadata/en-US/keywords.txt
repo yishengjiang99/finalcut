@@ -1,1 +1,1 @@
-subtitles,cut,crop,clip,filter,color,speed,slowmo,reels,vlog,export,looks,montage,share,audio,fade
+subtitles,translate,chinese,trim,crop,maker,reels,vlog,speed,filter,color,text,music,timeline,merge
