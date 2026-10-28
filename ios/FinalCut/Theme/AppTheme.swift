@@ -16,12 +16,13 @@ enum AppTheme {
 }
 
 /// Feature switches.
-/// The project history list is turned off (2026-10-27, at the user's word):
-/// the Projects button is hidden, so the library can't be opened from the
-/// editor. ProjectLibrary code and all saved projects stay in place — flip
-/// this back to re-enable. (timelineEnabled exists as a switch from the same
-/// day and is ON — the timeline itself was never ordered off.)
+/// The project history list was turned off on 2026-10-27 and re-enabled on
+/// 2026-10-28 (both at the user's word) to try again after PR #128 fixed
+/// the timeline preview/export routing. projectLibraryEnabled controls the
+/// Projects button in the top bar — off hides it, so the library can't be
+/// opened from the editor. (timelineEnabled exists as a switch from the
+/// same day and is ON — the timeline itself was never ordered off.)
 enum FeatureFlags {
     static let timelineEnabled = true
-    static let projectLibraryEnabled = false
+    static let projectLibraryEnabled = true
 }
