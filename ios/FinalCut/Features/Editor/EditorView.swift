@@ -675,6 +675,11 @@ final class EditorViewModel: ObservableObject {
     private func apply(_ stack: EditStack) {
         editStack = stack
         localVideoURL = stack.base
+        // Undo/redo restore the stack's project snapshot too — persist it,
+        // or the undone edit resurrects from project.json on the next launch.
+        // (Mutations save via performTimelineCommand; undo/redo land here.)
+        // No-op for legacy stacks: saveTimelineProject guards on project.
+        saveTimelineProject()
         Task { await refreshPreview() }
     }
 
