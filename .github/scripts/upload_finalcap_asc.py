@@ -187,7 +187,14 @@ def main():
 
     st, infos = api("GET", f"/v1/apps/{app_id}/appInfos")
     if infos.get("data"):
-        info_id = infos["data"][0]["id"]
+        # The editable appInfo is the one NOT locked by a live version; data[0]
+        # can be a READY_FOR_SALE appInfo whose localizations reject PATCHes
+        # with 409 INVALID_STATE (hit on the first 1.1 upload run).
+        info = next((i for i in infos["data"]
+                     if (i["attributes"].get("state") or i["attributes"].get("appStoreState"))
+                     not in ("READY_FOR_DISTRIBUTION", "READY_FOR_SALE")),
+                    infos["data"][0])
+        info_id = info["id"]
         st, info_locs = api("GET", f"/v1/appInfos/{info_id}/appInfoLocalizations")
         info_loc = next((L for L in info_locs.get("data", []) if L["attributes"].get("locale") == "en-US"), None)
         attrs = {"name": NAME, "subtitle": SUBTITLE, "privacyPolicyUrl": PRIVACY_URL}
