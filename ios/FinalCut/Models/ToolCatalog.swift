@@ -93,6 +93,8 @@ enum ToolCatalog {
         "apply_audio_ducking": ["trackId"],
         "set_project_canvas": ["width", "height"],
         "batch_timeline_edits": ["operations"],
+        "select_timeline_clip": [],
+        "seek_playhead": ["seconds"],
         "apply_color_filter": ["filter"],
         "adjust_contrast": ["contrast"],
         "flip_video_vertical": [],

@@ -19,7 +19,8 @@ struct TimelineView: View {
     /// Called when the compact strip is tapped.
     var onExpand: (() -> Void)? = nil
 
-    @State private var playhead: Double = 0
+    /// Ruler position while a scrub drag is in flight; the model's playhead otherwise.
+    @State private var scrubPosition: Double?
     @State private var showAudioImporter = false
     @State private var thumbnails: [UUID: [UIImage]] = [:]
     @State private var zoom: Double = 1
@@ -31,6 +32,8 @@ struct TimelineView: View {
     private var project: EditorProject? { model.timelineProject }
     private var duration: Double { project?.durationSeconds ?? model.editStack?.canvas.duration ?? 0 }
     private var pointsPerSecond: Double { 16 * zoom }
+    /// The playhead lives on the model (`seekSeconds`) so the seek_playhead tool moves it too.
+    private var playhead: Double { scrubPosition ?? model.seekSeconds ?? 0 }
     private var videoLaneHeight: CGFloat { compact ? 52 : 84 }
     private var audioLaneHeight: CGFloat { compact ? 26 : 40 }
 
@@ -169,10 +172,11 @@ struct TimelineView: View {
         .highPriorityGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    playhead = min(max(0, Double(value.location.x) / pointsPerSecond), duration)
+                    scrubPosition = min(max(0, Double(value.location.x) / pointsPerSecond), duration)
                 }
                 .onEnded { _ in
-                    model.seekSeconds = playhead
+                    if let scrubPosition { model.seekPlayhead(to: scrubPosition) }
+                    scrubPosition = nil
                 }
         )
         .accessibilityLabel("Playhead")

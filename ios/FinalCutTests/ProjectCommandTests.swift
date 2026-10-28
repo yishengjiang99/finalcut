@@ -122,4 +122,72 @@ final class ProjectCommandTests: XCTestCase {
         XCTAssertEqual(f.project.audioClip(a)?.clip.timelineStart.seconds ?? -1, 3, accuracy: 0.001)
         XCTAssertTrue(f.project.isValid)
     }
+
+    /// The model-facing summary reports the audio selection as well as the video one,
+    /// so "make this audio quieter" resolves after the user taps an audio clip.
+    func testSummaryReportsBothSelections() throws {
+        var f = makeFixture()
+        let clip = try f.session.perform(.appendVideoClip(assetID: f.beach.id, sourceStart: nil, sourceEnd: nil)).createdID!
+        let track = try f.session.perform(.createAudioTrack(name: "Music", kind: .music)).createdID!
+        let audio = try f.session.perform(.insertAudioClip(trackID: track, assetID: f.music.id, timelineStart: 0,
+                                                           sourceStart: nil, sourceDuration: 10, gain: nil, loop: false, repeatUntil: nil)).createdID!
+        _ = try f.session.perform(.selectClip(clipID: clip))
+        _ = try f.session.perform(.selectClip(clipID: audio))
+        let summary = f.project.summary()
+        XCTAssertEqual(summary.selectedClipID, clip.uuidString)
+        XCTAssertEqual(summary.selectedAudioClipID, audio.uuidString)
+        XCTAssertNil(summary.playheadSeconds) // view state: the editor adds it to the request
+    }
+
+    // MARK: Timeline view tools (select_timeline_clip / seek_playhead) through the executor
+
+    @MainActor
+    private func makeTimelineModel() async throws -> (EditorViewModel, EditorProject) {
+        let model = EditorViewModel()
+        model.localVideoURL = try XCTUnwrap(Bundle.main.url(forResource: "finalcap-test-video", withExtension: "mp4"))
+        let ensured = await model.ensureTimelineProject()
+        let project = try XCTUnwrap(ensured)
+        return (model, project)
+    }
+
+    @MainActor
+    func testSelectTimelineClipToolSelectsAndBumpsRevision() async throws {
+        let (model, project) = try await makeTimelineModel()
+        let clipID = try XCTUnwrap(project.videoClips.first?.id)
+        let result = await model.executeToolCall(ClientToolCall(id: "s1", name: "select_timeline_clip",
+                                                                arguments: ["clipId": .string(clipID.uuidString),
+                                                                            "expectedRevision": .number(Double(project.revision))]))
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(model.timelineProject?.selectedClipID, clipID)
+        XCTAssertEqual(result.output?["projectRevision"], .number(Double(project.revision + 1)))
+
+        let missing = await model.executeToolCall(ClientToolCall(id: "s2", name: "select_timeline_clip",
+                                                                 arguments: ["clipId": .string(UUID().uuidString)]))
+        XCTAssertFalse(missing.ok)
+        XCTAssertEqual(missing.error, "clip_not_found")
+        XCTAssertEqual(model.timelineProject?.selectedClipID, clipID)
+    }
+
+    @MainActor
+    func testSeekPlayheadToolMovesPlayheadWithoutEditingTheProject() async throws {
+        let (model, project) = try await makeTimelineModel()
+        let result = await model.executeToolCall(ClientToolCall(id: "p1", name: "seek_playhead", arguments: ["seconds": .number(1.5)]))
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(model.seekSeconds ?? -1, 1.5, accuracy: 0.001)
+        XCTAssertEqual(result.output?["playheadSeconds"], .number(1.5))
+        XCTAssertEqual(model.timelineProject?.revision, project.revision) // view state only
+
+        // Past the end clamps to the project duration; negative is rejected and changes nothing.
+        let far = await model.executeToolCall(ClientToolCall(id: "p2", name: "seek_playhead", arguments: ["seconds": .number(10_000)]))
+        XCTAssertTrue(far.ok)
+        XCTAssertEqual(model.seekSeconds ?? -1, project.durationSeconds, accuracy: 0.001)
+        let negative = await model.executeToolCall(ClientToolCall(id: "p3", name: "seek_playhead", arguments: ["seconds": .number(-1)]))
+        XCTAssertFalse(negative.ok)
+        XCTAssertEqual(negative.error, "invalid_arguments")
+        XCTAssertEqual(model.seekSeconds ?? -1, project.durationSeconds, accuracy: 0.001)
+
+        // The next chat request tells the model where the playhead is.
+        let media = await model.currentMedia()
+        XCTAssertEqual(media?.project?.playheadSeconds ?? -1, project.durationSeconds, accuracy: 0.001)
+    }
 }

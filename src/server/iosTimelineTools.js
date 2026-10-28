@@ -293,6 +293,19 @@ export const IOS_TIMELINE_TOOLS = deepFreeze([
       ...mutationProps,
     }, ['width', 'height']),
 
+  // ── Timeline view (what the user sees: selection + playhead) ──────────────
+  tool('select_timeline_clip',
+    'Select ONE clip on the timeline, exactly as if the user tapped it: a video clip ID sets the selected video clip, an audio clip ID sets the selected audio clip (each has its own selection). Omit clipId to clear both selections. Use it to show the user which clip you mean or are about to edit; it changes nothing about the media itself.',
+    {
+      clipId: id('Optional. Stable ID of a video clip or an audio clip (from the project context or get_project_timeline). Omit to clear the selection. Never invent an ID.'),
+      ...mutationProps,
+    }),
+  tool('seek_playhead',
+    'Move the playhead (and the preview) to a PROJECT-timeline position in seconds, as if the user dragged the ruler. Values past the end clamp to the project duration. This is view state only: it does not edit the project or change its revision. The result reports the actual playheadSeconds.',
+    {
+      seconds: seconds('Target position in PROJECT-timeline seconds.'),
+    }, ['seconds']),
+
   // ── Batch ─────────────────────────────────────────────────────────────────
   tool('batch_timeline_edits',
     'Apply several INDEPENDENT timeline edits as ONE device transaction: the device validates the whole batch first and applies all-or-nothing — if any operation is invalid, none are applied and the result names the failing operation index. Prefer this over many sequential calls when the edits do not depend on each other\'s results (it saves tool rounds). Do NOT batch when a later edit needs an ID created by an earlier one (e.g. adding a clip to a track you are also creating) — do those sequentially. Max 20 operations.',
@@ -442,12 +455,12 @@ export function validateBatchOperations(args) {
   return null;
 }
 
-/** Timeline tools that change the project (batchable; inspection tools are not). */
+/** Timeline tools that change the project (batchable; inspection and view-only tools are not). */
 export const TIMELINE_MUTATION_TOOL_NAMES = deepFreeze(
   IOS_TIMELINE_TOOL_NAMES.filter(n => ![
     'get_project_timeline', 'list_project_assets', 'get_clip_details',
     'get_audio_track_details', 'get_project_info', 'get_project_duration',
-    'batch_timeline_edits',
+    'seek_playhead', 'batch_timeline_edits',
   ].includes(n)),
 );
 
@@ -465,6 +478,7 @@ export const IOS_TIMELINE_TOOL_MEDIA_TYPES = deepFreeze(
 export const TIMELINE_AGENT_INSTRUCTIONS = [
   'The media being edited is a multi-clip PROJECT on the device, not a single file. The device is the source of truth: the project context is a snapshot, and inspection tools (get_project_timeline, list_project_assets, get_clip_details, get_audio_track_details) read live device state.',
   'INSPECT BEFORE UNCERTAIN CHANGES: when the user refers to a clip by subject, label, or order ("the beach clip", "the second clip"), resolve it from the project context or an inspection tool. Never invent an asset, clip, or track ID. "The second clip" means the current TIMELINE order, not the import order; after reordering, use the updated arrangement.',
+  'WHAT THE USER IS LOOKING AT: "this clip" / "the selected clip" is selectedClipId; "this audio" / "the selected music clip" is selectedAudioClipId; "here" / "at the playhead" / "now" is playheadSeconds (PROJECT-timeline seconds). When the one a request needs is null, ask or inspect — never guess. select_timeline_clip and seek_playhead change what the user sees; use them when the user asks to select, show, or jump to something.',
   'RESPECT EDITING SCOPE: distinguish a source asset, one video clip, the selected clip, one audio clip, a whole logical audio track, and the entire project. A clip-specific request must affect only that clip. "Mute the audio in clip three" targets that clip\'s ORIGINAL audio (set_clip_original_audio), never the music or narration tracks.',
   'PRESERVE UNSPECIFIED PROPERTIES: apply minimal, targeted mutations. "Lower the music to 20%" changes only the music track/clip gain — do not mute dialogue, reorder clips, or remove other tracks. "Add another soundtrack" ADDS a track/clip; never delete or replace an existing soundtrack unless asked.',
   'TIMING: sourceStart/sourceEnd/sourceDuration are SOURCE-media seconds; timelineStart/atProjectTime are PROJECT-timeline seconds. Trimming or speeding a video clip shifts later video clips, but independently placed audio clips do not move — re-check audio placement after changing video lengths when sync matters. Do not place an audio clip beyond the project duration unless the user asked for that.',

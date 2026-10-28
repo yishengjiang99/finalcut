@@ -1294,6 +1294,24 @@ export const toolFunctions = {
     }
   },
   
+  // `project` is { loadClips(ids) -> [{ bytes, mimeType }] } from the editor; clip ids come from the model's clip list.
+  concat_videos: async (args, videoFileData, setVideoFileData, addMessage, project) => {
+    try {
+      const ids = Array.isArray(args.clipIds) ? args.clipIds : [];
+      if (ids.length < 2) throw new Error('clipIds needs at least two clip ids, in the order they should play.');
+      if (!project?.loadClips) throw new Error('The clips are not available.');
+      const clips = await project.loadClips(ids);
+      const data = await engine.concatClips(clips);
+      lastExecution.executedOn = 'browser';
+      setVideoFileData(data);
+      addMessage({ text: `Joined ${clips.length} clips:`, videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
+      return `Joined ${clips.length} clips into one video.`;
+    } catch (error) {
+      addMessage({ text: 'Error joining videos: ' + error.message });
+      return 'Failed to join videos: ' + error.message;
+    }
+  },
+
   add_video_transition: async (args, videoFileData, setVideoFileData, addMessage, uploadedVideos) => {
     try {
       // Use uploaded videos if available, otherwise expect videos in args

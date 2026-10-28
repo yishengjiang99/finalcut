@@ -313,7 +313,8 @@ final class EditorViewModel: ObservableObject {
     /// Set by "New project" in the timeline: the next base import starts a fresh
     /// durable project instead of adapting the current session.
     var startNewProjectOnNextImport = false
-    /// Playhead target (seconds) requested from the timeline scrubber.
+    /// Timeline playhead (project seconds): set by the ruler scrubber and the
+    /// seek_playhead tool via `seekPlayhead(to:)`; the preview seeks when it changes.
     @Published var seekSeconds: Double?
     /// Idempotency cache for timeline tool calls (server contract): a retried call
     /// carrying the same key returns the original result without re-applying.
@@ -722,6 +723,7 @@ final class EditorViewModel: ObservableObject {
         importError = nil
         importStatus = nil
         startNewProjectOnNextImport = true
+        seekSeconds = nil
         state = .empty
     }
 
@@ -1265,6 +1267,8 @@ final class EditorViewModel: ObservableObject {
                 return ClientMedia(type: "image", width: canvas.width, height: canvas.height)
             }
             let fps = try? await AVURLAsset(url: stack.base).loadTracks(withMediaType: .video).first?.load(.nominalFrameRate)
+            var project = stack.project?.summary()
+            project?.playheadSeconds = seekSeconds
             return ClientMedia(
                 type: "video",
                 duration: stack.project?.durationSeconds ?? canvas.duration,
@@ -1272,7 +1276,7 @@ final class EditorViewModel: ObservableObject {
                 height: stack.project?.canvas.height ?? canvas.height,
                 fps: fps.flatMap { $0 > 0 ? Double($0) : nil },
                 hasAudio: canvas.hasAudio,
-                project: stack.project?.summary()
+                project: project
             )
         }
         if MediaMIME.isImage(url: url) {

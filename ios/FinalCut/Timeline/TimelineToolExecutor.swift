@@ -24,6 +24,7 @@ enum TimelineTools {
         "set_audio_clip_volume", "set_audio_track_volume", "mute_audio_track",
         "set_audio_clip_fade", "loop_audio_clip", "apply_audio_ducking",
         "set_project_canvas", "batch_timeline_edits",
+        "select_timeline_clip", "seek_playhead",
     ]
 
     static let inspectionNames: Set<String> = [
@@ -83,6 +84,17 @@ extension EditorViewModel {
 
         if TimelineTools.inspectionNames.contains(tool) {
             return inspection(tool, args: args, project: project)
+        }
+        // View state, not an edit: no revision gate, no idempotency, no undo entry.
+        if tool == "seek_playhead" {
+            guard let seconds = argNum(args, "seconds"), seconds.isFinite, seconds >= 0 else {
+                return failure("invalid_arguments")
+            }
+            let playhead = seekPlayhead(to: seconds)
+            return .success(on: .device, output: [
+                "playheadSeconds": .number((playhead * 1000).rounded() / 1000),
+                "projectRevision": .number(Double(project.revision)),
+            ])
         }
 
         // Idempotency: a retried mutation with a known key replays its result.
@@ -351,6 +363,11 @@ extension EditorViewModel {
         case "loop_audio_clip":
             guard let id = argID(args, "clipId") else { return .failure("invalid_arguments") }
             return .success(.loopAudioClip(clipID: id, repeatUntil: argNum(args, "repeatUntil")))
+        case "select_timeline_clip":
+            // Omitted clipId clears both selections (the same command a deselect uses).
+            guard args["clipId"] != nil else { return .success(.selectClip(clipID: nil)) }
+            guard let id = argID(args, "clipId") else { return .failure("invalid_arguments") }
+            return .success(.selectClip(clipID: id))
         case "set_project_canvas":
             guard let width = argNum(args, "width"), let height = argNum(args, "height") else { return .failure("invalid_arguments") }
             return .success(.setCanvas(width: Int(width), height: Int(height), fit: nil))

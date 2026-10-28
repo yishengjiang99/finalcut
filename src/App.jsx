@@ -571,6 +571,25 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     setVideoFileData(data);
   };
 
+  // The video clips of the project, for tools that combine clips (concat_videos). Reads a ref so a
+  // clip added earlier in the same turn is included.
+  const mediaListRef = useRef([]);
+  const project = {
+    listClips: () => mediaListRef.current
+      .filter(item => item.mimeType.startsWith('video/'))
+      .map(item => ({ id: String(item.id), label: item.label })),
+    loadClips: async (ids) => Promise.all(ids.map(async (id) => {
+      const item = mediaListRef.current.find(m => String(m.id) === String(id) && m.mimeType.startsWith('video/'));
+      if (!item) throw new Error(`Clip ${id} is not in the project.`);
+      let bytes = mediaBytesRef.current.get(item.id);
+      if (!bytes) {
+        bytes = new Uint8Array(await (await fetch(item.url)).arrayBuffer());
+        mediaBytesRef.current.set(item.id, bytes);
+      }
+      return { bytes, mimeType: item.mimeType };
+    })),
+  };
+
   const getVideoTitle = (videoType) => {
     return videoType === 'original' ? 'Original Video' : 'Processed Video';
   };
@@ -586,6 +605,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     setVideoFileData: setWorkingVideoFileData,
     addMessage,
     uploadedVideos,
+    project,
     refreshSampleAccessToken: () => getSampleAccessToken({ force: true }),
     onAuthExpired: () => setSessionExpired(true),
     onToolStart: (toolName, args) => setToolStage(toolStageText(toolName, args)),
@@ -778,6 +798,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       };
     }), [messages]);
 
+  mediaListRef.current = media;
   const mediaById = (id) => media.find(item => item.id === id) || null;
   const activeMedia = mediaById(activeMediaId);
 

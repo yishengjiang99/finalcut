@@ -107,11 +107,11 @@ describe('v2 config', () => {
 });
 
 describe('web toolset', () => {
-  it('offers every video tool in src/tools.js plus apply_edits and the FFmpeg fallback pair for a video', () => {
+  it('offers every video tool in src/tools.js plus apply_edits, concat_videos and the FFmpeg fallback pair for a video', () => {
     const names = webToolsFor({ mediaType: 'video' }).map(t => t.function.name);
     const videoTools = tools.map(t => t.function.name).filter(n => n !== 'convert_image_format'); // photo-only
-    expect(names).toEqual([...videoTools, 'apply_edits', SEARCH_CAPABILITIES_TOOL_NAME, RUN_FFMPEG_TOOL_NAME]);
-    expect(tools).toHaveLength(48);
+    expect(names).toEqual([...videoTools, 'apply_edits', 'concat_videos', SEARCH_CAPABILITIES_TOOL_NAME, RUN_FFMPEG_TOOL_NAME]);
+    expect(tools).toHaveLength(49);
   });
 
   it('offers only single-frame tools, and no FFmpeg fallback, for a photo', () => {

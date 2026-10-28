@@ -160,6 +160,7 @@ export function useCallAPI({
   setVideoFileData,
   addMessage,
   uploadedVideos,
+  project,
   refreshSampleAccessToken,
   onAuthExpired,
   onToolStart,
@@ -215,6 +216,7 @@ export function useCallAPI({
             setVideoFileData,
             addMessage,
             uploadedVideos,
+            project,
             onToolStart,
             onStatus: options.onStatus,
             nextId: () => messageIdCounterRef.current++,
@@ -459,7 +461,7 @@ export function useCallAPI({
     } finally {
       setIsCallingAPI(false); // Clear loading state after API call completes
     }
-  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos, refreshSampleAccessToken, onAuthExpired, onToolStart]);
+  }, [isSampleMode, sampleAccessToken, setIsCallingAPI, setProcessing, setMessages, messageIdCounterRef, videoFileData, setVideoFileData, addMessage, uploadedVideos, project, refreshSampleAccessToken, onAuthExpired, onToolStart]);
 
   return callAPI;
 }

@@ -78,6 +78,27 @@ export function validateMedia(media) {
  * ≤ MAX_THUMBNAILS items (else 400), each ≤ MAX_THUMBNAIL_BYTES decoded (else 413).
  * @returns {{ mime: string, dataUrl: string, bytes: number }[]}
  */
+export const MAX_CLIPS = 20;
+
+/**
+ * Validate `clips: [{ id, label }]`, the video clips the web editor holds (uploads and edit results).
+ * Returns a normalized array, empty when absent.
+ */
+export function validateClips(clips) {
+  if (clips === undefined || clips === null) return [];
+  if (!Array.isArray(clips) || clips.length > MAX_CLIPS) throw new ClientRequestError(`clips must be an array of at most ${MAX_CLIPS} items`);
+  return clips.map((clip) => {
+    if (!clip || typeof clip !== 'object' || typeof clip.id !== 'string' || !/^[\w.\-]{1,64}$/.test(clip.id)) {
+      throw new ClientRequestError('each clip needs a short string id');
+    }
+    return { id: clip.id, label: typeof clip.label === 'string' ? clip.label.replace(/[\r\n]+/g, ' ').slice(0, 80) : '' };
+  });
+}
+
+export function clipsContextText(clips) {
+  return `Clips in the project (oldest first; the current media is the one the next edit applies to): ${clips.map(c => `${c.id} = "${c.label}"`).join(', ')}.`;
+}
+
 export function parseThumbnails(thumbnails) {
   if (thumbnails === undefined || thumbnails === null) return [];
   if (!Array.isArray(thumbnails)) throw new ClientRequestError('thumbnails must be an array of base64 JPEG strings');

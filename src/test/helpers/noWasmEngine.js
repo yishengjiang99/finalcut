@@ -22,6 +22,7 @@ export async function noWasmEngine(importOriginal) {
     // Caption burn-in only ever runs in the browser; tests make it fail with mockRejectedValueOnce.
     burnSubtitles: vi.fn(async (_options, bytes) => new Uint8Array(10 + (bytes?.byteLength ?? bytes?.length ?? 0))),
     addAudioTrack: vi.fn(async () => new Uint8Array([7, 7, 7])),
+    concatClips: vi.fn(async (clips) => new Uint8Array(clips.length)),
     joinClips: vi.fn(async (_options, clips) => new Uint8Array(clips.length)),
     extractSpeechAudio: vi.fn(async () => new Uint8Array([82, 73, 70, 70])),
     thumbnail: async () => new Uint8Array([1]),

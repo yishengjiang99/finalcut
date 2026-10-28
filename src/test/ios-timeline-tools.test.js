@@ -4,6 +4,7 @@ import {
   IOS_TIMELINE_TOOLS,
   IOS_TIMELINE_TOOL_NAMES,
   TIMELINE_ERROR_CODES,
+  TIMELINE_AGENT_INSTRUCTIONS,
   TIMELINE_MUTATION_TOOL_NAMES,
   validateBatchOperations,
   validateTimelineToolArguments,
@@ -24,7 +25,7 @@ const EXPECTED_TOOLS = [
   'create_audio_track', 'add_audio_clip', 'move_audio_clip', 'trim_audio_clip',
   'remove_audio_clip', 'set_audio_clip_volume', 'set_audio_track_volume', 'mute_audio_track',
   'set_audio_clip_fade', 'loop_audio_clip', 'apply_audio_ducking', 'set_project_canvas',
-  'batch_timeline_edits',
+  'batch_timeline_edits', 'select_timeline_clip', 'seek_playhead',
 ];
 
 describe('timeline tool definitions', () => {
@@ -57,6 +58,22 @@ describe('timeline tool definitions', () => {
       'unsupported_on_device', 'resource_limit_exceeded', 'cancelled']) {
       expect(TIMELINE_ERROR_CODES).toContain(code);
     }
+  });
+
+  it('timeline view controls: selection is a revisioned edit, seeking is not', () => {
+    // Selecting goes through ProjectCommand.selectClip (bumps the revision, like a tap).
+    expect(TIMELINE_MUTATION_TOOL_NAMES).toContain('select_timeline_clip');
+    // The playhead is view state, not project state: no revision, never batched.
+    expect(TIMELINE_MUTATION_TOOL_NAMES).not.toContain('seek_playhead');
+    const seek = IOS_TIMELINE_TOOLS.find(t => t.function.name === 'seek_playhead').function;
+    expect(seek.parameters.properties).not.toHaveProperty('expectedRevision');
+    expect(seek.parameters.required).toEqual(['seconds']);
+  });
+
+  it('tells the agent how to resolve "this clip", "this audio" and "here"', () => {
+    expect(TIMELINE_AGENT_INSTRUCTIONS).toMatch(/selectedClipId/);
+    expect(TIMELINE_AGENT_INSTRUCTIONS).toMatch(/selectedAudioClipId/);
+    expect(TIMELINE_AGENT_INSTRUCTIONS).toMatch(/playheadSeconds/);
   });
 
   it('timeline tools are video-only and never leak into the web tool list', () => {
@@ -102,6 +119,16 @@ describe('validateTimelineToolArguments', () => {
     expect(validateTimelineToolArguments('set_audio_track_volume', { trackId: 'track-music', volume: 0.2 })).toBeNull();
     expect(validateTimelineToolArguments('get_project_timeline', {})).toBeNull();
     expect(validateTimelineToolArguments('reorder_video_clips', { orderedClipIds: ['a', 'b'] })).toBeNull();
+    expect(validateTimelineToolArguments('select_timeline_clip', { clipId: 'audio-1', expectedRevision: 3 })).toBeNull();
+    expect(validateTimelineToolArguments('select_timeline_clip', {})).toBeNull(); // clears the selection
+    expect(validateTimelineToolArguments('seek_playhead', { seconds: 12.5 })).toBeNull();
+  });
+
+  it('rejects malformed view-control calls', () => {
+    expect(validateTimelineToolArguments('seek_playhead', {})).toMatch(/seconds is required/);
+    expect(validateTimelineToolArguments('seek_playhead', { seconds: -1 })).toMatch(/>= 0/);
+    expect(validateTimelineToolArguments('seek_playhead', { seconds: 3, expectedRevision: 2 })).toMatch(/not a supported argument/);
+    expect(validateTimelineToolArguments('select_timeline_clip', { clipId: '' })).toMatch(/too short/);
   });
 
   it('rejects missing required args, wrong types, out-of-range values, and unknown keys', () => {

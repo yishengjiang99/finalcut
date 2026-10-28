@@ -65,6 +65,18 @@ soundtrack), `move_audio_clip`, `trim_audio_clip` (source range),
 
 Project: `set_project_canvas` (`width`, `height`).
 
+Timeline view (what the user sees): `select_timeline_clip` (`clipId?` — a
+video or audio clip ID, as if tapped; omit to clear both selections; a
+revisioned mutation like a tap, so it is batchable) and `seek_playhead`
+(`seconds`, project time, clamped to the duration). `seek_playhead` is view
+state only: no revision change, no `expectedRevision`/`idempotencyKey`, never
+batched; it returns `{ playheadSeconds, projectRevision }`.
+
+Snapshot fields that let the agent resolve deictic requests: `selectedClipId`
+("this clip"), `selectedAudioClipId` ("this audio"), `playheadSeconds`
+("here", "at the playhead"). The model-facing summary always carries all
+three, `null` when unknown.
+
 Batch: `batch_timeline_edits` (`operations: [{type, arguments}]`, ≤ 20,
 mutations only, no nesting). The device validates the whole batch first and
 applies **all-or-nothing**; a failure result names the failing operation index
@@ -108,6 +120,8 @@ command layer as manual timeline edits (shared undo/redo history):
 | audio track/clip tools | `createAudioTrack`, `insertAudioClip`, `moveAudioClip`, `trimAudioClip`, `removeAudioClip`, `setAudioClipVolume`, `setAudioClipMuted`, `setAudioTrackVolume`, `setAudioTrackMuted`, `setAudioFade`, `loopAudioClip`, `setAudioClipAutomation` |
 | ducking | `setAudioClipAutomation` fed by on-device `AudioDucking` analysis |
 | canvas | `setCanvas` |
+| select_timeline_clip | `selectClip` |
+| seek_playhead | none — `EditorViewModel.seekPlayhead(to:)` (same path as the ruler scrubber) |
 
 The request snapshot is the native `ProjectSummary`
 (`EditorProject.summary()`), sent as `media.project`; the server normalizes
@@ -151,5 +165,9 @@ and the gate is set to its build, 14 (app version 1.2).
   build / min build / web / photo), argument + batch validation.
 - `src/test/timeline-agent-e2e.test.js` — the §16 montage scenario, the
   follow-up reorder+mute, revision-conflict recovery, malformed-call
-  handling, and old-build behavior, all through the real endpoint with a
-  scripted model and a fake device.
+  handling, old-build behavior, "split this clip here" / "fade this audio"
+  resolved from the snapshot's selection + playhead, and select + seek, all
+  through the real endpoint with a scripted model and a fake device.
+- `ios/FinalCutTests/ProjectCommandTests.swift` — summary reports both
+  selections; `select_timeline_clip` / `seek_playhead` through the device
+  executor (revision, clamping, invalid args, playhead in the request).

@@ -26,4 +26,4 @@ test-results/
 playwright-report/
 .cache/ffmpeg-source/
 v2/public/vendor/
-.cache/blog-sources/
+.cache

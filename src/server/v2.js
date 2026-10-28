@@ -335,6 +335,28 @@ export const applyEditsToolDefinition = {
   },
 };
 
+export const CONCAT_TOOL_NAME = 'concat_videos';
+
+export const concatToolDefinition = {
+  type: 'function',
+  function: {
+    name: CONCAT_TOOL_NAME,
+    description: 'Join two or more of the project\'s video clips end to end into one new video. Use for "concat", "merge", "combine" or "join" requests. ' +
+      'Clips of different sizes are fitted to the first clip\'s frame. The clip ids come from the clips list in the context.',
+    parameters: {
+      type: 'object',
+      properties: {
+        clipIds: { type: 'array', minItems: 2, maxItems: 20, items: { type: 'string' }, description: 'Clip ids in playing order.' },
+      },
+      required: ['clipIds'],
+    },
+  },
+};
+
+export const WEB_CONCAT_GUIDANCE =
+  `To join clips use ${CONCAT_TOOL_NAME} with the ids from the clips list, in the order the user wants (upload order unless they say otherwise). ` +
+  'Only say a second clip is needed when the clips list is missing or has one clip.';
+
 export const WEB_COMPOUND_GUIDANCE =
   `When one request asks for two or more frame edits (color look, resize/aspect, crop, rotate, flip, brightness, contrast, hue, saturation), use a single ${APPLY_EDITS_TOOL_NAME} call listing them in order instead of separate tools. ` +
   'Edits that change timing or audio (trim, speed, volume, captions, audio effects) are not part of it: call their own tools, in the order the user wants, before or after it.';
@@ -342,14 +364,14 @@ export const WEB_COMPOUND_GUIDANCE =
 /** Tools offered to the web app: every tool in src/tools.js for the media type, then the FFmpeg fallback pair. */
 export function webToolsFor({ mediaType } = {}) {
   const typed = toolsForMediaType(mediaType).map(withWebResizePreset);
-  const withCompound = mediaType === 'audio' ? typed : [...typed, applyEditsToolDefinition];
+  const withCompound = mediaType === 'audio' ? typed : mediaType === 'image' ? [...typed, applyEditsToolDefinition] : [...typed, applyEditsToolDefinition, concatToolDefinition];
   return mediaType === 'image' ? withCompound : [...withCompound, searchCapabilitiesToolDefinition, runFfmpegToolDefinition];
 }
 
 export const WEB_PROFILE = {
   tools: webToolsFor,
   instructions: WEB_EXECUTION_INSTRUCTIONS,
-  guidance: [WEB_FALLBACK_GUIDANCE, WEB_SHAPE_GUIDANCE, WEB_COMPOUND_GUIDANCE],
+  guidance: [WEB_FALLBACK_GUIDANCE, WEB_SHAPE_GUIDANCE, WEB_COMPOUND_GUIDANCE, WEB_CONCAT_GUIDANCE],
   serverTools: { [SEARCH_CAPABILITIES_TOOL_NAME]: async (args) => searchCapabilities(args) },
 };
 

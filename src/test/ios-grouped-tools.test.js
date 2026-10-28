@@ -161,11 +161,11 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
     expect(IOS_TOOL_ALLOWLIST.apply_color_filter).toBe(10); // kept
   });
 
-  it('gets 59 tools: the 22 minus the four adjust_* plus the 9 grouped plus youtube_soundtrack plus the 30 timeline tools (CUTOFF >= TIMELINE_TOOLS_MIN_BUILD) plus ffmpeg_cli', () => {
+  it('gets 61 tools: the 22 minus the four adjust_* plus the 9 grouped plus youtube_soundtrack plus the 32 timeline tools (CUTOFF >= TIMELINE_TOOLS_MIN_BUILD) plus ffmpeg_cli', () => {
     const offered = names(offeredToolsFor({ userAgent: ios(CUTOFF) }));
     expect(build10).toHaveLength(22);
     expect(offered).toEqual([...withYouTube(build10.filter(n => !RETIRED.includes(n))), ...GROUPED, ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
-    expect(offered).toHaveLength(59);
+    expect(offered).toHaveLength(61);
     expect(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) }))).toEqual(offered);
   });
 
@@ -207,18 +207,18 @@ describe('GET /api/tools/schema applies the same filtering', () => {
     }
   });
 
-  it('cutoff build: 59 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
+  it('cutoff build: 61 tools, grouped mediaTypes, same as offeredToolsFor', async () => {
     const body = await (await getSchema(ios(CUTOFF))).json();
     expect(body.schemaVersion).toBe('1');
     expect(body.tools).toEqual(JSON.parse(JSON.stringify(offeredToolsFor({ userAgent: ios(CUTOFF) }))));
-    expect(body.tools).toHaveLength(59);
+    expect(body.tools).toHaveLength(61);
     expect(Object.keys(body.mediaTypes)).toEqual(names(body.tools));
     expect(body.mediaTypes.audio_effect).toEqual(['video']);
     expect(body.mediaTypes.ffmpeg_cli).toEqual(['video']);
     expect(body.mediaTypes.youtube_soundtrack).toEqual(['video']);
     for (const g of GROUPED.filter(n => n !== 'audio_effect')) expect(body.mediaTypes[g]).toEqual(['video', 'image']);
     const before = await (await getSchema(ios(CUTOFF - 1))).json();
-    expect(names(before.tools)).toHaveLength(54);
+    expect(names(before.tools)).toHaveLength(56);
     expect(names(before.tools)).not.toContain('lut');
     expect(names(before.tools)).toContain('ffmpeg_cli');
     expect(names(before.tools)).toContain('youtube_soundtrack');

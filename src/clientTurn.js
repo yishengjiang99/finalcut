@@ -78,11 +78,11 @@ export function toolResultFor(text, execution, output) {
  * @param {Uint8Array} turn.videoFileData
  * @param {(body: object) => Promise<object>} turn.post   POST /api/v2/chat, returns the parsed reply
  * @param {AbortSignal} [turn.signal]
- * @param {object} turn.ui  { setProcessing, setVideoFileData, addMessage, addAssistantMessage, nextId, onStatus, onToolStart, uploadedVideos }
+ * @param {object} turn.ui  { setProcessing, setVideoFileData, addMessage, addAssistantMessage, nextId, onStatus, onToolStart, uploadedVideos, project }
  * @returns {Promise<'done'>}
  */
 export async function runClientTurn({ messages, videoFileData, post, signal, ui }) {
-  const { setProcessing, setVideoFileData, addMessage, addAssistantMessage, nextId, onStatus, onToolStart, uploadedVideos } = ui;
+  const { setProcessing, setVideoFileData, addMessage, addAssistantMessage, nextId, onStatus, onToolStart, uploadedVideos, project } = ui;
   const report = status => { if (status) onStatus?.(status); };
   const latestUser = [...messages].reverse().find(m => m?.role === 'user' && !m?.excludeFromAPI && !m?.apiContent);
   if (!latestUser) return 'done';
@@ -112,7 +112,8 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
     for (let round = 0; round < MAX_CLIENT_ROUNDS; round += 1) {
       if (signal?.aborted) throw new Error('Job cancelled');
       report({ text: round === 0 ? 'Planning the edit…' : 'Checking the result…' });
-      const reply = await post({ messages: conversation, media: mediaForRequest(media), ...(turnToken ? { turnToken } : {}) });
+      const clips = project?.listClips?.() ?? [];
+      const reply = await post({ messages: conversation, media: mediaForRequest(media), ...(clips.length > 1 ? { clips } : {}), ...(turnToken ? { turnToken } : {}) });
 
       if (reply.status !== 'tool_calls' || !reply.toolCalls?.length) {
         const text = typeof reply.message === 'string' && reply.message.trim() ? reply.message.trim() : 'Done.';
@@ -145,8 +146,8 @@ export async function runClientTurn({ messages, videoFileData, post, signal, ui 
               resetLastExecution();
               const toolStartedAt = Date.now();
               const before = working;
-              const text = call.name === 'add_video_transition'
-                ? await toolFunction(call.arguments, working, setWorking, addMessage, uploadedVideos)
+              const text = call.name === 'add_video_transition' || call.name === 'concat_videos'
+                ? await toolFunction(call.arguments, working, setWorking, addMessage, call.name === 'concat_videos' ? project : uploadedVideos)
                 : await toolFunction(call.arguments, working, setWorking, addMessage);
               running = null;
               if (signal?.aborted) throw new Error('Job cancelled');

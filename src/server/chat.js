@@ -26,6 +26,8 @@ import {
   toClientToolCalls,
   unsupportedToolsInTurn,
   validateMedia,
+  validateClips,
+  clipsContextText,
 } from './clientExecution.js';
 import {
   projectContextText,
@@ -349,8 +351,10 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   let conversation;
   let project;
   let thumbnailRefs;
+  let clips;
   try {
     media = validateMedia(req.body.media);
+    clips = validateClips(req.body.clips);
     thumbnails = parseThumbnails(req.body.thumbnails);
     // Optional multi-clip project snapshot (top-level `project` or
     // `media.project`); absent for every legacy/single-media request.
@@ -414,6 +418,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   } else if (project) {
     contextLines.push('Project context: the client described a multi-clip project, but this app build has no timeline editing tools. Use only the offered tools (they act on the whole project output as before) and do not claim to reorder, trim, or mix individual clips or tracks.');
   }
+  if (profile && clips.length > 1) contextLines.push(clipsContextText(clips));
   const refsLine = thumbnailRefsText(thumbnailRefs);
   if (refsLine) contextLines.push(refsLine);
   if (skippedTools.length) {

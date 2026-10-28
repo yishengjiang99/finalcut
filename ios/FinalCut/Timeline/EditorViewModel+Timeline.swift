@@ -87,6 +87,7 @@ extension EditorViewModel {
         importError = nil
         importStatus = nil
         startNewProjectOnNextImport = false
+        seekSeconds = nil
         state = .ready
         ProjectLibrary.setLastOpenedProjectID(project.id)
         ProjectLibrary.markOpened(projectID: project.id)
@@ -153,6 +154,18 @@ extension EditorViewModel {
             lastError = "timeline_command_failed"
             return nil
         }
+    }
+
+    // MARK: Playhead (UI ruler + seek_playhead tool)
+
+    /// Moves the timeline playhead and the preview to a project time, clamped to the
+    /// project. View state only: nothing is edited, saved, or put on the undo stack.
+    @discardableResult
+    func seekPlayhead(to seconds: Double) -> Double {
+        let duration = timelineProject?.durationSeconds ?? editStack?.canvas.duration ?? 0
+        let clamped = min(max(0, seconds), max(0, duration))
+        seekSeconds = clamped
+        return clamped
     }
 
     // MARK: Import — append flows

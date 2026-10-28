@@ -216,7 +216,8 @@ function normalizeAudioTrack(raw, i, counters) {
  *   audioTracks: [{ id, label, kind?, volume?, muted?,
  *                   clips: [{ id, assetId, timelineStart, sourceStart,
  *                             sourceDuration, gain?, muted?, fadeIn?, fadeOut?, loop? }] }],
- *   selectedClipId?
+ *   selectedClipId?, selectedAudioClipId?,
+ *   playheadSeconds?   (project-timeline time; view state, not project state)
  * }
  */
 export function validateProject(body) {
@@ -313,6 +314,14 @@ export function validateProject(body) {
     if (!clipIds.has(selectedClipId)) fail('project.selectedClipId does not match any video clip');
     project.selectedClipId = selectedClipId;
   }
+  const selectedAudioClipId = pick(raw, 'selectedAudioClipId', 'selectedAudioClipID');
+  if (selectedAudioClipId !== undefined && selectedAudioClipId !== null) {
+    validId(selectedAudioClipId, 'selectedAudioClipId');
+    if (!audioClipIds.has(selectedAudioClipId)) fail('project.selectedAudioClipId does not match any audio clip');
+    project.selectedAudioClipId = selectedAudioClipId;
+  }
+  const playheadSeconds = validTime(raw.playheadSeconds, 'playheadSeconds');
+  if (playheadSeconds !== undefined) project.playheadSeconds = playheadSeconds;
   return project;
 }
 
@@ -375,6 +384,8 @@ export function summarizeProjectForModel(project, {
       audioClips: project.audioTracks.reduce((n, t) => n + t.clips.length, 0),
     },
     selectedClipId: project.selectedClipId ?? null,
+    selectedAudioClipId: project.selectedAudioClipId ?? null,
+    playheadSeconds: project.playheadSeconds !== undefined ? round3(project.playheadSeconds) : null,
     videoClipOrder: orderIds,
     assets,
     videoClips,

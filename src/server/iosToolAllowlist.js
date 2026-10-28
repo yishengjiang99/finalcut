@@ -133,6 +133,8 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   apply_audio_ducking: TIMELINE_TOOLS_MIN_BUILD,
   set_project_canvas: TIMELINE_TOOLS_MIN_BUILD,
   batch_timeline_edits: TIMELINE_TOOLS_MIN_BUILD,
+  select_timeline_clip: TIMELINE_TOOLS_MIN_BUILD,
+  seek_playhead: TIMELINE_TOOLS_MIN_BUILD,
 });
 
 /**

@@ -4,7 +4,7 @@
 import { FFmpegHost } from './ffmpegHost.js';
 import { buildProcessArgs, resolveOutput, audioFadeNeedsDuration, OpArgsError } from './ops/process.js';
 import {
-  buildTransitionArgs, buildAddAudioTrackArgs, buildBurnSubtitlesArgs, buildBurnAssArgs, buildSpeechAudioArgs,
+  buildTransitionArgs, buildConcatArgs, buildAddAudioTrackArgs, buildBurnSubtitlesArgs, buildBurnAssArgs, buildSpeechAudioArgs,
   buildThumbnailArgs, buildMuxSoftSubsArgs, parseCliCommand,
 } from './ops/multi.js';
 import { getFetchAbortSignal } from '../abortableFetch.js';
@@ -312,6 +312,19 @@ export async function joinClips({ transition, duration }, clips) {
   const { data } = await run({
     inputs: files,
     buildArgv: ({ inputs, output, threads }) => buildTransitionArgs({ transition, duration }, inputs.map((path, i) => ({ path, ...info[i] })), { output, threads }),
+  });
+  return data;
+}
+
+/** Join clips end to end with hard cuts. `clips` are { bytes, mimeType }. */
+export async function concatClips(clips) {
+  const files = clips.map(({ bytes, mimeType }, i) => toFile(bytes, mimeType, `clip${i}`));
+  const info = [];
+  for (const file of files) info.push(summarizeProbe(await probeFile(file)));
+  if (info.some(i => !i.width)) throw new OpArgsError('Only video clips can be joined, not photos or audio files');
+  const { data } = await run({
+    inputs: files,
+    buildArgv: ({ inputs, output, threads }) => buildConcatArgs(inputs.map((path, i) => ({ path, ...info[i] })), { output, threads }),
   });
   return data;
 }

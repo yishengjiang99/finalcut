@@ -126,6 +126,30 @@ describe('validateProject', () => {
     expect(() => validateProject({ project: sel })).toThrow(/selectedClipId/);
   });
 
+  it('carries the selected audio clip and the playhead so "this audio" and "here" resolve', () => {
+    const raw = iosSummary();
+    raw.selectedAudioClipID = 'audio-1';
+    raw.playheadSeconds = 14.5;
+    const project = validateProject({ media: { project: raw } });
+    expect(project.selectedAudioClipId).toBe('audio-1');
+    expect(project.playheadSeconds).toBe(14.5);
+    const summary = summarizeProjectForModel(project);
+    expect(summary).toMatchObject({ selectedClipId: 'clip-hotel', selectedAudioClipId: 'audio-1', playheadSeconds: 14.5 });
+    // Absent → explicit nulls, so the model never guesses a selection or position.
+    const bare = summarizeProjectForModel(validateProject({ project: apiProject() }));
+    expect(bare.selectedAudioClipId).toBeNull();
+    expect(bare.playheadSeconds).toBeNull();
+  });
+
+  it('rejects a selected audio clip that is not on any track, and a bad playhead', () => {
+    const dangling = apiProject();
+    dangling.selectedAudioClipId = 'clip-1'; // a VIDEO clip id is not an audio selection
+    expect(() => validateProject({ project: dangling })).toThrow(/selectedAudioClipId/);
+    const negative = apiProject();
+    negative.playheadSeconds = -2;
+    expect(() => validateProject({ project: negative })).toThrow(ClientRequestError);
+  });
+
   it('rejects snapshots carrying filesystem paths or URLs', () => {
     const withPath = apiProject();
     withPath.assets[0].path = '/var/mobile/Media/beach.mov';

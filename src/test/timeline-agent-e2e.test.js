@@ -160,6 +160,11 @@ function executeOnDevice(device, name, args) {
   if (name === 'list_project_assets') {
     return { ok: true, executedOn: 'device', output: { assets: device.assets } };
   }
+  if (name === 'seek_playhead') {
+    // View state: clamped to the project, no revision bump.
+    device.playheadSeconds = Math.min(args.seconds, deviceDuration(device));
+    return { ok: true, executedOn: 'device', output: { playheadSeconds: device.playheadSeconds, projectRevision: device.revision } };
+  }
   if (device.beforeExecute) device.beforeExecute(name, args);
   const conflict = checkRevision(device, args);
   if (conflict) return conflict;
@@ -234,6 +239,26 @@ function executeMutation(device, name, args) {
       if (args.enabled !== undefined) clip.originalAudioEnabled = args.enabled;
       return mutationOutput(device, [clip.id]);
     }
+    case 'split_video_clip': {
+      const index = device.videoClips.findIndex(c => c.id === args.clipId);
+      if (index < 0) return { ok: false, executedOn: 'device', error: 'clip_not_found', output: {} };
+      const start = timelineOutput(device).videoClips[index].timelineStart;
+      const clip = device.videoClips[index];
+      const at = clip.sourceStart + (args.atProjectTime - start);
+      if (!(at > clip.sourceStart && at < clip.sourceEnd)) return { ok: false, executedOn: 'device', error: 'invalid_timeline_position', output: {} };
+      const second = { ...clip, id: `${clip.id}-b`, sourceStart: at };
+      clip.sourceEnd = at;
+      device.videoClips.splice(index + 1, 0, second);
+      return mutationOutput(device, [clip.id, second.id]);
+    }
+    case 'select_timeline_clip': {
+      const isVideo = device.videoClips.some(c => c.id === args.clipId);
+      const isAudio = device.audioTracks.some(t => t.clips.some(c => c.id === args.clipId));
+      if (args.clipId !== undefined && !isVideo && !isAudio) return { ok: false, executedOn: 'device', error: 'clip_not_found', output: {} };
+      if (isVideo) device.selectedClipId = args.clipId;
+      if (isAudio) device.selectedAudioClipId = args.clipId;
+      return mutationOutput(device, args.clipId ? [args.clipId] : []);
+    }
     default:
       return { ok: false, executedOn: 'device', error: 'unsupported_on_device', output: {} };
   }
@@ -250,8 +275,17 @@ function projectSnapshot(device) {
     assets: device.assets,
     videoClips: out.videoClips.map(c => ({ id: c.id, assetId: c.assetId, timelineStart: c.timelineStart, sourceStart: c.sourceStart, sourceEnd: c.sourceEnd })),
     audioTracks: device.audioTracks,
-    selectedClipId: device.videoClips[0]?.id,
+    selectedClipId: device.selectedClipId ?? device.videoClips[0]?.id,
+    ...(device.selectedAudioClipId ? { selectedAudioClipId: device.selectedAudioClipId } : {}),
+    ...(device.playheadSeconds !== undefined ? { playheadSeconds: device.playheadSeconds } : {}),
   };
+}
+
+/** The project-context JSON the server put into the system prompt. */
+function promptProject(body) {
+  const system = body.messages.find(m => m.role === 'system')?.content || '';
+  const line = system.split('\n').find(l => l.startsWith('{"projectId"'));
+  return line ? JSON.parse(line) : null;
 }
 
 /** Drive one user turn through the real endpoint until the server answers `final`. */
@@ -420,6 +454,66 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     // Music and narration preserved exactly.
     expect(device.audioTracks[0].clips[0]).toMatchObject({ gain: 0.2, fadeOut: 2 });
     expect(device.audioTracks[1].clips[0]).toMatchObject({ timelineStart: 12 });
+  });
+
+  it('"split this clip here" and "fade this audio out" resolve from the selection and playhead', async () => {
+    const device = makeDevice();
+    device.audioTracks[0].clips.push({ id: 'audio-1', assetId: 'asset-music', timelineStart: 0, sourceStart: 0, sourceDuration: 30, gain: 1, fadeIn: 0, fadeOut: 0 });
+    device.selectedClipId = 'clip-restaurant'; // project time 10–18
+    device.selectedAudioClipId = 'audio-1';
+    device.playheadSeconds = 14;
+
+    let seq = 0;
+    const nextId = () => `call_${(seq += 1)}`;
+    let seen = null;
+    xaiResponder = (body) => {
+      const names = resultsByName(body).map(r => r.name);
+      seen ??= promptProject(body);
+      if (!names.includes('split_video_clip')) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'split_video_clip', { clipId: seen.selectedClipId, atProjectTime: seen.playheadSeconds, expectedRevision: seen.revision })] }));
+      }
+      if (!names.includes('set_audio_clip_fade')) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'set_audio_clip_fade', { clipId: seen.selectedAudioClipId, fadeOut: 2 })] }));
+      }
+      return jsonResponse(completion({ content: '- Answer:\n  Split the restaurant clip at 0:14 and faded the music out over 2s.\n- Lesson:\n  "Here" is the playhead.' }));
+    };
+
+    const final = await runTurn({ device, messages: [{ role: 'user', content: 'Split this clip here and fade this audio out over 2 seconds.' }] });
+
+    expect(final.status).toBe('final');
+    // The model was told exactly what is selected and where the playhead is.
+    expect(seen).toMatchObject({ selectedClipId: 'clip-restaurant', selectedAudioClipId: 'audio-1', playheadSeconds: 14 });
+    expect(device.videoClips.map(c => [c.id, c.sourceStart, c.sourceEnd])).toEqual([
+      ['clip-beach', 0, 10], ['clip-restaurant', 0, 4], ['clip-restaurant-b', 4, 8], ['clip-hotel', 0, 12],
+    ]);
+    expect(device.audioTracks[0].clips[0].fadeOut).toBe(2);
+  });
+
+  it('selects a clip and moves the playhead to its start; seeking never bumps the revision', async () => {
+    const device = makeDevice();
+    let seq = 0;
+    const nextId = () => `call_${(seq += 1)}`;
+    xaiResponder = (body) => {
+      const results = resultsByName(body);
+      const names = results.map(r => r.name);
+      if (!names.includes('select_timeline_clip')) {
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'select_timeline_clip', { clipId: 'clip-hotel', expectedRevision: 18 })] }));
+      }
+      if (!names.includes('seek_playhead')) {
+        // clip-hotel starts at 18s (beach 10 + restaurant 8).
+        return jsonResponse(completion({ content: null, tool_calls: [toolCall(nextId(), 'seek_playhead', { seconds: 18 })] }));
+      }
+      return jsonResponse(completion({ content: '- Answer:\n  Selected the hotel clip and moved the playhead to its start (0:18).\n- Lesson:\n  Selection and playhead are visible to me.' }));
+    };
+
+    const final = await runTurn({ device, messages: [{ role: 'user', content: 'Select the hotel clip and jump to where it starts.' }] });
+
+    expect(final.status).toBe('final');
+    expect(device.selectedClipId).toBe('clip-hotel');
+    expect(device.playheadSeconds).toBe(18);
+    expect(device.revision).toBe(19); // the selection only; the seek is view state
+    const seek = resultsByName(final).find(r => r.name === 'seek_playhead');
+    expect(seek.result).toMatchObject({ ok: true, output: { playheadSeconds: 18 } });
   });
 
   it('recovers from a project_revision_conflict by re-inspecting once and replanning', async () => {

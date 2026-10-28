@@ -76,6 +76,32 @@ export function buildTransitionArgs({ transition, duration = 1 } = {}, clips = [
 }
 
 /**
+ * Join clips end to end with hard cuts. Every clip is first brought to the first clip's frame size
+ * and 30 fps, and a silent clip gets silence of its own length, so clips from different cameras join cleanly.
+ * @param {{path:string, duration:number|null, width:number, height:number, hasAudio:boolean}[]} clips
+ */
+export function buildConcatArgs(clips = [], { output, threads } = {}) {
+  if (clips.length < 2) throw new OpArgsError('At least two video clips are required to join them');
+  const width = clips[0].width - (clips[0].width % 2);
+  const height = clips[0].height - (clips[0].height % 2);
+  const anyAudio = clips.some(c => c.hasAudio);
+  const filters = [];
+  clips.forEach((clip, i) => {
+    filters.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v${i}]`);
+    if (!anyAudio) return;
+    if (clip.hasAudio) filters.push(`[${i}:a]aformat=sample_rates=44100:channel_layouts=stereo[a${i}]`);
+    else filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=duration=${clip.duration || 1}[a${i}]`);
+  });
+  filters.push(`${clips.map((_, i) => `[v${i}]`).join('')}concat=n=${clips.length}:v=1:a=0[v]`);
+  if (anyAudio) filters.push(`${clips.map((_, i) => `[a${i}]`).join('')}concat=n=${clips.length}:v=0:a=1[a]`);
+  return [
+    ...HEAD, ...clips.flatMap(c => ['-i', c.path]),
+    '-filter_complex', filters.join(';'), '-map', '[v]', ...(anyAudio ? ['-map', '[a]', '-c:a', 'aac'] : []),
+    ...threadCap(threads), ...X264, '-movflags', '+faststart', output,
+  ];
+}
+
+/**
  * Replace the clip's audio with a new track, or mix the new track into it.
  * Soundtrack options (youtube_soundtrack): `startOffset` seeks into the new track before it is
  * read; `originalVolume` (mix only) scales the clip's own audio under the new track;

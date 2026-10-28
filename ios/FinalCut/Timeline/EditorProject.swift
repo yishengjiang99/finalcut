@@ -419,6 +419,7 @@ struct EditorProject: Codable, Equatable, Sendable {
             canvasHeight: canvas.height,
             durationSeconds: (durationSeconds * 1000).rounded() / 1000,
             selectedClipID: selectedClipID?.uuidString,
+            selectedAudioClipID: selectedAudioClipID?.uuidString,
             assets: assets.map {
                 ProjectSummary.Asset(id: $0.id.uuidString, name: $0.name, mediaType: $0.mediaType.rawValue,
                                      durationSeconds: ($0.duration.seconds * 1000).rounded() / 1000, hasAudio: $0.hasAudio)
@@ -477,7 +478,11 @@ struct ProjectSummary: Codable, Equatable, Sendable {
     var canvasHeight: Int
     var durationSeconds: Double
     var selectedClipID: String?
+    var selectedAudioClipID: String?
     var assets: [Asset]
     var videoClips: [VideoClip]
     var audioTracks: [AudioTrack]
+    /// Timeline playhead (project seconds). View state, not project state: `summary()`
+    /// leaves it nil and the editor fills it in for the chat request.
+    var playheadSeconds: Double?
 }
