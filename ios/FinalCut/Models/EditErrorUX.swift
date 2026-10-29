@@ -88,6 +88,29 @@ enum EditFailureKind: String, Codable, Equatable {
         }
     }
 
+    /// UI kind for a DEVICE tool result's stable error code (timeline + legacy-on-project
+    /// executors). Model-correctable failures (bad IDs, bad ranges, stale revision) map to
+    /// `.invalidArguments` — the end-of-turn card then says "try saying it another way"
+    /// with no Retry — instead of collapsing into `.generic`, which would show a Retry
+    /// that resends the same deterministic failure and would log `edit_error kind=generic`,
+    /// discarding the cause. Unknown codes stay `.generic`.
+    static func from(deviceCode code: String?) -> EditFailureKind {
+        switch code?.lowercased() {
+        case ServerErrorCode.invalidArguments,
+             "clip_not_found", "asset_not_found", "audio_track_not_found", "audio_clip_not_found",
+             "invalid_source_range", "clip_range_exceeds_asset", "clip_nonpositive_duration",
+             "audio_clip_nonpositive_duration", "project_revision_conflict", "reorder_ids_mismatch",
+             "split_outside_clip", "asset_not_video", "asset_has_no_audio", "duplicate_clip_id",
+             "duplicate_asset_id", "duplicate_audio_clip_id", "clip_missing_asset",
+             "audio_clip_missing_asset", "selected_clip_missing":
+            return .invalidArguments
+        case "unsupported_on_device": return .unavailable
+        case ServerErrorCode.unsupportedForPhoto: return .photoUnsupported
+        case ServerErrorCode.unsupportedImageFormat: return .unsupportedImageFormat
+        default: return .generic
+        }
+    }
+
     /// Error string returned to the model in the client-mode tool result.
     var toolError: String {
         switch self {

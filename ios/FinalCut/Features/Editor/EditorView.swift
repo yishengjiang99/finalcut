@@ -1374,12 +1374,12 @@ final class EditorViewModel: ObservableObject {
         // Multi-clip timeline tools dispatch to the shared ProjectCommand layer.
         if TimelineTools.names.contains(tool) {
             let result = await executeTimelineTool(call)
-            return record(result, kind: result.ok ? nil : .generic)
+            return record(result, kind: result.ok ? nil : EditFailureKind.from(deviceCode: result.error))
         }
         // Legacy single-clip tools on a timeline project are translated onto it
         // (selected clip / canvas / one-clip disambiguation) when a translation exists.
         if stack.isTimelineProject, let translated = await executeLegacyToolOnProject(call) {
-            return record(translated, kind: translated.ok ? nil : .generic)
+            return record(translated, kind: translated.ok ? nil : EditFailureKind.from(deviceCode: translated.error))
         }
         switch NativeToolParser.plan(tool: tool, arguments: call.arguments, canvas: stack.canvas) {
         case .success(.query(let name)):

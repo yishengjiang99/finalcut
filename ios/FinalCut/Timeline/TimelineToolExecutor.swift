@@ -599,9 +599,11 @@ extension EditorViewModel {
     /// Legacy single-clip tools, translated onto a timeline project. Returns nil when
     /// the tool has no project translation (the caller falls through to the legacy
     /// path). Frame/colour tools target the SELECTED clip; `resize_video` sets the
-    /// canvas. Trim/speed translate only for a ONE-clip project, where their
-    /// timeline-seconds semantics are unambiguous; on a multi-clip project the model
-    /// is told to use the clip tools instead.
+    /// canvas. Speed translates only for a ONE-clip project, where its
+    /// timeline-seconds semantics are unambiguous (per-clip speed on a multi-clip
+    /// project goes through `set_clip_speed`). Trim keeps its whole-project
+    /// meaning on any project: `trim_video` [start, end] are PROJECT seconds and
+    /// are translated by `ProjectCommandExecutor.projectTrimCommands`.
     func executeLegacyToolOnProject(_ call: ClientToolCall) async -> ClientToolResult? {
         guard editStack?.isTimelineProject == true, let project = timelineProject else { return nil }
         let args = call.arguments
@@ -640,11 +642,32 @@ extension EditorViewModel {
             guard let width = args["width"]?.doubleValue, let height = args["height"]?.doubleValue else { return nil }
             return await done(.setCanvas(width: Int(width), height: Int(height), fit: nil))
         case "trim_video":
-            guard project.videoClips.count == 1, let clip = selected,
-                  let start = args["start"]?.doubleValue, let end = args["end"]?.doubleValue else {
+            guard let start = args["start"]?.doubleValue, let end = args["end"]?.doubleValue else {
                 return failure("invalid_arguments")
             }
-            return await done(.trimVideoClip(clipID: clip.id, sourceStart: start, sourceEnd: end))
+            if project.videoClips.count == 1, let clip = selected {
+                return await done(.trimVideoClip(clipID: clip.id, sourceStart: start, sourceEnd: end))
+            }
+            // Whole-project trim on a multi-clip project: keep only the
+            // [start, end] project-time window — boundary clips trimmed, clips
+            // outside the window removed — as ONE atomic batch (one undo step,
+            // nothing applied if any step is invalid).
+            guard let commands = ProjectCommandExecutor.projectTrimCommands(project: project, start: start, end: end) else {
+                return failure("invalid_arguments")
+            }
+            if commands.isEmpty { return contractSuccess(project) }
+            guard var stack = editStack else { return failure("no_media") }
+            do {
+                let (results, failedIndex) = try stack.performProjectBatch(commands)
+                if failedIndex != nil { return failure("invalid_arguments") }
+                commitEdit(stack)
+                saveTimelineProject()
+                await refreshPreview()
+                guard let updated = timelineProject else { return failure("no_media") }
+                return contractSuccess(updated, affected: results.flatMap(\.affectedIDs))
+            } catch {
+                return failure("invalid_arguments")
+            }
         case "adjust_speed":
             guard project.videoClips.count == 1, let clip = selected,
                   let speed = args["speed"]?.doubleValue ?? args["factor"]?.doubleValue else {

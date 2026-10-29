@@ -72,6 +72,46 @@ enum ProjectCommandExecutor {
         return out
     }
 
+    /// Commands that keep only the project-time window [start, end] of a project
+    /// (the legacy `trim_video` whole-project semantics, translated onto a timeline
+    /// project): clips entirely outside the window are removed, boundary clips are
+    /// trimmed in SOURCE seconds (accounting for each clip's speed and its position
+    /// in the layout, transitions included). Returns nil when the window is invalid
+    /// (negative, empty, or starting at/after the project end), an empty array when
+    /// the window already covers the whole project, and never a plan that would
+    /// remove every clip.
+    static func projectTrimCommands(project: EditorProject, start: Double, end: Double) -> [ProjectCommand]? {
+        let minPiece = 0.05 // a kept sliver shorter than this is not a usable clip (cf. split guard)
+        guard start >= 0, end - start > minPiece, !project.videoClips.isEmpty else { return nil }
+        let duration = project.durationSeconds
+        guard start < duration else { return nil }
+        let clampedEnd = min(end, duration)
+        if start == 0, clampedEnd >= duration { return [] }
+        var commands: [ProjectCommand] = []
+        var keptClips = 0
+        for entry in project.layout {
+            guard let clip = project.clip(entry.clipID) else { continue }
+            let clipStart = entry.start.seconds
+            let clipEnd = entry.end.seconds
+            let keepStart = max(clipStart, start)
+            let keepEnd = min(clipEnd, clampedEnd)
+            guard keepEnd - keepStart > minPiece else {
+                commands.append(.removeVideoClip(clipID: clip.id))
+                continue
+            }
+            keptClips += 1
+            var newStart = clip.sourceStart.seconds
+            var newEnd = clip.sourceEnd.seconds
+            if keepStart > clipStart { newStart += (keepStart - clipStart) * clip.speed }
+            if keepEnd < clipEnd { newEnd -= (clipEnd - keepEnd) * clip.speed }
+            if newStart > clip.sourceStart.seconds + 0.001 || newEnd < clip.sourceEnd.seconds - 0.001 {
+                commands.append(.trimVideoClip(clipID: clip.id, sourceStart: newStart, sourceEnd: newEnd))
+            }
+        }
+        guard keptClips > 0 else { return nil }
+        return commands
+    }
+
     private static func bad(_ code: String) -> ProjectCommandError { .invalid(code) }
 
     private static func applyMutating(_ command: ProjectCommand, to p: inout EditorProject) throws -> ProjectCommandResult {

@@ -306,4 +306,66 @@ final class ProjectCommandTests: XCTestCase {
         XCTAssertTrue(model.isPhoto)
         XCTAssertTrue(model.messages.contains { $0.content.contains("1 more photo(s) weren't opened") })
     }
+
+    /// Whole-project trim (legacy `trim_video` on a timeline project): beach 10s +
+    /// hotel 8s + dinner 12s = 30s; keeping the first 15 project seconds must trim
+    /// hotel to source 0..<5 and remove dinner, landing at exactly 15s.
+    func testProjectTrimCommandsKeepFirstWindow() throws {
+        var f = makeFixture()
+        for asset in [f.beach, f.hotel, f.dinner] {
+            _ = try f.session.perform(.appendVideoClip(assetID: asset.id, sourceStart: nil, sourceEnd: nil))
+        }
+        XCTAssertEqual(f.project.durationSeconds, 30, accuracy: 0.001)
+        let commands = try XCTUnwrap(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: 0, end: 15))
+        XCTAssertEqual(commands.count, 2)
+        for command in commands { _ = try f.session.perform(command) }
+        XCTAssertEqual(f.project.videoClips.map(\.assetID), [f.beach.id, f.hotel.id])
+        XCTAssertEqual(f.project.videoClips[1].sourceStart.seconds, 0, accuracy: 0.001)
+        XCTAssertEqual(f.project.videoClips[1].sourceEnd.seconds, 5, accuracy: 0.001)
+        XCTAssertEqual(f.project.durationSeconds, 15, accuracy: 0.001)
+        XCTAssertTrue(f.project.isValid)
+    }
+
+    /// A middle window trims the boundary clip in SOURCE seconds accounting for
+    /// its speed (hotel at 2x: 1 project second into the clip = 2 source seconds)
+    /// and drops the clips outside the window entirely.
+    func testProjectTrimCommandsMiddleWindowAccountsForSpeed() throws {
+        var f = makeFixture()
+        for asset in [f.beach, f.hotel, f.dinner] {
+            _ = try f.session.perform(.appendVideoClip(assetID: asset.id, sourceStart: nil, sourceEnd: nil))
+        }
+        let hotelClip = f.project.videoClips[1]
+        _ = try f.session.perform(.setVideoClipSpeed(clipID: hotelClip.id, speed: 2))
+        // Layout now: beach 0..<10, hotel 10..<14 (8 source s at 2x), dinner 14..<26.
+        let commands = try XCTUnwrap(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: 11, end: 13))
+        for command in commands { _ = try f.session.perform(command) }
+        XCTAssertEqual(f.project.videoClips.map(\.assetID), [f.hotel.id])
+        XCTAssertEqual(f.project.videoClips[0].sourceStart.seconds, 2, accuracy: 0.001)
+        XCTAssertEqual(f.project.videoClips[0].sourceEnd.seconds, 6, accuracy: 0.001)
+        XCTAssertEqual(f.project.durationSeconds, 2, accuracy: 0.001)
+        XCTAssertTrue(f.project.isValid)
+    }
+
+    /// Invalid windows are refused (nil), a full-length window is a no-op ([]).
+    func testProjectTrimCommandsValidation() throws {
+        var f = makeFixture()
+        _ = try f.session.perform(.appendVideoClip(assetID: f.beach.id, sourceStart: nil, sourceEnd: nil))
+        _ = try f.session.perform(.appendVideoClip(assetID: f.hotel.id, sourceStart: nil, sourceEnd: nil))
+        XCTAssertNil(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: -1, end: 5))
+        XCTAssertNil(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: 5, end: 5))
+        XCTAssertNil(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: 99, end: 120))
+        XCTAssertEqual(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: 0, end: 18), [])
+        XCTAssertEqual(ProjectCommandExecutor.projectTrimCommands(project: f.project, start: 0, end: 999), [])
+    }
+
+    /// Device error codes map to model-correctable failures, not generic Retry cards.
+    func testDeviceErrorKindMapping() {
+        XCTAssertEqual(EditFailureKind.from(deviceCode: "invalid_arguments"), .invalidArguments)
+        XCTAssertEqual(EditFailureKind.from(deviceCode: "clip_not_found"), .invalidArguments)
+        XCTAssertEqual(EditFailureKind.from(deviceCode: "clip_range_exceeds_asset"), .invalidArguments)
+        XCTAssertEqual(EditFailureKind.from(deviceCode: "project_revision_conflict"), .invalidArguments)
+        XCTAssertEqual(EditFailureKind.from(deviceCode: "unsupported_on_device"), .unavailable)
+        XCTAssertEqual(EditFailureKind.from(deviceCode: "no_media"), .generic)
+        XCTAssertEqual(EditFailureKind.from(deviceCode: nil), .generic)
+    }
 }
