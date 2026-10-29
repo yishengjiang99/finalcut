@@ -20,7 +20,7 @@ Required:
 | `title` | the h1, sentence case |
 | `description` | 70 to 160 characters; meta description, link previews, RSS, /blog card |
 | `date` | `YYYY-MM-DD` |
-| `product` | `finalcap`, `protune`, `ai-music-radar` or `music-reader` (this repo: `finalcap`); sets the app link at the end of the post and the JSON-LD. `grepawk` is neutral: no app link and no app JSON-LD |
+| `product` | `finalcap`, `protune`, `ai-music-radar`, `music-reader` or `gbk` (this repo: `finalcap`); sets the app link at the end of the post and the JSON-LD. `grepawk` is neutral: no app link and no app JSON-LD |
 | `publish: true` | the opt-in. Without it (or with `draft: true`) the post is skipped |
 
 Optional: `updated` (YYYY-MM-DD), `tags` (`[a, b]`), `seoTitle`, `author` (defaults to Yisheng

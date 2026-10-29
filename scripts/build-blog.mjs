@@ -380,7 +380,7 @@ ${filters}
 <div class="grid">${posts.map((p, i) => card(p, { lead: i === 0, eager: i === 0 })).join('')}</div>
 ${photo.length ? `<h2 class="sec">ProTune articles</h2><div class="grid">${photo.map((a) => card(a)).join('')}</div>` : ''}
 </main>`;
-  return shell({ title: 'GrepAwk blog: how FinalCap, ProTune, AI Music Radar and Music Reader are built', description: 'How FinalCap, ProTune AI Camera, AI Music Radar and Music Reader work, written by the developer: on-device AI, FFmpeg, Core ML and ONNX.', url: BLOG_URL, type: 'website', ld, body, telemetry: 'blog', og, p: 'finalcap' });
+  return shell({ title: 'GrepAwk blog: how FinalCap, ProTune, AI Music Radar, Music Reader and GBK are built', description: 'How FinalCap, ProTune AI Camera, AI Music Radar, Music Reader and GBK Music Composer work, written by the developer: on-device AI, FFmpeg, Core ML and ONNX.', url: BLOG_URL, type: 'website', ld, body, telemetry: 'blog', og, p: 'finalcap' });
 }
 
 function renderRss(posts) {
@@ -443,7 +443,7 @@ export async function buildBlog({ outDir = path.join(ROOT, 'dist'), dirs } = {})
   }
   if (problems.length) throw new Error(`blog: ${problems.length} problem(s)\n  ${problems.join('\n  ')}`);
   for (const a of photo) Object.assign(a, await media.ogCard({ key: `photo-${a.slug}`, title: a.title, product: 'ProTune AI Camera', accent: PRODUCTS.protune.accent, accent2: PRODUCTS.protune.accent2 }));
-  const indexOg = (await media.ogCard({ key: 'index', title: 'How FinalCap, ProTune, AI Music Radar and Music Reader are built', product: 'GrepAwk blog' })).og;
+  const indexOg = (await media.ogCard({ key: 'index', title: 'How FinalCap, ProTune, AI Music Radar, Music Reader and GBK are built', product: 'GrepAwk blog' })).og;
   for (const p of posts) {
     mkdirSync(path.join(blogDir, p.slug), { recursive: true });
     writeFileSync(path.join(blogDir, p.slug, 'index.html'), renderPost(p, posts));

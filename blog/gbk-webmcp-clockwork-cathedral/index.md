@@ -4,7 +4,7 @@ description: How an AI agent used GBK's gbk_* WebMCP tools to compose, voice, mi
 date: 2026-10-23
 updated: 2026-10-24
 publish: true
-product: grepawk
+product: gbk
 keyword: WebMCP tools
 tags: [gbk, webmcp, music, fugue]
 hero: song.jpg

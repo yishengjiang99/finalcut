@@ -3,7 +3,7 @@ title: GBK's composer tools are now an MCP server
 description: How the GBK music composer turned its gbk_* tools into a remote MCP server any MCP client can call, plus five songs an agent wrote with them.
 date: 2026-10-24
 publish: true
-product: grepawk
+product: gbk
 keyword: MCP server
 tags: [gbk, mcp, music]
 updated: 2026-10-24

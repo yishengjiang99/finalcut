@@ -22,7 +22,7 @@ title: How X works                # h1, sentence case
 description: 70-160 chars          # meta description, OG, RSS, cards
 date: 2026-10-12                   # YYYY-MM-DD
 publish: true                      # required opt-in; anything else is skipped
-product: finalcap                  # finalcap | protune | ai-music-radar | music-reader (sets the app link + JSON-LD)
+product: finalcap                  # finalcap | protune | ai-music-radar | music-reader | gbk (sets the app link + JSON-LD)
 updated: 2026-10-20                # optional, dateModified + sitemap lastmod
 tags: [a, b]                       # optional, JSON-LD keywords
 seoTitle: ...                      # optional <title>

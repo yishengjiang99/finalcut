@@ -11,6 +11,7 @@ export const PRODUCTS = {
   finalcap: { name: 'FinalCap', accent: '#8b7cf6', accent2: '#5b8def', cta: 'Try FinalCap in your browser', url: 'https://grepawk.com/' },
   protune: { name: 'ProTune AI Camera', accent: '#f5b83d', accent2: '#f0743e', cta: 'Get ProTune AI Camera on the App Store', url: 'https://apps.apple.com/us/app/protune-ai-camera/id6813991381', site: 'https://photo.grepawk.com/' },
   'ai-music-radar': { name: 'AI Music Radar', accent: '#ff7a59', accent2: '#e9469a', cta: 'See AI Music Radar', url: 'https://music.grepawk.com/' },
+  gbk: { name: 'GBK Music Composer', short: 'GBK', accent: '#f2b544', accent2: '#40c4b2', cta: 'Open GBK Music Composer in your browser', url: 'https://compose.grepawk.com/' },
   // Neutral: no app link at the end and no SoftwareApplication in the JSON-LD.
   grepawk: { name: 'GrepAwk', accent: '#d8c27a', accent2: '#8a7ab0' },
   'music-reader': { name: 'AI Camera - Music Reader', short: 'Music Reader', accent: '#2dd4bf', accent2: '#3b9cf0', cta: 'Music Reader support and source', url: 'https://grepawk.com/music-reader/support.html' },

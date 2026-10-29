@@ -5,7 +5,7 @@ seoTitle: GBK and WebMCP, browser tools that let an AI agent edit MIDI songs
 description: GBK exposes 29 WebMCP tools so a browser AI agent can draw CC curves, write counterpoint and design sounds, while you A/B, Accept or undo.
 date: 2026-10-22
 publish: true
-product: grepawk
+product: gbk
 tags: [gbk, webmcp, midi, agents, soundfont]
 hero: 02-cc11-crescendo-proposal.jpg
 heroAlt: GBK workstation with a piano roll, a dashed green CC11 crescendo proposal in the automation lane, and the agent panel showing Accept and Reject buttons

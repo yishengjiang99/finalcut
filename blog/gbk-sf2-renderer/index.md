@@ -3,7 +3,7 @@ title: "How the GBK SoundFont renderer turns MIDI into sound"
 description: "How the GBK SoundFont renderer works: MIDI notes become voices, run through envelopes, a filter and LFOs, then send effects and a mastering bus."
 date: 2026-10-29
 publish: true
-product: grepawk
+product: gbk
 keyword: SoundFont renderer
 tags: [gbk, soundfont, midi, dsp]
 hero: hero.jpg
