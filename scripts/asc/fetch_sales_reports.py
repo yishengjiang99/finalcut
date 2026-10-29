@@ -38,8 +38,8 @@ def fetch(token, freq, report_date):
         with urllib.request.urlopen(req, timeout=60) as resp:
             return gzip.decompress(resp.read()).decode("utf-8")
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
+        if e.code in (404, 410):
+            return None  # no report for that date, or aged out of Apple's retention
         body = e.read()[:300].decode(errors="replace")
         raise SystemExit(f"salesReports {freq} {report_date}: HTTP {e.code} {body}")
 
