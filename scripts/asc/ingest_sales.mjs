@@ -113,8 +113,9 @@ try {
       `SELECT currency, ROUND(SUM(units*unit_proceeds),2) AS p FROM asc_sales_mirror
        WHERE app_id=? AND granularity=? AND period_start=? GROUP BY currency`, [APP_ID, t.granularity, period]);
     const got = Object.fromEntries(per.map(r => [r.currency, Number(r.p)]));
+    const canon = (o) => JSON.stringify(Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1))));
     if (Number(agg.rows_n) !== exp.rows || Number(agg.units_n) !== exp.units ||
-        JSON.stringify(got) !== JSON.stringify(exp.proceeds)) {
+        canon(got) !== canon(exp.proceeds)) {
       problems.push(`${name}: expected rows=${exp.rows} units=${exp.units} proceeds=${JSON.stringify(exp.proceeds)}; mirror rows=${agg.rows_n} units=${agg.units_n} proceeds=${JSON.stringify(got)}`);
     }
   }
