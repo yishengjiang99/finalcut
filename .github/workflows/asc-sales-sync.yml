@@ -1,0 +1,79 @@
+name: ASC sales sync
+
+# Daily mirror of App Store Connect sales reports (vendor 85942810) into the
+# production databases: FinalCap DB (app 6815060815) and ProTune DB (6813991381).
+# The ingest verifies mirrored totals against the raw reports and records each
+# run in asc_sales_sync_state; a Muse watcher reads that state and only speaks
+# up on failure, mismatch, or staleness. apple_transactions is never touched.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'sync = trailing window; backfill = monthly from 2024-01, daily from 2026-01-01'
+        type: choice
+        options: [sync, backfill]
+        default: sync
+  schedule:
+    - cron: '23 11 * * *'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch sales reports from App Store Connect
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          pip install -q PyJWT cryptography
+          python3 scripts/asc/fetch_sales_reports.py --mode "${{ inputs.mode || 'sync' }}" --out sales-data
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          if [[ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ]]; then printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts;
+          else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; fi
+
+      - name: Ship reports and ingest script to the server
+        env:
+          TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          ssh "$TARGET" 'rm -rf /home/finalcut/apps/pages/finalcut/.sales-sync-incoming && mkdir -p /home/finalcut/apps/pages/finalcut/.sales-sync-incoming'
+          scp -r sales-data "$TARGET":/home/finalcut/apps/pages/finalcut/.sales-sync-incoming/
+          scp scripts/asc/ingest_sales.mjs "$TARGET":/home/finalcut/apps/pages/finalcut/.sales-sync-incoming/
+
+      - name: Ingest into the FinalCap database
+        id: ingest_finalcap
+        env:
+          TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          ssh "$TARGET" 'cd /home/finalcut/apps/pages/finalcut && node .sales-sync-incoming/ingest_sales.mjs --env-file /home/finalcut/apps/pages/finalcut/.env --app-id 6815060815 --app-label finalcap --data .sales-sync-incoming/sales-data'
+
+      - name: Ingest into the ProTune database
+        id: ingest_protune
+        if: always()
+        env:
+          TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          ssh "$TARGET" 'cd /home/finalcut/apps/pages/finalcut && node .sales-sync-incoming/ingest_sales.mjs --env-file /etc/photo-recipes.env --app-id 6813991381 --app-label protune --data .sales-sync-incoming/sales-data'
+
+      - name: Clean up and enforce result
+        if: always()
+        env:
+          TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          FC: ${{ steps.ingest_finalcap.outcome }}
+          PT: ${{ steps.ingest_protune.outcome }}
+        run: |
+          ssh "$TARGET" 'rm -rf /home/finalcut/apps/pages/finalcut/.sales-sync-incoming' || true
+          echo "finalcap ingest: $FC / protune ingest: $PT"
+          [[ "$FC" == "success" && "$PT" == "success" ]]
