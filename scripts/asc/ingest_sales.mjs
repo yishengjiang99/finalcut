@@ -9,6 +9,7 @@
 // Existing tables (notably apple_transactions) are never touched.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import mysql from 'mysql2/promise';
 
 const args = {};
@@ -43,24 +44,36 @@ try {
     host: env.MYSQL_HOST || '127.0.0.1', port: Number(env.MYSQL_PORT || 3306),
     user: env.MYSQL_USER, password: env.MYSQL_PASSWORD, database: env.MYSQL_DATABASE,
   });
+  // The mirror is rebuilt from the reports on every run, so if an older build
+  // created it with the pre-grain-hash schema, drop and recreate it.
+  const [[grainCol]] = await conn.execute(
+    `SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'asc_sales_mirror' AND COLUMN_NAME = 'grain_hash'`);
+  if (Number(grainCol.n) === 0) await conn.execute(`DROP TABLE IF EXISTS asc_sales_mirror`);
   await conn.execute(`CREATE TABLE IF NOT EXISTS asc_sales_mirror (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     app_id BIGINT NOT NULL, granularity VARCHAR(8) NOT NULL,
     period_start DATE NOT NULL, period_end DATE NOT NULL,
     sku VARCHAR(64) NOT NULL DEFAULT '', parent_sku VARCHAR(64) NOT NULL DEFAULT '',
     product_type VARCHAR(8) NOT NULL DEFAULT '', country VARCHAR(2) NOT NULL DEFAULT '',
+    device VARCHAR(32) NOT NULL DEFAULT '',
+    grain_hash CHAR(64) NOT NULL,
     units INT NOT NULL, unit_proceeds DECIMAL(10,2) NOT NULL, currency VARCHAR(3) NOT NULL DEFAULT '',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_mirror (app_id, granularity, period_start, sku, parent_sku, country, product_type)
+    UNIQUE KEY uq_mirror (app_id, granularity, period_start, grain_hash)
   )`);
   await conn.execute(`CREATE TABLE IF NOT EXISTS asc_sales_sync_state (
     id BIGINT PRIMARY KEY AUTO_INCREMENT, app_id BIGINT NOT NULL, ran_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(16) NOT NULL, detail TEXT
   )`);
 
+  // Identity of a report row = every descriptive column (measures excluded).
+  // Keying on a subset collapses distinct rows (e.g. same SKU split by Device)
+  // and silently loses units, which is what the verification below caught.
+  const MEASURE_COLS = new Set(['Units', 'Developer Proceeds', 'Customer Price', 'Begin Date', 'End Date']);
   let upserted = 0;
   for (const fname of readdirSync(DATA).filter(f => f.endsWith('.tsv')).sort()) {
-    const gran = fname.startsWith('DAILY') ? 'DAILY' : 'MONTHLY';
+    const gran = fname.split('_')[0];
     const lines = readFileSync(join(DATA, fname), 'utf8').split('\n').filter(l => l.trim());
     const hdr = lines[0].split('\t');
     const ix = Object.fromEntries(hdr.map((h, i) => [h, i]));
@@ -68,15 +81,18 @@ try {
     for (const line of lines.slice(1)) {
       const row = line.split('\t');
       if (col(row, 'Apple Identifier') !== APP_ID) continue;
+      const descriptive = hdr.filter(h => !MEASURE_COLS.has(h)).map(h => col(row, h)).join('\u0001');
+      const grain = createHash('sha256').update(descriptive).digest('hex');
       const vals = [
         APP_ID, gran, mdY(col(row, 'Begin Date')), mdY(col(row, 'End Date')),
         col(row, 'SKU'), col(row, 'Parent Identifier'), col(row, 'Product Type Identifier'),
-        col(row, 'Country Code'), parseInt(col(row, 'Units') || '0', 10),
+        col(row, 'Country Code'), col(row, 'Device'), grain,
+        parseInt(col(row, 'Units') || '0', 10),
         parseFloat(col(row, 'Developer Proceeds') || '0'), col(row, 'Currency of Proceeds'),
       ];
       await conn.execute(
-        `INSERT INTO asc_sales_mirror (app_id, granularity, period_start, period_end, sku, parent_sku, product_type, country, units, unit_proceeds, currency)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        `INSERT INTO asc_sales_mirror (app_id, granularity, period_start, period_end, sku, parent_sku, product_type, country, device, grain_hash, units, unit_proceeds, currency)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE period_end=VALUES(period_end), units=VALUES(units), unit_proceeds=VALUES(unit_proceeds), currency=VALUES(currency)`, vals);
       upserted++;
     }
