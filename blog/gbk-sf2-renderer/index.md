@@ -2,6 +2,7 @@
 title: "How the GBK SoundFont renderer turns MIDI into sound"
 description: "How the GBK SoundFont renderer works: MIDI notes become voices, run through envelopes, a filter and LFOs, then send effects and a mastering bus."
 date: 2026-10-29
+updated: 2026-10-29
 publish: true
 product: gbk
 keyword: SoundFont renderer
@@ -25,7 +26,7 @@ A SoundFont preset is a list of regions. Each region owns one sample and a set o
 
 Before the new voices start, the engine checks exclusive classes. Drum kits use these so a closed hi-hat cuts an open one. Voices in the same class, on the same channel and preset, get a 5 ms fast release instead of ringing on.
 
-Polyphony is capped at 64 voices by default. The voice pool is preallocated and the render loop allocates nothing, which matters inside an AudioWorklet. When the pool is full and a new note needs a voice, the engine steals the quietest one, ranked by envelope level times voice gain. The steal is a hard cut, not a fade. In practice the quietest voice is usually one already fading out, but at the limit the cut is real and immediate.
+Polyphony is capped at 64 voices by default. The voice pool is preallocated and the render loop allocates nothing, which matters inside an AudioWorklet. When the pool is full and a new note needs a voice, the engine frees the quietest one, ranked by envelope level times voice gain, and gives it to the new note. The cut is hard, not a fade. In practice the quietest voice is usually one already fading out, but at the limit the cut is real and immediate.
 
 ## One voice: sample playback, envelopes, filter, modulation
 
@@ -86,7 +87,7 @@ Exporting a WAV does not switch synthesizers. The project is turned into a plan 
 
 ## What it does not do
 
-Some edges are worth stating plainly. There is no portamento or legato; notes start where they start. Pitch bend is per channel, so there is no per-note bend or MPE. Note off velocity is ignored. Pedals are read as on or off at the halfway point, with no half-pedal shading. The engine's own program change reads the bank from CC0 only; the bank LSB (CC32) is folded in by the parts of the app that resolve presets outside the engine. And the voice-stealing cut described above is a real cut. These are the current limits of the code, not aspirations.
+Some edges are worth stating plainly. There is no portamento or legato; notes start where they start. Pitch bend is per channel, so there is no per-note bend or MPE. Note off velocity is ignored. Pedals are read as on or off at the halfway point, with no half-pedal shading. The engine's own program change reads the bank from CC0 only; the bank LSB (CC32) is folded in by the parts of the app that resolve presets outside the engine. And the cut that frees a voice when the pool is full, described above, is a real cut. These are the current limits of the code, not aspirations.
 
 ## Try it
 
