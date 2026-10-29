@@ -100,11 +100,12 @@ def main():
             jobs.append(("DAILY", day.isoformat()))
             day += timedelta(days=1)
         # Weekly reports are retained 52 weeks (per Apple's 410 detail), so they
-        # reach back a year where daily/monthly have already aged out.
-        saturday = today - timedelta(days=(today.weekday() + 2) % 7)
+        # reach back a year where daily/monthly have already aged out. The
+        # reportDate must be the Sunday ending the desired week.
+        sunday = today - timedelta(days=(today.weekday() + 1) % 7)
         for _ in range(52):
-            jobs.append(("WEEKLY", saturday.isoformat()))
-            saturday -= timedelta(days=7)
+            jobs.append(("WEEKLY", sunday.isoformat()))
+            sunday -= timedelta(days=7)
     totals = {}
     fetched = 0
     for freq, rdate in jobs:
