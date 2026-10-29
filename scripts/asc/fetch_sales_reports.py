@@ -102,7 +102,9 @@ def main():
     totals = {}
     fetched = 0
     for freq, rdate in jobs:
-        tsv = fetch(token, freq, rdate)
+        # The API wants YYYY-MM for MONTHLY, YYYY-MM-DD for DAILY.
+        qdate = rdate[:7] if freq == "MONTHLY" else rdate
+        tsv = fetch(token, freq, qdate)
         if tsv is None:
             continue
         name = f"{freq}_{rdate}"
