@@ -45,6 +45,14 @@ extension NativeComposer {
     }
 
     static func compose(project: EditorProject, resolve: (MediaAsset) -> URL) async throws -> ComposedVideo {
+        // An empty timeline has no video tracks: AVFoundation completes
+        // videoComposition(with:applyingCIFiltersWithHandler:) with a nil
+        // composition, and Swift's async bridge force-unwraps that nil — a hard
+        // trap, not a thrown error (build 36 crash, 2026-10-29: delete every
+        // clip, refreshPreview composed the empty project). Fail normally.
+        guard !project.videoClips.isEmpty else {
+            throw ProjectComposerError.invalidProject(["no_video_clips"])
+        }
         let issues = project.validationIssues()
         if !issues.isEmpty { throw ProjectComposerError.invalidProject(issues) }
         // A deleted media file fails the compose with the asset identified (the UI

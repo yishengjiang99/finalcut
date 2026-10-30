@@ -607,6 +607,15 @@ final class EditorViewModel: ObservableObject {
             previewItem = nil
             composedVideo = nil
         } else if stack.isTimelineProject, let project = stack.project {
+            if project.videoClips.isEmpty {
+                // Empty timeline (every clip deleted): nothing to preview, and
+                // composing it traps inside AVFoundation (see ProjectComposer's
+                // no_video_clips guard) — just clear the preview.
+                composedVideo = nil
+                previewItem = nil
+                previewPhoto = nil
+                return
+            }
             // Multi-clip preview comes straight from the project composition — no
             // intermediate file is rendered. The generation counter drops results of
             // superseded edits so an older build can't overwrite a newer preview.

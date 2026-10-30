@@ -108,6 +108,24 @@ final class ProjectComposerTests: XCTestCase {
 
     // MARK: Tests
 
+    /// Regression (build 36 crash, 2026-10-29): deleting every clip and letting
+    /// refreshPreview compose the empty project trapped inside AVFoundation —
+    /// videoComposition(with:applyingCIFiltersWithHandler:) completes with a nil
+    /// composition for a trackless asset and Swift's async bridge force-unwraps
+    /// it. Compose must throw `no_video_clips` as a normal error instead.
+    func testEmptyProjectComposeThrowsInsteadOfTrapping() async throws {
+        let project = EditorProject(name: "Empty", canvas: ProjectCanvas(width: 128, height: 96))
+        do {
+            _ = try await NativeComposer.compose(project: project) { _ in self.dir }
+            XCTFail("composing an empty project must throw")
+        } catch let error as ProjectComposerError {
+            guard case .invalidProject(let issues) = error else {
+                return XCTFail("expected invalidProject, got \(error)")
+            }
+            XCTAssertEqual(issues, ["no_video_clips"])
+        }
+    }
+
     func testTwoClipsComposeSequentiallyWithRangesAndSpeed() async throws {
         let videoURL = try await makeVideo(name: "a.mp4")
         let video = try await probeAsset(videoURL, type: .video)
