@@ -1,0 +1,51 @@
+name: ASC crash log (read-only, temporary)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crashlog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch recent TestFlight crash feedback
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUNDLE_ID: com.ragnus.w2
+        run: |
+          set -euo pipefail
+          pip install -q PyJWT cryptography
+          python3 <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          import jwt
+          key_id = os.environ["APP_STORE_CONNECT_KEY_ID"].strip()
+          issuer = os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip()
+          p8 = os.environ['APP_STORE_CONNECT_API_KEY_P8'].replace('\\n', '\n').strip()
+          bundle_id = os.environ["BUNDLE_ID"].strip()
+          now = int(time.time())
+          token = jwt.encode({"iss": issuer, "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"}, p8, algorithm="ES256", headers={"kid": key_id, "typ": "JWT"})
+          def api(path):
+            req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=90) as r:
+              return json.loads(r.read().decode() or "{}")
+          def trypath(path):
+            try:
+              return api(path)
+            except urllib.error.HTTPError as e:
+              print("HTTP", e.code, "for", path, e.read().decode()[:300])
+              return None
+          apps = api(f"/v1/apps?filter[bundleId]={bundle_id}")
+          app = apps["data"][0]
+          app_id = app["id"]
+          print("APP", app_id, app["attributes"].get("name"))
+          subs = trypath(f"/v1/apps/{app_id}/betaFeedbackCrashSubmissions?limit=10&sort=-createdDate&include=build,tester,crashLog")
+          print("SUBMISSIONS", json.dumps(subs)[:6000] if subs else None)
+          data = (subs or {}).get("data") or []
+          for sub in data[:3]:
+            sid = sub["id"]
+            print("=== submission", sid, sub.get("attributes", {}).get("createdDate"))
+            log = trypath(f"/v1/betaFeedbackCrashSubmissions/{sid}/crashLog")
+            print("CRASHLOG", json.dumps(log)[:120000] if log else None)
+          PY
