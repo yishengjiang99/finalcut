@@ -112,9 +112,9 @@ export async function handleProductWebhookEvent(event, { stripe = defaultStripe,
       const plan = obj.metadata?.plan || '';
       const { setProductEntitlement } = await getDb();
       if (email) {
-        await setProductEntitlement({ email, product: spec.product, plan, source: 'stripe', ref: obj.subscription || obj.payment_intent || obj.id, customerId: obj.customer || null, active: true });
+        await setProductEntitlement({ email, product: spec.product, plan, source: 'stripe', ref: (typeof obj.subscription === 'object' ? obj.subscription?.id : obj.subscription) || obj.payment_intent || obj.id, customerId: obj.customer || null, active: true });
       }
-      if (spec.product === COMPOSE_PRODUCT) await lifecycle.recordCheckoutCompleted(obj, await getDb());
+      if (spec.product === COMPOSE_PRODUCT) await lifecycle.recordCheckoutCompleted(obj, await getDb(), { stripe, env, sendEmail });
       if (obj.metadata?.ads_opt_out === '1') return true;
       const isTrial = obj.mode === 'subscription' && (obj.amount_total || 0) === 0;
       const value = isTrial ? 0 : (obj.amount_total || 0) / 100 || (spec.plans(env)[plan]?.value ?? 0);
@@ -126,6 +126,13 @@ export async function handleProductWebhookEvent(event, { stripe = defaultStripe,
         at: new Date((obj.created || Math.floor(Date.now() / 1000)) * 1000),
         sourceUrl: obj.metadata?.landing,
       }, { env });
+      return true;
+    }
+    // Compose-only: the entitlement row is written at checkout.session.completed; this fills status +
+    // period end if .created lands after it (UPDATE is a no-op otherwise). Others fall through unchanged.
+    case 'customer.subscription.created': {
+      if (productOf(obj) !== COMPOSE_PRODUCT) return false;
+      await lifecycle.recordSubscriptionChange(event, await getDb());
       return true;
     }
     case 'customer.subscription.updated':

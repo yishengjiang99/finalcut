@@ -66,11 +66,36 @@ export function trialEndingEmail({ trialEnd, planLabel, manageUrl }) {
   return { subject: `Your GBK Composer Pro trial ends ${when}`, text, html: textToHtml(text) };
 }
 
+export function welcomeEmail({ planLabel, trialEnd = null, manageUrl }) {
+  const text = [
+    'Hi,',
+    '',
+    'Thanks for upgrading to GBK Composer Pro!',
+    '',
+    trialEnd
+      ? `Your plan: ${planLabel}. Your free trial runs until ${fmtDate(trialEnd)}; you won't be charged before then.`
+      : `Your plan: ${planLabel}.`,
+    '',
+    'What Pro includes:',
+    '- 10x the Studio AI budget',
+    '- 120 renders per hour',
+    '',
+    'Jump back into the Studio:',
+    'https://compose.grepawk.com/studio',
+    '',
+    'Manage or cancel your plan any time:',
+    manageUrl,
+    '',
+    'GBK Composer',
+  ].join('\n');
+  return { subject: trialEnd ? 'Welcome to GBK Composer Pro: your free trial has started' : 'Welcome to GBK Composer Pro', text, html: textToHtml(text) };
+}
+
 function textToHtml(text) {
   return text.split('\n').map((l) => (/^https:\/\//.test(l) ? `<a href="${esc(l)}">${esc(l)}</a>` : esc(l))).join('<br>\n');
 }
 
-const PLAN_LABELS = { pro_monthly: 'monthly ($5.99/month)', pro_yearly: 'yearly ($47.99/year)' };
+const PLAN_LABELS = { pro_monthly: 'monthly ($5.99/month)', pro_yearly: 'yearly ($47.99/year)', lifetime: 'lifetime' };
 
 export function emailsEnabled(env = process.env) {
   return env.COMPOSE_LIFECYCLE_EMAILS === '1' && Boolean(env.RESEND_API_KEY) && Boolean(env.COMPOSE_EMAIL_FROM);
@@ -87,7 +112,24 @@ export async function sendResendEmail({ to, subject, text, html }, { env = proce
 
 // ---- webhook additions for product='compose' ----
 const at = (unix) => new Date((unix || Math.floor(Date.now() / 1000)) * 1000);
-export const periodEndOf = (sub) => sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end ?? null;
+// Stripe API >= 2025-03-31.basil moved current_period_end from the Subscription onto each item.
+// Prefer the item-level value (latest across items), then the legacy top-level field, then trial_end.
+export const periodEndOf = (sub) => {
+  if (!sub || typeof sub !== 'object') return null;
+  const itemEnds = (sub.items?.data || []).map((i) => i?.current_period_end).filter((v) => Number.isFinite(v));
+  if (itemEnds.length) return Math.max(...itemEnds);
+  return sub.current_period_end ?? sub.trial_end ?? null;
+};
+
+// checkout.session.completed carries `subscription` as an id unless expanded; fetch it when needed.
+async function resolveSubscription(subscription, stripe) {
+  if (subscription && typeof subscription === 'object') return subscription;
+  if (!subscription || !stripe?.subscriptions?.retrieve) return null;
+  try { return await stripe.subscriptions.retrieve(subscription); } catch (error) {
+    console.error('[compose] subscription retrieve failed:', error.message);
+    return null;
+  }
+}
 
 // Email is sent at most once per ref: the email_* event is recorded first (INSERT IGNORE), and only
 // the call that inserted it sends. A failed send is logged and not retried (better than a double send).
@@ -124,17 +166,30 @@ export async function onTrialWillEnd(sub, db, { env, sendEmail, stripe }) {
   return sendOnce(db, { type: 'email_trial_ending', ref: `${sub.id}:${sub.trial_end}`, email, message }, { env, sendEmail });
 }
 
-export async function recordCheckoutCompleted(session, db) {
+export async function recordCheckoutCompleted(session, db, { stripe, env = process.env, sendEmail = sendResendEmail } = {}) {
   const email = session.customer_details?.email || session.customer_email || null;
   const plan = session.metadata?.plan || null;
   const isTrial = session.mode === 'subscription' && (session.amount_total || 0) === 0;
-  const ref = session.subscription || session.payment_intent || session.id;
-  if (session.subscription) await db.setProductSubscriptionState({ product: COMPOSE_PRODUCT, ref, status: isTrial ? 'trialing' : 'active' });
-  else await db.setProductSubscriptionState({ product: COMPOSE_PRODUCT, ref, status: 'active' });
+  const subId = typeof session.subscription === 'object' ? session.subscription?.id : session.subscription;
+  const ref = subId || session.payment_intent || session.id;
+  let sub = null;
+  if (subId) {
+    sub = await resolveSubscription(session.subscription, stripe);
+    await db.setProductSubscriptionState({
+      product: COMPOSE_PRODUCT, ref, status: sub?.status || (isTrial ? 'trialing' : 'active'),
+      currentPeriodEnd: periodEndOf(sub), cancelAtPeriodEnd: Boolean(sub?.cancel_at_period_end),
+    });
+  } else await db.setProductSubscriptionState({ product: COMPOSE_PRODUCT, ref, status: 'active' });
   await db.recordProductEvent({
     product: COMPOSE_PRODUCT, type: isTrial ? 'trial_start' : 'purchase', ref: session.id, email, plan,
-    amountCents: session.amount_total || 0, currency: session.currency || null, subscriptionRef: session.subscription || null, occurredAt: at(session.created),
-  });
+    amountCents: session.amount_total || 0, currency: session.currency || null, subscriptionRef: subId || null, occurredAt: at(session.created),
+  });  // Welcome/confirmation email: once per Checkout Session, off unless COMPOSE_LIFECYCLE_EMAILS=1.
+  const manageUrl = email && signPortalLink(email, env);
+  if (manageUrl) {
+    const trialEnd = isTrial ? (sub?.trial_end ?? null) : null;
+    const message = welcomeEmail({ planLabel: PLAN_LABELS[plan] || 'Pro', trialEnd, manageUrl });
+    await sendOnce(db, { type: 'email_welcome', ref: session.id, email, message }, { env, sendEmail });
+  }
 }
 
 export async function recordSubscriptionChange(event, db) {
@@ -177,4 +232,4 @@ export async function recordRefund(charge, db) {
   return true;
 }
 
-export const FUNNEL_TYPES = ['trial_start', 'trial_convert', 'renewal', 'purchase', 'cancel', 'refund', 'email_recovery', 'email_trial_ending'];
+export const FUNNEL_TYPES = ['trial_start', 'trial_convert', 'renewal', 'purchase', 'cancel', 'refund', 'email_recovery', 'email_trial_ending', 'email_welcome'];
