@@ -18,6 +18,7 @@
 		1A5E8B986C681D4767E46AFF /* NotoSansCJKsc-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 5CBED88C283EE2FD99C7B152 /* NotoSansCJKsc-Bold.otf */; };
 		1AFF213883107B65DCD2E72B /* Captions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF61874E48A7AF7AEB14D5E /* Captions.swift */; };
 		1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F58061DA341BBCB66512BC /* ProjectStore.swift */; };
+		FE57C0DE00000000000000B2 /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE57C0DE00000000000000B1 /* Transcript.swift */; };
 		FE57C0DE00000000000000A2 /* WireTurns.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE57C0DE00000000000000A1 /* WireTurns.swift */; };
 		1C91E72D0BE8A8E76AD6FFD8 /* EditRoutingAndMediaTypeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68C3D23240D4E22F930DAA98 /* EditRoutingAndMediaTypeTests.swift */; };
 		1FD1C413E1DB2E355F012DD6 /* AudioDucking.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE21E8673CABC1B000231B1F /* AudioDucking.swift */; };
@@ -191,6 +192,7 @@
 		B364855EAC084A2C921B51CA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BD8EDECA10A52D55149B0238 /* AudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRenderer.swift; sourceTree = "<group>"; };
 		C0F58061DA341BBCB66512BC /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		FE57C0DE00000000000000B1 /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcript.swift; sourceTree = "<group>"; };
 		FE57C0DE00000000000000A1 /* WireTurns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WireTurns.swift; sourceTree = "<group>"; };
 		CA5CF65882224BB0B955C889 /* FinalCutTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinalCutTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
@@ -380,6 +382,7 @@
 				53F92517F51CD79C498303A0 /* EditStackProjectAdapter.swift */,
 				C0F58061DA341BBCB66512BC /* ProjectStore.swift */,
 				FE57C0DE00000000000000A1 /* WireTurns.swift */,
+				FE57C0DE00000000000000B1 /* Transcript.swift */,
 				334A23BED09239D76E43CF05 /* ProjectLibrary.swift */,
 				7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */,
 				371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */,
@@ -627,6 +630,7 @@
 				9A75AE5C9B3158C7E784C1E8 /* EditStackProjectAdapter.swift in Sources */,
 				1BF5D5C4E96B92D1AA2E94E3 /* ProjectStore.swift in Sources */,
 				FE57C0DE00000000000000A2 /* WireTurns.swift in Sources */,
+				FE57C0DE00000000000000B2 /* Transcript.swift in Sources */,
 				8C8F6183FF43B54FC08DDF21 /* ProjectLibrary.swift in Sources */,
 				37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */,
 				CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */,

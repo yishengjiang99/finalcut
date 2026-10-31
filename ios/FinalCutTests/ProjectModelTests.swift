@@ -228,4 +228,48 @@ final class ProjectModelTests: XCTestCase {
         let delta = ClientChat.completedTurnMessages(seed: seed, previous: previous, response: response)
         XCTAssertEqual(delta, Array(previous.dropFirst(seed.count)) + [ClientChat.assistantMessage("All set.")])
     }
+
+    // MARK: Transcript persistence (Phase 2, #125)
+
+    func testTranscriptSaveLoadRoundTrip() throws {
+        try withTemporaryProjectStore {
+            let projectID = UUID()
+            try ProjectStore.ensureDirectories(projectID)
+            let dir = ProjectStore.projectDirectory(projectID)
+            let inside = dir.appendingPathComponent("Media/thumb.jpg")
+            let outside = FileManager.default.temporaryDirectory.appendingPathComponent("elsewhere.jpg")
+            let chip = CaptionDownloadChip(label: "SRT", filename: "captions.srt", content: "1")
+            let messages = [
+                ChatMessage(role: .system, content: "Opened Untitled (1 clips)."),
+                ChatMessage(role: .user, content: "trim it"),
+                ChatMessage(role: .assistant, content: "Trimmed.", resultThumbnailURLs: [inside, outside], downloadChips: [chip]),
+            ]
+            TranscriptStore.save(messages, projectID: projectID)
+            let loaded = try XCTUnwrap(TranscriptStore.load(projectID: projectID))
+            // System status lines are session-only; ids/content/chips survive.
+            XCTAssertEqual(loaded.map(\.id), [messages[1].id, messages[2].id])
+            XCTAssertEqual(loaded.map(\.content), ["trim it", "Trimmed."])
+            XCTAssertEqual(loaded[1].downloadChips, [chip])
+            // Thumbnails are stored project-relative; ones outside the project are dropped.
+            XCTAssertEqual(loaded[1].resultThumbnailURLs.map(\.standardizedFileURL), [inside.standardizedFileURL])
+            let raw = try String(contentsOf: TranscriptStore.fileURL(projectID), encoding: .utf8)
+            XCTAssertTrue(raw.contains("thumb.jpg"))
+            XCTAssertFalse(raw.contains(dir.lastPathComponent), "no absolute paths on disk")
+        }
+    }
+
+    func testTranscriptMissingOrCorruptFileLoadsNil() throws {
+        try withTemporaryProjectStore {
+            let projectID = UUID()
+            XCTAssertNil(TranscriptStore.load(projectID: projectID))
+            // No project directory: save is a no-op (never resurrects a deleted project).
+            TranscriptStore.save([ChatMessage(role: .user, content: "hi")], projectID: projectID)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: ProjectStore.projectDirectory(projectID).path))
+            try ProjectStore.ensureDirectories(projectID)
+            try Data("{not json".utf8).write(to: TranscriptStore.fileURL(projectID))
+            XCTAssertNil(TranscriptStore.load(projectID: projectID))
+            try Data(#"{"version": 99, "messages": []}"#.utf8).write(to: TranscriptStore.fileURL(projectID))
+            XCTAssertNil(TranscriptStore.load(projectID: projectID))
+        }
+    }
 }
