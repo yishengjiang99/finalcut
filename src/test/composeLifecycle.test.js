@@ -138,7 +138,7 @@ describe('#122 checkout + webhooks', () => {
 
   it('records trial_start → trial_convert → renewal → cancel → refund', async () => {
     await handle({ type: 'checkout.session.completed', data: { object: { id: 'cs_t', mode: 'subscription', amount_total: 0, subscription: 'sub_1', customer: 'cus_1', customer_details: { email: 'pro@example.com' }, metadata: { product: 'compose', plan: 'pro_yearly' } } } });
-    expect(db.setProductSubscriptionState).toHaveBeenCalledWith({ product: 'compose', ref: 'sub_1', status: 'trialing' });
+    expect(db.setProductSubscriptionState).toHaveBeenCalledWith({ product: 'compose', ref: 'sub_1', status: 'trialing', currentPeriodEnd: null, cancelAtPeriodEnd: false });
     const inv = (id) => ({ type: 'invoice.paid', data: { object: { id, amount_paid: 4799, currency: 'usd', parent: { subscription_details: { subscription: 'sub_1', metadata: { product: 'compose', plan: 'pro_yearly' } } } } } });
     await handle(inv('in_1'));
     await handle(inv('in_2'));
@@ -214,6 +214,94 @@ describe('email deliverability', () => {
     const sendEmail = vi.fn(async () => {});
     const ev = { type: 'checkout.session.expired', data: { object: { id: 'cs_u', customer_details: { email: 'a@b.co' }, consent: { promotions: 'opt_in' }, after_expiration: { recovery: { url: 'https://buy.stripe.com/r/abc' } }, metadata: { product: 'compose' } } } };
     await handle(ev, { sendEmail, env: ON });
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('compose current_period_end (Stripe 2025-12-15.clover)', () => {
+  const completed = (subscription) => ({ type: 'checkout.session.completed', data: { object: { id: 'cs_y', mode: 'subscription', amount_total: 0, subscription, customer: 'cus_1', customer_details: { email: 'pro@example.com' }, metadata: { product: 'compose', plan: 'pro_yearly' } } } });
+  const cloverSub = { id: 'sub_y', status: 'trialing', trial_end: 1793000000, cancel_at_period_end: false, items: { data: [{ current_period_end: 1793000000 }] }, metadata: { product: 'compose' } };
+
+  it('periodEndOf: item-level, then legacy top-level, then trial_end', () => {
+    expect(life.periodEndOf({ items: { data: [{ current_period_end: 5 }, { current_period_end: 9 }] }, current_period_end: 1 })).toBe(9);
+    expect(life.periodEndOf({ current_period_end: 7, items: { data: [] } })).toBe(7);
+    expect(life.periodEndOf({ trial_end: 3, items: { data: [{}] } })).toBe(3);
+    expect(life.periodEndOf(null)).toBeNull();
+  });
+
+  it('checkout.session.completed retrieves an unexpanded subscription and stores its period end', async () => {
+    const retrieve = vi.fn(async () => cloverSub);
+    await handle(completed('sub_y'), { stripe: { subscriptions: { retrieve } } });
+    expect(retrieve).toHaveBeenCalledWith('sub_y');
+    expect(db.setProductSubscriptionState).toHaveBeenCalledWith({ product: 'compose', ref: 'sub_y', status: 'trialing', currentPeriodEnd: 1793000000, cancelAtPeriodEnd: false });
+  });
+
+  it('checkout.session.completed uses an expanded subscription without a retrieve', async () => {
+    const retrieve = vi.fn();
+    await handle(completed(cloverSub), { stripe: { subscriptions: { retrieve } } });
+    expect(retrieve).not.toHaveBeenCalled();
+    expect(db.setProductSubscriptionState).toHaveBeenCalledWith({ product: 'compose', ref: 'sub_y', status: 'trialing', currentPeriodEnd: 1793000000, cancelAtPeriodEnd: false });
+    expect(db.setProductEntitlement).toHaveBeenCalledWith(expect.objectContaining({ ref: 'sub_y' }));
+  });
+
+  it('retrieve failure still records trialing (falls back gracefully)', async () => {
+    const retrieve = vi.fn(async () => { throw new Error('boom'); });
+    await handle(completed('sub_y'), { stripe: { subscriptions: { retrieve } } });
+    expect(db.setProductSubscriptionState).toHaveBeenCalledWith({ product: 'compose', ref: 'sub_y', status: 'trialing', currentPeriodEnd: null, cancelAtPeriodEnd: false });
+  });
+
+  it('customer.subscription.created/updated set period end from items, trial_end fallback', async () => {
+    expect(await handle({ type: 'customer.subscription.created', data: { object: cloverSub } })).toBe(true);
+    expect(db.setProductSubscriptionState).toHaveBeenLastCalledWith({ product: 'compose', ref: 'sub_y', status: 'trialing', currentPeriodEnd: 1793000000, cancelAtPeriodEnd: false });
+    await handle({ type: 'customer.subscription.updated', data: { object: { ...cloverSub, items: { data: [{}] }, trial_end: 1794000000 } } });
+    expect(db.setProductSubscriptionState).toHaveBeenLastCalledWith({ product: 'compose', ref: 'sub_y', status: 'trialing', currentPeriodEnd: 1794000000, cancelAtPeriodEnd: false });
+  });
+
+  it('music/FinalCut subscription.created is not handled here', async () => {
+    expect(await handle({ type: 'customer.subscription.created', data: { object: { id: 'sub_m', metadata: { product: 'music' } } } })).toBe(false);
+    expect(await handle({ type: 'customer.subscription.created', data: { object: { id: 'sub_f', metadata: {} } } })).toBe(false);
+    expect(db.setProductSubscriptionState).not.toHaveBeenCalled();
+  });
+});
+
+describe('compose welcome email', () => {
+  const sub = { id: 'sub_w', status: 'trialing', trial_end: 1793000000, items: { data: [{ current_period_end: 1793000000 }] } };
+  const stripe = { subscriptions: { retrieve: vi.fn(async () => sub) } };
+  const trial = { type: 'checkout.session.completed', data: { object: { id: 'cs_w', mode: 'subscription', amount_total: 0, subscription: 'sub_w', customer: 'cus_1', customer_details: { email: 'pro@example.com' }, metadata: { product: 'compose', plan: 'pro_yearly' } } } };
+
+  it('off by default; when on, sent once per session with plan, trial end, Pro perks, studio + signed portal link', async () => {
+    const sendEmail = vi.fn(async () => {});
+    await handle(trial, { sendEmail, stripe });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(db._events.has('email_welcome|cs_w')).toBe(false);
+    await handle(trial, { sendEmail, stripe, env: ON });
+    await handle(trial, { sendEmail, stripe, env: ON }); // webhook retry
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    const msg = sendEmail.mock.calls[0][0];
+    expect(msg.to).toBe('pro@example.com');
+    expect(msg.subject).toBe('Welcome to GBK Composer Pro: your free trial has started');
+    expect(msg.text).toContain('yearly ($47.99/year)');
+    expect(msg.text).toContain('until October 26, 2026');
+    expect(msg.text).toContain('10x the Studio AI budget');
+    expect(msg.text).toContain('120 renders per hour');
+    expect(msg.text).toContain('https://compose.grepawk.com/studio');
+    const link = msg.text.split('\n').find((l) => l.includes('https://grepawk.com/api/compose/portal?')).replace(/^.*?(https:)/, '$1');
+    expect(life.verifyPortalLink(Object.fromEntries(new URL(link).searchParams), ON)).toBe(true);
+    expect(db._events.get('email_welcome|cs_w')).toMatchObject({ product: 'compose', type: 'email_welcome', email: 'pro@example.com' });
+  });
+
+  it('lifetime purchase: no trial line', async () => {
+    const sendEmail = vi.fn(async () => {});
+    await handle({ type: 'checkout.session.completed', data: { object: { id: 'cs_l', mode: 'payment', amount_total: 9900, payment_intent: 'pi_1', customer_details: { email: 'pro@example.com' }, metadata: { product: 'compose', plan: 'lifetime' } } } }, { sendEmail, env: ON });
+    const msg = sendEmail.mock.calls[0][0];
+    expect(msg.subject).toBe('Welcome to GBK Composer Pro');
+    expect(msg.text).toContain('Your plan: lifetime.');
+    expect(msg.text).not.toContain('free trial');
+  });
+
+  it('music checkout sends no welcome email', async () => {
+    const sendEmail = vi.fn(async () => {});
+    await handle({ type: 'checkout.session.completed', data: { object: { id: 'cs_m', mode: 'subscription', amount_total: 0, subscription: 'sub_m', customer_details: { email: 'a@b.co' }, metadata: { product: 'music', plan: 'pro_monthly' } } } }, { sendEmail, env: ON });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 });
