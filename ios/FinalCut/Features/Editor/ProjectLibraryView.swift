@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Project history — the library of saved editing projects (issue #125,
 /// Phase 1), modelled on chat-app conversation lists: title-first rows in
@@ -24,6 +25,8 @@ struct ProjectLibraryView: View {
     @State private var showArchived = false
     /// The just-archived row the Undo toast can restore.
     @State private var undoArchiveRow: ProjectIndexRow?
+    @State private var showStorage = false
+    @State private var showNudge = false
 
     private var buckets: ProjectLibraryBuckets {
         ProjectLibrary.buckets(from: rows, query: query)
@@ -48,10 +51,19 @@ struct ProjectLibraryView: View {
                     AnyView(decoratedRow(row))
                 }
             }
+            .navigationDestination(isPresented: $showStorage) {
+                ProjectStorageView(model: model) { rows = ProjectLibrary.loadRows() }
+            }
             .overlay(alignment: .bottom) { undoToast }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showStorage = true } label: {
+                        Label("Storage", systemImage: "internaldrive")
+                    }
+                    .accessibilityIdentifier("ProjectStorage")
                 }
             }
         }
@@ -95,6 +107,9 @@ struct ProjectLibraryView: View {
     private var list: some View {
         List {
             let current = buckets
+            if showNudge, query.isEmpty {
+                Section { archiveNudge }
+            }
             if !current.pinned.isEmpty {
                 Section("Pinned") {
                     ForEach(current.pinned) { decoratedRow($0) }
@@ -126,6 +141,38 @@ struct ProjectLibraryView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+    }
+
+    /// Gentle archive suggestion (#125 Phase 4): never archives on its own;
+    /// "Not now" snoozes it for `ProjectStorage.nudgeSnooze`.
+    private var archiveNudge: some View {
+        let stale = ProjectStorage.staleProjects(rows)
+        let days = Int(ProjectStorage.staleThreshold / 86_400)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(stale.count == 1
+                 ? "1 project hasn't been opened in \(days)+ days. Archive it to tidy your list? Nothing is deleted."
+                 : "\(stale.count) projects haven't been opened in \(days)+ days. Archive them to tidy your list? Nothing is deleted.")
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textPrimary)
+            HStack(spacing: 16) {
+                Button(stale.count == 1 ? "Archive it" : "Archive them") {
+                    for row in stale { model.setProjectArchived(id: row.id, true) }
+                    rows = ProjectLibrary.loadRows()
+                    showNudge = false
+                }
+                .buttonStyle(.borderless)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.accent)
+                Button("Not now") {
+                    ProjectStorage.dismissArchiveNudge()
+                    showNudge = false
+                }
+                .buttonStyle(.borderless)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+        .listRowBackground(AppTheme.surfaceElevated)
     }
 
     static func noMatchText(_ query: String) -> String {
@@ -349,6 +396,7 @@ struct ProjectLibraryView: View {
 
     private func reload() async {
         rows = ProjectLibrary.loadRows()
+        showNudge = ProjectStorage.shouldShowArchiveNudge(rows)
         loadCoverImages()
         // Lazily generate covers for rows that don't have one yet (best
         // effort, off the save path — see ProjectLibrary), then pick them up.
@@ -397,4 +445,148 @@ struct ArchivedProjectsList: View {
         .navigationTitle("Archived")
         .searchable(text: $query, prompt: "Search titles or dates")
     }
+}
+
+/// Storage (#125 Phase 4): library total, projects largest first, thumbnail
+/// cache clearing (covers only, never project data), and per-project backup
+/// export, duplicate, archive and delete.
+struct ProjectStorageView: View {
+    @ObservedObject var model: EditorViewModel
+    var onChange: () -> Void
+
+    @State private var entries: [ProjectStorageEntry] = []
+    @State private var clearedText: String?
+    @State private var deleteEntry: ProjectStorageEntry?
+    @State private var exportURL: URL?
+    @State private var exportFailed = false
+    @State private var working = false
+
+    private static func bytes(_ count: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+    }
+
+    var body: some View {
+        let total = ProjectStorage.totalBytes(entries)
+        let thumbnails = entries.reduce(Int64(0)) { $0 + $1.thumbnailBytes }
+        List {
+            Section {
+                HStack {
+                    Text("All projects")
+                    Spacer()
+                    Text(Self.bytes(total)).foregroundStyle(AppTheme.textSecondary)
+                }
+                .listRowBackground(AppTheme.surfaceElevated)
+                Button {
+                    let freed = ProjectStorage.clearThumbnailCache()
+                    clearedText = "Freed \(Self.bytes(freed)). Thumbnails come back the next time the library shows them."
+                    reload()
+                } label: {
+                    HStack {
+                        Text("Clear thumbnail cache")
+                        Spacer()
+                        Text(Self.bytes(thumbnails)).foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+                .disabled(thumbnails == 0)
+                .listRowBackground(AppTheme.surfaceElevated)
+            } footer: {
+                Text("Clearing thumbnails never deletes projects, media or chats.")
+            }
+            Section("Largest first") {
+                ForEach(entries) { entry in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.title).lineLimit(1).foregroundStyle(AppTheme.textPrimary)
+                            if entry.isArchived {
+                                Text("Archived").font(.caption2).foregroundStyle(AppTheme.textSecondary)
+                            }
+                        }
+                        Spacer()
+                        Text(Self.bytes(entry.totalBytes)).foregroundStyle(AppTheme.textSecondary)
+                    }
+                    .listRowBackground(AppTheme.surfaceElevated)
+                    .contextMenu {
+                        Button { export(entry) } label: {
+                            Label("Export backup", systemImage: "square.and.arrow.up")
+                        }
+                        Button { duplicate(entry) } label: {
+                            Label("Duplicate (copies media)", systemImage: "plus.square.on.square")
+                        }
+                        Button {
+                            model.setProjectArchived(id: entry.id, !entry.isArchived)
+                            reload()
+                        } label: {
+                            Label(entry.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
+                        }
+                        Button(role: .destructive) { deleteEntry = entry } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button { export(entry) } label: {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                        .tint(AppTheme.accent)
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.background.ignoresSafeArea())
+        .navigationTitle("Storage")
+        .overlay { if working { ProgressView() } }
+        .onAppear { reload() }
+        .alert("Thumbnail cache cleared", isPresented: Binding(
+            get: { clearedText != nil }, set: { if !$0 { clearedText = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(clearedText ?? "") }
+        .alert("Delete this project?", isPresented: Binding(
+            get: { deleteEntry != nil }, set: { if !$0 { deleteEntry = nil } }), presenting: deleteEntry) { entry in
+            Button("Delete permanently", role: .destructive) {
+                _ = try? model.deleteProject(id: entry.id)
+                deleteEntry = nil
+                reload()
+            }
+            Button("Cancel", role: .cancel) { deleteEntry = nil }
+        } message: { entry in
+            Text("“\(entry.title)” and its media will be deleted permanently. This frees \(Self.bytes(entry.totalBytes)).")
+        }
+        .alert("Couldn't export that project", isPresented: $exportFailed) {
+            Button("OK", role: .cancel) {}
+        }
+        .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) {
+            if let url = exportURL { ActivityShareSheet(items: [url]) }
+        }
+    }
+
+    private func reload() {
+        entries = ProjectStorage.entries()
+        onChange()
+    }
+
+    private func export(_ entry: ProjectStorageEntry) {
+        working = true
+        let id = entry.id
+        Task { @MainActor in
+            let url = await Task.detached { try? ProjectStorage.makeBackupArchive(projectID: id) }.value
+            working = false
+            if let url { exportURL = url } else { exportFailed = true }
+        }
+    }
+
+    private func duplicate(_ entry: ProjectStorageEntry) {
+        model.saveTimelineProject()
+        _ = try? ProjectStorage.duplicate(projectID: entry.id)
+        reload()
+    }
+}
+
+/// UIActivityViewController for a backup file (share sheet, incl. Save to Files).
+struct ActivityShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
