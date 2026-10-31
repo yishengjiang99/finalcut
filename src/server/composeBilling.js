@@ -9,6 +9,8 @@
 //   POST /api/compose/portal  {email}  Authorization: Bearer $COMPOSE_ENTITLEMENT_TOKEN → { url }
 //        Stripe Billing Portal session for that customer, returning to compose.grepawk.com/studio.
 //   GET  /api/compose/portal?email&exp&sig   signed link (lifecycle emails) → 303 to the portal.
+//   GET|POST /api/compose/unsubscribe?email&sig   signed link from marketing emails. GET shows a confirm
+//        button; POST unsubscribes (also RFC 8058 List-Unsubscribe-Post one-click).
 //   GET  /api/compose/events?since=ISO&until=ISO  Bearer → funnel events + counts for the GBK report.
 // Webhook handling is shared with music (musicBilling.handleProductWebhookEvent, product='compose').
 import express from 'express';
@@ -17,7 +19,7 @@ import { stripe as defaultStripe } from './config.js';
 import { apiLimiter } from './middleware.js';
 import { COMPOSE_PRODUCT, PRODUCT_SPECS, resolveComposePlan } from './products.js';
 import { attributionFrom, buildCheckoutParams } from './musicBilling.js';
-import { verifyPortalLink, FUNNEL_TYPES } from './composeLifecycle.js';
+import { verifyPortalLink, verifyUnsubscribeLink, unsubscribeRef, FUNNEL_TYPES } from './composeLifecycle.js';
 
 export const PORTAL_RETURN_PATH = '/studio';
 
@@ -118,6 +120,27 @@ export function createComposeRouter({ stripe = defaultStripe, db, env = process.
       console.error('[compose] portal link error:', error.message);
       return res.redirect(303, `${site}${PORTAL_RETURN_PATH}?portal=error`);
     }
+  });
+
+  // Unsubscribe from marketing-type emails (recovery). GET never changes state (link scanners
+  // prefetch URLs); it shows a confirm button that POSTs. Mail clients POST directly (RFC 8058).
+  const unsubPage = (title, msg, form = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>${title}</title></head><body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:48px auto;padding:0 16px;"><h1 style="font-size:22px;">${title}</h1><p>${msg}</p>${form}<p style="font-size:12px;color:#6b7280;">FinalCut (GBK Composer) · grepawk.com</p></body></html>`;
+  router.get('/api/compose/unsubscribe', apiLimiter, (req, res) => {
+    if (!verifyUnsubscribeLink(req.query || {}, env)) return res.status(400).type('html').send(unsubPage('Link not valid', 'This unsubscribe link is not valid. Reply to any of our emails and we will remove you.'));
+    const q = new URLSearchParams({ email: String(req.query.email), sig: String(req.query.sig) });
+    return res.type('html').send(unsubPage('Unsubscribe', 'Stop receiving GBK Composer reminder emails? Billing notices about an active subscription will still be sent.',
+      `<form method="post" action="/api/compose/unsubscribe?${q.toString().replace(/&/g, '&amp;')}"><button type="submit" style="padding:10px 18px;font-size:16px;">Unsubscribe</button></form>`));
+  });
+  router.post('/api/compose/unsubscribe', apiLimiter, form, async (req, res) => {
+    if (!verifyUnsubscribeLink(req.query || {}, env)) return res.status(400).type('html').send(unsubPage('Link not valid', 'This unsubscribe link is not valid.'));
+    const email = String(req.query.email).toLowerCase();
+    try {
+      await (await getDb()).recordProductEvent({ product: COMPOSE_PRODUCT, type: 'email_unsubscribe', ref: unsubscribeRef(email), email });
+    } catch (error) {
+      console.error('[compose] unsubscribe error:', error.message);
+      return res.status(500).type('html').send(unsubPage('Something went wrong', 'Please try again in a moment.'));
+    }
+    return res.type('html').send(unsubPage('You are unsubscribed', 'You will not receive GBK Composer reminder emails anymore.'));
   });
 
   // Funnel events for the GBK report. Default window: last 30 days.

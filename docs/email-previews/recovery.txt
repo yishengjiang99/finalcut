@@ -1,0 +1,20 @@
+Subject: Your GBK Composer Pro checkout is saved
+List-Unsubscribe: <https://grepawk.com/api/compose/unsubscribe?email=you%40example.com&sig=EXAMPLE>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+
+Your checkout is saved
+
+Hi,
+
+You started checking out GBK Composer Pro but didn't finish. Your cart is saved, so you can pick up where you left off.
+
+Resume checkout: https://buy.stripe.com/r/EXAMPLE
+
+Pro includes a 7-day free trial on monthly and yearly plans, and you can cancel any time.
+
+If you meant to skip it, no worries. This is the only reminder we'll send.
+
+--
+FinalCut (GBK Composer) · grepawk.com
+You received this because you started a GBK Composer Pro checkout and agreed to receive emails from us.
+Unsubscribe from these emails: https://grepawk.com/api/compose/unsubscribe?email=you%40example.com&sig=EXAMPLE

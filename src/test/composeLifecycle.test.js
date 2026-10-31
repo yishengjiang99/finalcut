@@ -17,6 +17,7 @@ const db = vi.hoisted(() => {
       ? { plan: 'pro_yearly', ref: 'sub_1', stripe_customer_id: 'cus_1', active: 1, status: 'trialing', current_period_end: 1793000000, cancel_at_period_end: 0 }
       : null)),
     recordProductEvent: vi.fn(async (e) => { const k = `${e.type}|${e.ref}`; if (events.has(k)) return false; events.set(k, e); return true; }),
+    isEmailUnsubscribed: vi.fn(async (email) => [...events.values()].some((e) => e.type === 'email_unsubscribe' && e.ref === `unsub:${email}`)),
     hasProductEvent: vi.fn(async ({ subscriptionRef, types }) => [...events.values()].some((e) => e.subscriptionRef === subscriptionRef && types.includes(e.type))),
     findProductEntitlementByRef: vi.fn(async (p, ref) => (ref === 'sub_1' ? { email: 'pro@example.com', plan: 'pro_yearly', ref: 'sub_1' } : null)),
     findProductEntitlementByCustomer: vi.fn(async (p, cus) => (cus === 'cus_1' ? { email: 'pro@example.com', plan: 'pro_yearly', ref: 'sub_1' } : null)),
@@ -131,7 +132,7 @@ describe('#122 checkout + webhooks', () => {
     const msg = sendEmail.mock.calls[0][0];
     expect(msg.to).toBe('pro@example.com');
     expect(msg.text).toContain('yearly ($47.99/year)');
-    const link = msg.text.split('\n').find((l) => l.startsWith('https://grepawk.com/api/compose/portal?'));
+    const link = msg.text.match(/https:\/\/\S*\/api\/compose\/portal\S*/)[0];
     expect(life.verifyPortalLink(Object.fromEntries(new URL(link).searchParams), ON)).toBe(true);
   });
 
@@ -165,5 +166,54 @@ describe('#122 checkout + webhooks', () => {
     expect(j.counts).toMatchObject({ trial_start: 1, trial_convert: 1, cancel: 0, refund: 0 });
     expect(j.events[1]).toMatchObject({ type: 'trial_convert', amount_cents: 599, at: '2026-10-27T00:00:00.000Z' });
     await srv.close();
+  });
+});
+
+describe('email deliverability', () => {
+  it('recovery email: branded html + text, footer reason, unsubscribe link and one-click headers', () => {
+    const unsubscribeUrl = life.signUnsubscribeLink('A@b.co', ENV);
+    const m = life.recoveryEmail({ recoveryUrl: 'https://buy.stripe.com/r/abc', unsubscribeUrl });
+    expect(m.subject).not.toMatch(/[A-Z]{4,}|!|free!/);
+    expect(m.html).toContain('https://grepawk.com/apple-touch-icon.png');
+    expect(m.html).toContain('href="https://buy.stripe.com/r/abc"');
+    expect(m.html).toMatch(/You received this because/);
+    expect(m.text).toMatch(/FinalCut \(GBK Composer\)/);
+    expect(m.text).toContain('https://buy.stripe.com/r/abc');
+    expect(m.text).toContain(unsubscribeUrl);
+    expect(m.html).toContain(unsubscribeUrl.replace(/&/g, '&amp;'));
+    expect(m.headers).toEqual({ 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
+  });
+
+  it('trial ending email is transactional: footer reason, no unsubscribe', () => {
+    const m = life.trialEndingEmail({ trialEnd: 1793000000, planLabel: 'yearly', manageUrl: 'https://grepawk.com/api/compose/portal?x=1&y=2' });
+    expect(m.headers).toBeUndefined();
+    expect(m.html).not.toMatch(/unsubscribe/i);
+    expect(m.text).toMatch(/required billing notice/);
+    expect(m.html).toContain('href="https://grepawk.com/api/compose/portal?x=1&amp;y=2"');
+  });
+
+  it('sendResendEmail passes reply_to and headers, never logs the key', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true }));
+    await life.sendResendEmail({ to: 'a@b.co', subject: 's', text: 't', html: 'h', headers: { 'List-Unsubscribe': '<u>' } }, { env: { ...ON, COMPOSE_EMAIL_REPLY_TO: 'r@grepawk.com' }, fetchImpl });
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(body).toMatchObject({ reply_to: 'r@grepawk.com', headers: { 'List-Unsubscribe': '<u>' }, from: ON.COMPOSE_EMAIL_FROM });
+  });
+
+  it('unsubscribe endpoint: GET confirms without changing state, POST suppresses future recovery emails', async () => {
+    const srv = await serve(compose.createComposeRouter({ stripe: null, env: ON, db }));
+    const link = new URL(life.signUnsubscribeLink('a@b.co', ON));
+    const path = `${srv.base}/api/compose/unsubscribe${link.search}`;
+    expect((await fetch(`${srv.base}/api/compose/unsubscribe?email=a@b.co&sig=bad`)).status).toBe(400);
+    const g = await fetch(path);
+    expect(g.status).toBe(200);
+    expect(db.recordProductEvent).not.toHaveBeenCalled();
+    const p = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'List-Unsubscribe=One-Click' });
+    expect(p.status).toBe(200);
+    expect(await db.isEmailUnsubscribed('a@b.co')).toBe(true);
+    await srv.close();
+    const sendEmail = vi.fn(async () => {});
+    const ev = { type: 'checkout.session.expired', data: { object: { id: 'cs_u', customer_details: { email: 'a@b.co' }, consent: { promotions: 'opt_in' }, after_expiration: { recovery: { url: 'https://buy.stripe.com/r/abc' } }, metadata: { product: 'compose' } } } };
+    await handle(ev, { sendEmail, env: ON });
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 });

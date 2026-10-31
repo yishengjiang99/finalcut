@@ -462,6 +462,12 @@ export async function recordProductEvent({ product, type, ref, email = null, pla
   return result.affectedRows > 0;
 }
 
+export async function isEmailUnsubscribed(email) {
+  const pool = getPool();
+  const [rows] = await pool.query("SELECT 1 FROM product_events WHERE type = 'email_unsubscribe' AND ref = ? LIMIT 1", [`unsub:${String(email).toLowerCase()}`]);
+  return rows.length > 0;
+}
+
 export async function hasProductEvent({ subscriptionRef, types }) {
   const pool = getPool();
   const [rows] = await pool.query('SELECT 1 FROM product_events WHERE subscription_ref = ? AND type IN (?) LIMIT 1', [subscriptionRef, types]);

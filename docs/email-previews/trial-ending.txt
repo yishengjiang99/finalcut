@@ -1,0 +1,19 @@
+Subject: Your GBK Composer Pro trial ends October 26, 2026
+
+Your free trial ends on October 26, 2026
+
+Hi,
+
+Your GBK Composer Pro free trial ends on October 26, 2026. After that, your yearly ($47.99/year) plan starts and your card on file is charged.
+
+Want to keep Pro? You don't need to do anything.
+
+Want to cancel or change plans? You can manage your subscription here:
+
+Manage subscription: https://grepawk.com/api/compose/portal?email=you%40example.com&exp=0&sig=EXAMPLE
+
+This link is personal to you and expires in 14 days.
+
+--
+FinalCut (GBK Composer) · grepawk.com
+You received this because you have a GBK Composer Pro trial. It is a required billing notice about your account.
