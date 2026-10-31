@@ -23,7 +23,7 @@ extension EditStack {
     /// absolute path, which `ProjectComposer.resolveAssetURL` also honours, so in-memory
     /// sessions preview/export without a store round-trip).
     func makeProject(
-        name: String = "Untitled",
+        name: String = EditorProject.placeholderTitle(),
         resolveRelativePath: (URL) -> String = { $0.path }
     ) -> EditorProject {
         let baseAsset = MediaAsset(

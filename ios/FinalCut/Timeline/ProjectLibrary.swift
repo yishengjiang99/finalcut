@@ -4,9 +4,9 @@ import UIKit
 
 /// One denormalized library row — everything the project-history list renders,
 /// cached in `index.json` at the Projects root (issue #125, Phase 1). Content
-/// fields (title, duration, clip counts) are derived from `project.json`, which
-/// stays the source of truth; library-owned fields (`isPinned`, `lastOpenedAt`)
-/// live only here and survive row rebuilds.
+/// fields (title, duration, clip counts, pin/archive) are derived from
+/// `project.json`, which stays the source of truth; `lastOpenedAt` lives only
+/// here and survives row rebuilds.
 struct ProjectIndexRow: Codable, Equatable, Sendable, Identifiable {
     var id: UUID
     var title: String
@@ -22,8 +22,7 @@ struct ProjectIndexRow: Codable, Equatable, Sendable, Identifiable {
     /// Cover image filename inside the project directory ("cover.jpg"), when one
     /// has been generated.
     var coverFilename: String?
-    /// Pin/archive land as actions in Phase 3; the row carries the flags from the
-    /// start so the sectioning below is already correct when they arrive.
+    /// Mirrors `EditorProject.isPinned` / `isArchived` (Phase 3).
     var isPinned: Bool = false
     var isArchived: Bool = false
     /// Modification time of `project.json` when this row was built. The
@@ -33,12 +32,12 @@ struct ProjectIndexRow: Codable, Equatable, Sendable, Identifiable {
     var projectFileModifiedAt: Date
 }
 
-/// A titled bucket of rows for the history list (Pinned / Today / Yesterday /
-/// Previous 7 Days / Previous 30 Days / one per older month).
-struct ProjectLibrarySection: Identifiable, Equatable {
-    var title: String
-    var rows: [ProjectIndexRow]
-    var id: String { title }
+/// The library list's buckets (#125 Phase 3), each newest edit first:
+/// pinned and unpinned non-archived projects, and archived projects.
+struct ProjectLibraryBuckets: Equatable {
+    var pinned: [ProjectIndexRow] = []
+    var projects: [ProjectIndexRow] = []
+    var archived: [ProjectIndexRow] = []
 }
 
 /// The across-project library service (issue #125, Phase 1) — the front door over
@@ -114,8 +113,8 @@ enum ProjectLibrary {
             audioClipCount: project.audioTracks.reduce(0) { $0 + $1.clips.count },
             messageCount: existing?.messageCount ?? 0,
             coverFilename: coverExists(project.id) ? coverFilename : nil,
-            isPinned: existing?.isPinned ?? false,
-            isArchived: existing?.isArchived ?? false,
+            isPinned: project.isPinned == true,
+            isArchived: project.isArchived == true,
             projectFileModifiedAt: fileModified)
     }
 
@@ -151,6 +150,37 @@ enum ProjectLibrary {
         project.setUserTitle(newTitle)
         try ProjectStore.save(project)
         _ = loadRows()
+    }
+
+    /// Pins or unpins a project (stored in project.json). Doesn't count as an
+    /// edit: the file's modification time is kept, so the row's "last edited"
+    /// order doesn't jump.
+    static func setPinned(projectID: UUID, _ pinned: Bool) throws {
+        try updateFlags(projectID) { $0.isPinned = pinned ? true : nil }
+    }
+
+    /// Archives or unarchives a project (stored in project.json); also not an
+    /// edit, so Undo restores the row exactly where it was.
+    static func setArchived(projectID: UUID, _ archived: Bool) throws {
+        try updateFlags(projectID) { $0.isArchived = archived ? true : nil }
+    }
+
+    private static func updateFlags(_ projectID: UUID, _ mutate: (inout EditorProject) -> Void) throws {
+        var project = try ProjectStore.load(projectID)
+        let fileURL = ProjectStore.projectFileURL(projectID)
+        let modified = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.modificationDate] as? Date
+        mutate(&project)
+        try ProjectStore.save(project)
+        if let modified {
+            try? FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: fileURL.path)
+        }
+        // With the mtime kept, the cached row counts as fresh; patch its flags.
+        var rows = loadRows()
+        if let index = rows.firstIndex(where: { $0.id == projectID }) {
+            rows[index].isPinned = project.isPinned == true
+            rows[index].isArchived = project.isArchived == true
+            writeIndex(rows)
+        }
     }
 
     /// Deletes a project directory permanently and drops its index row.
@@ -255,51 +285,48 @@ enum ProjectLibrary {
 
     // MARK: Sectioning + formatting (pure; the list renders exactly this)
 
-    /// Buckets rows chat-app style: Pinned first, then Today / Yesterday /
-    /// Previous 7 Days / Previous 30 Days by last-edit time, then one section
-    /// per older month, newest first. Archived rows are excluded (their view
-    /// arrives with Archive in Phase 3). Input order (newest edit first) is
-    /// preserved inside every bucket.
-    static func sections(from rows: [ProjectIndexRow], now: Date = Date(),
-                         calendar: Calendar = .current) -> [ProjectLibrarySection] {
-        let visible = rows.filter { !$0.isArchived }
-        var result: [ProjectLibrarySection] = []
-        let pinned = visible.filter { $0.isPinned }
-        if !pinned.isEmpty { result.append(ProjectLibrarySection(title: "Pinned", rows: pinned)) }
-        let rest = visible.filter { !$0.isPinned }
+    /// Splits rows into Pinned / Projects / Archived, each sorted by last
+    /// edit (newest first), keeping only rows matching `query` (see `matches`).
+    static func buckets(from rows: [ProjectIndexRow], query: String = "", now: Date = Date(),
+                        calendar: Calendar = .current) -> ProjectLibraryBuckets {
+        let matching = rows
+            .filter { matches($0, query: query, now: now, calendar: calendar) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        return ProjectLibraryBuckets(
+            pinned: matching.filter { $0.isPinned && !$0.isArchived },
+            projects: matching.filter { !$0.isPinned && !$0.isArchived },
+            archived: matching.filter { $0.isArchived })
+    }
 
-        let startToday = calendar.startOfDay(for: now)
-        let startYesterday = calendar.date(byAdding: .day, value: -1, to: startToday) ?? startToday
-        let startWeek = calendar.date(byAdding: .day, value: -7, to: startToday) ?? startYesterday
-        let startMonth = calendar.date(byAdding: .day, value: -30, to: startToday) ?? startWeek
+    /// Title-only search (no chat text, no index): case-insensitive substring
+    /// match on the title or on the row's date labels ("Today", "Yesterday",
+    /// "October 2026", "Oct 31, 2026"). An empty query matches everything.
+    static func matches(_ row: ProjectIndexRow, query: String, now: Date = Date(),
+                        calendar: Calendar = .current) -> Bool {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return true }
+        let haystacks = [row.title] + dateLabels(for: row.updatedAt, now: now, calendar: calendar)
+        return haystacks.contains { $0.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
 
-        let buckets: [(title: String, rows: [ProjectIndexRow])] = [
-            ("Today", rest.filter { $0.updatedAt >= startToday }),
-            ("Yesterday", rest.filter { $0.updatedAt >= startYesterday && $0.updatedAt < startToday }),
-            ("Previous 7 Days", rest.filter { $0.updatedAt >= startWeek && $0.updatedAt < startYesterday }),
-            ("Previous 30 Days", rest.filter { $0.updatedAt >= startMonth && $0.updatedAt < startWeek }),
-        ]
-        for bucket in buckets where !bucket.rows.isEmpty {
-            result.append(ProjectLibrarySection(title: bucket.title, rows: bucket.rows))
-        }
-
-        let older = rest.filter { $0.updatedAt < startMonth }
-        if !older.isEmpty {
-            let formatter = DateFormatter()
-            formatter.calendar = calendar
-            formatter.dateFormat = "MMMM yyyy"
-            var months: [(key: String, rows: [ProjectIndexRow])] = []
-            for row in older {
-                let key = formatter.string(from: row.updatedAt)
-                if let index = months.firstIndex(where: { $0.key == key }) {
-                    months[index].rows.append(row)
-                } else {
-                    months.append((key, [row]))
-                }
-            }
-            result.append(contentsOf: months.map { ProjectLibrarySection(title: $0.key, rows: $0.rows) })
-        }
-        return result
+    /// The date strings a row can be found by.
+    static func dateLabels(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> [String] {
+        var labels: [String] = []
+        if calendar.isDate(date, inSameDayAs: now) { labels.append("Today") }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) { labels.append("Yesterday") }
+        let month = DateFormatter()
+        month.calendar = calendar
+        month.timeZone = calendar.timeZone
+        month.dateFormat = "MMMM yyyy"
+        labels.append(month.string(from: date))
+        let medium = DateFormatter()
+        medium.calendar = calendar
+        medium.timeZone = calendar.timeZone
+        medium.dateStyle = .medium
+        medium.timeStyle = .none
+        labels.append(medium.string(from: date))
+        return labels
     }
 
     /// "Edited 2h ago" — compact relative edit time for a row's trailing edge.

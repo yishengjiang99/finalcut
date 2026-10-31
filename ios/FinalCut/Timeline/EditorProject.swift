@@ -251,11 +251,15 @@ struct EditorProject: Codable, Equatable, Sendable {
     /// never overwrites their title. Optional so project.json files saved
     /// before this field existed still decode (nil means not edited).
     var titleIsUserEdited: Bool?
+    /// #125 Phase 3 library state. Optional so older project.json files load
+    /// (nil means not pinned / not archived).
+    var isPinned: Bool?
+    var isArchived: Bool?
 
     static let defaultName = "Untitled"
     static let autoTitleMaxLength = 40
 
-    init(id: UUID = UUID(), name: String = EditorProject.defaultName, canvas: ProjectCanvas) {
+    init(id: UUID = UUID(), name: String = EditorProject.placeholderTitle(), canvas: ProjectCanvas) {
         self.id = id
         self.name = name
         self.canvas = canvas
@@ -263,20 +267,46 @@ struct EditorProject: Codable, Equatable, Sendable {
 
     // Title ---------------------------------------------------------------
 
-    /// Local-only auto-title (#125 v1): the first user prompt, whitespace
-    /// collapsed and truncated. Nil for an empty prompt.
-    static func autoTitle(from prompt: String) -> String? {
-        let collapsed = prompt.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        guard !collapsed.isEmpty else { return nil }
-        guard collapsed.count > autoTitleMaxLength else { return collapsed }
-        return String(collapsed.prefix(autoTitleMaxLength - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    /// Title before any prompt: "Untitled · Oct 31, 2026".
+    static func placeholderTitle(date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return "\(defaultName) · \(formatter.string(from: date))"
     }
 
-    /// Titles a still-default project from a prompt. Never touches a title the
-    /// user edited, and never re-titles an already auto-titled project.
+    /// True for "Untitled" (older projects) and "Untitled · <date>".
+    var hasPlaceholderTitle: Bool {
+        name == Self.defaultName || name.hasPrefix(Self.defaultName + " · ")
+    }
+
+    /// Local-only auto-title (#125): the prompt's first non-empty line,
+    /// whitespace collapsed, cut at a word boundary to at most
+    /// `autoTitleMaxLength` characters (ellipsis included) when too long.
+    /// A single word longer than the limit is hard-cut. Nil for an empty prompt.
+    static func autoTitle(from prompt: String) -> String? {
+        let firstLine = prompt.split(whereSeparator: \.isNewline)
+            .first(where: { !$0.allSatisfy(\.isWhitespace) })
+            .map(String.init) ?? ""
+        let collapsed = firstLine.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        guard collapsed.count > autoTitleMaxLength else { return collapsed }
+        let limit = autoTitleMaxLength - 1 // room for "…"
+        let head = String(collapsed.prefix(limit))
+        let next = collapsed[collapsed.index(collapsed.startIndex, offsetBy: limit)]
+        var cut = head
+        if next != " ", let space = head.lastIndex(of: " ") {
+            cut = String(head[..<space])
+        }
+        return cut.trimmingCharacters(in: .whitespaces) + "…"
+    }
+
+    /// Titles a project that still has its placeholder title from a prompt.
+    /// Never touches a title the user edited, and never re-titles an already
+    /// auto-titled project.
     @discardableResult
     mutating func applyAutoTitle(from prompt: String) -> Bool {
-        guard titleIsUserEdited != true, name == Self.defaultName,
+        guard titleIsUserEdited != true, hasPlaceholderTitle,
               let title = Self.autoTitle(from: prompt) else { return false }
         name = title
         return true

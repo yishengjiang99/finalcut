@@ -20,8 +20,9 @@ struct ProjectLibraryView: View {
     @State private var deleteSizeText = ""
     @State private var openFailed = false
 
-    private var sections: [ProjectLibrarySection] {
-        ProjectLibrary.sections(from: rows)
+    private var sections: [(title: String, rows: [ProjectIndexRow])] {
+        let buckets = ProjectLibrary.buckets(from: rows)
+        return [("Pinned", buckets.pinned), ("Projects", buckets.projects)].filter { !$0.rows.isEmpty }
     }
 
     var body: some View {
@@ -80,7 +81,7 @@ struct ProjectLibraryView: View {
 
     private var list: some View {
         List {
-            ForEach(sections) { section in
+            ForEach(sections, id: \.title) { section in
                 Section(section.title) {
                     ForEach(section.rows) { row in
                         rowView(row)

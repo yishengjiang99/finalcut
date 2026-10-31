@@ -663,8 +663,13 @@ final class EditorViewModel: ObservableObject {
 
     /// A new edit on the stack: shows it, clears Redo (in `push`) and registers shake-to-undo.
     func commitEdit(_ stack: EditStack) {
+        var stack = stack
+        // Any edit unarchives the project (#125 Phase 3).
+        let unarchived = stack.project?.isArchived == true
+        if unarchived { stack.project?.isArchived = nil }
         editStack = stack
         registerUndo(redo: false)
+        if unarchived { saveTimelineProject() }
     }
 
     /// Undo the last edit (Design §3). Never touches the base file.
@@ -695,6 +700,13 @@ final class EditorViewModel: ObservableObject {
     var canRedo: Bool { editStack?.canRedo == true && !isBusy }
 
     private func apply(_ stack: EditStack) {
+        var stack = stack
+        // Undo/redo restore an older project snapshot; pin/archive are library
+        // state, not edits, so keep the current values (#125 Phase 3).
+        if stack.project != nil, let current = editStack?.project {
+            stack.project?.isPinned = current.isPinned
+            stack.project?.isArchived = nil
+        }
         editStack = stack
         localVideoURL = stack.base
         // Undo/redo restore the stack's project snapshot too — persist it,

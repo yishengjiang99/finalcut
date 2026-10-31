@@ -140,6 +140,28 @@ extension EditorViewModel {
         }
     }
 
+    /// Pins/unpins a project (#125 Phase 3). The open project's in-memory copy
+    /// is updated too, so its next autosave can't clobber the flag.
+    func setProjectPinned(id: UUID, _ pinned: Bool) {
+        if timelineProject?.id == id, var stack = editStack {
+            stack.project?.isPinned = pinned ? true : nil
+            editStack = stack
+        }
+        try? ProjectLibrary.setPinned(projectID: id, pinned)
+    }
+
+    /// Archives/unarchives a project (#125 Phase 3); see `setProjectPinned`.
+    func setProjectArchived(id: UUID, _ archived: Bool) {
+        if timelineProject?.id == id, var stack = editStack {
+            stack.project?.isArchived = archived ? true : nil
+            editStack = stack
+        }
+        try? ProjectLibrary.setArchived(projectID: id, archived)
+    }
+
+    /// True when the open project is archived (editor shows the Archived tag).
+    var isOpenProjectArchived: Bool { timelineProject?.isArchived == true }
+
     /// Deletes a project from the library (directory and copied media,
     /// permanently). Deleting the project currently open first clears the
     /// session via the same path as "New project", so the editor never keeps

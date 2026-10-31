@@ -309,4 +309,151 @@ final class ProjectModelTests: XCTestCase {
         XCTAssertEqual(decoded.titleIsUserEdited, true)
         XCTAssertEqual(decoded, project)
     }
+
+    // MARK: Library search / pin / archive (Phase 3, #125)
+
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    private func libraryRow(_ title: String, _ updated: Date, pinned: Bool = false, archived: Bool = false) -> ProjectIndexRow {
+        ProjectIndexRow(id: UUID(), title: title, createdAt: updated, updatedAt: updated, lastOpenedAt: nil,
+                        durationSeconds: 5, clipCount: 1, audioClipCount: 0, coverFilename: nil,
+                        isPinned: pinned, isArchived: archived, projectFileModifiedAt: updated)
+    }
+
+    func testLibraryBucketsFilterAndSort() {
+        let now = utcCalendar.date(from: DateComponents(year: 2026, month: 10, day: 31, hour: 12))!
+        let pinnedBeach = libraryRow("Beach Trip", now.addingTimeInterval(-3600), pinned: true)
+        let dinner = libraryRow("dinner", now.addingTimeInterval(-2 * 3600))
+        let hotel = libraryRow("Hotel", now.addingTimeInterval(-26 * 3600))
+        let archivedPinned = libraryRow("beach reel", now.addingTimeInterval(-3 * 3600), pinned: true, archived: true)
+        let oldBeach = libraryRow("Old BEACH", utcCalendar.date(from: DateComponents(year: 2026, month: 9, day: 15))!, archived: true)
+        let rows = [oldBeach, hotel, archivedPinned, dinner, pinnedBeach] // unsorted on purpose
+        func ids(_ query: String) -> [[UUID]] {
+            let b = ProjectLibrary.buckets(from: rows, query: query, now: now, calendar: utcCalendar)
+            return [b.pinned.map(\.id), b.projects.map(\.id), b.archived.map(\.id)]
+        }
+        // Archived rows only in the archived bucket (even when pinned); newest edit first.
+        XCTAssertEqual(ids(""), [[pinnedBeach.id], [dinner.id, hotel.id], [archivedPinned.id, oldBeach.id]])
+        // Case-insensitive title match.
+        XCTAssertEqual(ids("  BeAcH "), [[pinnedBeach.id], [], [archivedPinned.id, oldBeach.id]])
+        // Date labels match too.
+        XCTAssertEqual(ids("yesterday"), [[], [hotel.id], []])
+        XCTAssertEqual(ids("TODAY"), [[pinnedBeach.id], [dinner.id], [archivedPinned.id]])
+        XCTAssertEqual(ids("september 2026"), [[], [], [oldBeach.id]])
+        XCTAssertEqual(ids("no such project"), [[], [], []])
+    }
+
+    func testPinAndArchivePersistAndOldFilesLoad() throws {
+        // project.json from before Phase 3 has no pin/archive keys.
+        let project = EditorProject(name: "Trip", canvas: .hd1080Landscape)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(project)) as? [String: Any])
+        json.removeValue(forKey: "isPinned")
+        json.removeValue(forKey: "isArchived")
+        let legacy = try JSONDecoder().decode(EditorProject.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(legacy.isPinned)
+        XCTAssertNil(legacy.isArchived)
+
+        try withTemporaryProjectStore {
+            try ProjectStore.save(project)
+            let fileURL = ProjectStore.projectFileURL(project.id)
+            let before = try XCTUnwrap(ProjectLibrary.loadRows().first)
+            XCTAssertFalse(before.isPinned)
+
+            try ProjectLibrary.setPinned(projectID: project.id, true)
+            try ProjectLibrary.setArchived(projectID: project.id, true)
+            let saved = try ProjectStore.load(project.id)
+            XCTAssertEqual(saved.isPinned, true)
+            XCTAssertEqual(saved.isArchived, true)
+            let row = try XCTUnwrap(ProjectLibrary.loadRows().first)
+            XCTAssertTrue(row.isPinned)
+            XCTAssertTrue(row.isArchived)
+            // Not an edit: last-edited time is unchanged.
+            XCTAssertEqual(row.updatedAt.timeIntervalSince(before.updatedAt), 0, accuracy: 0.001)
+            let mtime = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date)
+            XCTAssertEqual(mtime.timeIntervalSince(before.projectFileModifiedAt), 0, accuracy: 0.001)
+
+            // A rebuilt index (deleted cache) still knows the flags from project.json.
+            try FileManager.default.removeItem(at: ProjectStore.projectsRoot.appendingPathComponent("index.json"))
+            let rebuilt = try XCTUnwrap(ProjectLibrary.loadRows().first)
+            XCTAssertTrue(rebuilt.isPinned)
+            XCTAssertTrue(rebuilt.isArchived)
+        }
+    }
+
+    func testArchiveUndoRestoresTheRow() throws {
+        try withTemporaryProjectStore {
+            let project = EditorProject(name: "Trip", canvas: .hd1080Landscape)
+            try ProjectStore.save(project)
+            let before = ProjectLibrary.buckets(from: ProjectLibrary.loadRows())
+            XCTAssertEqual(before.projects.map(\.id), [project.id])
+
+            try ProjectLibrary.setArchived(projectID: project.id, true)
+            let archived = ProjectLibrary.buckets(from: ProjectLibrary.loadRows())
+            XCTAssertEqual(archived.projects, [])
+            XCTAssertEqual(archived.archived.map(\.id), [project.id])
+
+            try ProjectLibrary.setArchived(projectID: project.id, false) // Undo toast
+            let after = ProjectLibrary.buckets(from: ProjectLibrary.loadRows())
+            XCTAssertEqual(after.projects.map(\.id), [project.id])
+            XCTAssertEqual(after.archived, [])
+            XCTAssertNil(try ProjectStore.load(project.id).isArchived)
+        }
+    }
+
+    @MainActor
+    func testAnyEditUnarchivesTheOpenProject() throws {
+        try withTemporaryProjectStore {
+            let model = EditorViewModel()
+            var stack = EditStack(base: URL(fileURLWithPath: "/tmp/base.mov"),
+                                  baseCanvas: NativeCanvas(width: 1280, height: 720, duration: 6, isPhoto: false, hasAudio: true))
+            stack.project = stack.makeProject()
+            stack.project?.isArchived = true
+            model.editStack = stack
+            XCTAssertTrue(model.isOpenProjectArchived)
+
+            var edited = stack
+            edited.push(EditEntry(tool: "apply_color_filter", op: .colorFilter(filter: "red", intensity: 1)))
+            model.commitEdit(edited)
+            XCTAssertFalse(model.isOpenProjectArchived)
+            let id = try XCTUnwrap(model.timelineProject?.id)
+            XCTAssertNil(try ProjectStore.load(id).isArchived) // persisted
+        }
+    }
+
+    func testAutoTitleTruncationEdgeCases() {
+        let max = EditorProject.autoTitleMaxLength
+        // First line only, trimmed.
+        XCTAssertEqual(EditorProject.autoTitle(from: "\n\n  Make it pop  \nand add music"), "Make it pop")
+        // Exactly at the limit: unchanged, no ellipsis.
+        let exact = String(repeating: "a", count: max)
+        XCTAssertEqual(EditorProject.autoTitle(from: exact), exact)
+        // Over the limit: cut at a word boundary, ellipsis added, never over the limit.
+        let words = "Trim the intro then add warm color grading and upbeat music"
+        let cut = try! XCTUnwrap(EditorProject.autoTitle(from: words))
+        XCTAssertEqual(cut, "Trim the intro then add warm color…")
+        XCTAssertLessThanOrEqual(cut.count, max)
+        XCTAssertTrue(words.hasPrefix(String(cut.dropLast())))
+        // One long word: hard cut.
+        let long = try! XCTUnwrap(EditorProject.autoTitle(from: String(repeating: "x", count: 100)))
+        XCTAssertEqual(long.count, max)
+        XCTAssertTrue(long.hasSuffix("…"))
+        // Whitespace-only / empty: no title.
+        XCTAssertNil(EditorProject.autoTitle(from: " \n\t "))
+        XCTAssertNil(EditorProject.autoTitle(from: ""))
+        // No prompt yet: "Untitled · <date>", which auto-title may replace.
+        var project = EditorProject(canvas: .hd1080Landscape)
+        XCTAssertTrue(project.name.hasPrefix("Untitled · "))
+        XCTAssertTrue(project.hasPlaceholderTitle)
+        XCTAssertTrue(project.applyAutoTitle(from: "color grade"))
+        XCTAssertEqual(project.name, "color grade")
+        // User-edited titles are never overridden, even a placeholder-looking one.
+        var edited = EditorProject(canvas: .hd1080Landscape)
+        edited.setUserTitle("Untitled · mine")
+        XCTAssertFalse(edited.applyAutoTitle(from: "color grade"))
+        XCTAssertEqual(edited.name, "Untitled · mine")
+    }
 }
