@@ -6,8 +6,9 @@ import SwiftUI
 /// Days, then months), with the video delta of a cover thumbnail, duration
 /// and clip count per row. Rows come from `ProjectLibrary`'s rebuildable
 /// index; opening a row loads that project into the editor behind this sheet.
-/// Pin/Archive/Duplicate/Search arrive in later phases — Phase 1 is open,
-/// rename, delete.
+/// Phase 3: title/date search, a Pinned section above Projects (last edited
+/// first), archived projects behind an "Archived (N)" row, pin/archive
+/// swipes, and delete only from the context menu with a confirmation.
 struct ProjectLibraryView: View {
     @ObservedObject var model: EditorViewModel
     @Environment(\.dismiss) private var dismiss
@@ -19,11 +20,16 @@ struct ProjectLibraryView: View {
     @State private var deleteRow: ProjectIndexRow?
     @State private var deleteSizeText = ""
     @State private var openFailed = false
+    @State private var query = ""
+    @State private var showArchived = false
+    /// The just-archived row the Undo toast can restore.
+    @State private var undoArchiveRow: ProjectIndexRow?
 
-    private var sections: [(title: String, rows: [ProjectIndexRow])] {
-        let buckets = ProjectLibrary.buckets(from: rows)
-        return [("Pinned", buckets.pinned), ("Projects", buckets.projects)].filter { !$0.rows.isEmpty }
+    private var buckets: ProjectLibraryBuckets {
+        ProjectLibrary.buckets(from: rows, query: query)
     }
+
+    private var archivedCount: Int { rows.filter(\.isArchived).count }
 
     var body: some View {
         NavigationStack {
@@ -36,6 +42,13 @@ struct ProjectLibraryView: View {
             }
             .background(AppTheme.background.ignoresSafeArea())
             .navigationTitle("Projects")
+            .searchable(text: $query, prompt: "Search titles or dates")
+            .navigationDestination(isPresented: $showArchived) {
+                ArchivedProjectsList(rows: rows.filter(\.isArchived)) { row in
+                    AnyView(decoratedRow(row))
+                }
+            }
+            .overlay(alignment: .bottom) { undoToast }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -81,36 +94,106 @@ struct ProjectLibraryView: View {
 
     private var list: some View {
         List {
-            ForEach(sections, id: \.title) { section in
-                Section(section.title) {
-                    ForEach(section.rows) { row in
-                        rowView(row)
-                            .listRowBackground(AppTheme.surfaceElevated)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) { beginDelete(row) } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                                Button { beginRename(row) } label: {
-                                    Label("Rename", systemImage: "pencil")
-                                }
-                            }
-                            .contextMenu {
-                                Button { open(row) } label: {
-                                    Label("Open", systemImage: "play.circle")
-                                }
-                                Button { beginRename(row) } label: {
-                                    Label("Rename", systemImage: "pencil")
-                                }
-                                Button(role: .destructive) { beginDelete(row) } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
+            let current = buckets
+            if !current.pinned.isEmpty {
+                Section("Pinned") {
+                    ForEach(current.pinned) { decoratedRow($0) }
+                }
+            }
+            Section("Projects") {
+                if current.pinned.isEmpty, current.projects.isEmpty, !query.isEmpty {
+                    Text(ProjectLibraryView.noMatchText(query))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .listRowBackground(AppTheme.surfaceElevated)
+                }
+                ForEach(current.projects) { decoratedRow($0) }
+            }
+            if archivedCount > 0 {
+                Section {
+                    Button { showArchived = true } label: {
+                        HStack {
+                            Label("Archived (\(archivedCount))", systemImage: "archivebox")
+                                .foregroundStyle(AppTheme.textPrimary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
                     }
+                    .listRowBackground(AppTheme.surfaceElevated)
                 }
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+    }
+
+    static func noMatchText(_ query: String) -> String {
+        "No projects match \"\(query.trimmingCharacters(in: .whitespacesAndNewlines))\""
+    }
+
+    /// A row with its swipes and context menu. Leading swipe pins/unpins;
+    /// trailing swipe archives (Unarchive in the Archived list). A swipe never
+    /// deletes: Delete is only in the context menu, behind a confirmation.
+    private func decoratedRow(_ row: ProjectIndexRow) -> some View {
+        rowView(row)
+            .listRowBackground(AppTheme.surfaceElevated)
+            .swipeActions(edge: .leading) {
+                Button { setPinned(row, !row.isPinned) } label: {
+                    Label(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin")
+                }
+                .tint(.yellow)
+            }
+            .swipeActions(edge: .trailing) {
+                Button { setArchived(row, !row.isArchived) } label: {
+                    Label(row.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
+                }
+                .tint(.gray)
+            }
+            .contextMenu {
+                Button { setPinned(row, !row.isPinned) } label: {
+                    Label(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin")
+                }
+                Button { setArchived(row, !row.isArchived) } label: {
+                    Label(row.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
+                }
+                Button { beginRename(row) } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                Button(role: .destructive) { beginDelete(row) } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var undoToast: some View {
+        if let row = undoArchiveRow {
+            HStack(spacing: 12) {
+                Text("Archived “\(row.title)”")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Button("Undo") {
+                    undoArchiveRow = nil
+                    model.setProjectArchived(id: row.id, false)
+                    rows = ProjectLibrary.loadRows()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.accent)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(AppTheme.surfaceElevated, in: Capsule())
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .task(id: row.id) {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if undoArchiveRow?.id == row.id { undoArchiveRow = nil }
+            }
+        }
     }
 
     private func rowView(_ row: ProjectIndexRow) -> some View {
@@ -119,6 +202,12 @@ struct ProjectLibraryView: View {
                 coverView(row)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if row.isPinned {
+                            Image(systemName: "pin.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.yellow)
+                                .accessibilityLabel("Pinned")
+                        }
                         Text(row.title)
                             .font(.body.weight(.medium))
                             .foregroundStyle(AppTheme.textPrimary)
@@ -217,6 +306,17 @@ struct ProjectLibraryView: View {
         }
     }
 
+    private func setPinned(_ row: ProjectIndexRow, _ pinned: Bool) {
+        model.setProjectPinned(id: row.id, pinned)
+        rows = ProjectLibrary.loadRows()
+    }
+
+    private func setArchived(_ row: ProjectIndexRow, _ archived: Bool) {
+        model.setProjectArchived(id: row.id, archived)
+        rows = ProjectLibrary.loadRows()
+        withAnimation { undoArchiveRow = archived ? row : nil }
+    }
+
     private func beginRename(_ row: ProjectIndexRow) {
         renameText = row.title
         renameRow = row
@@ -270,5 +370,31 @@ struct ProjectLibraryView: View {
                 coverImages[row.id] = image
             }
         }
+    }
+}
+
+/// The Archived list (#125 Phase 3): archived projects, last edited first, with
+/// the same title/date search. Rows come decorated by the library (so the
+/// trailing swipe reads Unarchive here).
+struct ArchivedProjectsList: View {
+    let rows: [ProjectIndexRow]
+    let rowContent: (ProjectIndexRow) -> AnyView
+    @State private var query = ""
+
+    var body: some View {
+        let archived = ProjectLibrary.buckets(from: rows, query: query).archived
+        List {
+            if archived.isEmpty {
+                Text(query.isEmpty ? "No archived projects" : ProjectLibraryView.noMatchText(query))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .listRowBackground(AppTheme.surfaceElevated)
+            }
+            ForEach(archived) { rowContent($0) }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.background.ignoresSafeArea())
+        .navigationTitle("Archived")
+        .searchable(text: $query, prompt: "Search titles or dates")
     }
 }

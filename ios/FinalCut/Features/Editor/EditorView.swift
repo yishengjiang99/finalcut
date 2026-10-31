@@ -35,6 +35,10 @@ struct EditorView: View {
                 freeRemaining: TopBarView.visibleFreeRemaining(unlimited: appModel.isUnlimited, remaining: appModel.dailyRemaining),
                 onSettings: { showSettings = true },
                 onShowHistory: { showHistory = true },
+                archived: model.isOpenProjectArchived,
+                onUnarchive: {
+                    if let id = model.timelineProject?.id { model.setProjectArchived(id: id, false) }
+                },
                 editControlsVisible: model.localVideoURL != nil,
                 canUndo: model.canUndo,
                 canRedo: model.canRedo,

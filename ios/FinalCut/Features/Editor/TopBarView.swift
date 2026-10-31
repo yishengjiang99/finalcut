@@ -21,6 +21,10 @@ struct TopBarView: View {
     /// available — the library is also how a project is opened from an empty
     /// editor, so unlike Export it doesn't depend on a loaded clip.
     var onShowHistory: () -> Void = {}
+    /// The open project is archived (#125 Phase 3): show a thin "Archived" tag
+    /// with an Unarchive button next to the title.
+    var archived = false
+    var onUnarchive: () -> Void = {}
     /// Undo/Redo show once media is loaded; each is disabled when there's nothing to undo/redo.
     var editControlsVisible = false
     var canUndo = false
@@ -79,6 +83,23 @@ struct TopBarView: View {
                 .foregroundStyle(AppTheme.textPrimary)
                 .accessibilityLabel("Projects")
                 .accessibilityIdentifier("ProjectLibrary")
+            }
+
+            if archived {
+                HStack(spacing: 6) {
+                    Text("Archived")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                    Button("Unarchive", action: onUnarchive)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.accent)
+                        .accessibilityIdentifier("Unarchive")
+                }
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .overlay(Capsule().stroke(AppTheme.textSecondary.opacity(0.4), lineWidth: 0.5))
             }
 
             Spacer(minLength: 0)
