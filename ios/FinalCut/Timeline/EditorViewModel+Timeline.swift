@@ -121,7 +121,7 @@ extension EditorViewModel {
         transcriptBaseIndex = 0
         messages = (TranscriptStore.load(projectID: project.id) ?? []) + [ChatMessage(role: .system, content: missing.isEmpty
             ? "Opened \(project.name) (\(project.videoClips.count) clips)."
-            : "Opened \(project.name) — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", ")).")])
+            : "Opened \(project.name) — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", ")).")]
         restoreWireContext(forProject: project.id)
         await refreshPreview()
         return true
