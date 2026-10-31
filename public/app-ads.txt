@@ -1,0 +1,3 @@
+# app-ads.txt — apps published by GrepAwk, including FinalCap - AI Video Editor
+# No in-app advertising inventory is sold, so there are no authorized
+# digital sellers to list in this file.

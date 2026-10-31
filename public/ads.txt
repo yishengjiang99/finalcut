@@ -1,0 +1,3 @@
+# ads.txt — grepawk.com
+# GrepAwk sells no advertising inventory on this website, so there are no
+# authorized digital sellers to list in this file.
