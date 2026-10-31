@@ -148,7 +148,7 @@ enum ProjectLibrary {
     /// rebuilt from the saved project.
     static func rename(projectID: UUID, to newTitle: String) throws {
         var project = try ProjectStore.load(projectID)
-        project.name = newTitle
+        project.setUserTitle(newTitle)
         try ProjectStore.save(project)
         _ = loadRows()
     }

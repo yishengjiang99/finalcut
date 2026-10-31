@@ -302,7 +302,12 @@ struct ImportErrorBanner: View {
 @MainActor
 final class EditorViewModel: ObservableObject {
     @Published var state: EditorState = .empty
-    @Published var messages: [ChatMessage] = []
+    @Published var messages: [ChatMessage] = [] {
+        didSet { persistTranscript() }
+    }
+    /// Index in `messages` where the current project's transcript starts;
+    /// earlier messages belong to a previous project in this session.
+    var transcriptBaseIndex = 0
     @Published var composerText = ""
     @Published var localVideoURL: URL?
     /// Photos multi-select for a new session (top bar, composer, import panel).
@@ -786,6 +791,7 @@ final class EditorViewModel: ObservableObject {
     func resetSessionForNewProject() {
         processingTask?.cancel()
         clearWireContext()
+        transcriptBaseIndex = messages.count
         activeJobId = nil
         localVideoURL = nil
         editStack = nil
@@ -1268,6 +1274,27 @@ final class EditorViewModel: ObservableObject {
         } catch {
             if Task.isCancelled { return }
             finishChatFailure(error)
+        }
+    }
+
+    // MARK: - Transcript + auto-title (Phase 2, #125)
+
+    /// Saves the current project's slice of the visible chat to transcript.json
+    /// and auto-titles a still-default project from its first user prompt.
+    /// Messages sent before a project materialises are adopted by the first
+    /// project the session creates (mirrors the wire-context rule).
+    func persistTranscript() {
+        guard let project = timelineProject else { return }
+        if transcriptBaseIndex > messages.count { transcriptBaseIndex = 0 }
+        let slice = Array(messages[transcriptBaseIndex...])
+        TranscriptStore.save(slice, projectID: project.id)
+        if let prompt = slice.first(where: { $0.role == .user })?.content {
+            var titled = project
+            if titled.applyAutoTitle(from: prompt), var stack = editStack {
+                stack.project = titled
+                editStack = stack
+                saveTimelineProject()
+            }
         }
     }
 

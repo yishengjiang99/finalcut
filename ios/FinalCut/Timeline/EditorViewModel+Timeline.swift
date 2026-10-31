@@ -79,8 +79,8 @@ extension EditorViewModel {
     /// here for safety), and a legacy single-clip video session is materialised
     /// into a durable project so switching never silently drops it. Photo
     /// sessions have no project form yet and are simply replaced. The chat
-    /// display starts fresh with an "Opened …" line (the display transcript
-    /// stays session-scoped), while the model-facing wire context is restored
+    /// display shows the project's saved transcript (transcript.json) plus an
+    /// "Opened …" line, while the model-facing wire context is restored
     /// from the project's wire-turns.json (Phase 2, #125) so follow-up edits
     /// build on the earlier conversation. Returns false when the project
     /// can't be previewed (no video clips, or its first clip's file is gone).
@@ -116,9 +116,12 @@ extension EditorViewModel {
         ProjectLibrary.setLastOpenedProjectID(project.id)
         ProjectLibrary.markOpened(projectID: project.id)
         let missing = ProjectStore.missingAssets(project)
-        messages = [ChatMessage(role: .system, content: missing.isEmpty
+        // Visible transcript restored from transcript.json (Phase 2, #125), then
+        // the session's "Opened …" status line (status lines are never saved).
+        transcriptBaseIndex = 0
+        messages = (TranscriptStore.load(projectID: project.id) ?? []) + [ChatMessage(role: .system, content: missing.isEmpty
             ? "Opened \(project.name) (\(project.videoClips.count) clips)."
-            : "Opened \(project.name) — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", ")).")]
+            : "Opened \(project.name) — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", ")).")])
         restoreWireContext(forProject: project.id)
         await refreshPreview()
         return true
@@ -129,7 +132,7 @@ extension EditorViewModel {
     /// next autosave; any other project is renamed on disk via the library.
     func renameProject(id: UUID, to newName: String) async {
         if timelineProject?.id == id, var stack = editStack, stack.project != nil {
-            stack.project?.name = newName
+            stack.project?.setUserTitle(newName)
             editStack = stack
             saveTimelineProject()
         } else {

@@ -247,11 +247,45 @@ struct EditorProject: Codable, Equatable, Sendable {
     /// Captions already on PROJECT time (e.g. migrated from a single-clip EditStack).
     var captions: [CaptionCue] = []
     var schemaVersion: Int = EditorProject.currentSchemaVersion
+    /// #125 Phase 2: true once the user renamed the project, so auto-titling
+    /// never overwrites their title. Optional so project.json files saved
+    /// before this field existed still decode (nil means not edited).
+    var titleIsUserEdited: Bool?
 
-    init(id: UUID = UUID(), name: String = "Untitled", canvas: ProjectCanvas) {
+    static let defaultName = "Untitled"
+    static let autoTitleMaxLength = 40
+
+    init(id: UUID = UUID(), name: String = EditorProject.defaultName, canvas: ProjectCanvas) {
         self.id = id
         self.name = name
         self.canvas = canvas
+    }
+
+    // Title ---------------------------------------------------------------
+
+    /// Local-only auto-title (#125 v1): the first user prompt, whitespace
+    /// collapsed and truncated. Nil for an empty prompt.
+    static func autoTitle(from prompt: String) -> String? {
+        let collapsed = prompt.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        guard collapsed.count > autoTitleMaxLength else { return collapsed }
+        return String(collapsed.prefix(autoTitleMaxLength - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+
+    /// Titles a still-default project from a prompt. Never touches a title the
+    /// user edited, and never re-titles an already auto-titled project.
+    @discardableResult
+    mutating func applyAutoTitle(from prompt: String) -> Bool {
+        guard titleIsUserEdited != true, name == Self.defaultName,
+              let title = Self.autoTitle(from: prompt) else { return false }
+        name = title
+        return true
+    }
+
+    /// A user rename: sets the title and marks it user-edited.
+    mutating func setUserTitle(_ title: String) {
+        name = title
+        titleIsUserEdited = true
     }
 
     // Lookups -------------------------------------------------------------

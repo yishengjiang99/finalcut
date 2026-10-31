@@ -272,4 +272,41 @@ final class ProjectModelTests: XCTestCase {
             XCTAssertNil(TranscriptStore.load(projectID: projectID))
         }
     }
+
+    // MARK: Title flag (Phase 2, #125)
+
+    func testAutoTitleNeverOverwritesUserEditedTitle() {
+        var project = EditorProject(canvas: .hd1080Landscape)
+        XCTAssertTrue(project.applyAutoTitle(from: "  make it   black and white  "))
+        XCTAssertEqual(project.name, "make it black and white")
+        // Already titled: a later prompt doesn't re-title.
+        XCTAssertFalse(project.applyAutoTitle(from: "add captions"))
+        XCTAssertEqual(project.name, "make it black and white")
+
+        var renamed = EditorProject(canvas: .hd1080Landscape)
+        renamed.setUserTitle(EditorProject.defaultName) // user picked "Untitled" on purpose
+        XCTAssertEqual(renamed.titleIsUserEdited, true)
+        XCTAssertFalse(renamed.applyAutoTitle(from: "trim the intro"))
+        XCTAssertEqual(renamed.name, EditorProject.defaultName)
+
+        XCTAssertNil(EditorProject.autoTitle(from: "   "))
+        let long = EditorProject.autoTitle(from: String(repeating: "word ", count: 30))!
+        XCTAssertLessThanOrEqual(long.count, EditorProject.autoTitleMaxLength)
+        XCTAssertTrue(long.hasSuffix("…"))
+    }
+
+    func testTitleFlagIsBackwardCompatibleAndPersists() throws {
+        var project = EditorProject(name: "Trip", canvas: .hd1080Landscape)
+        // A project.json saved before the flag existed has no such key.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(project)) as? [String: Any])
+        json.removeValue(forKey: "titleIsUserEdited")
+        let legacy = try JSONDecoder().decode(EditorProject.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(legacy.titleIsUserEdited)
+        XCTAssertEqual(legacy.name, "Trip")
+
+        project.setUserTitle("My trip")
+        let decoded = try JSONDecoder().decode(EditorProject.self, from: JSONEncoder().encode(project))
+        XCTAssertEqual(decoded.titleIsUserEdited, true)
+        XCTAssertEqual(decoded, project)
+    }
 }
