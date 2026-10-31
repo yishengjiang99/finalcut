@@ -342,6 +342,14 @@ final class EditorViewModel: ObservableObject {
     private var promptContinuation: CheckedContinuation<Bool, Never>?
     /// Latest `turnToken` of the running client-mode chat turn (sent with the lyric captions upload).
     var currentTurnToken: String?
+    /// Phase 2 (#125): the model-facing wire conversation for the current
+    /// project — restored from wire-turns.json when a project opens, appended
+    /// after each completed chat turn, and saved back per project. Separate
+    /// from the display-only `messages` transcript, which stays session-scoped.
+    var wireContext: [JSONValue] = []
+    /// The project `wireContext` belongs to; nil until a project is opened or
+    /// materialised in this session.
+    var wireContextProjectID: UUID?
     /// Tests inject the socket, pacing, sleeping and watchdog timings.
     var streamingDepsTweak: ((inout StreamingDeps) -> Void)?
     var captionSocketFactory: (URL) -> CaptionSocket = { URLSessionCaptionSocket(url: $0) }
@@ -777,6 +785,7 @@ final class EditorViewModel: ObservableObject {
     /// "New project" action). Saved projects on disk are not touched.
     func resetSessionForNewProject() {
         processingTask?.cancel()
+        clearWireContext()
         activeJobId = nil
         localVideoURL = nil
         editStack = nil
@@ -1211,7 +1220,11 @@ final class EditorViewModel: ObservableObject {
         }
         do {
             try await prepareAuth(client)
-            var conversation: [JSONValue] = [ClientChat.userMessage(prompt)]
+            // Seed with the project's restored wire context (Phase 2, #125) so
+            // a follow-up edit builds on the earlier conversation; the server
+            // stays stateless and simply receives the fuller history.
+            let wireSeed = wireContext
+            var conversation: [JSONValue] = wireSeed + [ClientChat.userMessage(prompt)]
             var response = try await client.sendClientChat(
                 ClientChatRequest(messages: conversation, media: await currentMedia(), thumbnails: await currentThumbnails())
             )
@@ -1248,12 +1261,50 @@ final class EditorViewModel: ObservableObject {
             if let text = response.finalText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                 messages.append(ChatMessage(role: .assistant, content: text))
             }
+            recordCompletedWireTurn(seed: wireSeed, previous: conversation, response: response)
             finishTurn()
         } catch is CancellationError {
             // User sent another message or view torn down.
         } catch {
             if Task.isCancelled { return }
             finishChatFailure(error)
+        }
+    }
+
+    // MARK: - Wire context (Phase 2, #125)
+
+    /// Loads a project's saved wire turns as the session's model context
+    /// (sanitised + budget-pruned; empty when the project has none saved).
+    func restoreWireContext(forProject projectID: UUID) {
+        wireContext = WireTurnStore.restoredContext(projectID: projectID)
+        wireContextProjectID = projectID
+    }
+
+    /// Drops the session's wire context (new project / session reset).
+    func clearWireContext() {
+        wireContext = []
+        wireContextProjectID = nil
+    }
+
+    /// Appends a completed chat turn's wire messages to the session context
+    /// and persists them under the current project, when one exists. Turns
+    /// recorded before a project materialises are adopted by the first
+    /// project the session creates; if the context was restored from a
+    /// different project than the one now open, the turn starts that
+    /// project's context fresh instead of mixing two conversations.
+    private func recordCompletedWireTurn(seed: [JSONValue], previous: [JSONValue], response: ClientChatResponse) {
+        let delta = ClientChat.completedTurnMessages(seed: seed, previous: previous, response: response)
+        guard !delta.isEmpty else { return }
+        if let projectID = timelineProject?.id {
+            if let owner = wireContextProjectID, owner != projectID {
+                wireContext = delta
+            } else {
+                wireContext += delta
+            }
+            wireContextProjectID = projectID
+            WireTurnStore.save(wireContext, projectID: projectID)
+        } else {
+            wireContext += delta
         }
     }
 

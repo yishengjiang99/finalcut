@@ -134,6 +134,29 @@ enum ClientChat {
         .object(["role": .string("user"), "content": .string(text)])
     }
 
+    static func assistantMessage(_ text: String) -> JSONValue {
+        .object(["role": .string("assistant"), "content": .string(text)])
+    }
+
+    /// The wire messages one completed turn adds on top of the `seed` context
+    /// it started from (Phase 2, #125 — the delta persisted to wire-turns.json).
+    /// Prefers the server's echoed conversation when the echo preserves the
+    /// seed verbatim; otherwise falls back to the locally built request chain.
+    /// Either way the final assistant text is present exactly once.
+    static func completedTurnMessages(seed: [JSONValue], previous: [JSONValue], response: ClientChatResponse) -> [JSONValue] {
+        var delta: [JSONValue]
+        if let echo = response.messages, echo.count >= seed.count, Array(echo.prefix(seed.count)) == seed {
+            delta = Array(echo.dropFirst(seed.count))
+        } else {
+            delta = Array(previous.dropFirst(min(seed.count, previous.count)))
+        }
+        if let text = response.finalText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            let final = assistantMessage(text)
+            if delta.last != final { delta.append(final) }
+        }
+        return delta
+    }
+
     /// Assistant turn carrying tool calls, used only if the server omits `messages`.
     static func assistantToolCallsMessage(_ calls: [ClientToolCall]) -> JSONValue {
         .object([

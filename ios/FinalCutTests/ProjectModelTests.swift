@@ -1,4 +1,5 @@
 import CoreMedia
+import Foundation
 import XCTest
 @testable import FinalCut
 
@@ -99,5 +100,126 @@ final class ProjectModelTests: XCTestCase {
         cues = project.projectCaptions()
         XCTAssertEqual(cues.count, 1)
         XCTAssertEqual(cues[0].start, 1, accuracy: 0.001)
+    }
+
+    // MARK: - Wire turns (Phase 2, #125): saved model context per project
+
+    private func withTemporaryProjectStore(_ body: () throws -> Void) throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("fc-wire-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        ProjectStore.baseDirectoryOverride = base
+        defer {
+            ProjectStore.baseDirectoryOverride = nil
+            try? FileManager.default.removeItem(at: base)
+        }
+        try body()
+    }
+
+    /// One wire tool exchange: the assistant's tool-call message + its result.
+    private func wireToolTurn(callID: String, name: String, output: String) -> [JSONValue] {
+        let call = ClientToolCall(id: callID, name: name, arguments: [:])
+        let result = ClientToolResult.success(on: .device, output: ["detail": .string(output)])
+        return [ClientChat.assistantToolCallsMessage([call]), result.toolMessage(callId: callID)]
+    }
+
+    private func finalResponse(messages: [JSONValue]?, finalText: String?) -> ClientChatResponse {
+        var object: [String: JSONValue] = ["status": .string("final"), "toolCalls": .array([])]
+        if let messages { object["messages"] = .array(messages) }
+        if let finalText { object["message"] = .string(finalText) }
+        let data = try! JSONEncoder().encode(JSONValue.object(object))
+        return try! JSONDecoder().decode(ClientChatResponse.self, from: data)
+    }
+
+    func testWireTurnsSaveLoadRoundTrip() throws {
+        try withTemporaryProjectStore {
+            let projectID = UUID()
+            let messages: [JSONValue] = [ClientChat.userMessage("trim it")]
+                + wireToolTurn(callID: "c1", name: "trim_video", output: "done")
+                + [ClientChat.assistantMessage("Trimmed.")]
+            WireTurnStore.save(messages, projectID: projectID)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: WireTurnStore.fileURL(projectID).path))
+            XCTAssertEqual(WireTurnStore.load(projectID: projectID), messages)
+            // Kept separate from the project file: wire turns never create one.
+            XCTAssertFalse(FileManager.default.fileExists(atPath: ProjectStore.projectFileURL(projectID).path))
+        }
+    }
+
+    func testWireTurnsMissingFileIsNoOp() throws {
+        try withTemporaryProjectStore {
+            let projectID = UUID()
+            XCTAssertNil(WireTurnStore.load(projectID: projectID))
+            XCTAssertEqual(WireTurnStore.restoredContext(projectID: projectID), [])
+        }
+    }
+
+    func testWireTurnsRestoreSanitizesStaleToolResults() {
+        let messages: [JSONValue] = [ClientChat.userMessage("make it warmer")]
+            + wireToolTurn(callID: "c1", name: "set_color", output: "big payload")
+            + [ClientChat.assistantMessage("Done — warmed it up.")]
+        let restored = WireTurns.restoredContext(from: messages)
+        XCTAssertEqual(restored.count, messages.count)
+        XCTAssertEqual(restored[0], messages[0]) // user turn intact
+        XCTAssertEqual(restored[1], messages[1]) // assistant tool-call turn intact
+        XCTAssertEqual(restored[3], messages[3]) // assistant text intact
+        let tool = restored[2]
+        XCTAssertEqual(tool["tool_call_id"]?.stringValue, "c1")
+        let content = tool["content"]?.objectValue
+        XCTAssertEqual(content?["stale"]?.boolValue, true)
+        XCTAssertEqual(content?["tool"]?.stringValue, "set_color")
+        XCTAssertEqual(content?["ok"]?.boolValue, true)
+        XCTAssertNil(content?["output"]) // the stale payload itself is gone
+        XCTAssertNotNil(content?["note"]?.stringValue)
+        // Sanitising is idempotent: a marker survives a second pass unchanged.
+        XCTAssertEqual(WireTurns.sanitizedForRestore(restored), restored)
+    }
+
+    func testWireTurnsRestorePrunesOldestTurnsToBudget() {
+        var messages: [JSONValue] = []
+        for index in 0..<6 {
+            messages.append(ClientChat.userMessage("turn \(index) " + String(repeating: "x", count: 400)))
+            messages += wireToolTurn(callID: "c\(index)", name: "trim_video", output: "ok")
+            messages.append(ClientChat.assistantMessage("done \(index)"))
+        }
+        let sanitized = WireTurns.sanitizedForRestore(messages)
+        let budget = WireTurns.estimatedTokens(of: sanitized) / 2
+        let restored = WireTurns.prunedToBudget(sanitized, budget: budget)
+        XCTAssertLessThanOrEqual(WireTurns.estimatedTokens(of: restored), budget)
+        // Starts on a user message, so no tool result is orphaned at the head…
+        XCTAssertEqual(restored.first?["role"]?.stringValue, "user")
+        // …the oldest turn is gone…
+        XCTAssertFalse(restored.contains(ClientChat.userMessage("turn 0 " + String(repeating: "x", count: 400))))
+        // …and the most recent turn survives whole.
+        XCTAssertEqual(Array(restored.suffix(4)), Array(sanitized.suffix(4)))
+        // No orphaned tool results anywhere: each answers a call still present.
+        var callIDs = Set<String>()
+        for message in restored {
+            if let calls = message["tool_calls"]?.arrayValue {
+                for call in calls {
+                    if let id = call["id"]?.stringValue { callIDs.insert(id) }
+                }
+            }
+            if message["role"]?.stringValue == "tool", let id = message["tool_call_id"]?.stringValue {
+                XCTAssertTrue(callIDs.contains(id), "tool result \(id) lost its call")
+            }
+        }
+    }
+
+    func testCompletedTurnMessagesUsesEchoDelta() {
+        let seed: [JSONValue] = [ClientChat.userMessage("first"), ClientChat.assistantMessage("ok")]
+        let turn: [JSONValue] = [ClientChat.userMessage("second")]
+            + wireToolTurn(callID: "c9", name: "trim_video", output: "done")
+            + [ClientChat.assistantMessage("All set.")]
+        let response = finalResponse(messages: seed + turn, finalText: "All set.")
+        let delta = ClientChat.completedTurnMessages(seed: seed, previous: seed + Array(turn.dropLast()), response: response)
+        XCTAssertEqual(delta, turn)
+    }
+
+    func testCompletedTurnMessagesFallsBackToLocalChain() {
+        let seed: [JSONValue] = [ClientChat.userMessage("first"), ClientChat.assistantMessage("ok")]
+        let previous: [JSONValue] = seed + [ClientChat.userMessage("second")]
+            + wireToolTurn(callID: "c9", name: "trim_video", output: "done")
+        let response = finalResponse(messages: nil, finalText: "All set.")
+        let delta = ClientChat.completedTurnMessages(seed: seed, previous: previous, response: response)
+        XCTAssertEqual(delta, Array(previous.dropFirst(seed.count)) + [ClientChat.assistantMessage("All set.")])
     }
 }
