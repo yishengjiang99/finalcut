@@ -456,4 +456,146 @@ final class ProjectModelTests: XCTestCase {
         XCTAssertFalse(edited.applyAutoTitle(from: "color grade"))
         XCTAssertEqual(edited.name, "Untitled · mine")
     }
+
+    // MARK: Storage (Phase 4, #125)
+
+    /// Saves a project with one media file of `mediaBytes` (and optionally a cover).
+    private func makeStoredProject(_ name: String, mediaBytes: Int, coverBytes: Int = 0) throws -> EditorProject {
+        var project = EditorProject(name: name, canvas: .hd1080Landscape)
+        let asset = MediaAsset(id: UUID(), relativePath: "Media/clip.mov", name: "clip.mov", mediaType: .video,
+                               duration: .seconds(5), naturalSize: CodableSize(width: 1920, height: 1080),
+                               preferredTransform: .identity, nominalFrameRate: 30, hasAudio: true)
+        project.assets = [asset]
+        try ProjectStore.save(project)
+        try Data(repeating: 7, count: mediaBytes).write(to: ProjectStore.resolve(asset, in: project))
+        if coverBytes > 0 {
+            try Data(repeating: 1, count: coverBytes).write(
+                to: ProjectStore.projectDirectory(project.id).appendingPathComponent(ProjectLibrary.coverFilename))
+        }
+        return project
+    }
+
+    func testStorageSizesAndSortBySize() throws {
+        try withTemporaryProjectStore {
+            let small = try makeStoredProject("Small", mediaBytes: 1_000)
+            let big = try makeStoredProject("Big", mediaBytes: 50_000, coverBytes: 200)
+            let entries = ProjectStorage.entries()
+            XCTAssertEqual(entries.map(\.id), [big.id, small.id]) // largest first
+            XCTAssertEqual(entries[0].totalBytes, ProjectLibrary.directorySize(big.id))
+            XCTAssertGreaterThanOrEqual(entries[0].totalBytes, 50_200)
+            XCTAssertEqual(entries[0].thumbnailBytes, 200)
+            XCTAssertEqual(entries[1].thumbnailBytes, 0)
+            XCTAssertEqual(ProjectStorage.totalBytes(entries), entries[0].totalBytes + entries[1].totalBytes)
+        }
+        // Ties sort by title.
+        let a = ProjectStorageEntry(id: UUID(), title: "b", totalBytes: 10, thumbnailBytes: 0, isArchived: false)
+        let b = ProjectStorageEntry(id: UUID(), title: "A", totalBytes: 10, thumbnailBytes: 0, isArchived: false)
+        let c = ProjectStorageEntry(id: UUID(), title: "z", totalBytes: 99, thumbnailBytes: 0, isArchived: true)
+        XCTAssertEqual(ProjectStorage.sortedBySize([a, b, c]).map(\.title), ["z", "A", "b"])
+    }
+
+    func testClearThumbnailCacheNeverTouchesProjectData() throws {
+        try withTemporaryProjectStore {
+            let project = try makeStoredProject("Trip", mediaBytes: 4_000, coverBytes: 300)
+            TranscriptStore.save([ChatMessage(role: .user, content: "trim it")], projectID: project.id)
+            WireTurnStore.save([ClientChat.userMessage("trim it")], projectID: project.id)
+            let dir = ProjectStore.projectDirectory(project.id)
+
+            XCTAssertEqual(ProjectStorage.clearThumbnailCache(), 300)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(ProjectLibrary.coverFilename).path))
+            XCTAssertEqual(try ProjectStore.load(project.id), project)
+            XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("Media/clip.mov")).count, 4_000)
+            XCTAssertEqual(TranscriptStore.load(projectID: project.id)?.map(\.content), ["trim it"])
+            XCTAssertNotNil(WireTurnStore.load(projectID: project.id))
+            XCTAssertNil(ProjectLibrary.loadRows().first?.coverFilename)
+            XCTAssertEqual(ProjectStorage.clearThumbnailCache(), 0) // idempotent
+        }
+    }
+
+    func testDuplicateIsAFullIndependentCopy() throws {
+        try withTemporaryProjectStore {
+            var original = try makeStoredProject("Trip", mediaBytes: 2_000, coverBytes: 100)
+            original.isPinned = true
+            try ProjectStore.save(original)
+            TranscriptStore.save([ChatMessage(role: .user, content: "trim it")], projectID: original.id)
+
+            let copyID = try ProjectStorage.duplicate(projectID: original.id)
+            XCTAssertNotEqual(copyID, original.id)
+            let copy = try ProjectStore.load(copyID)
+            XCTAssertEqual(copy.name, "Trip copy")
+            XCTAssertNil(copy.isPinned)
+            XCTAssertEqual(copy.assets, original.assets)
+            XCTAssertEqual(copy.videoClips, original.videoClips)
+            XCTAssertEqual(TranscriptStore.load(projectID: copyID)?.map(\.content), ["trim it"])
+
+            // Media is copied in full: changing or deleting the original leaves the copy intact.
+            let copyMedia = ProjectStore.resolve(copy.assets[0], in: copy)
+            XCTAssertEqual(try Data(contentsOf: copyMedia).count, 2_000)
+            try Data(repeating: 9, count: 10).write(to: ProjectStore.resolve(original.assets[0], in: original))
+            XCTAssertEqual(try Data(contentsOf: copyMedia), Data(repeating: 7, count: 2_000))
+            try ProjectLibrary.delete(projectID: original.id)
+            XCTAssertEqual(try Data(contentsOf: copyMedia).count, 2_000)
+            XCTAssertEqual(ProjectLibrary.loadRows().map(\.id), [copyID])
+        }
+    }
+
+    func testStaleProjectsAndNudgeSnooze() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 86_400
+        let stale = libraryRow("Old", now.addingTimeInterval(-40 * day))
+        var reopened = libraryRow("Old but opened", now.addingTimeInterval(-90 * day))
+        reopened.lastOpenedAt = now.addingTimeInterval(-2 * day)
+        let older = libraryRow("Oldest", now.addingTimeInterval(-200 * day))
+        let archived = libraryRow("Archived", now.addingTimeInterval(-100 * day), archived: true)
+        let fresh = libraryRow("Fresh", now.addingTimeInterval(-29 * day))
+        let rows = [stale, reopened, older, archived, fresh]
+
+        XCTAssertEqual(ProjectStorage.staleThreshold, 30 * day)
+        XCTAssertEqual(ProjectStorage.staleProjects(rows, now: now).map(\.id), [older.id, stale.id])
+        XCTAssertTrue(ProjectStorage.shouldShowArchiveNudge(rows, now: now, dismissedAt: nil))
+        // Dismissed recently: stays quiet for the snooze window, then may return.
+        XCTAssertFalse(ProjectStorage.shouldShowArchiveNudge(rows, now: now, dismissedAt: now.addingTimeInterval(-10 * day)))
+        XCTAssertTrue(ProjectStorage.shouldShowArchiveNudge(rows, now: now,
+                                                             dismissedAt: now.addingTimeInterval(-ProjectStorage.nudgeSnooze - 1)))
+        // Nothing stale: no nudge.
+        XCTAssertFalse(ProjectStorage.shouldShowArchiveNudge([fresh, reopened, archived], now: now, dismissedAt: nil))
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "fc-nudge-\(UUID().uuidString)"))
+        XCTAssertNil(ProjectStorage.nudgeDismissedAt(defaults: defaults))
+        ProjectStorage.dismissArchiveNudge(at: now, defaults: defaults)
+        XCTAssertEqual(ProjectStorage.nudgeDismissedAt(defaults: defaults), now)
+    }
+
+    func testBackupBundleContents() throws {
+        try withTemporaryProjectStore {
+            let project = try makeStoredProject("Trip: day/1", mediaBytes: 1_500, coverBytes: 100)
+            TranscriptStore.save([ChatMessage(role: .user, content: "trim it")], projectID: project.id)
+            WireTurnStore.save([ClientChat.userMessage("trim it")], projectID: project.id)
+            let out = FileManager.default.temporaryDirectory.appendingPathComponent("fc-backup-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: out) }
+
+            let bundle = try ProjectStorage.stageBackup(projectID: project.id, in: out)
+            XCTAssertEqual(bundle.lastPathComponent, "Trip- day-1.finalcap")
+            let contents = try FileManager.default.contentsOfDirectory(atPath: bundle.path).sorted()
+            // Project data only: the cached cover is left out.
+            XCTAssertEqual(contents, ["Media", "manifest.json", "project.json", "transcript.json", "wire-turns.json"])
+            XCTAssertEqual(try Data(contentsOf: bundle.appendingPathComponent("Media/clip.mov")).count, 1_500)
+            let saved = try JSONDecoder().decode(EditorProject.self, from: Data(contentsOf: bundle.appendingPathComponent("project.json")))
+            XCTAssertEqual(saved, project)
+            let manifest = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: Data(contentsOf: bundle.appendingPathComponent("manifest.json"))) as? [String: String])
+            XCTAssertEqual(manifest["projectID"], project.id.uuidString)
+            XCTAssertEqual(manifest["title"], "Trip: day/1")
+            // The source project is untouched (cover still cached there).
+            XCTAssertEqual(ProjectStorage.thumbnailBytes(project.id), 100)
+
+            let zip = try ProjectStorage.makeBackupArchive(projectID: project.id)
+            defer { try? FileManager.default.removeItem(at: zip.deletingLastPathComponent()) }
+            XCTAssertEqual(zip.pathExtension, "zip")
+            let zipBytes = try Data(contentsOf: zip)
+            XCTAssertGreaterThan(zipBytes.count, 0)
+            XCTAssertEqual(Array(zipBytes.prefix(2)), [0x50, 0x4B]) // "PK"
+        }
+    }
 }
