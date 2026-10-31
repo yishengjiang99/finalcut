@@ -28,6 +28,9 @@ export const VIDEO_MAX_BYTES = 60_000_000; // per release asset
 export const RELEASE = 'https://github.com/yishengjiang99/finalcut/releases/download/blog-media';
 const WIDTHS = [480, 800, 1200, 1600];
 const CACHE = path.join(ROOT, '.cache', 'blog-media');
+// Encoded image variants, keyed by source content hash + width + format (the output file name).
+// Bump the version whenever the encode settings in image() change so stale variants are not reused.
+const IMG_CACHE = path.join(CACHE, 'img-v1');
 
 const hash = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 10);
 const safe = (name) => path.basename(name).replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -73,6 +76,7 @@ export class Media {
     // Encode every width x format at once (libuv/libvips spread them over the cores); the srcset
     // order is fixed by `widths`, not by completion order.
     const encodes = [];
+    mkdirSync(IMG_CACHE, { recursive: true });
     for (const w of widths) {
       const base = sharp(buf).rotate().resize({ width: w, withoutEnlargement: true });
       const jobs = {
@@ -84,7 +88,10 @@ export class Media {
       for (const f of ['avif', 'webp', fb]) {
         const name = `${id}-${w}.${f}`;
         const dest = path.join(this.dir, name);
-        if (!existsSync(dest)) encodes.push(jobs[f]().toBuffer().then((b) => writeFileSync(dest, b)));
+        const cached = path.join(IMG_CACHE, name);
+        if (existsSync(dest)) { /* already written this build */ }
+        else if (existsSync(cached)) copyFileSync(cached, dest);
+        else encodes.push(jobs[f]().toBuffer().then((b) => { writeFileSync(dest, b); writeFileSync(cached, b); }));
         out[f].push(`${MEDIA_URL}/${name} ${w}w`);
       }
     }

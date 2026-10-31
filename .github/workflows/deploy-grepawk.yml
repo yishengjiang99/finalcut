@@ -106,6 +106,13 @@ jobs:
           path: .cache/ffmpeg-source
           key: ffmpeg-source-${{ hashFiles('vendor/ffmpeg-source.lock.json') }}
 
+      - name: Cache encoded blog images (content-addressed; see scripts/blog/media.mjs IMG_CACHE)
+        uses: actions/cache@v4
+        with:
+          path: .cache/blog-media/img-v1
+          key: blog-img-v1-${{ hashFiles('blog/**/*.png', 'blog/**/*.jpg', 'blog/**/*.jpeg', 'blog/**/*.webp', 'scripts/blog/media.mjs') }}
+          restore-keys: blog-img-v1-
+
       - name: Build (npm run build, then npm run build:v2)
         run: |
           set -euo pipefail

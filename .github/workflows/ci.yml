@@ -47,6 +47,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache encoded blog images (content-addressed; see scripts/blog/media.mjs IMG_CACHE)
+        uses: actions/cache@v4
+        with:
+          path: .cache/blog-media/img-v1
+          key: blog-img-v1-${{ hashFiles('blog/**/*.png', 'blog/**/*.jpg', 'blog/**/*.jpeg', 'blog/**/*.webp', 'scripts/blog/media.mjs') }}
+          restore-keys: blog-img-v1-
+
       - name: Run tests (smoke subset on merge — full suite via `npm test` locally or workflow_dispatch)
         run: ${{ inputs.full && 'npm test' || 'npm run test:smoke' }}
         env:
