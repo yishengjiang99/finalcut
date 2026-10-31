@@ -21,6 +21,8 @@ FinalCap is built by Yisheng Jiang (GrepAwk). It is free to try, with a paid pla
 - [Translate subtitles](https://grepawk.com/translate-subtitles): bilingual captions with the translation on top and the original below.
 - [Add lyrics to a video](https://grepawk.com/add-lyrics-to-video): lyric captions with a translation under each line.
 - [How FinalCap turns plain-English requests into FFmpeg edits](https://grepawk.com/blog/finalcap-plain-english-ffmpeg-edits): the architecture: the model picks a tool, it does not write video, and FFmpeg runs in the browser.
+- [FinalCap vs CapCut](https://grepawk.com/finalcap-vs-capcut): chat editing with no upload, compared honestly with CapCut's timeline, templates and cloud web editor.
+- [FinalCap vs Descript](https://grepawk.com/finalcap-vs-descript): private chat editing with on-device captions, compared with Descript's cloud transcription and transcript editing.
 - [FinalCap privacy policy](https://grepawk.com/legal/privacy.html): exactly what is sent, what stays on the device, and what asks first.
 - [FinalCap for iPhone](https://apps.apple.com/us/app/finalcap-ai-video-editor/id6815060815): the same chat-to-edit workflow on iPhone, with edits applied on the phone.
 

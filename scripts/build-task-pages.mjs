@@ -48,6 +48,10 @@ ul.list{padding-left:20px;color:#c8d1df}ul.list li{margin:0 0 6px}
 details{border-bottom:1px solid #1a2230;padding:12px 0}summary{cursor:pointer;font-weight:600;min-height:24px}
 details p{margin:8px 0 0;color:#c8d1df}
 .guides{list-style:none;padding:0;margin:0}.guides li{margin:0 0 4px}.guides a{display:inline-block;padding:8px 0}
+.cmp{overflow-x:auto;margin:0 0 8px}table.cmp-t{border-collapse:collapse;width:100%;font-size:15.5px}
+.cmp-t th,.cmp-t td{border:1px solid #232c3a;padding:10px 12px;text-align:left;vertical-align:top}
+.cmp-t thead th{background:#121823;color:#e8edf4}.cmp-t tbody th{color:#e8edf4;font-weight:600;white-space:nowrap}
+.cmp-t td{color:#c8d1df}
 footer{border-top:1px solid #1a2230;margin-top:48px;padding:20px 0 32px;color:#9aa7bb;font-size:15px}
 footer a{display:inline-block;padding:8px 0;margin-right:16px}
 `.replace(/\n/g, '');
@@ -123,6 +127,7 @@ ${cta('top')}
 <p class="note">Opens FinalCap with "${esc(page.prompt)}" ready in the chat box. ${esc(page.signinNote)}</p>
 <h2>${esc(page.stepsHeading || 'How to do it in 3 steps')}</h2>
 <ol class="steps">${steps}</ol>
+${page.table ? `<h2>${esc(page.table.heading)}</h2><div class="cmp"><table class="cmp-t"><thead><tr>${page.table.columns.map((c) => `<th scope="col">${esc(c)}</th>`).join('')}</tr></thead><tbody>${page.table.rows.map(([label, ...cells]) => `<tr><th scope="row">${esc(label)}</th>${cells.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}
 <h2>${esc(page.optionsHeading || 'What you can control')}</h2>
 <ul class="list">${page.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>
 ${(page.sections || []).map(([heading, paras]) => `<h2>${esc(heading)}</h2>${paras.map((t) => `<p>${esc(t)}</p>`).join('')}`).join('\n')}

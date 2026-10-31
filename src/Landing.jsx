@@ -194,6 +194,8 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
             <a href="/add-lyrics-to-video">Add lyrics to a video</a>
             <a href="/edit-video-without-uploading">Edit video without uploading</a>
             <a href="/about">About FinalCap</a>
+            <a href="/finalcap-vs-capcut">FinalCap vs CapCut</a>
+            <a href="/finalcap-vs-descript">FinalCap vs Descript</a>
           </nav>
         </div>
       </section>
@@ -324,6 +326,8 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <a href="/add-lyrics-to-video">Add lyrics to a video</a>
           <a href="/edit-video-without-uploading">Edit video without uploading</a>
           <a href="/about">About FinalCap</a>
+          <a href="/finalcap-vs-capcut">FinalCap vs CapCut</a>
+          <a href="/finalcap-vs-descript">FinalCap vs Descript</a>
         </nav>
         <nav className="wrap footer-more" aria-label="More apps by the same developer">
           <span>More apps:</span>

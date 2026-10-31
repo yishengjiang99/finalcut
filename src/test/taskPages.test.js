@@ -14,8 +14,8 @@ const html = Object.fromEntries(pages.map((p) => [p.slug, readFileSync(path.join
 const toolNames = new Set(tools.map((t) => t.function?.name || t.name));
 
 describe('static guide pages', () => {
-  it('builds the five slugs', () => {
-    expect(pages.map((p) => p.slug)).toEqual(['add-subtitles', 'translate-subtitles', 'add-lyrics-to-video', 'edit-video-without-uploading', 'about']);
+  it('builds the seven slugs', () => {
+    expect(pages.map((p) => p.slug)).toEqual(['add-subtitles', 'translate-subtitles', 'add-lyrics-to-video', 'edit-video-without-uploading', 'about', 'finalcap-vs-capcut', 'finalcap-vs-descript']);
   });
   it('has unique titles, descriptions and canonicals; one h1 each; 150-160 char descriptions', () => {
     expect(new Set(pages.map((p) => p.title)).size).toBe(pages.length);

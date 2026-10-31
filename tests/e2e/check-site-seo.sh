@@ -34,7 +34,7 @@ grep -q 'sourceMappingURL' <<<"$html" && bad "sourcemap reference in HTML" || ok
 # Static guide pages (scripts/build-task-pages.mjs): 200, one h1, own canonical, FAQPage JSON-LD,
 # listed in the sitemap, linked from the landing page; old/variant URLs 301 to the clean URL.
 sitemap="$(curl -fsS -m 20 "$BASE/sitemap.xml")"
-for slug in add-subtitles translate-subtitles add-lyrics-to-video edit-video-without-uploading about; do
+for slug in add-subtitles translate-subtitles add-lyrics-to-video edit-video-without-uploading about finalcap-vs-capcut finalcap-vs-descript; do
   page="$(curl -fsS -m 20 "$BASE/$slug")" || { bad "/$slug not 200"; continue; }
   [[ "$(grep -o '<h1[ >]' <<<"$page" | wc -l)" == 1 ]] && ok "/$slug one <h1>" || bad "/$slug one <h1>"
   has "$page" "<link rel=\"canonical\" href=\"https://$HOST/$slug\">" "/$slug canonical"
