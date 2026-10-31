@@ -65,7 +65,13 @@ final class ProjectModelTests: XCTestCase {
         project.videoClips[0].sourceEnd = .seconds(9)
         project.videoClips[0].assetID = UUID()
         XCTAssertTrue(project.validationIssues().contains("clip_missing_asset"))
+        // Valid speeds are 0.05...16 (same contract as ProjectCommand's set speed), so 9x is
+        // legal; use values outside the range on both ends.
         project.videoClips[0].speed = 9
+        XCTAssertFalse(project.validationIssues().contains("clip_speed_out_of_range"))
+        project.videoClips[0].speed = 32
+        XCTAssertTrue(project.validationIssues().contains("clip_speed_out_of_range"))
+        project.videoClips[0].speed = 0.01
         XCTAssertTrue(project.validationIssues().contains("clip_speed_out_of_range"))
     }
 
