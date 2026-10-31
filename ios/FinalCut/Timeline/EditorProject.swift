@@ -368,15 +368,17 @@ struct EditorProject: Codable, Equatable, Sendable {
         var clipIDs = Set<UUID>()
         for clip in videoClips {
             if !clipIDs.insert(clip.id).inserted { issues.append("duplicate_clip_id") }
-            guard let asset = asset(clip.assetID) else { issues.append("clip_missing_asset"); continue }
+            // Asset-independent checks run first so a clip whose asset is missing
+            // still reports its other problems (bad speed, gain, fades, range).
             if clip.sourceDuration <= .zero { issues.append("clip_nonpositive_duration") }
             if clip.sourceStart.cmTime < .zero { issues.append("clip_negative_start") }
-            if asset.mediaType == .video, clip.sourceEnd.cmTime > asset.duration.cmTime + CMTime(seconds: 0.05, preferredTimescale: 600) {
-                issues.append("clip_range_exceeds_asset")
-            }
             if !(0.05...16).contains(clip.speed) { issues.append("clip_speed_out_of_range") }
             if !(0...4).contains(clip.audioGain) { issues.append("clip_gain_out_of_range") }
             if clip.audioFadeIn < 0 || clip.audioFadeOut < 0 { issues.append("clip_negative_fade") }
+            guard let asset = asset(clip.assetID) else { issues.append("clip_missing_asset"); continue }
+            if asset.mediaType == .video, clip.sourceEnd.cmTime > asset.duration.cmTime + CMTime(seconds: 0.05, preferredTimescale: 600) {
+                issues.append("clip_range_exceeds_asset")
+            }
         }
         var audioIDs = Set<UUID>()
         for track in audioTracks {

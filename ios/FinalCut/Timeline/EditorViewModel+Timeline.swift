@@ -79,8 +79,10 @@ extension EditorViewModel {
     /// here for safety), and a legacy single-clip video session is materialised
     /// into a durable project so switching never silently drops it. Photo
     /// sessions have no project form yet and are simply replaced. The chat
-    /// starts fresh with an "Opened …" line — transcripts are session-scoped
-    /// until Phase 2 persists them per project. Returns false when the project
+    /// display starts fresh with an "Opened …" line (the display transcript
+    /// stays session-scoped), while the model-facing wire context is restored
+    /// from the project's wire-turns.json (Phase 2, #125) so follow-up edits
+    /// build on the earlier conversation. Returns false when the project
     /// can't be previewed (no video clips, or its first clip's file is gone).
     @discardableResult
     func openProject(_ project: EditorProject) async -> Bool {
@@ -117,6 +119,7 @@ extension EditorViewModel {
         messages = [ChatMessage(role: .system, content: missing.isEmpty
             ? "Opened \(project.name) (\(project.videoClips.count) clips)."
             : "Opened \(project.name) — \(missing.count) file(s) are missing: \(missing.map(\.name).joined(separator: ", ")).")]
+        restoreWireContext(forProject: project.id)
         await refreshPreview()
         return true
     }
