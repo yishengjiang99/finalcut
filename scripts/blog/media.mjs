@@ -32,6 +32,23 @@ const CACHE = path.join(ROOT, '.cache', 'blog-media');
 const hash = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 10);
 const safe = (name) => path.basename(name).replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+// Network fetch with a hard timeout and one retry, so a stalled connection fails the build with a
+// clear message instead of hanging it.
+async function download(url, httpError, { timeoutMs = 60_000, tries = 2 } = {}) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) throw Object.assign(new Error(httpError(res.status)), { final: res.status < 500 });
+      return Buffer.from(await res.arrayBuffer());
+    } catch (e) {
+      if (e.final) throw e;
+      last = e;
+    }
+  }
+  throw new Error(`${url}: ${last?.cause?.message || last?.message || last}`);
+}
+
 export class Media {
   constructor(outDir) {
     this.dir = path.join(outDir, 'media', 'blog');
@@ -76,16 +93,32 @@ export class Media {
     return { width: top, height, ratio: meta.height / meta.width, avif: out.avif.join(', '), webp: out.webp.join(', '), fallbackSet: out[fb].join(', '), src: out[fb].at(-1).split(' ')[0], largest: `${MEDIA_URL}/${id}-${top}.${fb}` };
   }
 
+  /** Download a blog-media release video into .cache/blog-media/ (no-op when cached); returns the path. */
+  async fetchVideo(name) {
+    const cached = path.join(CACHE, name);
+    if (!existsSync(cached)) {
+      const buf = await download(`${RELEASE}/${name}`, (status) => `video "${name}": ${status} from the blog-media release (upload it with: gh release upload blog-media ${name} -R yishengjiang99/finalcut)`);
+      mkdirSync(CACHE, { recursive: true });
+      writeFileSync(cached, buf);
+    }
+    return cached;
+  }
+
+  /** Download a YouTube thumbnail into .cache/blog-media/ (no-op when cached); returns the path. */
+  async fetchYoutubeThumb(id) {
+    const cached = path.join(CACHE, `yt-${id}.jpg`);
+    if (!existsSync(cached)) {
+      const buf = await download(`https://i.ytimg.com/vi/${id}/hqdefault.jpg`, (status) => `youtube ${id}: thumbnail ${status} (is the id right?)`);
+      mkdirSync(CACHE, { recursive: true });
+      writeFileSync(cached, buf);
+    }
+    return cached;
+  }
+
   /** A video asset from the blog-media release (downloaded once into .cache/blog-media/). */
   async video(name) {
     if (!/^[A-Za-z0-9._-]+\.(mp4|webm)$/.test(name)) throw new Error(`video "${name}": use a file name of the blog-media release (.mp4 or .webm)`);
-    mkdirSync(CACHE, { recursive: true });
-    const cached = path.join(CACHE, name);
-    if (!existsSync(cached)) {
-      const res = await fetch(`${RELEASE}/${name}`, { redirect: 'follow' });
-      if (!res.ok) throw new Error(`video "${name}": ${res.status} from the blog-media release (upload it with: gh release upload blog-media ${name} -R yishengjiang99/finalcut)`);
-      writeFileSync(cached, Buffer.from(await res.arrayBuffer()));
-    }
+    const cached = await this.fetchVideo(name);
     const size = statSync(cached).size;
     if (size > VIDEO_MAX_BYTES) throw new Error(`video "${name}" is ${(size / 1e6).toFixed(1)} MB, over ${VIDEO_MAX_BYTES / 1e6} MB`);
     const ext = path.extname(name);
@@ -106,13 +139,7 @@ export class Media {
 
   /** YouTube thumbnail, fetched at build time and cropped to 16:9. */
   async youtubeThumb(id) {
-    mkdirSync(CACHE, { recursive: true });
-    const cached = path.join(CACHE, `yt-${id}.jpg`);
-    if (!existsSync(cached)) {
-      const res = await fetch(`https://i.ytimg.com/vi/${id}/hqdefault.jpg`);
-      if (!res.ok) throw new Error(`youtube ${id}: thumbnail ${res.status} (is the id right?)`);
-      writeFileSync(cached, Buffer.from(await res.arrayBuffer()));
-    }
+    const cached = await this.fetchYoutubeThumb(id);
     const cropped = path.join(CACHE, `yt-${id}-16x9.jpg`);
     if (!existsSync(cropped)) await sharp(cached).resize(480, 270, { fit: 'cover' }).jpeg({ quality: 85 }).toFile(cropped);
     return this.image(cropped, { maxWidth: 480 });

@@ -432,6 +432,21 @@ export async function buildBlog({ outDir = path.join(ROOT, 'dist'), dirs } = {})
   mkdirSync(blogDir, { recursive: true });
   const media = new Media(outDir);
   const problems = [];
+  // Download every remote asset (blog-media release videos, YouTube thumbnails) before any image
+  // encoding starts. fetch() resolves DNS on the libuv threadpool, which sharp's encodes fill up;
+  // interleaved, a download can sit queued behind minutes of AVIF work and time out ("fetch failed").
+  for (const p of posts) {
+    const blocks = [];
+    md.walkTokens(md.lexer(p.body), (t) => { if (t.type === 'code' && (t.lang === 'video' || t.lang === 'youtube')) blocks.push(t); });
+    for (const t of blocks) {
+      let d; try { d = parseDirective(t.lang, t.text, p.where); } catch { continue; } // malformed blocks are reported by resolveMedia
+      try {
+        if (t.lang === 'youtube' && /^[A-Za-z0-9_-]{11}$/.test(d.id || '')) await media.fetchYoutubeThumb(d.id);
+        for (const v of t.lang === 'video' && d.src && d.poster && d.title ? [d.src, d.webm] : []) if (/^[A-Za-z0-9._-]+\.(mp4|webm)$/.test(v || '')) await media.fetchVideo(v);
+      } catch (e) { problems.push(`${p.where}: ${e.message}`); }
+    }
+  }
+  if (problems.length) throw new Error(`blog: ${problems.length} problem(s)\n  ${problems.join('\n  ')}`);
   for (const p of posts) {
     try {
       p.media = await resolveMedia(p, media);
