@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>FinalCap: AI Video Editor in Your Browser, No Upload</title>
-    <meta name="description" content="FinalCap is a chat-to-edit AI video editor: trim, caption, crop to 9:16, fix color and convert. FFmpeg runs in your browser, so your video file isn't uploaded.">
+    <title>FinalCap: Private AI Video Editor in Your Browser (No Upload)</title>
+    <meta name="description" content="Edit video by chat. FinalCap runs FFmpeg and Whisper in your browser so your file never uploads. Add captions, resize to 9:16, trim, and export. Free to try.">
     <link rel="canonical" href="https://grepawk.com/">
     <meta name="theme-color" content="#0b0e13">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,8 +18,8 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="FinalCap">
     <meta property="og:url" content="https://grepawk.com/">
-    <meta property="og:title" content="FinalCap: edit video by describing it">
-    <meta property="og:description" content="FinalCap, a chat-to-edit AI video editor. Trim, caption, resize to 9:16 and convert, with FFmpeg running in your browser. Your video file is not uploaded to edit.">
+    <meta property="og:title" content="FinalCap: Private AI Video Editor in Your Browser (No Upload)">
+    <meta property="og:description" content="Edit video by chat. FinalCap runs FFmpeg and Whisper in your browser so your file never uploads. Add captions, resize to 9:16, trim, and export. Free to try.">
     <meta property="og:image" content="https://grepawk.com/og/finalcap-og-1200x630.jpg">
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:width" content="1200">
@@ -28,8 +28,8 @@
     <meta property="og:locale" content="en_US">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:creator" content="@YishengJiang">
-    <meta name="twitter:title" content="FinalCap: edit video by describing it">
-    <meta name="twitter:description" content="FinalCap, a chat-to-edit AI video editor. FFmpeg runs in your browser, so your video file is not uploaded to edit.">
+    <meta name="twitter:title" content="FinalCap: Private AI Video Editor in Your Browser (No Upload)">
+    <meta name="twitter:description" content="Edit video by chat. FinalCap runs FFmpeg and Whisper in your browser so your file never uploads. Add captions, resize to 9:16, trim, and export. Free to try.">
     <meta name="twitter:image" content="https://grepawk.com/og/finalcap-og-1200x630.jpg">
     <meta name="twitter:image:alt" content="FinalCap logo with the tagline: Edit video by describing it.">
 
@@ -64,10 +64,24 @@
           "@type": "SoftwareApplication",
           "@id": "https://grepawk.com/#ios-app",
           "name": "FinalCap - AI Video Editor",
-          "description": "FinalCap for iPhone, coming soon to the App Store: edit video by describing it, with edits applied on your iPhone.",
+          "description": "FinalCap for iPhone, on the App Store: edit video by describing it, with edits applied on your iPhone.",
+          "url": "https://apps.apple.com/us/app/finalcap-ai-video-editor/id6815060815",
           "applicationCategory": "MultimediaApplication",
           "operatingSystem": "iOS",
           "author": { "@type": "Person", "name": "Yisheng Jiang" }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://grepawk.com/#faq",
+          "isPartOf": { "@id": "https://grepawk.com/#website" },
+          "mainEntity": [
+            { "@type": "Question", "name": "Does FinalCap upload my video?", "acceptedAnswer": { "@type": "Answer", "text": "No. For normal edits your video file is not uploaded. FFmpeg runs the edit in your browser, captions are transcribed on your device, and FinalCap asks for explicit confirmation before any media upload." } },
+            { "@type": "Question", "name": "How do captions work?", "acceptedAnswer": { "@type": "Answer", "text": "A Whisper speech model runs in your browser (WebGPU or WebAssembly) and transcribes the audio on your device. FinalCap can burn the captions into the video or export them as SRT and VTT files. Translating captions sends only the caption text to the server." } },
+            { "@type": "Question", "name": "What can I edit?", "acceptedAnswer": { "@type": "Answer", "text": "Trim and join clips, crop and resize (9:16, 1:1 and 16:9), change speed, adjust color, add text and transitions, fix audio, and convert or export to MP4, WebM, MOV or MKV." } },
+            { "@type": "Question", "name": "What does the AI see?", "acceptedAnswer": { "@type": "Answer", "text": "Your typed request and up to four small still frames from the video, so it can plan the edit. The AI never receives the video file, and it can only choose edits FinalCap knows how to run." } },
+            { "@type": "Question", "name": "Is FinalCap free?", "acceptedAnswer": { "@type": "Answer", "text": "FinalCap is free to try: the sample video works with no sign-in and no subscription. Editing your own videos needs a Google sign-in and a FinalCap subscription." } },
+            { "@type": "Question", "name": "Does FinalCap work on mobile?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. FinalCap for iPhone is on the App Store, with the same chat-to-edit workflow and edits applied on your iPhone. The web editor runs in a desktop browser." } }
+          ]
         }
       ]
     }

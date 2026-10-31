@@ -14,12 +14,12 @@ const html = Object.fromEntries(pages.map((p) => [p.slug, readFileSync(path.join
 const toolNames = new Set(tools.map((t) => t.function?.name || t.name));
 
 describe('static guide pages', () => {
-  it('builds the three slugs', () => {
-    expect(pages.map((p) => p.slug)).toEqual(['add-subtitles', 'translate-subtitles', 'add-lyrics-to-video']);
+  it('builds the five slugs', () => {
+    expect(pages.map((p) => p.slug)).toEqual(['add-subtitles', 'translate-subtitles', 'add-lyrics-to-video', 'edit-video-without-uploading', 'about']);
   });
   it('has unique titles, descriptions and canonicals; one h1 each; 150-160 char descriptions', () => {
-    expect(new Set(pages.map((p) => p.title)).size).toBe(3);
-    expect(new Set(pages.map((p) => p.description)).size).toBe(3);
+    expect(new Set(pages.map((p) => p.title)).size).toBe(pages.length);
+    expect(new Set(pages.map((p) => p.description)).size).toBe(pages.length);
     for (const p of pages) {
       const h = html[p.slug];
       expect(h.match(/<h1[ >]/g)).toHaveLength(1);

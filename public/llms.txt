@@ -1,0 +1,32 @@
+# FinalCap
+
+> FinalCap is a private AI video editor that runs in your browser. Users describe edits in plain English, an AI model returns a structured tool call, and the edit runs on the user's device with FFmpeg (WebAssembly in the browser, AVFoundation on iPhone), so the video file is not uploaded for normal edits. Captions are transcribed by default with Whisper running on the device.
+
+FinalCap is built by Yisheng Jiang (GrepAwk). It is free to try, with a paid plan for higher usage. To plan an edit, FinalCap sends the user's typed request and up to four small still frames to its server, never the video file. Translating captions sends only the caption text. If a step cannot run on the device, FinalCap asks for explicit confirmation before uploading any media; lyric captions, for example, send only the audio track after the user agrees.
+
+## What FinalCap can do
+
+- Edit video by chat: trim, crop, resize, rotate, speed, color, text, transitions and export, described in plain English.
+- Add captions to a video without uploading it: speech is transcribed on the device and captions can be burned in or exported as SRT and VTT files.
+- Translate subtitles: captions are transcribed on the device, then only the caption text is sent for translation, and both languages are burned in.
+- Resize video to 9:16 for Instagram Reels, TikTok and YouTube Shorts, 1:1 for feeds, or 16:9 for YouTube.
+- Add lyric captions to a music video, with a translation under each line (this sends the audio track to the server, after the user agrees).
+
+## Key pages
+
+- [FinalCap home: edit video by describing it, no upload](https://grepawk.com/): the browser editor and landing page.
+- [About FinalCap](https://grepawk.com/about): what FinalCap is, how it works, its privacy model, and who built it.
+- [Edit video without uploading](https://grepawk.com/edit-video-without-uploading): how private, no-upload editing works and what data leaves the device.
+- [Add subtitles to a video](https://grepawk.com/add-subtitles): auto captions burned in, or SRT and VTT files, without uploading the video.
+- [Translate subtitles](https://grepawk.com/translate-subtitles): bilingual captions with the translation on top and the original below.
+- [Add lyrics to a video](https://grepawk.com/add-lyrics-to-video): lyric captions with a translation under each line.
+- [How FinalCap turns plain-English requests into FFmpeg edits](https://grepawk.com/blog/finalcap-plain-english-ffmpeg-edits): the architecture: the model picks a tool, it does not write video, and FFmpeg runs in the browser.
+- [FinalCap privacy policy](https://grepawk.com/legal/privacy.html): exactly what is sent, what stays on the device, and what asks first.
+- [FinalCap for iPhone](https://apps.apple.com/us/app/finalcap-ai-video-editor/id6815060815): the same chat-to-edit workflow on iPhone, with edits applied on the phone.
+
+## Common questions
+
+- Does FinalCap upload your video? No. For normal edits the video file is not uploaded; FFmpeg runs in the browser and the file stays on the device.
+- How do captions work without uploading? A Whisper speech model runs in the browser (WebGPU or WebAssembly) and transcribes the audio on the device.
+- What does the AI see? The typed request and up to four small still frames from the video. It never receives the video file to plan an edit.
+- Is FinalCap free? It is free to try, including a sample video with no sign-in. Editing your own videos uses a paid plan.

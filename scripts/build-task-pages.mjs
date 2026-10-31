@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build the static SEO task pages (/add-subtitles, /translate-subtitles, /add-lyrics-to-video) into
+// Build the static SEO task pages (slugs in scripts/task-pages/pages.mjs) into
 // dist/<slug>.html. Part of `npm run build` (after the landing pre-render). Plain HTML + inline CSS,
 // no React and no bundle: the pages render instantly and stay out of the app's JS.
 // nginx serves them at the clean URL (nginx/finalcut-site.conf, `location = /<slug>`).
@@ -121,11 +121,12 @@ function renderPage(page) {
 <p class="lede">${esc(page.lede)}</p>
 ${cta('top')}
 <p class="note">Opens FinalCap with "${esc(page.prompt)}" ready in the chat box. ${esc(page.signinNote)}</p>
-<h2>How to do it in 3 steps</h2>
+<h2>${esc(page.stepsHeading || 'How to do it in 3 steps')}</h2>
 <ol class="steps">${steps}</ol>
-<h2>What you can control</h2>
+<h2>${esc(page.optionsHeading || 'What you can control')}</h2>
 <ul class="list">${page.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>
-<section class="privacy" aria-labelledby="privacy-h"><h2 id="privacy-h">What runs on your device, and what goes to our server</h2>
+${(page.sections || []).map(([heading, paras]) => `<h2>${esc(heading)}</h2>${paras.map((t) => `<p>${esc(t)}</p>`).join('')}`).join('\n')}
+<section class="privacy" aria-labelledby="privacy-h"><h2 id="privacy-h">${esc(page.privacyHeading || 'What runs on your device, and what goes to our server')}</h2>
 <ul class="list">${page.privacy.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>
 <p class="note">Details: <a href="/legal/privacy.html">FinalCap privacy policy</a>.</p></section>
 <h2>FAQ</h2>

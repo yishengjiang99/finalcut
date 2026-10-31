@@ -50,13 +50,13 @@ Songs are harder than speech, so lyric captions work differently. After you agre
 
 ## Also on iPhone
 
-A FinalCap app for iPhone is in App Store review. This short promo shows the same idea on the phone: you type the edit and see the result in the preview.
+A FinalCap app for iPhone is on the App Store. This short promo shows the same idea on the phone: you type the edit and see the result in the preview.
 
 ```video
 src: finalcap-promo-v4.mp4
 poster: promo-poster.jpg
 title: FinalCap for iPhone promo
-caption: FinalCap for iPhone, now in App Store review (21 seconds).
+caption: FinalCap for iPhone, on the App Store (21 seconds).
 ```
 
 ## Try it

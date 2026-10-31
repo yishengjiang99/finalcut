@@ -32,6 +32,16 @@ export const landingSteps = [
   ['Download the result', "FFmpeg renders the edit in your browser. Save the file when it's ready.", '"✓ Done. Download MP4"']
 ];
 
+// Keep these answers identical to the FAQPage JSON-LD in index.html.
+export const landingFaq = [
+  ['Does FinalCap upload my video?', 'No. For normal edits your video file is not uploaded. FFmpeg runs the edit in your browser, captions are transcribed on your device, and FinalCap asks for explicit confirmation before any media upload.'],
+  ['How do captions work?', 'A Whisper speech model runs in your browser (WebGPU or WebAssembly) and transcribes the audio on your device. FinalCap can burn the captions into the video or export them as SRT and VTT files. Translating captions sends only the caption text to the server.'],
+  ['What can I edit?', 'Trim and join clips, crop and resize (9:16, 1:1 and 16:9), change speed, adjust color, add text and transitions, fix audio, and convert or export to MP4, WebM, MOV or MKV.'],
+  ['What does the AI see?', 'Your typed request and up to four small still frames from the video, so it can plan the edit. The AI never receives the video file, and it can only choose edits FinalCap knows how to run.'],
+  ['Is FinalCap free?', 'FinalCap is free to try: the sample video works with no sign-in and no subscription. Editing your own videos needs a Google sign-in and a FinalCap subscription.'],
+  ['Does FinalCap work on mobile?', 'Yes. FinalCap for iPhone is on the App Store, with the same chat-to-edit workflow and edits applied on your iPhone. The web editor runs in a desktop browser.']
+];
+
 export const landingExamples = [
   ['🏙️', 'linear-gradient(135deg,#1a2233,#2c3a58)', '"Convert to 9:16 for Instagram Reels"', '✓ Cropped to 1080×1920'],
   ['🎤', 'linear-gradient(135deg,#231a33,#3a2c58)', '"Generate captions and translate them to Spanish"', '✓ Captions transcribed, translated and burned in'],
@@ -100,6 +110,8 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
             <a href="#examples">Examples</a>
             <a href="/blog">Blog</a>
             <a href="#privacy">Privacy</a>
+            <a href="#faq">FAQ</a>
+            <a href="/about">About</a>
           </div>
           <div className="spacer" />
           <button className="btn-ghost" onClick={onGetStarted}>Sign in</button>
@@ -111,7 +123,7 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
         <div className="wrap">
           <div>
             <div className="eyebrow"><span className="dot" /> AI video editor that runs in your browser</div>
-            <h1>Edit video by <span className="grad">describing it.</span></h1>
+            <h1>Edit video by <span className="grad">describing it.</span> No upload.</h1>
             <p className="hero-sub">Type the edit you want, such as a trim, captions, a color change, a speed change or a new format. FinalCap turns your words into FFmpeg edits that run in your browser, so your video file is not uploaded to edit.</p>
 
             {authError && <div className="auth-error">{authError}</div>}
@@ -180,6 +192,8 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
             <a href="/add-subtitles">Add subtitles to a video</a>
             <a href="/translate-subtitles">Translate subtitles</a>
             <a href="/add-lyrics-to-video">Add lyrics to a video</a>
+            <a href="/edit-video-without-uploading">Edit video without uploading</a>
+            <a href="/about">About FinalCap</a>
           </nav>
         </div>
       </section>
@@ -239,12 +253,32 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
       <section className="block" id="iphone">
         <div className="wrap">
           <div className="kicker reveal">iPhone</div>
-          <h2 className="sec reveal">FinalCap for iPhone is coming soon to the App Store</h2>
-          <p className="sec-sub reveal">The same chat-to-edit workflow, with edits applied on your iPhone.</p>
+          <h2 className="sec reveal">FinalCap for iPhone is on the App Store</h2>
+          <p className="sec-sub reveal">The same chat-to-edit workflow, with edits applied on your iPhone. <a href="https://apps.apple.com/us/app/finalcap-ai-video-editor/id6815060815" onClick={() => track('cta_click', { cta: 'app_store', placement: 'iphone_section' })}>Get FinalCap on the App Store</a>.</p>
         </div>
       </section>
 
-      <section className="block alt" id="more-apps" aria-labelledby="more-apps-title">
+      <section className="block alt" id="faq">
+        <div className="wrap">
+          <div className="kicker reveal">FAQ</div>
+          <h2 className="sec reveal">Questions about FinalCap</h2>
+          <div className="feat-grid">
+            {landingFaq.map(([question, answer]) => (
+              <div className="feat reveal" key={question}>
+                <h3>{question}</h3>
+                <p>{answer}</p>
+              </div>
+            ))}
+          </div>
+          <nav className="guides" aria-label="Learn more about FinalCap">
+            <span>Learn more:</span>
+            <a href="/edit-video-without-uploading">How no-upload editing works</a>
+            <a href="/about">About FinalCap</a>
+          </nav>
+        </div>
+      </section>
+
+      <section className="block" id="more-apps" aria-labelledby="more-apps-title">
         <div className="wrap">
           <div className="kicker reveal">More apps</div>
           <h2 className="sec reveal" id="more-apps-title">More apps by the same developer</h2>
@@ -288,6 +322,8 @@ export default function Landing({ onGetStarted, onLoadSample, authError }) {
           <a href="/add-subtitles">Add subtitles to a video</a>
           <a href="/translate-subtitles">Translate video subtitles</a>
           <a href="/add-lyrics-to-video">Add lyrics to a video</a>
+          <a href="/edit-video-without-uploading">Edit video without uploading</a>
+          <a href="/about">About FinalCap</a>
         </nav>
         <nav className="wrap footer-more" aria-label="More apps by the same developer">
           <span>More apps:</span>
