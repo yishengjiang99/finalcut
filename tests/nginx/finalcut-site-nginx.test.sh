@@ -41,7 +41,10 @@ cat > "$E/nginx.conf" <<CONF
 user root; worker_processes 1; pid $W/nginx.pid; error_log $W/error.log;
 events { worker_connections 256; }
 http { include $E/mime.types; default_type application/octet-stream; access_log off;
-  gzip on; include $E/sites-enabled/*; }
+  gzip on; include $E/sites-enabled/*;
+  # Stand-in for the host-level cb-github-logger service (python3 on 127.0.0.1:8799 in production,
+  # not part of this repo) that /cb/github proxies to; answers 200 like the real logger.
+  server { listen 127.0.0.1:8799; location / { return 200 "logged\n"; } } }
 CONF
 export FINALCUT_NGINX_DIR="$E" FINALCUT_SITE_BACKUP_ROOT="$W/backups" FINALCUT_NGINX_SUDO="" \
        FINALCUT_NGINX_TEST="nginx -t -q -c $E/nginx.conf" FINALCUT_NGINX_RELOAD="nginx -c $E/nginx.conf -s reload" \

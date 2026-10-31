@@ -7,9 +7,16 @@
 // - Open Graph cards (1200x630) drawn per post with sharp + Inter Bold.
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+
+// sharp defaults to concurrency 1 on glibc Linux without jemalloc (CI runners, the deploy box), which
+// makes libvips/libaom encode every AVIF single-threaded: ~4x slower, and AVIF is ~70% of the blog
+// build. This is a short-lived build process, so the allocator-fragmentation concern behind that
+// default does not apply; use every core.
+sharp.concurrency(availableParallelism());
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -46,6 +53,9 @@ export class Media {
     const top = Math.min(meta.width, maxWidth);
     const widths = [...new Set([...WIDTHS.filter((w) => w < top), top])];
     const out = { avif: [], webp: [], [fb]: [] };
+    // Encode every width x format at once (libuv/libvips spread them over the cores); the srcset
+    // order is fixed by `widths`, not by completion order.
+    const encodes = [];
     for (const w of widths) {
       const base = sharp(buf).rotate().resize({ width: w, withoutEnlargement: true });
       const jobs = {
@@ -57,10 +67,11 @@ export class Media {
       for (const f of ['avif', 'webp', fb]) {
         const name = `${id}-${w}.${f}`;
         const dest = path.join(this.dir, name);
-        if (!existsSync(dest)) writeFileSync(dest, await jobs[f]().toBuffer());
+        if (!existsSync(dest)) encodes.push(jobs[f]().toBuffer().then((b) => writeFileSync(dest, b)));
         out[f].push(`${MEDIA_URL}/${name} ${w}w`);
       }
     }
+    await Promise.all(encodes);
     const height = Math.round(meta.height * (top / meta.width));
     return { width: top, height, ratio: meta.height / meta.width, avif: out.avif.join(', '), webp: out.webp.join(', '), fallbackSet: out[fb].join(', '), src: out[fb].at(-1).split(' ')[0], largest: `${MEDIA_URL}/${id}-${top}.${fb}` };
   }
