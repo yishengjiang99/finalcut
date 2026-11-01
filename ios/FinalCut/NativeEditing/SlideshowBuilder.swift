@@ -73,11 +73,16 @@ enum SlideshowBuilder {
         guard let first = photos.first else { throw BuildError.noPhotos }
         let firstSize = PhotoTranscoder.orientedPixelSize(of: first).map { CGSize(width: $0.width, height: $0.height) }
         let size = outputSize(forFirstPhoto: firstSize)
-        let frames: [CIImage] = try photos.map { url in
-            guard let image = uprightImage(at: url, maxPixelSize: max(size.width, size.height)) else { throw BuildError.unreadable }
-            return fittedFrame(image, size: size)
+        // Decode lazily: only the current and next photo are held, downsampled to the canvas.
+        var cache: [Int: CIImage] = [:]
+        func loadFrame(_ i: Int) throws -> CIImage {
+            if let cached = cache[i] { return cached }
+            guard let image = uprightImage(at: photos[i], maxPixelSize: max(size.width, size.height)) else { throw BuildError.unreadable }
+            let fitted = fittedFrame(image, size: size)
+            cache[i] = fitted
+            return fitted
         }
-        let timing = Timing(photoCount: frames.count)
+        let timing = Timing(photoCount: photos.count)
 
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ImportedVideos", isDirectory: true)
@@ -125,10 +130,11 @@ enum SlideshowBuilder {
             CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
             guard let buffer else { throw BuildError.writer("buffer") }
             let layer = timing.layer(at: frame)
-            var image = frames[layer.index]
+            cache = cache.filter { $0.key >= layer.index }
+            var image = try loadFrame(layer.index)
             if let next = layer.next {
                 image = image.applyingFilter("CIDissolveTransition",
-                                             parameters: [kCIInputTargetImageKey: frames[next], kCIInputTimeKey: layer.mix])
+                                             parameters: [kCIInputTargetImageKey: try loadFrame(next), kCIInputTimeKey: layer.mix])
             }
             context.render(image, to: buffer, bounds: CGRect(origin: .zero, size: size), colorSpace: colorSpace)
             guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(frame), timescale: fps)) else {

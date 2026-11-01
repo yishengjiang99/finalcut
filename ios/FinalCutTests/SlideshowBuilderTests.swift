@@ -45,10 +45,12 @@ final class SlideshowBuilderTests: XCTestCase {
         let photos = [try Self.jpeg(width: 64, height: 48, orientation: 1), try Self.jpeg(width: 48, height: 64, orientation: 6)]
         let url = try await SlideshowBuilder.build(photos: photos)
         let asset = AVURLAsset(url: url)
-        let video = try XCTUnwrap(try await asset.loadTracks(withMediaType: .video).first)
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let video = try XCTUnwrap(videoTracks.first)
         let size = try await video.load(.naturalSize)
         XCTAssertEqual(size, CGSize(width: 1440, height: 1080))
-        XCTAssertFalse(try await asset.loadTracks(withMediaType: .audio).isEmpty)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertFalse(audioTracks.isEmpty)
         let duration = try await asset.load(.duration).seconds
         XCTAssertEqual(duration, SlideshowBuilder.Timing(photoCount: 2).duration, accuracy: 0.1)
     }
@@ -61,7 +63,8 @@ final class SlideshowBuilderTests: XCTestCase {
         let url = try XCTUnwrap(model.localVideoURL)
         XCTAssertFalse(model.isPhoto)
         XCTAssertFalse(model.messages.contains { $0.content.contains("weren't opened") })
-        let canvas = try XCTUnwrap(await EditorViewModel.loadCanvas(url))
+        let loaded = await EditorViewModel.loadCanvas(url)
+        let canvas = try XCTUnwrap(loaded)
         XCTAssertFalse(canvas.isPhoto)
         XCTAssertTrue(canvas.hasAudio)
         let args: [String: JSONValue] = ["prompt": .string("piano"), "duration_seconds": .number(5)]
