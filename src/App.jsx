@@ -3,6 +3,7 @@ import { systemPrompt } from './tools.js';
 import { setSampleModeAccessToken, setSampleModeEnabled, setCurrentFileMimeType, muxCaptionTrack, sampleAuthHeaders } from './toolFunctions.js';
 import VideoPreview from './VideoPreview.jsx';
 import TimelineStrip from './TimelineStrip.jsx';
+import { soundtrackPrompt } from './soundtrackPrompt.js';
 
 // Timeline strip switch. (It was briefly set false on 2026-10-27 under a
 // misread instruction and restored the same day — the feature ordered off
@@ -1423,6 +1424,10 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                   placeholder={videoFileData ? 'Describe the video edit… e.g. “trim seconds 5–15 and add burned-in captions”' : 'Ask anything, or attach a file to edit…'}
                   aria-label="Message input"
                 />
+                {activeMedia && !activeMedia.isAudio && !activeMedia.mimeType?.startsWith('image/') && (
+                  <button className="icon-btn soundtrack-btn" title="Add soundtrack" aria-label="Add soundtrack" disabled={isCallingAPI} onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => { e.stopPropagation(); handleSampleClick(soundtrackPrompt(previewElsRef.current.get(activeMediaIdRef.current)?.duration)); }}>🎵</button>
+                )}
                 <VoiceButton runPrompt={runVoicePrompt} disabled={false} onNotice={toast} />
                 <button className="send-btn" title={isCallingAPI ? 'Stop' : 'Send'} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); isCallingAPI ? cancelRunning() : handleSend(); }} disabled={!isCallingAPI && !chatInput.trim()}>
                   {isCallingAPI ? '■' : '↑'}

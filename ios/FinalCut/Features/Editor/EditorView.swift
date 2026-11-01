@@ -105,7 +105,8 @@ struct EditorView: View {
                 importPickerItems: $model.importPickerItems,
                 onSend: { model.sendMessage() },
                 importEnabled: importEnabled,
-                dictation: dictation
+                dictation: dictation,
+                onSoundtrack: model.soundtrackButtonAvailable ? { model.prefillSoundtrackPrompt() } : nil
             )
         }
         .background(AppTheme.background.ignoresSafeArea())
@@ -837,6 +838,23 @@ final class EditorViewModel: ObservableObject {
         showSampleChips = true
     }
 
+    /// The Add soundtrack button shows for an open video (photos: later phase).
+    var soundtrackButtonAvailable: Bool {
+        localVideoURL != nil && editStack?.isPhoto != true
+    }
+
+    /// Pre-fills the composer with the soundtrack prompt; the user edits and sends it.
+    func prefillSoundtrackPrompt() {
+        composerText = Self.soundtrackPrompt(duration: editStack?.canvas.duration)
+        Telemetry.shared.track("soundtrack_button_tapped")
+    }
+
+    nonisolated static func soundtrackPrompt(duration: Double?) -> String {
+        let length = duration.flatMap { $0 > 0 ? "about \(Int($0.rounded())) seconds long" : nil }
+        return "Add a music soundtrack to this video. Generate an original track that fits it, "
+            + "\(length ?? "about as long as the video"), and add it as the music track."
+    }
+
     func applySampleChip(_ chip: String) {
         composerText = chip
         sendMessage()
@@ -1493,6 +1511,8 @@ final class EditorViewModel: ObservableObject {
             return await runLyricCaptions(call: call, stack: stack, request: request)
         case .success(.youtubeSoundtrack(let url, let startOffset, let originalVolume)):
             return await runYouTubeSoundtrack(call: call, url: url, startOffset: startOffset, originalVolume: originalVolume)
+        case .success(.generatedSoundtrack(let arguments, let originalVolume)):
+            return await runGeneratedSoundtrack(call: call, arguments: arguments, originalVolume: originalVolume)
         case .success(.apply(let op)):
             stack.push(EditEntry(tool: tool, op: op, toolCallId: call.id))
             commitEdit(stack)
@@ -1807,7 +1827,7 @@ final class EditorViewModel: ObservableObject {
             "resize_video_preset": "Aspect ratio", "adjust_brightness": "Brightness", "adjust_contrast": "Contrast",
             "adjust_saturation": "Saturation", "adjust_hue": "Hue", "apply_color_filter": "Color filter",
             "add_text": "Text", "adjust_audio_volume": "Volume", "audio_fade": "Fade",
-            "youtube_soundtrack": "Soundtrack",
+            "youtube_soundtrack": "Soundtrack", "add_soundtrack": "Soundtrack",
             "convert_video_format": "Format", "convert_image_format": "Format",
         ]
         return names[tool] ?? tool.replacingOccurrences(of: "_", with: " ").capitalized
@@ -2086,10 +2106,20 @@ final class EditorViewModel: ObservableObject {
         }
         let file: URL
         do {
-            file = try Self.storeSoundtrack(data: fetched.data, videoId: fetched.videoId)
+            file = try Self.storeSoundtrack(data: fetched.data, name: fetched.videoId, ext: "m4a")
         } catch {
             return record(.failure("youtube_fetch_failed", on: .device), kind: .generic)
         }
+        var extra: [String: JSONValue] = [:]
+        if let title = fetched.title, !title.isEmpty { extra["title"] = .string(title) }
+        if let duration = fetched.duration { extra["audioDuration"] = .number(duration) }
+        return await applySoundtrack(call: call, tool: "youtube_soundtrack", file: file, startOffset: startOffset,
+                                     originalVolume: originalVolume, extra: extra, failureCode: "youtube_fetch_failed")
+    }
+
+    /// Pushes a stored soundtrack as an undoable edit (timeline lane or legacy `.soundtrack` op).
+    private func applySoundtrack(call: ClientToolCall, tool: String, file: URL, startOffset: Double, originalVolume: Double,
+                                 extra: [String: JSONValue], failureCode: String) async -> ClientToolResult {
         guard var current = editStack else {
             return record(.failure("no_media", on: .device), kind: .generic)
         }
@@ -2097,46 +2127,89 @@ final class EditorViewModel: ObservableObject {
             // Timeline mode: the song becomes a normal audio clip on a Soundtrack
             // lane (movable/trimmable/removable like any other audio clip).
             guard await insertSoundtrackIntoTimeline(file: file, startOffset: startOffset, originalVolume: originalVolume) else {
-                return record(.failure("youtube_fetch_failed", on: .device), kind: .generic)
+                return record(.failure(failureCode, on: .device), kind: .generic)
             }
             state = .ready
-            messages.append(ChatMessage(role: .system, content: "\(Self.label(for: "youtube_soundtrack")) · \(UXCopy.cloud)"))
+            messages.append(ChatMessage(role: .system, content: "\(Self.label(for: tool)) · \(UXCopy.cloud)"))
             let project = timelineProject
             var output: [String: JSONValue] = [
                 "duration": .number(((project?.durationSeconds ?? 0) * 1000).rounded() / 1000),
             ]
-            if let title = fetched.title, !title.isEmpty { output["title"] = .string(title) }
-            if let duration = fetched.duration { output["audioDuration"] = .number(duration) }
+            output.merge(extra) { _, new in new }
             return record(.success(on: .server, output: output), kind: nil)
         }
         current.push(EditEntry(
-            tool: "youtube_soundtrack",
+            tool: tool,
             op: .soundtrack(file: file, startOffset: startOffset, originalVolume: originalVolume),
             toolCallId: call.id,
             executedOn: .server
         ))
         commitEdit(current)
         await refreshPreview()
-        messages.append(ChatMessage(role: .system, content: "\(Self.label(for: "youtube_soundtrack")) · \(UXCopy.cloud)"))
+        messages.append(ChatMessage(role: .system, content: "\(Self.label(for: tool)) · \(UXCopy.cloud)"))
         let canvas = current.canvas
         var output: [String: JSONValue] = [
             "width": .number(Double(canvas.width)),
             "height": .number(Double(canvas.height)),
             "duration": .number((canvas.duration * 1000).rounded() / 1000),
         ]
-        if let title = fetched.title, !title.isEmpty { output["title"] = .string(title) }
-        if let duration = fetched.duration { output["audioDuration"] = .number(duration) }
+        output.merge(extra) { _, new in new }
         return record(.success(on: .server, output: output), kind: nil)
     }
 
-    /// Saves a fetched soundtrack in the Caches directory, named by YouTube video id
-    /// when the server sent one (repeat fetches of a song reuse the same file).
-    private static func storeSoundtrack(data: Data, videoId: String?) throws -> URL {
+    // MARK: - add_soundtrack (GBK-generated music on the server, on-device mix)
+
+    /// `add_soundtrack`: sends only the tool arguments to `POST /api/soundtrack/generate`;
+    /// the server generates original music with GBK and returns a WAV, mixed in like a
+    /// YouTube soundtrack. Needs Cloud processing; limits come back as stable codes.
+    private func runGeneratedSoundtrack(call: ClientToolCall, arguments: [String: JSONValue], originalVolume: Double) async -> ClientToolResult {
+        guard cloudProcessingEnabled else {
+            messages.append(.failure(EditFailureCard(kind: .unavailable)))
+            return record(.failure("unsupported_on_device", on: .device), kind: .unavailable)
+        }
+        guard let client = apiClient else { return record(.failure("no_media", on: .server), kind: .generic) }
+        do { try await prepareAuth(client) } catch { return record(.failure("auth_failed", on: .server), kind: .generic) }
+        state = .processing
+        isCloudStepRunning = true
+        processingOverlay = .editing
+        defer { isCloudStepRunning = false }
+        Telemetry.shared.track("soundtrack_generation_started")
+        let data: Data
+        do {
+            data = try await client.generateSoundtrack(arguments: arguments)
+        } catch is CancellationError {
+            return .failure("cancelled", on: .server)
+        } catch {
+            Telemetry.shared.track("soundtrack_generation_failed")
+            if let apiError = error as? APIError, apiError.isPaywall {
+                handlePaywallIfNeeded(apiError)
+                return .failure("paywall", on: .server)
+            }
+            // soundtrack_limit / soundtrack_timeout / soundtrack_unavailable go back to the model.
+            if let apiError = error as? APIError, let code = apiError.serverCode {
+                return record(.failure(code, on: .server), kind: apiError.serverFailureKind)
+            }
+            return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
+        }
+        Telemetry.shared.track("soundtrack_generation_completed")
+        let file: URL
+        do {
+            file = try Self.storeSoundtrack(data: data, name: nil, ext: "wav")
+        } catch {
+            return record(.failure("soundtrack_failed", on: .device), kind: .generic)
+        }
+        return await applySoundtrack(call: call, tool: "add_soundtrack", file: file, startOffset: 0,
+                                     originalVolume: originalVolume, extra: ["generated": .bool(true)], failureCode: "soundtrack_failed")
+    }
+
+    /// Saves a soundtrack in the Caches directory, named by YouTube video id when the
+    /// server sent one (repeat fetches of a song reuse the same file).
+    private static func storeSoundtrack(data: Data, name: String?, ext: String) throws -> URL {
         let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let dir = caches.appendingPathComponent("soundtracks", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let safeId = (videoId ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
-        let file = dir.appendingPathComponent("\(safeId.isEmpty ? UUID().uuidString : safeId).m4a")
+        let safeId = (name ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let file = dir.appendingPathComponent("\(safeId.isEmpty ? UUID().uuidString : safeId).\(ext)")
         try data.write(to: file, options: .atomic)
         return file
     }

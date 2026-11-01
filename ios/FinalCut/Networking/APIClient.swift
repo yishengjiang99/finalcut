@@ -76,6 +76,7 @@ final class APIClient {
     var createCheckoutSessionURL: URL { url(for: APIEndpoints.createCheckoutSession) }
     var verifyCheckoutSessionURL: URL { url(for: APIEndpoints.verifyCheckoutSession) }
     var youtubeAudioFetchURL: URL { url(for: APIEndpoints.youtubeAudioFetch) }
+    var soundtrackGenerateURL: URL { url(for: APIEndpoints.soundtrackGenerate) }
     var ffmpegCliURL: URL { url(for: APIEndpoints.ffmpegCli) }
     var ffmpegCliRunURL: URL { url(for: APIEndpoints.ffmpegCliRun) }
     var authGoogleURL: URL { url(for: APIEndpoints.authGoogle) }
@@ -416,6 +417,17 @@ final class APIClient {
             videoId: header("X-Video-Id"),
             title: header("X-Audio-Title")
         )
+    }
+
+    /// `add_soundtrack` (`POST /api/soundtrack/generate`): sends only the tool arguments
+    /// (never media); returns the generated WAV. Counts as one inference like youtube-audio.
+    func generateSoundtrack(arguments: [String: JSONValue]) async throws -> Data {
+        let body = try JSONSerialization.data(withJSONObject: arguments.mapValues { $0.foundationValue }, options: [])
+        var request = makeRequest(url: soundtrackGenerateURL, method: "POST", auth: .bearerPreferred, body: body)
+        request.timeoutInterval = 300 // generation + render can take a couple of minutes
+        let (data, response) = try await session.data(for: request)
+        try Self.throwIfNeeded(response: response, data: data)
+        return data
     }
 
     func ffmpegCliJSON(action: String, params: [String: Any]) async throws -> Data {

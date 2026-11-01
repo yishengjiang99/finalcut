@@ -111,7 +111,7 @@ describe('web toolset', () => {
     const names = webToolsFor({ mediaType: 'video' }).map(t => t.function.name);
     const videoTools = tools.map(t => t.function.name).filter(n => n !== 'convert_image_format'); // photo-only
     expect(names).toEqual([...videoTools, 'apply_edits', 'concat_videos', SEARCH_CAPABILITIES_TOOL_NAME, RUN_FFMPEG_TOOL_NAME]);
-    expect(tools).toHaveLength(49);
+    expect(tools).toHaveLength(50);
   });
 
   it('offers only single-frame tools, and no FFmpeg fallback, for a photo', () => {

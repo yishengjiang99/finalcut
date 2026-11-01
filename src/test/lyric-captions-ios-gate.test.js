@@ -121,10 +121,10 @@ describe('snapshots', () => {
     }
   });
 
-  it('web stays at 49 tools with the shared lyric_captions definition (server burn description)', () => {
-    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(49);
+  it('web stays at 50 tools with the shared lyric_captions definition (server burn description)', () => {
+    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(50);
     expect(serialize(undefined)).toBe(snapshotFile('web-no-ua'));
-    expect(offeredToolsFor({})).toHaveLength(49);
+    expect(offeredToolsFor({})).toHaveLength(50);
     expect(offeredToolsFor({}).find(t => t.function.name === 'lyric_captions')).toBe(WEB_DEF);
     expect(WEB_DEF.function.description).not.toBe(LYRIC_CAPTIONS_IOS_DESCRIPTION);
     expect(readFileSync(path.join(repo, 'docs', 'api', 'tools-schema.v1.json'), 'utf8')).not.toContain('The app asks the user before uploading');

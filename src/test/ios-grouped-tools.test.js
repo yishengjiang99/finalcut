@@ -60,7 +60,7 @@ const ios = (build) => `FinalCap-iOS/${build}`;
 // youtube_soundtrack's position in the shared tool list: right after lyric_captions.
 const withYouTube = (list) => {
   const i = list.indexOf('lyric_captions');
-  return [...list.slice(0, i + 1), 'youtube_soundtrack', ...list.slice(i + 1)];
+  return [...list.slice(0, i + 1), 'youtube_soundtrack', 'add_soundtrack', ...list.slice(i + 1)];
 };
 const names = (list) => list.map(t => t.function.name);
 const CUTOFF = GROUPED_EFFECTS_MIN_BUILD;
@@ -115,10 +115,10 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     });
   }
 
-  it('counts: iOS/10 = 22 tools (21 + lyric_captions), web and FinalCap/11 CFNetwork = 49 (with style_captions and youtube_soundtrack)', () => {
+  it('counts: iOS/10 = 22 tools (21 + lyric_captions), web and FinalCap/11 CFNetwork = 50 (with style_captions, youtube_soundtrack and add_soundtrack)', () => {
     expect(JSON.parse(snapshotFile('ios-build10')).schema.tools).toHaveLength(22);
-    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(49);
-    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(49);
+    expect(JSON.parse(snapshotFile('web-no-ua')).schema.tools).toHaveLength(50);
+    expect(JSON.parse(snapshotFile('cfnetwork-build11')).schema.tools).toHaveLength(50);
   });
 
   it('build cutoff-1 is the build-10 list plus youtube_soundtrack and the ffmpeg_cli fallback (no grouped tools leak)', () => {
@@ -190,7 +190,7 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
   it('non-iOS UAs never get grouped tools, whatever build they claim', () => {
     for (const ua of [undefined, 'Mozilla/5.0', `FinalCap/${CUTOFF} CFNetwork/1.0`, `finalcap-ios/${CUTOFF}`]) {
       const offered = names(offeredToolsFor({ userAgent: ua }));
-      expect(offered).toHaveLength(49);
+      expect(offered).toHaveLength(50);
       for (const g of GROUPED) expect(offered).not.toContain(g);
     }
   });

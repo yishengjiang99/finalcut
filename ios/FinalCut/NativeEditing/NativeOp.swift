@@ -161,6 +161,9 @@ enum NativePlan: Equatable {
     /// `youtube_soundtrack`: fetch the YouTube audio from the server, then push a
     /// `.soundtrack` op with the mix settings (async, not a plain op).
     case youtubeSoundtrack(url: String, startOffset: Double, originalVolume: Double)
+    /// `add_soundtrack`: the server generates original music (GBK) from `arguments`,
+    /// then a `.soundtrack` op mixes it in (async, not a plain op).
+    case generatedSoundtrack(arguments: [String: JSONValue], originalVolume: Double)
 }
 
 /// Maps schema tool calls (docs/api/tools-schema.v1.json) onto `NativeOp`s, validating
@@ -173,7 +176,7 @@ enum NativeToolParser {
         "adjust_contrast", "adjust_saturation", "adjust_hue", "apply_color_filter", "add_text",
         "adjust_audio_volume", "audio_fade", "get_video_dimensions", "get_supported_formats",
         "convert_video_format", "convert_image_format", "generate_captions", "lyric_captions",
-        "youtube_soundtrack",
+        "youtube_soundtrack", "add_soundtrack",
     ]
 
     static let photoTools: Set<String> = [
@@ -343,6 +346,14 @@ enum NativeToolParser {
             let originalVolume = a["original_volume"] == nil || a["original_volume"] == .null ? 0 : num("original_volume")
             guard let originalVolume, originalVolume >= 0, originalVolume <= 1 else { return bad("original_volume 0..1") }
             return .success(.youtubeSoundtrack(url: url, startOffset: startOffset, originalVolume: originalVolume))
+
+        case "add_soundtrack":
+            guard let prompt = a["prompt"]?.stringValue, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return bad("prompt") }
+            guard let duration = num("duration_seconds"), duration > 0 else { return bad("duration_seconds") }
+            let originalVolume = a["original_volume"] == nil || a["original_volume"] == .null ? 0.3 : num("original_volume")
+            guard let originalVolume, originalVolume >= 0, originalVolume <= 1 else { return bad("original_volume 0..1") }
+            return .success(.generatedSoundtrack(arguments: a, originalVolume: originalVolume))
 
         case "adjust_audio_volume":
             guard canvas.hasAudio else { return bad("no audio track") }

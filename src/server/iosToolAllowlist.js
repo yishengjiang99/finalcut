@@ -66,6 +66,9 @@ export const YOUTUBE_SOUNDTRACK_MAX_BUILD = 12;
  */
 export const TIMELINE_TOOLS_MIN_BUILD = 14;
 
+/** First FinalCap-iOS build with the add_soundtrack executor (GBK-generated music, TestFlight 21). */
+export const ADD_SOUNDTRACK_MIN_BUILD = 21;
+
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });
 
@@ -111,6 +114,8 @@ export const IOS_TOOL_ALLOWLIST = Object.freeze({
   ffmpeg_cli: FFMPEG_CLI_MIN_BUILD,
   // YouTube-link soundtrack: app fetches the audio from the server, mixes it on device.
   youtube_soundtrack: { minBuild: YOUTUBE_SOUNDTRACK_MIN_BUILD, maxBuild: YOUTUBE_SOUNDTRACK_MAX_BUILD },
+  // Generated soundtrack: server runs GBK, app mixes the WAV on device.
+  add_soundtrack: ADD_SOUNDTRACK_MIN_BUILD,
   // Timeline tools (iOS-only definitions, iosTimelineTools.js): multi-clip
   // video editing and multi-track audio on the on-device project model.
   get_project_timeline: TIMELINE_TOOLS_MIN_BUILD,
