@@ -21,6 +21,7 @@ struct PaywallView: View {
             HStack {
                 Spacer()
                 Button {
+                    ReviewPromptTracker.shared.blockSession()
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -208,6 +209,7 @@ struct PaywallView: View {
             .accessibilityIdentifier("PaywallRestore")
 
             Button("Not now") {
+                ReviewPromptTracker.shared.blockSession()
                 dismiss()
             }
             .font(.subheadline)
@@ -268,6 +270,7 @@ struct PaywallView: View {
                 statusMessage = "Purchase completed, but server verification is pending: \(error.localizedDescription)"
             }
         case .cancelled:
+            ReviewPromptTracker.shared.blockSession()
             Telemetry.shared.track("purchase_cancelled", props: ["product_id": product.id])
             statusMessage = "Purchase cancelled."
         case .pending:

@@ -1,4 +1,5 @@
 import Foundation
+import StoreKit
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -89,11 +90,13 @@ final class ExportController: ObservableObject {
                     self.notifyIfInactive(success: true, isPhoto: isPhoto, savedToPhotos: true)
                     PushManager.shared.track("export_done")
                     Telemetry.shared.track("export_success", props: ["destination": Destination.photos.rawValue])
+                    self.considerReviewPrompt()
                 case .files:
                     self.phase = .idle
                     self.filesPickerURL = url
                     PushManager.shared.track("export_done")
                     Telemetry.shared.track("export_success", props: ["destination": Destination.files.rawValue])
+                    self.considerReviewPrompt()
                 }
             } catch NativeExporter.ExportError.cancelled {
                 self.phase = .idle
@@ -125,6 +128,29 @@ final class ExportController: ObservableObject {
     func cancel() {
         exporter.cancel()
         task?.cancel()
+    }
+
+    // MARK: - Review prompt (FinalCap 1.2, Lever 1)
+
+    /// Called only from the two export-success points above; failure and cancel
+    /// paths never reach it. Records the success (the lifetime count advances
+    /// here and nowhere else), then — when the gate allows — waits for the
+    /// success UI to settle and requests the system review prompt on the active
+    /// foreground scene. The OS decides whether the prompt actually displays.
+    private func considerReviewPrompt() {
+        let tracker = ReviewPromptTracker.shared
+        guard tracker.recordSuccessfulExport() else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard UIApplication.shared.applicationState == .active,
+                  let scene = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first(where: { $0.activationState == .foregroundActive })
+            else { return }
+            tracker.markPromptRequested()
+            Telemetry.shared.track("review_prompt_requested", props: tracker.telemetryProps())
+            SKStoreReviewController.requestReview(in: scene)
+        }
     }
 
     /// Renders once per session (cached). No edits → the original file.
