@@ -53,6 +53,17 @@ final class KeyboardAndMicUITests: XCTestCase {
         XCTFail("composer field never took keyboard focus")
     }
 
+    /// Add soundtrack pre-fills the composer and never sends.
+    func testSoundtrackButtonPrefillsComposer() throws {
+        let button = app.buttons["Add soundtrack"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        button.tap()
+        let ok = waitUntil(timeout: 5) { ((self.field.value as? String) ?? "").contains("Add a music soundtrack") }
+        if !ok { print(app.debugDescription) }
+        XCTAssertTrue(ok, "composer pre-filled with the soundtrack prompt")
+        XCTAssertTrue(app.buttons["Send"].exists, "prompt stays unsent")
+    }
+
     func testTappingPreviewDismissesKeyboard() throws {
         focusField()
         field.typeText("make it red")
