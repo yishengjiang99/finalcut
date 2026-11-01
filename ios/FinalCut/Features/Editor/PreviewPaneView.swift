@@ -10,6 +10,8 @@ struct PreviewPaneView: View {
     var videoURL: URL?
     /// Dimmer copy (cloud steps only; device edits never dim the preview).
     var processingMessage: String = ProcessingOverlayKind.editing.message
+    /// Import progress (e.g. building a slideshow); replaces the generic importing copy.
+    var statusMessage: String? = nil
     /// Composed preview for the current edit stack.
     var playerItem: AVPlayerItem? = nil
     /// Rendered photo for the current edit stack.
@@ -56,7 +58,7 @@ struct PreviewPaneView: View {
                     ProgressView()
                         .tint(AppTheme.accent)
                         .scaleEffect(1.2)
-                    Text(state.transferMessage ?? processingMessage)
+                    Text(state.transferMessage.map { statusMessage ?? $0 } ?? processingMessage)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(AppTheme.textPrimary)
                         .multilineTextAlignment(.center)

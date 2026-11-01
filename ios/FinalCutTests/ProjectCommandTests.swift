@@ -298,13 +298,21 @@ final class ProjectCommandTests: XCTestCase {
     }
 
     @MainActor
-    func testMultiSelectOfOnlyPhotosOpensTheFirstPhoto() async throws {
+    func testMultiSelectOfOnlyPhotosBuildsASlideshow() async throws {
         let model = EditorViewModel()
-        let first = try importedPhoto()
-        await model.importSelection(videos: [], photos: [first, try importedPhoto()], failures: 0)
-        XCTAssertEqual(model.localVideoURL, first.url)
+        await model.importSelection(videos: [], photos: [try importedPhoto(), try importedPhoto()], failures: 0)
+        XCTAssertEqual(model.localVideoURL?.pathExtension, "mp4")
+        XCTAssertFalse(model.isPhoto)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("slideshow from 2 photos") })
+    }
+
+    @MainActor
+    func testSinglePhotoStillOpensAsPhoto() async throws {
+        let model = EditorViewModel()
+        let photo = try importedPhoto()
+        await model.importSelection(videos: [], photos: [photo], failures: 0)
+        XCTAssertEqual(model.localVideoURL, photo.url)
         XCTAssertTrue(model.isPhoto)
-        XCTAssertTrue(model.messages.contains { $0.content.contains("1 more photo(s) weren't opened") })
     }
 
     /// Whole-project trim (legacy `trim_video` on a timeline project): beach 10s +

@@ -61,6 +61,7 @@ struct EditorView: View {
                     state: model.state,
                     videoURL: model.localVideoURL,
                     processingMessage: model.lyricStatus ?? model.processingOverlay.message,
+                    statusMessage: model.importStatus,
                     playerItem: model.previewItem,
                     photo: model.previewPhoto,
                     showsDimmer: model.isCloudStepRunning,
@@ -535,21 +536,42 @@ final class EditorViewModel: ObservableObject {
             failImport(isPhoto: photoFailed)
             return
         }
-        let extraVideos = videos.dropFirst()
-        finishImport(base, message: base.isPhoto ? "Imported photo from Photos"
-                     : extraVideos.isEmpty ? "Imported from Photos" : "Imported \(videos.count) videos from Photos")
-        for video in extraVideos {
-            _ = await appendImportedMedia(video.url)
-        }
-        let skippedPhotos = base.isPhoto ? photos.count - 1 : photos.count
         var notes: [String] = []
-        if skippedPhotos > 0 {
-            notes.append(base.isPhoto ? "\(skippedPhotos) more photo(s) weren't opened — photos are edited one at a time."
-                                      : "\(skippedPhotos) photo(s) weren't added — photos can't join a video project.")
+        if videos.isEmpty, photos.count > 1 {
+            await importSlideshow(photos)
+        } else {
+            let extraVideos = videos.dropFirst()
+            finishImport(base, message: base.isPhoto ? "Imported photo from Photos"
+                         : extraVideos.isEmpty ? "Imported from Photos" : "Imported \(videos.count) videos from Photos")
+            for video in extraVideos {
+                _ = await appendImportedMedia(video.url)
+            }
+            if !base.isPhoto, !photos.isEmpty {
+                notes.append("\(photos.count) photo(s) weren't added — photos can't join a video project.")
+            }
         }
         if failures > 0 { notes.append("\(failures) item(s) couldn't be imported.") }
         if !notes.isEmpty {
             messages.append(ChatMessage(role: .system, content: notes.joined(separator: " ")))
+        }
+    }
+
+    /// Several photos (and no video): joined in pick order into one slideshow video.
+    private func importSlideshow(_ photos: [ImportedVideo]) async {
+        state = .importing
+        importStatus = "Building slideshow…"
+        do {
+            let url = try await SlideshowBuilder.build(photos: photos.map(\.url)) { fraction in
+                Task { @MainActor [weak self] in
+                    guard let self, self.state == .importing else { return }
+                    self.importStatus = "Building slideshow… \(Int(fraction * 100))%"
+                }
+            }
+            importStatus = nil
+            finishImport(ImportedVideo(url: url), message: "Made a slideshow from \(photos.count) photos")
+        } catch {
+            importStatus = nil
+            failImport(isPhoto: true)
         }
     }
 
