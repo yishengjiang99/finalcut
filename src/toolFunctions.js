@@ -272,6 +272,22 @@ async function fetchYouTubeAudio(url) {
   };
 }
 
+// Generated soundtrack (add_soundtrack): POST /api/soundtrack/generate runs GBK and returns a WAV.
+async function fetchGeneratedSoundtrack(args) {
+  const response = await fetch('/api/soundtrack/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...ffmpegCliAuthHeaders() },
+    body: JSON.stringify(args)
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const error = new Error(body.error || 'Soundtrack generation failed');
+    error.code = body.code || null;
+    throw error;
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 export const MAX_CLI_STRING_ATTEMPTS = 3;
 
 /**
@@ -1174,6 +1190,32 @@ export const toolFunctions = {
       lastExecution.errorCode = lastExecution.errorCode || error?.code || null;
       addMessage({ text: 'Error adding YouTube soundtrack: ' + error.message });
       return 'Failed to add YouTube soundtrack: ' + error.message;
+    }
+  },
+
+  // Original music from GBK (server), mixed in ffmpeg.wasm like youtube_soundtrack.
+  add_soundtrack: async (args, videoFileData, setVideoFileData, addMessage) => {
+    try {
+      if ((currentFileMimeType || '').startsWith('image/')) throw new Error('Soundtrack is not supported for photos yet');
+      const originalVolume = args?.original_volume ?? 0.3;
+      if (typeof originalVolume !== 'number' || Number.isNaN(originalVolume) || originalVolume < 0 || originalVolume > 1) {
+        throw new Error('original_volume must be between 0.0 and 1.0');
+      }
+      const bytes = await fetchGeneratedSoundtrack(args || {});
+      const data = await engine.addAudioTrack(
+        { mode: originalVolume > 0 ? 'mix' : 'replace', volume: 1, startOffset: 0, originalVolume, padToVideoEnd: true },
+        videoFileData,
+        currentFileMimeType,
+        { bytes, extension: 'wav' }
+      );
+      lastExecution.executedOn = 'browser';
+      setVideoFileData(data);
+      addMessage({ text: 'Processed video (generated soundtrack):', videoUrl: URL.createObjectURL(new Blob([data], { type: 'video/mp4' })), mimeType: 'video/mp4' });
+      return `Original soundtrack generated and added. The original audio is ${originalVolume > 0 ? `kept at ${Math.round(originalVolume * 100)}% under the music` : 'muted'}.`;
+    } catch (error) {
+      lastExecution.errorCode = lastExecution.errorCode || error?.code || null;
+      addMessage({ text: 'Error adding soundtrack: ' + error.message });
+      return 'Failed to add soundtrack: ' + error.message;
     }
   },
 

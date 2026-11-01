@@ -10,6 +10,8 @@ struct ComposerView: View {
     var importEnabled = true
     /// On-device dictation; nil hides the mic (previews/tests).
     var dictation: DictationController? = nil
+    /// "Add soundtrack": pre-fills the field (never sends); nil hides the button.
+    var onSoundtrack: (() -> Void)? = nil
 
     @FocusState private var fieldFocused: Bool
 
@@ -30,6 +32,16 @@ struct ComposerView: View {
                 .accessibilityHint("Choose photos or videos from Photos")
                 .disabled(!importEnabled)
                 .opacity(importEnabled ? 1 : 0.35)
+
+                if let onSoundtrack {
+                    Button(action: onSoundtrack) {
+                        Image(systemName: "music.note")
+                            .font(.title3)
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                    .accessibilityLabel("Add soundtrack")
+                    .accessibilityIdentifier("SoundtrackButton")
+                }
 
                 TextField(isListening ? UXCopy.dictationListening : "Describe an edit…", text: $text, axis: .vertical)
                     .lineLimit(1...5)

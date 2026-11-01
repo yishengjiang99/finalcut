@@ -135,7 +135,7 @@ final class EditRoutingAndMediaTypeTests: XCTestCase {
     }
 
     func testCatalogCoversAllSchemaV1Tools() {
-        XCTAssertEqual(ToolCatalog.requiredArgs.count, 80)  // + 32 timeline tools (incl. select_timeline_clip, seek_playhead)
+        XCTAssertEqual(ToolCatalog.requiredArgs.count, 81)  // + 32 timeline tools (incl. select_timeline_clip, seek_playhead) + add_soundtrack
         XCTAssertEqual(ToolCatalog.requiredArgs["crop_video"], ["x", "y", "width", "height"])
         XCTAssertEqual(ToolCatalog.requiredArgs["adjust_contrast"], ["contrast"])
     }

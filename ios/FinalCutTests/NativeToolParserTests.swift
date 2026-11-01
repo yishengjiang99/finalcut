@@ -20,8 +20,9 @@ final class NativeToolParserTests: XCTestCase {
     }
 
     func testAllowlistIsTheBuild10Twenty() {
-        // 22 from the build-10 allowlist + youtube_soundtrack (build 13, §5c).
-        XCTAssertEqual(NativeToolParser.supportedTools.count, 23)
+        // 22 from the build-10 allowlist + youtube_soundtrack (build 13, §5c) + add_soundtrack (build 39).
+        XCTAssertEqual(NativeToolParser.supportedTools.count, 24)
+        XCTAssertTrue(NativeToolParser.isSupported("add_soundtrack"))
         XCTAssertTrue(NativeToolParser.isSupported("youtube_soundtrack"))
         XCTAssertTrue(NativeToolParser.isSupported("generate_captions"))
         XCTAssertFalse(NativeToolParser.isSupported("translate_captions"))
@@ -95,6 +96,23 @@ final class NativeToolParserTests: XCTestCase {
         silent.hasAudio = false
         XCTAssertTrue(isInvalid(plan("generate_captions", [:], silent)))
         XCTAssertEqual(plan("generate_captions", [:], photo), .failure(.unsupportedForPhoto))
+    }
+
+    func testAddSoundtrackPlans() {
+        let args: [String: JSONValue] = ["prompt": .string("calm piano"), "duration_seconds": .number(20)]
+        XCTAssertEqual(plan("add_soundtrack", args), .success(.generatedSoundtrack(arguments: args, originalVolume: 0.3)))
+        var muted = args
+        muted["original_volume"] = .number(0)
+        XCTAssertEqual(plan("add_soundtrack", muted), .success(.generatedSoundtrack(arguments: muted, originalVolume: 0)))
+        XCTAssertTrue(isInvalid(plan("add_soundtrack", ["prompt": .string("x")])))
+        XCTAssertTrue(isInvalid(plan("add_soundtrack", ["prompt": .string(" "), "duration_seconds": .number(20)])))
+        XCTAssertTrue(isInvalid(plan("add_soundtrack", ["prompt": .string("x"), "duration_seconds": .number(20), "original_volume": .number(2)])))
+        XCTAssertEqual(plan("add_soundtrack", args, photo), .failure(.unsupportedForPhoto))
+    }
+
+    func testSoundtrackPromptPrefill() {
+        XCTAssertTrue(EditorViewModel.soundtrackPrompt(duration: 31.6).contains("about 32 seconds long"))
+        XCTAssertTrue(EditorViewModel.soundtrackPrompt(duration: nil).contains("about as long as the video"))
     }
 
     func testYouTubeSoundtrackPlans() {

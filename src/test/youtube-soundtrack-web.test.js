@@ -158,3 +158,20 @@ describe('toolFunctions.youtube_soundtrack (web)', () => {
     expect(engine.addAudioTrack).not.toHaveBeenCalled();
   });
 });
+
+describe('toolFunctions.add_soundtrack (web)', () => {
+  beforeEach(() => { fetch.mockReset(); });
+  it('posts the args to /api/soundtrack/generate and mixes the WAV', async () => {
+    fetch.mockResolvedValueOnce(fetchOk());
+    const set = vi.fn(); const add = vi.fn();
+    const result = await toolFunctions.add_soundtrack({ prompt: 'calm', duration_seconds: 12 }, new Uint8Array([9]), set, add);
+    expect(fetch.mock.calls[0][0]).toBe('/api/soundtrack/generate');
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ prompt: 'calm', duration_seconds: 12 });
+    expect(result).toContain('kept at 30%');
+    expect(set).toHaveBeenCalled();
+  });
+  it('surfaces a server limit message', async () => {
+    fetch.mockResolvedValueOnce(fetchError(429, { error: 'Music generation limit reached', code: 'soundtrack_limit' }));
+    expect(await toolFunctions.add_soundtrack({ prompt: 'x', duration_seconds: 10 }, new Uint8Array([9]), vi.fn(), vi.fn())).toContain('limit reached');
+  });
+});

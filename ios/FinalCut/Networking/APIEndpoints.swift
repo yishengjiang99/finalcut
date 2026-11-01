@@ -25,6 +25,8 @@ enum APIEndpoints {
 
     /// YouTube soundtrack (docs/api/YOUTUBE_SOUNDTRACK.md): POST { url } → AAC bytes + X-Audio-* headers.
     static let youtubeAudioFetch = "/api/youtube-audio/fetch"
+    /// add_soundtrack: POST the tool arguments → generated WAV bytes + X-Audio-Duration.
+    static let soundtrackGenerate = "/api/soundtrack/generate"
 
     /// FFmpeg CLI fallback: JSON-only discover/plan (no media).
     static let ffmpegCli = "/api/ffmpeg-cli"
