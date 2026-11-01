@@ -14,6 +14,7 @@ import { createClientLog } from './clientLog.js';
 import { keepAwake } from './wakeLock.js';
 import { buildAss, LYRIC_FONT, resolveCaptionStyle, resolveCaptionStylePatch } from './lyricShared.js';
 import { abortableFetch as fetch, getFetchAbortSignal } from './abortableFetch.js';
+import { readProgressStream } from './progressStream.js';
 import * as engine from './wasm/ffmpegEngine.js';
 import { SUPPORTED_VIDEO_CODECS, SUPPORTED_AUDIO_BITRATES, PHOTO_OUTPUT_FORMATS } from './wasm/ops/process.js';
 import { CLI_MIME_TYPES } from './wasm/ops/multi.js';
@@ -157,6 +158,8 @@ export function setToolStatusListener(listener) {
   toolStatusListener = typeof listener === 'function' ? listener : null;
 }
 const toolStatus = (text, progress, hint) => toolStatusListener?.({ text, ...(Number.isFinite(progress) ? { progress } : {}), ...(hint ? { hint } : {}) });
+// A named stage of a long tool run; the chat shows it with the elapsed seconds.
+const toolStage = (text) => toolStatusListener?.({ text, stage: true });
 
 export const sampleAuthHeaders = () => (sampleModeEnabled && sampleModeAccessToken ? { 'sample-access-token': sampleModeAccessToken } : {});
 
@@ -273,10 +276,11 @@ async function fetchYouTubeAudio(url) {
 }
 
 // Generated soundtrack (add_soundtrack): POST /api/soundtrack/generate runs GBK and returns a WAV.
+// Asks for SSE progress (stage + heartbeat events); an older server answers with the raw WAV.
 async function fetchGeneratedSoundtrack(args) {
   const response = await fetch('/api/soundtrack/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...ffmpegCliAuthHeaders() },
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream, audio/wav', ...ffmpegCliAuthHeaders() },
     body: JSON.stringify(args)
   });
   if (!response.ok) {
@@ -285,7 +289,9 @@ async function fetchGeneratedSoundtrack(args) {
     error.code = body.code || null;
     throw error;
   }
-  return new Uint8Array(await response.arrayBuffer());
+  if (!/text\/event-stream/.test(response.headers.get('content-type') || '')) return new Uint8Array(await response.arrayBuffer());
+  const result = await readProgressStream(response, (e) => { if (e.type === 'progress' && e.label) toolStage(e.label); });
+  return Uint8Array.from(atob(result.audioBase64 || ''), c => c.charCodeAt(0));
 }
 
 export const MAX_CLI_STRING_ATTEMPTS = 3;
@@ -1201,7 +1207,9 @@ export const toolFunctions = {
       if (typeof originalVolume !== 'number' || Number.isNaN(originalVolume) || originalVolume < 0 || originalVolume > 1) {
         throw new Error('original_volume must be between 0.0 and 1.0');
       }
+      toolStage('Composing track…');
       const bytes = await fetchGeneratedSoundtrack(args || {});
+      toolStage('Mixing into video…');
       const data = await engine.addAudioTrack(
         { mode: originalVolume > 0 ? 'mix' : 'replace', volume: 1, startOffset: 0, originalVolume, padToVideoEnd: true },
         videoFileData,

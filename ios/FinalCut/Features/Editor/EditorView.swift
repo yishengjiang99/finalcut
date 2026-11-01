@@ -60,7 +60,7 @@ struct EditorView: View {
                 PreviewPaneView(
                     state: model.state,
                     videoURL: model.localVideoURL,
-                    processingMessage: model.lyricStatus ?? model.processingOverlay.message,
+                    processingMessage: model.lyricStatus ?? model.toolProgress?.label ?? model.processingOverlay.message,
                     statusMessage: model.importStatus,
                     playerItem: model.previewItem,
                     photo: model.previewPhoto,
@@ -91,7 +91,8 @@ struct EditorView: View {
                 messages: model.messages,
                 onRetry: { model.retry($0) },
                 queuedIDs: Set(model.queuedPromptIDs),
-                isWorking: model.isBusy
+                isWorking: model.isBusy,
+                workingProgress: model.toolProgress
             )
                 .frame(maxHeight: (timelineExpandedActive && !chatExpanded) ? 132 : .infinity)
 
@@ -346,6 +347,8 @@ final class EditorViewModel: ObservableObject {
     @Published var pendingPrompt: CloudPrompt?
     /// Progress line for lyric captions ("Uploading audio…", "Listening to the song…", …).
     @Published var lyricStatus: String?
+    /// Current stage of a long tool run (add_soundtrack); the timer starts at the first stage.
+    @Published var toolProgress: ToolProgress?
     /// Tests answer prompts without UI (return true for the primary button).
     var promptHandler: ((CloudPrompt) async -> Bool)?
     /// "Open Settings" on the Cloud-off notice: shows the app's Cloud processing setting.
@@ -2194,11 +2197,12 @@ final class EditorViewModel: ObservableObject {
         state = .processing
         isCloudStepRunning = true
         processingOverlay = .editing
-        defer { isCloudStepRunning = false }
+        setToolStage("Composing track…")
+        defer { isCloudStepRunning = false; toolProgress = nil }
         Telemetry.shared.track("soundtrack_generation_started")
         let data: Data
         do {
-            data = try await client.generateSoundtrack(arguments: arguments)
+            data = try await client.generateSoundtrack(arguments: arguments) { [weak self] in self?.setToolStage($0) }
         } catch is CancellationError {
             return .failure("cancelled", on: .server)
         } catch {
@@ -2214,6 +2218,7 @@ final class EditorViewModel: ObservableObject {
             return serverFailure((error as? APIError)?.serverFailureKind ?? .generic)
         }
         Telemetry.shared.track("soundtrack_generation_completed")
+        setToolStage("Mixing into video…")
         let file: URL
         do {
             file = try Self.storeSoundtrack(data: data, name: nil, ext: "wav")
@@ -2222,6 +2227,10 @@ final class EditorViewModel: ObservableObject {
         }
         return await applySoundtrack(call: call, tool: "add_soundtrack", file: file, startOffset: 0,
                                      originalVolume: originalVolume, extra: ["generated": .bool(true)], failureCode: "soundtrack_failed")
+    }
+
+    func setToolStage(_ label: String) {
+        toolProgress = ToolProgress(label: label, startedAt: toolProgress?.startedAt ?? Date())
     }
 
     /// Saves a soundtrack in the Caches directory, named by YouTube video id when the

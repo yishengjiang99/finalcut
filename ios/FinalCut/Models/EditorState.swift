@@ -47,6 +47,17 @@ enum ProcessingOverlayKind: String, Codable, CaseIterable, Equatable {
     }
 }
 
+/// Stage of a long tool run shown in chat and on the dimmer, e.g. "Rendering audio… 12s".
+struct ToolProgress: Equatable {
+    var label: String
+    var startedAt: Date
+
+    func text(at now: Date) -> String {
+        let seconds = Int(now.timeIntervalSince(startedAt))
+        return seconds >= 1 ? "\(label) \(seconds)s" : label
+    }
+}
+
 /// Soft caption artifacts retained for share/export chips and burn-in args.
 struct CaptionArtifacts: Equatable, Codable {
     var srt: String?
