@@ -20,7 +20,7 @@ final class NativeToolParserTests: XCTestCase {
     }
 
     func testAllowlistIsTheBuild10Twenty() {
-        // 22 from the build-10 allowlist + youtube_soundtrack (build 13, §5c) + add_soundtrack (build 21).
+        // 22 from the build-10 allowlist + youtube_soundtrack (build 13, §5c) + add_soundtrack (build 39).
         XCTAssertEqual(NativeToolParser.supportedTools.count, 24)
         XCTAssertTrue(NativeToolParser.isSupported("add_soundtrack"))
         XCTAssertTrue(NativeToolParser.isSupported("youtube_soundtrack"))

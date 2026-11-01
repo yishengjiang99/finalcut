@@ -60,7 +60,7 @@ enum ToolCatalog {
         // `NativeToolParser` → `EditorViewModel.runYouTubeSoundtrack` (server fetch of
         // the audio, on-device mix); never the jobs API.
         "youtube_soundtrack": ["url"],
-        // Generated soundtrack (server runs GBK, returns WAV; on-device mix). Build 21+.
+        // Generated soundtrack (server runs GBK, returns WAV; on-device mix). Build 39+.
         "add_soundtrack": ["prompt", "duration_seconds"],
         // Multi-clip timeline tools — the landed server contract
         // (src/server/iosTimelineTools.js; camelCase args; build 14+;

@@ -66,8 +66,8 @@ export const YOUTUBE_SOUNDTRACK_MAX_BUILD = 12;
  */
 export const TIMELINE_TOOLS_MIN_BUILD = 14;
 
-/** First FinalCap-iOS build with the add_soundtrack executor (GBK-generated music, TestFlight 21). */
-export const ADD_SOUNDTRACK_MIN_BUILD = 21;
+/** First FinalCap-iOS build with the add_soundtrack executor (GBK-generated music, next TestFlight build after run 38). */
+export const ADD_SOUNDTRACK_MIN_BUILD = 39;
 
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });

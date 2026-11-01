@@ -95,15 +95,15 @@ describe('add_soundtrack off switch and gating', () => {
     expect(soundtrackEnabled({ SOUNDTRACK_ENABLED: '1' })).toBe(true);
     for (const v of ['0', 'false', 'OFF']) expect(soundtrackEnabled({ SOUNDTRACK_ENABLED: v })).toBe(false);
   });
-  it('offered to web and iOS build >= 21, removed when switched off', () => {
+  it('offered to web and iOS build >= 39, removed when switched off', () => {
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'video' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'image' })).not.toContain('add_soundtrack');
-    expect(names({ userAgent: 'FinalCap-iOS/21' })).toContain('add_soundtrack');
-    expect(names({ userAgent: 'FinalCap-iOS/20' })).not.toContain('add_soundtrack');
+    expect(names({ userAgent: 'FinalCap-iOS/39' })).toContain('add_soundtrack');
+    expect(names({ userAgent: 'FinalCap-iOS/38' })).not.toContain('add_soundtrack');
     vi.stubEnv('SOUNDTRACK_ENABLED', '0');
     try {
       expect(names({ userAgent: 'Mozilla/5.0' })).not.toContain('add_soundtrack');
-      expect(names({ userAgent: 'FinalCap-iOS/21' })).not.toContain('add_soundtrack');
+      expect(names({ userAgent: 'FinalCap-iOS/39' })).not.toContain('add_soundtrack');
     } finally { vi.unstubAllEnvs(); }
   });
 });
