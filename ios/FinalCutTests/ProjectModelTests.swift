@@ -598,4 +598,82 @@ final class ProjectModelTests: XCTestCase {
             XCTAssertEqual(Array(zipBytes.prefix(2)), [0x50, 0x4B]) // "PK"
         }
     }
+
+    // MARK: - Review prompt gate (FinalCap 1.2, Lever 1)
+
+    private func makeReviewTracker() throws -> (tracker: ReviewPromptTracker, defaults: UserDefaults) {
+        let suite = "ReviewPromptGateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        return (ReviewPromptTracker(defaults: defaults), defaults)
+    }
+
+    func testReviewPromptNotEligibleOnFirstExport() throws {
+        let (tracker, _) = try makeReviewTracker()
+        let now = Date()
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: now))
+        XCTAssertEqual(tracker.successfulExportCount, 1)
+        XCTAssertFalse(ReviewPromptGate.isEligible(successfulExportCount: 1, lastPromptDate: nil,
+                                                   sessionBlocked: false, now: now))
+    }
+
+    func testReviewPromptEligibleOnSecondExportWithNoPriorPrompt() throws {
+        let (tracker, _) = try makeReviewTracker()
+        let now = Date()
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: now))
+        XCTAssertTrue(tracker.recordSuccessfulExport(now: now))
+        XCTAssertEqual(tracker.successfulExportCount, 2)
+    }
+
+    func testReviewPromptBlockedWithinCooldownAfterPrompt() throws {
+        let (tracker, _) = try makeReviewTracker()
+        let t0 = Date()
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: t0))
+        XCTAssertTrue(tracker.recordSuccessfulExport(now: t0))
+        tracker.markPromptRequested(now: t0)
+        // A third export 30 days later is still inside the 90-day cooldown.
+        let t30 = t0.addingTimeInterval(30 * 86_400)
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: t30))
+        XCTAssertEqual(tracker.successfulExportCount, 3)
+    }
+
+    func testReviewPromptAllowedAgainAfterCooldown() throws {
+        let (tracker, _) = try makeReviewTracker()
+        let t0 = Date()
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: t0))
+        XCTAssertTrue(tracker.recordSuccessfulExport(now: t0))
+        tracker.markPromptRequested(now: t0)
+        // Day 89 is still inside the cooldown; day 91 is past it.
+        XCTAssertFalse(ReviewPromptGate.isEligible(
+            successfulExportCount: 3, lastPromptDate: t0, sessionBlocked: false,
+            now: t0.addingTimeInterval(89 * 86_400)))
+        XCTAssertTrue(tracker.recordSuccessfulExport(now: t0.addingTimeInterval(91 * 86_400)))
+    }
+
+    func testReviewPromptBlockedWhenSessionFlagSet() throws {
+        let (tracker, _) = try makeReviewTracker()
+        let now = Date()
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: now))
+        tracker.blockSession()
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: now))
+        XCTAssertEqual(tracker.successfulExportCount, 2)
+        XCTAssertFalse(ReviewPromptGate.isEligible(successfulExportCount: 5, lastPromptDate: nil,
+                                                   sessionBlocked: true, now: now))
+    }
+
+    func testReviewPromptCountAdvancesOnlyViaSuccessEntryPoint() throws {
+        let (tracker, defaults) = try makeReviewTracker()
+        // Reading state, evaluating the gate, and blocking a session must never
+        // move the count: only `recordSuccessfulExport` (the export-success
+        // entry point) does, so failed/cancelled exports cannot advance it.
+        XCTAssertEqual(tracker.successfulExportCount, 0)
+        XCTAssertNil(tracker.lastPromptDate)
+        _ = ReviewPromptGate.isEligible(successfulExportCount: 99, lastPromptDate: nil,
+                                        sessionBlocked: false, now: Date())
+        tracker.blockSession()
+        XCTAssertEqual(tracker.successfulExportCount, 0)
+        XCTAssertEqual(defaults.integer(forKey: "reviewPrompt.successfulExportCount"), 0)
+        XCTAssertFalse(tracker.recordSuccessfulExport(now: Date()))
+        XCTAssertEqual(tracker.successfulExportCount, 1)
+    }
 }
