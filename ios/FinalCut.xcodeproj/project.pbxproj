@@ -10,6 +10,7 @@
 		AA11BB22CC33DD44EE55FF01 /* TimelineScrubUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF02 /* TimelineScrubUITests.swift */; };
 		029FF0AD96E5E8AE02A9809F /* NoUploadWordingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A85C5D14F6E15DFBD86EB76 /* NoUploadWordingUITests.swift */; };
 		0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048CDA22B7176DD87977ECEB /* EditorProject.swift */; };
+		F100000000000000000000A1 /* ReviewPromptGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100000000000000000000B1 /* ReviewPromptGate.swift */; };
 		08B2347A4DD41246349469D9 /* ClientChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A430886E967E8C735A5982D4 /* ClientChat.swift */; };
 		08EC33E5C6F30F54A008A325 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBF0AE1658FCDE426FC77B0 /* TimelineView.swift */; };
 		099412012CC74F5A4BC9678F /* ProjectComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F218B1D17FDA1EB5CCB8D1 /* ProjectComposerTests.swift */; };
@@ -129,6 +130,7 @@
 		AA11BB22CC33DD44EE55FF02 /* TimelineScrubUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrubUITests.swift; sourceTree = "<group>"; };
 		01F8F90184F0448FAD35E158 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		048CDA22B7176DD87977ECEB /* EditorProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorProject.swift; sourceTree = "<group>"; };
+		F100000000000000000000B1 /* ReviewPromptGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptGate.swift; sourceTree = "<group>"; };
 		0D94D22BA98B260EE05385A8 /* KeyboardAndMicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardAndMicUITests.swift; sourceTree = "<group>"; };
 		0EF0F225BA281D91E08B35DE /* PhotoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoRenderer.swift; sourceTree = "<group>"; };
 		14F6988B52314F80AA539724 /* FinalCut.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FinalCut.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -390,6 +392,7 @@
 				7664D9CDF6E20B31BBF9EACC /* ProjectHistory.swift */,
 				371C1555BB99DD4633CD6CD1 /* ProjectCommand.swift */,
 				048CDA22B7176DD87977ECEB /* EditorProject.swift */,
+				F100000000000000000000B1 /* ReviewPromptGate.swift */,
 			);
 			path = Timeline;
 			sourceTree = "<group>";
@@ -639,6 +642,7 @@
 				37D541400CBF84A87DD37B16 /* ProjectHistory.swift in Sources */,
 				CC1EE6AA2A793E9F9E03A667 /* ProjectCommand.swift in Sources */,
 				0731596C317A28F6FF6EDF2B /* EditorProject.swift in Sources */,
+				F100000000000000000000A1 /* ReviewPromptGate.swift in Sources */,
 				A82630A64F0E068F4A149637 /* CameraPicker.swift in Sources */,
 				63140D2471FF1CAB65DAA5AB /* SuggestionService.swift in Sources */,
 				E771E9AE7A12D921CF1172CF /* KeyboardDismiss.swift in Sources */,
