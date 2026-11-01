@@ -60,7 +60,7 @@ const ios = (build) => `FinalCap-iOS/${build}`;
 // youtube_soundtrack's position in the shared tool list: right after lyric_captions.
 const withYouTube = (list) => {
   const i = list.indexOf('lyric_captions');
-  return [...list.slice(0, i + 1), 'youtube_soundtrack', 'add_soundtrack', ...list.slice(i + 1)];
+  return [...list.slice(0, i + 1), 'add_soundtrack', ...list.slice(i + 1)]; // youtube_soundtrack is off on iOS (maxBuild 12)
 };
 const names = (list) => list.map(t => t.function.name);
 const CUTOFF = GROUPED_EFFECTS_MIN_BUILD;
@@ -127,7 +127,7 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     // youtube_soundtrack is a shared tool now: it sits at its src/tools.js position, right after lyric_captions.
     expect(names(schema.tools)).toEqual([...withYouTube(names(at10.schema.tools)), ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
     expect(schema.mediaTypes.ffmpeg_cli).toEqual(['video']);
-    expect(schema.mediaTypes.youtube_soundtrack).toEqual(['video']);
+    expect(schema.mediaTypes.add_soundtrack).toEqual(['video']);
     for (const g of GROUPED) expect(names(schema.tools)).not.toContain(g);
     for (const mt of ['any', 'video', 'image']) {
       const expected = names(at10.offered[mt === 'any' ? 'any' : mt]);
@@ -215,28 +215,20 @@ describe('GET /api/tools/schema applies the same filtering', () => {
     expect(Object.keys(body.mediaTypes)).toEqual(names(body.tools));
     expect(body.mediaTypes.audio_effect).toEqual(['video']);
     expect(body.mediaTypes.ffmpeg_cli).toEqual(['video']);
-    expect(body.mediaTypes.youtube_soundtrack).toEqual(['video']);
+    expect(body.mediaTypes.add_soundtrack).toEqual(['video']);
     for (const g of GROUPED.filter(n => n !== 'audio_effect')) expect(body.mediaTypes[g]).toEqual(['video', 'image']);
     const before = await (await getSchema(ios(CUTOFF - 1))).json();
     expect(names(before.tools)).toHaveLength(56);
     expect(names(before.tools)).not.toContain('lut');
     expect(names(before.tools)).toContain('ffmpeg_cli');
-    expect(names(before.tools)).toContain('youtube_soundtrack');
+    expect(names(before.tools)).toContain('add_soundtrack');
   });
 
-  it('youtube_soundtrack: shared tool, gated to build 13+ on iOS (YOUTUBE_SOUNDTRACK_MIN_BUILD), with the iOS description override', () => {
-    expect(names(offeredToolsFor({ userAgent: ios(12) }))).not.toContain('youtube_soundtrack');
-    expect(names(offeredToolsFor({ userAgent: ios(13) }))).toContain('youtube_soundtrack');
-    expect(names(offeredToolsFor({ userAgent: ios(13), mediaType: 'image' }))).not.toContain('youtube_soundtrack');
-    // Web shipped it first: no-UA and browser UAs get the shared definition from src/tools.js.
+  it('youtube_soundtrack: off for every iOS build (empty range), still shared with web', () => {
+    for (const b of [12, 13, 21]) expect(names(offeredToolsFor({ userAgent: ios(b) }))).not.toContain('youtube_soundtrack');
     expect(names(offeredToolsFor({ userAgent: undefined }))).toContain('youtube_soundtrack');
-    expect(names(offeredToolsFor({ userAgent: 'Mozilla/5.0' }))).toContain('youtube_soundtrack');
-    const webDef = offeredToolsFor({ userAgent: undefined }).find(t => t.function.name === 'youtube_soundtrack');
-    const iosDef = offeredToolsFor({ userAgent: ios(13) }).find(t => t.function.name === 'youtube_soundtrack');
-    expect(webDef).toBe(tools.find(t => t.function.name === 'youtube_soundtrack'));
-    expect(iosDef.function.description).toBe(YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION);
-    expect(iosDef.function.description).not.toBe(webDef.function.description);
-    expect(iosDef.function.parameters).toEqual(webDef.function.parameters);
+    expect(offeredToolsFor({ userAgent: 'Mozilla/5.0' }).find(t => t.function.name === 'youtube_soundtrack'))
+      .toBe(tools.find(t => t.function.name === 'youtube_soundtrack'));
   });
 });
 
