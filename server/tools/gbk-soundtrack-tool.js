@@ -6,10 +6,13 @@
 import express from 'express';
 import { createHash, randomUUID } from 'crypto';
 import { soundtrackEnabled, SOUNDTRACK_MIN_SECONDS, SOUNDTRACK_MAX_SECONDS, SOUNDTRACK_STYLES } from '../../src/server/soundtrackTool.js';
+import { openProgressStream, wantsProgressStream } from '../../src/server/progressStream.js';
 import { videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess } from '../../src/server/middleware.js';
 
 export const GBK_MCP_URL = process.env.GBK_MCP_URL || 'https://compose.grepawk.com/mcp';
 const POLL_DEADLINE_MS = 150_000;
+/** Stage labels sent to clients that ask for progress (SSE). */
+export const SOUNDTRACK_STAGES = { composing: 'Composing track…', rendering: 'Rendering audio…', downloading: 'Downloading audio…' };
 const CACHE_MAX = 50;
 
 export class SoundtrackError extends Error {
@@ -91,7 +94,7 @@ export function soundtrackCacheKey(req) {
   return createHash('sha256').update(JSON.stringify(inputs)).digest('hex');
 }
 
-/** Run the GBK flow. Resolves { bytes, mimeType, durationSeconds, compositionId, sha256, cached }. */
+/** Run the GBK flow; deps.onStage(stage) reports SOUNDTRACK_STAGES keys. Resolves { bytes, mimeType, durationSeconds, compositionId, sha256, cached }. */
 export async function generateSoundtrack(req, deps = {}) {
   const env = deps.env ?? process.env;
   const token = deps.token ?? env.GBK_MCP_TOKEN;
@@ -99,9 +102,11 @@ export async function generateSoundtrack(req, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleep = deps.sleep ?? (ms => new Promise(r => setTimeout(r, ms)));
   const now = deps.now ?? Date.now;
+  const onStage = deps.onStage ?? (() => {});
   const key = soundtrackCacheKey(req);
   if (cache.has(key)) return { ...cache.get(key), cached: true };
 
+  onStage('composing');
   const mcp = createMcpClient({ url: deps.url ?? env.GBK_MCP_URL ?? GBK_MCP_URL, token, fetchImpl });
   await mcp.initialize();
   const seed = parseInt(key.slice(0, 7), 16);
@@ -116,6 +121,7 @@ export async function generateSoundtrack(req, deps = {}) {
     operations: [{ type: 'generate_arrangement', style: req.style, seed, ...(Number.isInteger(created.bars) ? { bars: created.bars } : {}),
       ...(req.tempo ? { tempo: req.tempo } : {}), ...(req.instrumentation ? { instrumentation: req.instrumentation } : {}) }],
   });
+  onStage('rendering');
   let job = await mcp.call('gbk_render_composition', {
     compositionId, ...(Number.isInteger(edited.revision) ? { revision: edited.revision } : {}), headless: true, includeMidi: false, tailSeconds: 1, waitSeconds: 50,
   });
@@ -126,6 +132,7 @@ export async function generateSoundtrack(req, deps = {}) {
     if (!['completed', 'failed', 'cancelled'].includes(job.status)) await sleep(1000);
   }
   if (job.status !== 'completed') throw new SoundtrackError('soundtrack_failed', 502, job.error?.message || 'Music render failed');
+  onStage('downloading');
   const arts = await mcp.call('gbk_get_artifacts', { compositionId });
   const wav = arts.latest?.wav;
   if (!wav?.downloadUrl) throw new SoundtrackError('soundtrack_failed', 502, 'Music render produced no audio');
@@ -147,17 +154,45 @@ soundtrackRouter.post('/api/soundtrack/generate', express.json({ limit: '10kb' }
   (req, res, next) => soundtrackEnabled() ? next() : res.status(404).json({ error: 'Soundtrack generation is off', code: 'soundtrack_disabled' }),
   videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
     const started = Date.now();
+    let parsed;
+    try { parsed = parseSoundtrackRequest(req.body || {}); } catch (e) { return sendFailure(res, e, started); }
+    // Accept: text/event-stream → stage + heartbeat events, then the WAV as base64 in `result`.
+    // Heartbeats also keep proxies (60s read timeouts) from cutting a long render.
+    if (wantsProgressStream(req)) {
+      const stream = openProgressStream(res);
+      try {
+        const out = await generateSoundtrack(parsed, { onStage: s => stream.progress(s, SOUNDTRACK_STAGES[s]) });
+        logCompleted(out, started);
+        return stream.result({ mimeType: out.mimeType, durationSeconds: out.durationSeconds, cached: out.cached, audioBase64: out.bytes.toString('base64') });
+      } catch (e) {
+        const f = failure(e, started);
+        return stream.error({ error: f.message, code: f.code, status: f.status });
+      }
+    }
     try {
-      const out = await generateSoundtrack(parseSoundtrackRequest(req.body || {}));
-      console.log(JSON.stringify({ event: 'soundtrack_generation_completed', ms: Date.now() - started, cached: out.cached, id: randomUUID() }));
+      const out = await generateSoundtrack(parsed);
+      logCompleted(out, started);
       res.set('Content-Type', out.mimeType);
       res.set('X-Audio-Duration', String(out.durationSeconds));
       res.set('X-Audio-Cached', out.cached ? 'true' : 'false');
       return res.send(out.bytes);
     } catch (e) {
-      const known = e instanceof SoundtrackError;
-      console.log(JSON.stringify({ event: 'soundtrack_generation_failed', ms: Date.now() - started, code: known ? e.code : 'internal' }));
-      if (!known) console.error('soundtrack error:', e);
-      return res.status(known ? e.status : 500).json({ error: known ? e.message : 'Soundtrack generation failed', code: known ? e.code : 'soundtrack_failed' });
+      return sendFailure(res, e, started);
     }
   });
+
+function logCompleted(out, started) {
+  console.log(JSON.stringify({ event: 'soundtrack_generation_completed', ms: Date.now() - started, cached: out.cached, id: randomUUID() }));
+}
+
+function failure(e, started) {
+  const known = e instanceof SoundtrackError;
+  console.log(JSON.stringify({ event: 'soundtrack_generation_failed', ms: Date.now() - started, code: known ? e.code : 'internal' }));
+  if (!known) console.error('soundtrack error:', e);
+  return { status: known ? e.status : 500, message: known ? e.message : 'Soundtrack generation failed', code: known ? e.code : 'soundtrack_failed' };
+}
+
+function sendFailure(res, e, started) {
+  const f = failure(e, started);
+  return res.status(f.status).json({ error: f.message, code: f.code });
+}

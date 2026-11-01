@@ -155,6 +155,15 @@ export const toolStageText = (toolName, args) => {
   if (toolName === 'ffmpeg_cli' && args?.action !== 'run') return 'Working out the ffmpeg command…';
   return 'Processing with ffmpeg…';
 };
+// Chat typing label: measured progress, else the long tool's stage with elapsed seconds ("Rendering audio… 12s").
+export const typingStageText = ({ turnStatus, stage, toolStage, now = Date.now() }) => {
+  if (Number.isFinite(turnStatus?.progress) && turnStatus.text) return turnStatus.text;
+  if (stage?.label) {
+    const seconds = Math.floor((now - stage.startedAt) / 1000);
+    return seconds >= 1 ? `${stage.label} ${seconds}s` : stage.label;
+  }
+  return toolStage || 'Working\u2026';
+};
 // What an upload to the server would send, for the consent prompt.
 const UPLOAD_NOUN = { video: 'your video', photo: 'your photo', audio: 'the audio of your clip (not the video)' };
 const JOB_ICONS = { done: '✅', error: '⚠️', cancelled: '🚫' };
@@ -248,7 +257,9 @@ export default function App({ skipLanding = false, startWithSample = false } = {
   const jobIdCounterRef = useRef(1);
   const [toolStage, setToolStage] = useState(null); // what the running job's current tool is doing
   const [clipLimits, setClipLimits] = useState(DEFAULT_CLIP_LIMITS);
-  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds? } for the running job
+  const [turnStatus, setTurnStatus] = useState(null); // { text, progress?, etaSeconds?, stage? } for the running job
+  const [stage, setStage] = useState(null); // { label, startedAt }: the latest named stage of a long tool run
+  const stageNow = useNow(1000, Boolean(stage));
   const [uploadConsent, setUploadConsent] = useState(null); // { tool, reason, uploads, resolve } while asking
   const currentJobRef = useRef(null); // { id, controller } while a prompt is running
   // Which clip the next edit applies to. Bytes are kept per media message so any
@@ -736,9 +747,14 @@ export default function App({ skipLanding = false, startWithSample = false } = {
     let status;
     try {
       // callAPI appends to the array it is given; hand it a copy, not the array held in state.
-      status = await callAPI([...newMessages], { signal: controller.signal, onStatus: setTurnStatus });
+      const onStatus = (s) => {
+        setTurnStatus(s);
+        if (s?.stage) setStage(prev => ({ label: s.text, startedAt: prev?.startedAt ?? Date.now() }));
+      };
+      status = await callAPI([...newMessages], { signal: controller.signal, onStatus });
     } finally {
       setTurnStatus(null);
+      setStage(null);
       // A pending upload question belongs to the job that just ended.
       setUploadConsent(prev => { prev?.resolve(false); return null; });
       currentJobRef.current = null;
@@ -1320,7 +1336,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                 <div className="msg assistant">
                   <div className="bubble typing" aria-live="polite">
                     <span></span><span></span><span></span>
-                    <span className="typing-stage">{(Number.isFinite(turnStatus?.progress) && turnStatus.text) || toolStage || 'Working\u2026'}</span>
+                    <span className="typing-stage">{typingStageText({ turnStatus, stage, toolStage, now: stageNow })}</span>
                   </div>
                   {turnStatus?.hint && <div className="typing-hint" aria-live="polite">{turnStatus.hint}</div>}
                 </div>
