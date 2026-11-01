@@ -18,7 +18,7 @@
 #   6b. nginx: scripts/nginx/finalcut-site-nginx.sh install (HSTS, gzip, http2, www/http -> apex,
 #      real 404s, /legal redirect, asset caching; backup -> edits -> nginx -t -> reload -> on-server
 #      smoke incl. other vhosts unchanged; restores the backup on any failure).
-#   7. GATE (after): health + commit, contract test vs the step-1 baseline (no drift), /v2 headers,
+#   7. GATE (after): health + commit, iOS endpoint checks, /v2 headers,
 #      existing routes' headers identical to the step-1 snapshot, licenses + source reachable.
 #      + site checks (tests/e2e/check-site-seo.sh) + one telemetry event received then deleted.
 #   8. Any failure after step 5 started: nginx rollback (only this run's backups: site, then /v2)
@@ -86,9 +86,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deploy-gate
-          # Snapshot only: the post-deploy gate compares production against this baseline
-          # (no drift). This run's exit code is ignored on purpose: a contract mismatch
-          # against current production must not abort the deploy (gate removed 2026-10-24).
           tests/e2e/compare-route-headers.sh --dump "$BASE" > deploy-gate/route-headers-before.txt
           echo "baseline recorded"
 
@@ -189,7 +186,7 @@ jobs:
           echo "SITE_NGINX_TOUCHED=1" >> "$GITHUB_ENV"
           ssh -o BatchMode=yes "$TARGET" "FINALCUT_DEPLOY_ID='$DEPLOY_ID' bash '$APP_DIR/scripts/nginx/finalcut-site-nginx.sh' install '$APP_DIR'"
 
-      - name: "GATE (post-deploy): health, iOS contract (no drift), /v2 headers, existing routes"
+      - name: "GATE (post-deploy): health, iOS endpoints, /v2 headers, existing routes"
         run: |
           set -euo pipefail
           echo "==> /api/health (poll until the restarted backend is ready)"
