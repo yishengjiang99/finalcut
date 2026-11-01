@@ -4,9 +4,8 @@
 # server on grepawk.com. Can also be run manually (Actions → Run workflow).
 #
 # Guarded deploy (docs/DECISIONS.md D6/D9):
-#   1. BASELINE (before touching prod): record the iOS endpoint contract snapshot + a header
-#      snapshot of existing routes, used only as the step-7 no-drift baseline. Not a gate: a
-#      contract mismatch against prod never aborts the deploy (pre-deploy gate removed 2026-10-24).
+#   1. BASELINE (before touching prod): record a header snapshot of existing
+#      routes, used as the step-7 baseline. Not a gate.
 #   2. Build on the runner: npm run build && npm run build:v2 (pinned cores + verified GPL source).
 #   3. Installer tests: stubbed harness (/v2) + real nginx 1.18 in ubuntu:22.04 (site settings).
 #   4. PREFLIGHT over SSH, read-only: nginx -t passes, sudo works, exactly one nginx file holds
@@ -82,7 +81,7 @@ jobs:
           : "${APP_DIR:?DEPLOY_DIR variable required}"
           [[ -n "${{ vars.SERVER_NAME }}" && -n "${{ vars.DEPLOY_HOST }}" && -n "${{ vars.DEPLOY_USER }}" ]] || { echo "SERVER_NAME/DEPLOY_HOST/DEPLOY_USER variables required" >&2; exit 1; }
 
-      - name: "Record pre-deploy baseline (contract snapshot + route headers; not a gate)"
+      - name: "Record pre-deploy baseline (route headers; not a gate)"
         run: |
           set -euo pipefail
           mkdir -p deploy-gate
