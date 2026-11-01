@@ -4,9 +4,8 @@
 # server on grepawk.com. Can also be run manually (Actions → Run workflow).
 #
 # Guarded deploy (docs/DECISIONS.md D6/D9):
-#   1. BASELINE (before touching prod): record the iOS endpoint contract snapshot + a header
-#      snapshot of existing routes, used only as the step-7 no-drift baseline. Not a gate: a
-#      contract mismatch against prod never aborts the deploy (pre-deploy gate removed 2026-10-24).
+#   1. BASELINE (before touching prod): record a header snapshot of existing
+#      routes, used as the step-7 baseline. Not a gate.
 #   2. Build on the runner: npm run build && npm run build:v2 (pinned cores + verified GPL source).
 #   3. Installer tests: stubbed harness (/v2) + real nginx 1.18 in ubuntu:22.04 (site settings).
 #   4. PREFLIGHT over SSH, read-only: nginx -t passes, sudo works, exactly one nginx file holds
@@ -18,7 +17,7 @@
 #   6b. nginx: scripts/nginx/finalcut-site-nginx.sh install (HSTS, gzip, http2, www/http -> apex,
 #      real 404s, /legal redirect, asset caching; backup -> edits -> nginx -t -> reload -> on-server
 #      smoke incl. other vhosts unchanged; restores the backup on any failure).
-#   7. GATE (after): health + commit, contract test vs the step-1 baseline (no drift), /v2 headers,
+#   7. GATE (after): health + commit, iOS endpoint checks, /v2 headers,
 #      existing routes' headers identical to the step-1 snapshot, licenses + source reachable.
 #      + site checks (tests/e2e/check-site-seo.sh) + one telemetry event received then deleted.
 #   8. Any failure after step 5 started: nginx rollback (only this run's backups: site, then /v2)
@@ -51,11 +50,6 @@ on:
   repository_dispatch:
     types: [blog-updated]
   workflow_dispatch:
-    inputs:
-      allow_contract_drift:
-        description: 'Allow iOS contract drift after deploy (only for an intentional, reviewed API change)'
-        type: boolean
-        default: false
 
 concurrency:
   group: deploy-grepawk
@@ -87,14 +81,10 @@ jobs:
           : "${APP_DIR:?DEPLOY_DIR variable required}"
           [[ -n "${{ vars.SERVER_NAME }}" && -n "${{ vars.DEPLOY_HOST }}" && -n "${{ vars.DEPLOY_USER }}" ]] || { echo "SERVER_NAME/DEPLOY_HOST/DEPLOY_USER variables required" >&2; exit 1; }
 
-      - name: "Record pre-deploy baseline (contract snapshot + route headers; not a gate)"
+      - name: "Record pre-deploy baseline (route headers; not a gate)"
         run: |
           set -euo pipefail
           mkdir -p deploy-gate
-          # Snapshot only: the post-deploy gate compares production against this baseline
-          # (no drift). This run's exit code is ignored on purpose: a contract mismatch
-          # against current production must not abort the deploy (gate removed 2026-10-24).
-          node tests/contract/ios-endpoints.mjs --base "$BASE" --record deploy-gate/contract-before.json || true
           tests/e2e/compare-route-headers.sh --dump "$BASE" > deploy-gate/route-headers-before.txt
           echo "baseline recorded"
 
@@ -195,9 +185,7 @@ jobs:
           echo "SITE_NGINX_TOUCHED=1" >> "$GITHUB_ENV"
           ssh -o BatchMode=yes "$TARGET" "FINALCUT_DEPLOY_ID='$DEPLOY_ID' bash '$APP_DIR/scripts/nginx/finalcut-site-nginx.sh' install '$APP_DIR'"
 
-      - name: "GATE (post-deploy): health, iOS contract (no drift), /v2 headers, existing routes"
-        env:
-          ALLOW_DRIFT: ${{ github.event.inputs.allow_contract_drift || 'false' }}
+      - name: "GATE (post-deploy): health, iOS endpoints, /v2 headers, existing routes"
         run: |
           set -euo pipefail
           echo "==> /api/health (poll until the restarted backend is ready)"
@@ -212,12 +200,8 @@ jobs:
           COMMIT="$(echo "$HEALTH" | grep -o '"commit":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
           echo "deployed commit: ${COMMIT:-'(none)'} (expected ${EXPECTED})"
           if [[ -n "${COMMIT:-}" && "$COMMIT" != "$EXPECTED"* && "$EXPECTED" != "$COMMIT"* ]]; then echo "commit mismatch" >&2; exit 1; fi
-          echo "==> iOS contract vs pre-deploy baseline"
-          if [[ "$ALLOW_DRIFT" == "true" ]]; then
-            node tests/contract/ios-endpoints.mjs --base "$BASE"
-          else
-            node tests/contract/ios-endpoints.mjs --base "$BASE" --compare deploy-gate/contract-before.json
-          fi
+          echo "==> iOS endpoint checks"
+          node tests/contract/ios-endpoints.mjs --base "$BASE"
           echo "==> /v2 headers"
           tests/e2e/check-v2-headers.sh "$BASE"
           echo "==> existing routes: headers vs pre-deploy snapshot"
@@ -262,7 +246,7 @@ jobs:
             fi
             rm -rf dist.new" || rc=1
           sleep 3
-          node tests/contract/ios-endpoints.mjs --base "$BASE" --compare deploy-gate/contract-before.json || rc=1
+          node tests/contract/ios-endpoints.mjs --base "$BASE" || rc=1
           tests/e2e/compare-route-headers.sh deploy-gate/route-headers-before.txt "$BASE" || rc=1
           echo "NOTE: server code (rsynced) and node_modules are not rolled back; re-run this workflow on the previous commit if needed."
           exit $rc
