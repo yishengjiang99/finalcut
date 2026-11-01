@@ -421,13 +421,32 @@ final class APIClient {
 
     /// `add_soundtrack` (`POST /api/soundtrack/generate`): sends only the tool arguments
     /// (never media); returns the generated WAV. Counts as one inference like youtube-audio.
-    func generateSoundtrack(arguments: [String: JSONValue]) async throws -> Data {
+    /// Asks for SSE progress; `onStage` gets each server stage label. A server without
+    /// progress support answers with the raw WAV, which is returned as before.
+    func generateSoundtrack(arguments: [String: JSONValue], onStage: @escaping @MainActor (String) -> Void = { _ in }) async throws -> Data {
         let body = try JSONSerialization.data(withJSONObject: arguments.mapValues { $0.foundationValue }, options: [])
         var request = makeRequest(url: soundtrackGenerateURL, method: "POST", auth: .bearerPreferred, body: body)
+        request.setValue("text/event-stream, audio/wav", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 300 // generation + render can take a couple of minutes
-        let (data, response) = try await session.data(for: request)
-        try Self.throwIfNeeded(response: response, data: data)
-        return data
+        let (bytes, response) = try await session.bytes(for: request)
+        let http = response as? HTTPURLResponse
+        guard http?.value(forHTTPHeaderField: "Content-Type")?.contains("text/event-stream") == true,
+              (200..<300).contains(http?.statusCode ?? 0) else {
+            var data = Data()
+            for try await byte in bytes { data.append(byte) }
+            try Self.throwIfNeeded(response: response, data: data)
+            return data
+        }
+        var parser = ProgressEventParser()
+        for try await line in bytes.lines {
+            switch parser.feed(line) {
+            case .progress(let label)?: await onStage(label)
+            case .result(let audio)?: return audio
+            case .failure(let status, let payload)?: throw Self.error(forStatus: status, data: payload)
+            case .heartbeat?, .unknown?, nil: continue
+            }
+        }
+        throw APIError.message("The soundtrack stream ended without audio")
     }
 
     func ffmpegCliJSON(action: String, params: [String: Any]) async throws -> Data {
@@ -860,6 +879,49 @@ struct APIErrorPayload: Decodable, Equatable {
     var operation: String?
     var mediaType: String?
     var format: String?
+}
+
+/// One event of the opt-in SSE progress stream (server: src/server/progressStream.js).
+enum ProgressEvent: Equatable {
+    case progress(String)
+    case heartbeat(Int)
+    case result(Data)
+    case failure(Int, Data)
+    /// Event names this build does not know; ignored.
+    case unknown(String)
+}
+
+/// Line-by-line SSE parser. `URLSession.AsyncBytes.lines` drops blank lines, so each
+/// `data:` line is one event, named by the latest `event:` line.
+struct ProgressEventParser {
+    private var eventName = "message"
+
+    mutating func feed(_ line: String) -> ProgressEvent? {
+        if line.hasPrefix("event:") {
+            eventName = line.dropFirst(6).trimmingCharacters(in: .whitespaces)
+            return nil
+        }
+        guard line.hasPrefix("data:") else { return nil }
+        let payload = Data(line.dropFirst(5).trimmingCharacters(in: .whitespaces).utf8)
+        let name = eventName
+        eventName = "message"
+        guard let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any] else { return nil }
+        switch name {
+        case "progress":
+            return (object["label"] as? String).map { .progress($0) }
+        case "heartbeat":
+            return .heartbeat((object["elapsed"] as? NSNumber)?.intValue ?? 0)
+        case "result":
+            guard let base64 = object["audioBase64"] as? String, let audio = Data(base64Encoded: base64) else {
+                return .failure(502, Data(#"{"error":"Music render produced no audio","code":"soundtrack_failed"}"#.utf8))
+            }
+            return .result(audio)
+        case "error":
+            return .failure((object["status"] as? NSNumber)?.intValue ?? 502, payload)
+        default:
+            return .unknown(name)
+        }
+    }
 }
 
 enum APIError: Error, LocalizedError, Equatable {

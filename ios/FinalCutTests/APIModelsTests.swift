@@ -338,4 +338,77 @@ final class APIModelsTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"video\""))
         XCTAssertTrue(body.contains("fake-video"))
     }
+
+    // MARK: - Tool progress (add_soundtrack SSE)
+
+    func testProgressEventParserReadsStagesHeartbeatsResultAndIgnoresUnknown() {
+        var parser = ProgressEventParser()
+        let lines = [
+            "event: progress", #"data: {"type":"progress","stage":"rendering","label":"Rendering audio…"}"#,
+            ": keepalive",
+            "event: heartbeat", #"data: {"type":"heartbeat","elapsed":8}"#,
+            "event: future_event", #"data: {"type":"future_event"}"#,
+            "event: result", #"data: {"type":"result","audioBase64":"UklGRg=="}"#,
+        ]
+        let events = lines.compactMap { parser.feed($0) }
+        XCTAssertEqual(events, [.progress("Rendering audio…"), .heartbeat(8), .unknown("future_event"), .result(Data("RIFF".utf8))])
+    }
+
+    func testProgressEventParserMapsStreamedErrorToStatus() {
+        var parser = ProgressEventParser()
+        _ = parser.feed("event: error")
+        let payload = #"data: {"type":"error","error":"Limit","code":"soundtrack_limit","status":429}"#
+        guard case .failure(let status, let data)? = parser.feed(payload) else { return XCTFail("expected failure") }
+        XCTAssertEqual(status, 429)
+        XCTAssertEqual(APIClient.error(forStatus: status, data: data).serverCode, "soundtrack_limit")
+    }
+
+    func testToolProgressTextShowsElapsedSeconds() {
+        let start = Date(timeIntervalSince1970: 100)
+        let progress = ToolProgress(label: "Rendering audio…", startedAt: start)
+        XCTAssertEqual(progress.text(at: start.addingTimeInterval(0.4)), "Rendering audio…")
+        XCTAssertEqual(progress.text(at: start.addingTimeInterval(12.7)), "Rendering audio… 12s")
+    }
+
+    @MainActor
+    func testGenerateSoundtrackStreamsStagesThenAudio() async throws {
+        SoundtrackStreamStub.response = ("text/event-stream",
+            "event: progress\ndata: {\"label\":\"Composing track…\"}\n\nevent: heartbeat\ndata: {\"elapsed\":4}\n\nevent: result\ndata: {\"audioBase64\":\"UklGRg==\"}\n\n")
+        let client = APIClient(config: APIConfig(baseURL: URL(string: "https://example.test")!), session: SoundtrackStreamStub.session())
+        var stages: [String] = []
+        let audio = try await client.generateSoundtrack(arguments: ["prompt": .string("calm")]) { stages.append($0) }
+        XCTAssertEqual(audio, Data("RIFF".utf8))
+        XCTAssertEqual(stages, ["Composing track…"])
+        XCTAssertEqual(SoundtrackStreamStub.lastAccept, "text/event-stream, audio/wav")
+    }
+
+    func testGenerateSoundtrackAcceptsRawWavFromOlderServer() async throws {
+        SoundtrackStreamStub.response = ("audio/wav", "RIFF")
+        let client = APIClient(config: APIConfig(baseURL: URL(string: "https://example.test")!), session: SoundtrackStreamStub.session())
+        let audio = try await client.generateSoundtrack(arguments: ["prompt": .string("calm")])
+        XCTAssertEqual(audio, Data("RIFF".utf8))
+    }
+}
+
+final class SoundtrackStreamStub: URLProtocol {
+    nonisolated(unsafe) static var response: (String, String) = ("audio/wav", "")
+    nonisolated(unsafe) static var lastAccept: String?
+
+    static func session() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SoundtrackStreamStub.self]
+        return URLSession(configuration: config)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.lastAccept = request.value(forHTTPHeaderField: "Accept")
+        let (type, body) = Self.response
+        let http = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": type])!
+        client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

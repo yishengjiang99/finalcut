@@ -8,6 +8,8 @@ struct ChatView: View {
     var queuedIDs: Set<UUID> = []
     /// Shows a small working indicator under the last message.
     var isWorking: Bool = false
+    /// Stage of a long tool run, shown beside the indicator with elapsed seconds.
+    var workingProgress: ToolProgress? = nil
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -25,10 +27,21 @@ struct ChatView: View {
                             .id(message.id)
                     }
                     if isWorking {
-                        ProgressView()
-                            .tint(AppTheme.accent)
-                            .padding(.leading, 4)
-                            .accessibilityIdentifier("ChatWorking")
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .tint(AppTheme.accent)
+                            if let workingProgress {
+                                SwiftUI.TimelineView(.periodic(from: workingProgress.startedAt, by: 1)) { context in
+                                    Text(workingProgress.text(at: context.date))
+                                        .font(.footnote)
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                        .monospacedDigit()
+                                }
+                                .accessibilityIdentifier("ChatWorkingStage")
+                            }
+                        }
+                        .padding(.leading, 4)
+                        .accessibilityIdentifier("ChatWorking")
                     }
                 }
                 .padding(16)
