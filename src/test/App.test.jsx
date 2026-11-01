@@ -168,7 +168,7 @@ describe('App Component', () => {
     expect(composer.classList.contains('active')).toBe(false);
     const attach = container.querySelector('.composer-input-row .attach-btn');
     expect(attach).not.toBeNull();
-    expect(attach.getAttribute('title')).toBe('Attach video or audio');
+    expect(attach.getAttribute('title')).toBe('Attach video, photo or audio');
     expect(container.querySelector('.composer-actions .attach-btn')).toBeNull();
   });
 

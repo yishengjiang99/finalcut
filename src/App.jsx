@@ -625,11 +625,14 @@ export default function App({ skipLanding = false, startWithSample = false } = {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        const isAudio = file.type.startsWith('audio/');
-        const isVideo = file.type.startsWith('video/');
+        // Some browsers leave HEIC/HEIF type empty; infer it from the extension.
+        const type = file.type || (/\.(heic|heif)$/i.test(file.name) ? 'image/heic' : '');
+        const isAudio = type.startsWith('audio/');
+        const isVideo = type.startsWith('video/');
+        const isPhoto = type.startsWith('image/');
 
-        if (!isAudio && !isVideo) {
-          toast(`“${file.name}” is not a valid audio or video file`);
+        if (!isAudio && !isVideo && !isPhoto) {
+          toast(`“${file.name}” is not a valid video, photo or audio file`);
           hasError = true;
           continue;
         }
@@ -652,7 +655,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
           data: data,
           url: url,
           name: file.name,
-          mimeType: file.type,
+          mimeType: type,
           isAudio: isAudio
         });
 
@@ -663,8 +666,8 @@ export default function App({ skipLanding = false, startWithSample = false } = {
           activateMedia(newVideos[0].id);
           setVideoFileData(data);
           setFileType(isAudio ? 'audio' : 'video');
-          setFileMimeType(file.type);
-          setCurrentFileMimeType(file.type);
+          setFileMimeType(type);
+          setCurrentFileMimeType(type);
         }
       }
 
@@ -693,7 +696,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
         videoType: 'original',
         mimeType: video.mimeType,
         name: video.name,
-        apiContent: `A ${video.isAudio ? 'audio' : 'video'} file is available for editing.`,
+        apiContent: `A ${video.isAudio ? 'audio' : video.mimeType.startsWith('image/') ? 'photo' : 'video'} file is available for editing.`,
         id: video.id
       }));
 
@@ -1107,7 +1110,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
           </>
         )}
         <div className="rc-media">
-          <VideoPreview
+          {msg.mimeType?.startsWith('image/') ? <img className="still" src={msg.videoUrl} alt={item.label} /> : <VideoPreview
             key={`preview-${msg.id}`}
             videoUrl={msg.videoUrl}
             title={getVideoTitle(msg.videoType)}
@@ -1115,7 +1118,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
             vttUrl={msg.vttUrl || null}
             captionTrack={trackOfMedia(item.id)}
             onVideoMount={(el) => registerPreviewEl(msg.id, el)}
-          />
+          />}
           {item.kind !== 'result' && (
             <div className="rc-overlay">
               {isActive
@@ -1402,11 +1405,11 @@ export default function App({ skipLanding = false, startWithSample = false } = {
                   ref={fileInputRef}
                   type="file"
                   onChange={handleUpload}
-                  accept="video/*,audio/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac"
+                  accept="video/*,audio/*,image/*,.heic,.heif,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp3,audio/ogg,audio/aac"
                   multiple
                   hidden
                 />
-                <button className="icon-btn attach-btn" title="Attach video or audio" disabled={isCallingAPI} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); openFilePicker(); }}>📎</button>
+                <button className="icon-btn attach-btn" title="Attach video, photo or audio" disabled={isCallingAPI} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); openFilePicker(); }}>📎</button>
                 <textarea
                   ref={textareaRef}
                   rows={1}
