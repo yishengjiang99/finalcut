@@ -43,6 +43,24 @@ if ext:
 else: print('BLOCKER?: no external beta group')
 print('beta review detail:', api('GET', f'/v1/apps/{app_id}/betaAppReviewDetail', ok_fail=True))
 print('beta app localizations:', [l['attributes'] for l in (api('GET', f'/v1/apps/{app_id}/betaAppLocalizations', ok_fail=True) or {}).get('data', [])])
+# beta app info prerequisites, copied from the live App Store listing
+vers = api('GET', f'/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=10')['data']
+live = next((v for v in vers if v['attributes'].get('appStoreState') == 'READY_FOR_SALE'), vers[0])
+desc = next((l['attributes'].get('description') for l in api('GET', f"/v1/appStoreVersions/{live['id']}/appStoreVersionLocalizations")['data'] if l['attributes']['locale'] == 'en-US'), None)
+rd = (api('GET', f"/v1/appStoreVersions/{live['id']}/appStoreReviewDetail", ok_fail=True) or {}).get('data') or {}
+ra = rd.get('attributes', {}) if rd else {}
+print('review contact present:', {k: bool(ra.get(k)) for k in ('contactFirstName','contactLastName','contactPhone','contactEmail')})
+if not api('GET', f'/v1/apps/{app_id}/betaAppLocalizations')['data'] and desc:
+    attrs = {'locale': 'en-US', 'description': desc[:4000]}
+    if ra.get('contactEmail'): attrs['feedbackEmail'] = ra['contactEmail']
+    api('POST', '/v1/betaAppLocalizations', {'data': {'type': 'betaAppLocalizations', 'attributes': attrs, 'relationships': {'app': {'data': {'type': 'apps', 'id': app_id}}}}}, ok_fail=True)
+    print('beta app description set from live listing')
+brd = api('GET', f'/v1/apps/{app_id}/betaAppReviewDetail')['data']
+if not brd['attributes'].get('contactEmail') and ra.get('contactEmail'):
+    a = {k: ra.get(k) for k in ('contactFirstName','contactLastName','contactPhone','contactEmail')}
+    a['demoAccountRequired'] = False
+    api('PATCH', f"/v1/betaAppReviewDetails/{brd['id']}", {'data': {'type': 'betaAppReviewDetails', 'id': brd['id'], 'attributes': a}}, ok_fail=True)
+    print('beta review contact copied from App Store review detail')
 # submit
 bd = api('GET', f'/v1/builds/{bid}/buildBetaDetail')['data']['attributes']; print('buildBetaDetail before', bd)
 if bd.get('externalBuildState') in ('READY_FOR_BETA_SUBMISSION', 'MISSING_EXPORT_COMPLIANCE', None):
