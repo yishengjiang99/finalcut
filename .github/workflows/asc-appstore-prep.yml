@@ -1,0 +1,16 @@
+name: ASC App Store prep 1.2 (FinalCap)
+on:
+  push:
+    branches: [asc-appstore-prep-1.2]
+  workflow_dispatch:
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: pip install -q PyJWT cryptography && python3 scripts/asc/appstore_prep.py
