@@ -34,14 +34,24 @@ def fetch(token, freq, report_date):
          f"&filter[vendorNumber]={VENDOR}&filter[reportDate]={report_date}")
     req = urllib.request.Request(BASE + q, headers={
         "Authorization": f"Bearer {token}", "Accept": "application/a-gzip"})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            return gzip.decompress(resp.read()).decode("utf-8")
-    except urllib.error.HTTPError as e:
-        if e.code in (404, 410):
-            return None  # no report for that date, or aged out of Apple's retention
-        body = e.read()[:300].decode(errors="replace")
-        raise SystemExit(f"salesReports {freq} {report_date}: HTTP {e.code} {body}")
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return gzip.decompress(resp.read()).decode("utf-8")
+        except urllib.error.HTTPError as e:
+            if e.code in (404, 410):
+                return None  # no report for that date, or aged out of Apple's retention
+            body = e.read()[:300].decode(errors="replace")
+            if e.code < 500:
+                raise SystemExit(f"salesReports {freq} {report_date}: HTTP {e.code} {body}")
+            err = f"HTTP {e.code}"
+        except (TimeoutError, urllib.error.URLError) as e:
+            err = str(e)
+        time.sleep(5 * 2 ** attempt)
+    # Apple 5xx/timeouts that persist: skip this date. Sync re-fetches the last
+    # 12 days every run, and ingest only verifies reports that were fetched.
+    print(f"WARN salesReports {freq} {report_date}: skipped after retries ({err})", file=sys.stderr)
+    return None
 
 
 def totals_for(tsv):

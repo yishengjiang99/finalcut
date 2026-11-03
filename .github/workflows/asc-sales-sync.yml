@@ -45,6 +45,7 @@ jobs:
           else ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; fi
 
       - name: Ship reports and ingest script to the server
+        id: ship
         env:
           TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
         run: |
@@ -61,7 +62,7 @@ jobs:
 
       - name: Ingest into the ProTune database
         id: ingest_protune
-        if: always()
+        if: always() && steps.ship.outcome == 'success'
         env:
           TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
         run: |
