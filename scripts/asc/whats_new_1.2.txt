@@ -1,0 +1,9 @@
+What's new in FinalCap 1.2:
+
+• Photo slideshows: pick several photos at once and FinalCap turns them into a slideshow video.
+• Add a soundtrack: ask for music and FinalCap composes an original track for your video, with live progress while it works.
+• Pick up where you left off: reopening a project brings back your chat with the editor.
+• A smarter project library: search by title or date, pin favorites, and swipe to archive (with undo).
+• New Storage screen: see how much space each project uses, clear thumbnails to free space, duplicate a project, or export a .finalcap backup.
+• Tidy-up nudge: projects you haven't opened in 30 days get a gentle prompt to archive.
+• Fixes for trimming timeline projects and a crash when the last clip is removed.

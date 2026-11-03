@@ -1,0 +1,23 @@
+name: ASC TestFlight submit (FinalCap)
+on:
+  push:
+    branches: [asc-testflight-submit-1.2]
+  workflow_dispatch:
+    inputs:
+      marketing_version: {required: true, default: '1.2'}
+      build_number: {required: true, default: '41'}
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          BUNDLE_ID: com.ragnus.w2
+          MARKETING_VERSION: ${{ inputs.marketing_version || '1.2' }}
+          BUILD_NUMBER: ${{ inputs.build_number || '41' }}
+          NOTES_FILE: scripts/asc/whats_new_1.2.txt
+        run: pip install -q PyJWT cryptography && python3 scripts/asc/testflight_submit.py
