@@ -1,7 +1,5 @@
 name: ASC TestFlight submit (FinalCap)
 on:
-  push:
-    branches: [asc-testflight-submit-1.2]
   workflow_dispatch:
     inputs:
       marketing_version: {required: true, default: '1.2'}
