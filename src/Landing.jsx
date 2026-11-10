@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { track } from './telemetry.js';
 import logoUrl from './brand/logo-96.webp';
 import posterUrl from './brand/explainer-poster.webp';
