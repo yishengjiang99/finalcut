@@ -18,8 +18,6 @@ enum APIEndpoints {
     /// Streaming captions (docs/api/STREAMING_CAPTIONS.md): token + translate. Cloud processing ON + user consent only.
     static let streamingCaptionsToken = "/api/streaming-captions/token"
     static let streamingCaptionsTranslate = "/api/streaming-captions/translate"
-    static let createCheckoutSession = "/api/create-checkout-session"
-    static let verifyCheckoutSession = "/api/verify-checkout-session"
     static let authGoogle = "/auth/google"
     static let authLogout = "/auth/logout"
 
