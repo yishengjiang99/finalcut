@@ -92,7 +92,7 @@ final class ProjectVideoCompositor: NSObject, AVVideoCompositing {
             }
             image = image.transformed(by: CGAffineTransform(translationX: -image.extent.origin.x, y: -image.extent.origin.y))
             // Clip effects (in oriented source space).
-            image = layer.renderer.apply(to: image)
+            image = layer.renderer.apply(to: image, time: CMTimeGetSeconds(request.compositionTime))
             // Fit the rendered frame into the project canvas without distortion.
             let frameSize = image.extent.size
             guard frameSize.width > 0, frameSize.height > 0 else { continue }

@@ -276,7 +276,7 @@ extension NativeComposer {
                         image = image.transformed(by: visual.transform)
                     }
                     image = image.transformed(by: CGAffineTransform(translationX: -image.extent.origin.x, y: -image.extent.origin.y))
-                    image = visual.renderer.apply(to: image)
+                    image = visual.renderer.apply(to: image, time: CMTimeGetSeconds(t))
                     let frameSize = image.extent.size
                     if frameSize.width > 0, frameSize.height > 0 {
                         let scaleX = renderSize.width / frameSize.width

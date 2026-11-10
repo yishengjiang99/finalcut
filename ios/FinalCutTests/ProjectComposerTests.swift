@@ -237,4 +237,77 @@ final class ProjectComposerTests: XCTestCase {
         let frame = try await exported.image(at: CMTime(seconds: 3, preferredTimescale: 600)).image
         XCTAssertGreaterThan(meanLuma(frame), 60, "exported frame is black")
     }
+
+    func testGrainFramesDifferWhenCompositionTimeIsPassed() async throws {
+        let grain = VignetteGrainOp(effect: "grain", intensity: 1, vignetteAmount: nil, grainAmount: nil)
+        let videoURL = try await makeVideo(name: "grain.mp4", seconds: 3, gray: 0x90)
+        let video = try await probeAsset(videoURL, type: .video)
+
+        // Cut-only path (ProjectComposer closure).
+        var cut = EditorProject(name: "Grain", canvas: ProjectCanvas(width: 128, height: 96))
+        cut.assets = [video]
+        var cutClip = VideoClip(id: UUID(), assetID: video.id, sourceStart: .zero, sourceEnd: .seconds(3))
+        cutClip.effects = [.vignetteGrain(grain)]
+        cut.videoClips = [cutClip]
+        try await assertGrainMoves(in: cut, resolve: { _ in videoURL }, times: [0, 1.0])
+
+        // Custom compositor path (overlapping transition → ProjectVideoCompositor).
+        var fade = EditorProject(name: "GrainFade", canvas: ProjectCanvas(width: 128, height: 96))
+        fade.assets = [video]
+        var first = VideoClip(id: UUID(), assetID: video.id, sourceStart: .zero, sourceEnd: .seconds(2))
+        first.effects = [.vignetteGrain(grain)]
+        first.transitionOut = TransitionSpec(kind: .crossDissolve, duration: .seconds(0.5))
+        var second = VideoClip(id: UUID(), assetID: video.id, sourceStart: .zero, sourceEnd: .seconds(2))
+        second.effects = [.vignetteGrain(grain)]
+        fade.videoClips = [first, second]
+        // 2s + 2s - 0.5s overlap = 3.5s; sample each clip outside the overlap.
+        try await assertGrainMoves(in: fade, resolve: { _ in videoURL }, times: [0.2, 2.5])
+    }
+
+    func testAudioEffectOnProjectSurvivesCompose() async throws {
+        let videoURL = try await makeVideo(name: "ae.mp4", seconds: 2, gray: 0x90)
+        let video = try await probeAsset(videoURL, type: .video)
+        var project = EditorProject(name: "AE", canvas: ProjectCanvas(width: 128, height: 96))
+        project.assets = [video]
+        project.videoClips = [VideoClip(id: UUID(), assetID: video.id, sourceStart: .zero, sourceEnd: .seconds(2),
+                                        originalAudioEnabled: true)]
+        var session = ProjectSession(project: project)
+        let effect = AudioEffectOp(effect: "pitch_down", intensity: 0.5, reverbPreset: nil,
+                                   pitchSemitones: 3, delaySeconds: nil, mixPercent: nil,
+                                   gainDb: nil, frequencyHz: nil)
+        _ = try session.perform(.applyAudioEffect(clipID: session.project.videoClips[0].id, effect: effect))
+        XCTAssertEqual(session.project.videoClips[0].audioEffects, [effect])
+        let composed = try await NativeComposer.compose(project: session.project) { _ in videoURL }
+        XCTAssertEqual(composed.duration, 2, accuracy: 0.2)
+        let audioTracks = try await composed.asset.loadTracks(withMediaType: .audio)
+        XCTAssertFalse(audioTracks.isEmpty, "baked audio_effect must still produce an audio track")
+        XCTAssertEqual(session.project.videoClips[0].audioEffects, [effect])
+    }
+
+    private func assertGrainMoves(in project: EditorProject, resolve: @escaping (MediaAsset) -> URL, times: [Double]) async throws {
+        let composed = try await NativeComposer.compose(project: project, resolve: resolve)
+        let generator = composed.makeImageGenerator()
+        var checksums: [Int] = []
+        for t in times {
+            let frame = try await generator.image(at: CMTime(seconds: t, preferredTimescale: 600)).image
+            checksums.append(frameChecksum(frame))
+        }
+        XCTAssertEqual(Set(checksums).count, checksums.count, "grain frames at \(times) should differ if composition time is passed: \(checksums)")
+    }
+
+    private func frameChecksum(_ image: CGImage) -> Int {
+        var total = 0
+        let w = image.width, h = image.height
+        var data = [UInt8](repeating: 0, count: 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        for y in stride(from: 0, to: h, by: max(1, h / 8)) {
+            for x in stride(from: 0, to: w, by: max(1, w / 8)) {
+                let ctx = CGContext(data: &data, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                    space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                ctx.draw(image, in: CGRect(x: -x, y: -(h - 1 - y), width: w, height: h))
+                total = total &+ Int(data[0]) &* 3 &+ Int(data[1]) &* 5 &+ Int(data[2]) &* 7 &+ x &+ y &* 13
+            }
+        }
+        return total
+    }
 }
