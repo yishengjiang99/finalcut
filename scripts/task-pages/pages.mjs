@@ -132,6 +132,8 @@ export const pages = [
     description: 'Edit video without uploading it. FinalCap runs FFmpeg and Whisper in your browser, so your file stays on your device while you trim, caption and resize.',
     h1: 'Edit video without uploading your file',
     lede: 'FinalCap is a private AI video editor that runs in your browser. You describe the edit in plain English, the AI returns a structured tool call, and FFmpeg in your browser runs it on your device, so the video file is not uploaded for normal edits.',
+    updated: 'November 9, 2026',
+    stat: '222 visitors arrived from ChatGPT in late October 2026, nearly matching Google at 232. This page is the answer for anyone who types \'edit video without uploading\' into a search box or an AI chat: an editor that runs in your browser, with the file staying on your device.',
     steps: [
       ['Open your video', 'Sign in with Google and open a video file from your computer. Opening the file does not upload it; the browser reads it from your device.'],
       ['Describe the edit in plain English', 'Type one of these prompts, or your own wording:', [
@@ -152,6 +154,7 @@ export const pages = [
       'To plan an edit, the AI receives your typed request and up to four small still frames from the video, never the video file itself.',
       'Translating captions sends only the caption text to the server. Lyric captions send only the audio track, and only after you agree.',
       'If a step cannot run in your browser, FinalCap asks before uploading anything to do it on the server. The default answer is no.',
+      'For normal edits, your video file is not uploaded, and FinalCap asks before uploading anything.',
     ],
     faq: [
       ['Does FinalCap upload my video?', 'No, not for normal edits. The video file stays on your device and FFmpeg runs the edit in your browser. FinalCap asks for explicit confirmation before any media upload, and the only routine exception is lyric captions, which send the audio track (never the video) after you agree.'],
@@ -170,6 +173,8 @@ export const pages = [
     description: 'FinalCap is a chat-driven video editor that runs FFmpeg and Whisper in your browser. Built so your video stays on your device. Learn how it works here.',
     h1: 'About FinalCap: the editor where the model never touches your video',
     lede: 'FinalCap is a chat-driven AI video editor for the browser and iPhone. Most AI video tools ask you to upload your file to their server, or generate new video from scratch. FinalCap does neither for normal edits: you describe the edit, and your own device applies it to your own file.',
+    updated: 'November 9, 2026',
+    stat: 'In late October 2026, ChatGPT sent 222 visitors to this site, nearly as many as Google at 232, and visits from ChatGPT\'s browser grew from 167 to 212 in two weeks. These four new pages drew 165 visits from 157 different visitors in their first four days online.',
     stepsHeading: 'How FinalCap works, in three steps',
     steps: [
       ['You describe the edit', 'Open a video and type what you want in plain English: a trim, captions, a resize to 9:16, a color or speed change.'],
@@ -185,7 +190,7 @@ export const pages = [
     ],
     sections: [
       ['Who built FinalCap', [
-        'FinalCap is designed and built by Yisheng Jiang, a software engineer who previously worked as a Meta contractor, and released under the GrepAwk name. The same developer makes ProTune AI Camera and AI Music Radar.',
+        'FinalCap is designed and built by Yisheng Jiang, a software engineer who previously worked as a Meta contractor, and released under the GrepAwk name. The same developer makes ProTune AI Camera and EarSheet.',
         'Support and contact options are on the support page linked in the footer; the privacy policy linked below states how FinalCap handles data.',
       ]],
       ['FinalCap on the web and on iPhone', [
@@ -199,9 +204,10 @@ export const pages = [
       'What is sent is small and named: your typed request and up to four small still frames to plan an edit, and caption text when you ask for a translation.',
       'Captions are transcribed by default with Whisper running on your device, so the audio is not uploaded for transcription.',
       'If a step cannot run on your device, FinalCap asks for explicit confirmation before uploading any media, and lyric captions send only the audio track.',
+      'For normal edits, your video file is not uploaded, and FinalCap asks before uploading anything.',
     ],
     faq: [
-      ['Who makes FinalCap?', 'Yisheng Jiang, a software engineer (formerly a Meta contractor), building under the GrepAwk name. He also makes ProTune AI Camera and AI Music Radar.'],
+      ['Who makes FinalCap?', 'Yisheng Jiang, a software engineer (formerly a Meta contractor), building under the GrepAwk name. He also makes ProTune AI Camera and EarSheet.'],
       ['Is FinalCap a generative AI video tool?', 'No. FinalCap applies deterministic edits (trim, resize, captions, color, speed, format) to your own video with FFmpeg or AVFoundation. It does not generate new footage.'],
       ['Why does FinalCap not upload videos like other editors?', 'Because the edit can run where the file already is. Modern browsers can run FFmpeg and Whisper locally, so uploading the whole video is a choice, not a requirement, and FinalCap chooses not to for normal edits.'],
       ['Where can I use FinalCap?', 'In a desktop browser at grepawk.com, and on iPhone through the FinalCap app on the App Store. The sample video on the home page works with no sign-in.'],
@@ -217,6 +223,8 @@ export const pages = [
     description: 'FinalCap vs CapCut: a chat-driven editor that runs in your browser with no upload, compared with CapCut\'s timeline, templates and cloud web editor, fairly.',
     h1: 'FinalCap vs CapCut: same social edits, a different privacy model',
     lede: 'CapCut is a popular timeline editor with a huge template and effects library, on mobile, desktop and the web. FinalCap is a smaller, chat-driven editor built around one constraint: your video file is not uploaded to edit it. This page compares the two honestly, including where CapCut is stronger.',
+    updated: 'November 9, 2026',
+    stat: 'In its first four days online, this comparison drew 38 visits from 37 different visitors. The question it answers is simple: which editor lets you edit a video without uploading it, CapCut or FinalCap? Googlebot and OpenAI\'s search bot have both fetched this page.',
     stepsHeading: 'How editing works in FinalCap, in three steps',
     steps: [
       ['Open your video', 'Open a file in the browser editor. Opening it does not upload it; the browser reads it from your device.'],
@@ -254,6 +262,7 @@ export const pages = [
       'FinalCap: for normal edits the video file is not uploaded. The AI receives your typed request and up to four small still frames; caption translation sends only caption text; any step that cannot run locally asks for explicit confirmation first.',
       'CapCut web: media is uploaded into CapCut\'s cloud storage ("Myspace" spaces) to edit, share and collaborate, per CapCut\'s own guides. CapCut\'s apps can edit locally stored projects, with cloud backup and sync offered on top.',
       'If where the file lives does not matter to you, this row is a wash and the template library should decide it. If it does matter, it is the whole decision.',
+      'For normal edits, your video file is not uploaded, and FinalCap asks before uploading anything.',
     ],
     faq: [
       ['Is FinalCap a CapCut alternative?', 'Yes, for chat-based, private editing: captions, trims, resizes and format changes described in plain English and run in your browser. It is not an alternative for CapCut\'s template and effects library, which FinalCap does not have.'],
@@ -271,6 +280,8 @@ export const pages = [
     description: 'FinalCap vs Descript: a private, chat-driven browser editor with on-device captions, compared with Descript\'s cloud transcription and text-based editing.',
     h1: 'FinalCap vs Descript: two ways to edit by language, opposite data models',
     lede: 'Descript pioneered editing video by editing its transcript, with powerful tools for podcasts and talking-head video, and it works in the cloud: you upload media and its servers transcribe it. FinalCap edits by chat instead of by transcript, and runs on your device: no upload, captions transcribed locally. This page compares them fairly, including where Descript is stronger.',
+    updated: 'November 9, 2026',
+    stat: 'In its first four days online, this comparison drew 39 visits from 38 different visitors. The question it answers is simple: which editor lets you edit a video without uploading it, Descript or FinalCap? Googlebot and OpenAI\'s search bot have both fetched this page.',
     stepsHeading: 'How editing works in FinalCap, in three steps',
     steps: [
       ['Open your video', 'Open a file in the browser editor. Opening it does not upload it; the browser reads it from your device.'],
@@ -308,6 +319,7 @@ export const pages = [
       'FinalCap: for normal edits the video file is not uploaded. The AI receives your typed request and up to four small still frames; captions are transcribed on your device; translation sends only caption text.',
       'Descript: media uploads to Descript\'s cloud for processing, and its help center states transcription starts after the file has finished uploading to the cloud. Projects, transcripts and media live in your Descript drive.',
       'Neither model is careless; they are different products. Descript\'s cloud is what makes collaborative, searchable, long-form editing possible. FinalCap\'s local model is what makes no-upload editing possible.',
+      'For normal edits, your video file is not uploaded, and FinalCap asks before uploading anything.',
     ],
     faq: [
       ['Is FinalCap a Descript alternative?', 'For captions, translation and quick social edits without uploading, yes. For transcript-based editing of podcasts and long interviews, no: that is Descript\'s core workflow and FinalCap does not offer it.'],

@@ -87,6 +87,12 @@ function renderPage(page) {
       { '@type': 'ListItem', position: 2, name: page.nav, item: url },
     ],
   };
+  const pageLd = page.updated ? {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    url,
+    dateModified: '2026-11-09',
+  } : null;
   const cta = (placement) => `<div class="cta-row"><a class="cta" href="${esc(tryHref(page.prompt))}" data-cta="task_try" data-placement="${placement}" rel="nofollow">Try it in FinalCap</a><a class="sec" href="/?start=sample" data-cta="task_sample" data-placement="${placement}" rel="nofollow">Try the sample video (no sign-in)</a></div>`;
   const steps = page.steps.map(([name, text, prompts]) => `<li><h3>${esc(name)}</h3><p>${esc(text)}</p>${prompts ? `<ul class="prompts">${prompts.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}</li>`).join('');
   return `<!doctype html>
@@ -117,12 +123,15 @@ function renderPage(page) {
 <style>${CSS}</style>
 <script type="application/ld+json">${jsonLd(faqLd)}</script>
 <script type="application/ld+json">${jsonLd(crumbLd)}</script>
+${pageLd ? `<script type="application/ld+json">${jsonLd(pageLd)}</script>` : ''}
 </head>
 <body>
 <header><div class="wrap"><a class="brand" href="/">FinalCap<span>chat-to-edit AI video editor</span></a><nav aria-label="Guides"><a href="/#features">Features</a></nav></div></header>
 <main class="wrap">
 <h1>${esc(page.h1)}</h1>
+${page.updated ? `<p class="note">Updated ${esc(page.updated)}</p>` : ''}
 <p class="lede">${esc(page.lede)}</p>
+${page.stat ? `<p class="lede">${esc(page.stat)}</p>` : ''}
 ${cta('top')}
 <p class="note">Opens FinalCap with "${esc(page.prompt)}" ready in the chat box. ${esc(page.signinNote)}</p>
 <h2>${esc(page.stepsHeading || 'How to do it in 3 steps')}</h2>
