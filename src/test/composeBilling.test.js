@@ -30,7 +30,7 @@ beforeAll(async () => {
   stripeMod = await import('../server/stripe.js');
   compose = await import('../server/composeBilling.js');
   music = await import('../server/musicBilling.js');
-  ads = await import('../server/adsConversions.js');
+  ads = await import('../server/adConversions.js');
   products = await import('../server/products.js');
 });
 beforeEach(() => { Object.values(db).forEach((f) => f.mockClear()); });
@@ -117,11 +117,11 @@ describe('compose checkout + entitlement', () => {
     const creds = { X_ADS_CONSUMER_KEY: 'ck', X_ADS_CONSUMER_SECRET: 'cs', X_ADS_ACCESS_TOKEN: 'at', X_ADS_ACCESS_TOKEN_SECRET: 'as', REDDIT_CAPI_TOKEN: 'rt' };
     const e = { ...creds, MUSIC_X_PIXEL_ID: 'mX', MUSIC_X_EVENT_ID_PURCHASE: 'mbuy', MUSIC_REDDIT_PIXEL_ID: 'mR', COMPOSE_X_PIXEL_ID: 'cX', COMPOSE_X_EVENT_ID_PURCHASE: 'cbuy', COMPOSE_REDDIT_PIXEL_ID: 'cR' };
     const conv = { kind: 'purchase', eventId: 'gc-123456789', value: 6, email: 'a@b.co', at: new Date('2026-10-25T18:00:00Z') };
-    expect(ads.buildXRequest({ ...conv, adsPrefix: 'COMPOSE' }, e).url).toContain('/conversions/cX');
-    expect(ads.buildXRequest({ ...conv, adsPrefix: 'COMPOSE' }, e).body.conversions[0].event_id).toBe('cbuy');
-    expect(ads.buildRedditRequest({ ...conv, adsPrefix: 'COMPOSE' }, e).url).toContain('/pixels/cR/');
-    expect(ads.buildXRequest(conv, e).url).toContain('/conversions/mX');
-    expect(ads.buildXRequest({ ...conv, adsPrefix: 'COMPOSE' }, creds)).toBeNull();
+    expect(ads.buildPurchaseXRequest({ ...conv, adsPrefix: 'COMPOSE' }, e).url).toContain('/conversions/cX');
+    expect(ads.buildPurchaseXRequest({ ...conv, adsPrefix: 'COMPOSE' }, e).body.conversions[0].event_id).toBe('cbuy');
+    expect(ads.buildPurchaseRedditRequest({ ...conv, adsPrefix: 'COMPOSE' }, e).url).toContain('/pixels/cR/');
+    expect(ads.buildPurchaseXRequest(conv, e).url).toContain('/conversions/mX');
+    expect(ads.buildPurchaseXRequest({ ...conv, adsPrefix: 'COMPOSE' }, creds)).toBeNull();
   });
 
   it('compose site URL refuses foreign hosts', () => {

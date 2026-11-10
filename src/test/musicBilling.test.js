@@ -21,7 +21,7 @@ let stripeMod, music, ads, products;
 beforeAll(async () => {
   stripeMod = await import('../server/stripe.js');
   music = await import('../server/musicBilling.js');
-  ads = await import('../server/adsConversions.js');
+  ads = await import('../server/adConversions.js');
   products = await import('../server/products.js');
 });
 beforeEach(() => { Object.values(db).forEach((f) => f.mockClear()); });
@@ -120,31 +120,32 @@ describe('ad conversions', () => {
   const conv = { kind: 'purchase', eventId: 'mr-123456789', value: 49.99, currency: 'USD', email: ' Buyer@Example.com ', twclid: 'tw1', rdtCid: 'rd1', at: new Date('2026-10-22T20:00:00Z') };
 
   it('builds X and Reddit payloads with the shared dedupe id and hashed email', () => {
-    const x = ads.buildXRequest(conv, full);
+    const x = ads.buildPurchaseXRequest(conv, full);
     expect(x.url).toBe('https://ads-api.x.com/12/measurement/conversions/pxX');
-    expect(x.body.conversions[0]).toMatchObject({ event_id: 'tw-pxX-buy', conversion_id: 'mr-123456789', value: 49.99, price_currency: 'USD', identifiers: [{ twclid: 'tw1' }, { hashed_email: ads.sha256Email('buyer@example.com') }] });
-    const r = ads.buildRedditRequest(conv, full);
+    expect(x.body.conversions[0]).toMatchObject({ event_id: 'tw-pxX-buy', conversion_id: 'mr-123456789', value: 49.99, price_currency: 'USD', identifiers: [{ twclid: 'tw1' }, { hashed_email: ads.hashEmail('buyer@example.com') }] });
+    const r = ads.buildPurchaseRedditRequest(conv, full);
     expect(r.url).toBe('https://ads-api.reddit.com/api/v3/pixels/pxR/conversion_events');
     expect(r.body.data.events[0]).toMatchObject({ event_at: conv.at.getTime(), action_source: 'WEBSITE', click_id: 'rd1', type: { tracking_type: 'PURCHASE' }, metadata: { conversion_id: 'mr-123456789', value: 49.99 } });
-    expect(ads.buildRedditRequest({ ...conv, kind: 'start_trial' }, full).body.data.events[0].type).toEqual({ tracking_type: 'CUSTOM', custom_event_name: 'StartTrial' });
+    expect(ads.buildPurchaseRedditRequest({ ...conv, kind: 'start_trial' }, full).body.data.events[0].type).toEqual({ tracking_type: 'CUSTOM', custom_event_name: 'StartTrial' });
   });
 
   it('OAuth 1.0a signature matches the RFC 5849 / X reference example', () => {
     // Example from https://developer.x.com/en/docs/authentication/oauth-1-0a/creating-a-signature
-    const h = ads.oauth1Header('POST', 'https://api.twitter.com/1.1/statuses/update.json?include_entities=true&status=Hello%20Ladies%20%2B%20Gentlemen%2C%20a%20signed%20OAuth%20request%21', {
+    const h = ads.oauth1Header({ method: 'POST', url: 'https://api.twitter.com/1.1/statuses/update.json?include_entities=true&status=Hello%20Ladies%20%2B%20Gentlemen%2C%20a%20signed%20OAuth%20request%21',
       consumerKey: 'xvz1evFS4wEEPTGEFPHBog', consumerSecret: 'kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3WpwPAoE3Z7kBw',
       token: '370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb', tokenSecret: 'LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE',
-    }, { nonce: 'kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg', timestamp: 1318622958 });
+      nonce: 'kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg', timestamp: 1318622958 });
     expect(h).toContain('oauth_signature="hCtSmYh%2BiHYCEqBWrE7C7hYmtUk%3D"');
   });
 
-  it('sends both, and ADS_TRACKING_ENABLED=0 or missing credentials send nothing', async () => {
+  it('sends both whenever credentials exist (ADS_TRACKING_ENABLED ignored); missing credentials send nothing', async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, text: async () => '' }));
     expect(await ads.sendConversion(conv, { env: full, fetchImpl })).toEqual({ x: 200, reddit: 200 });
     expect(fetchImpl.mock.calls[0][1].headers.Authorization).toMatch(/^OAuth /);
     expect(fetchImpl.mock.calls[1][1].headers.Authorization).toBe('Bearer rt');
     fetchImpl.mockClear();
-    expect(await ads.sendConversion(conv, { env: { ...full, ADS_TRACKING_ENABLED: '0' }, fetchImpl })).toEqual({ skipped: true });
+    expect(await ads.sendConversion(conv, { env: { ...full, ADS_TRACKING_ENABLED: '0' }, fetchImpl })).toEqual({ x: 200, reddit: 200 });
+    fetchImpl.mockClear();
     expect(await ads.sendConversion(conv, { env: {}, fetchImpl })).toEqual({});
     expect(fetchImpl).not.toHaveBeenCalled();
   });

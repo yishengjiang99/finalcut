@@ -9,7 +9,7 @@ import express from 'express';
 import { stripe as defaultStripe } from './config.js';
 import { apiLimiter } from './middleware.js';
 import { MUSIC_PRODUCT, COMPOSE_PRODUCT, PRODUCT_SPECS, resolveMusicPlan, musicSiteUrl, productOf } from './products.js';
-import { sendConversion } from './adsConversions.js';
+import { sendConversion } from './adConversions.js';
 import * as lifecycle from './composeLifecycle.js';
 
 export const ATTRIBUTION_KEYS = ['event_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'twclid', 'rdt_cid', 'landing', 'ads_opt_out'];
