@@ -166,10 +166,14 @@ final class GroupedToolsTests: XCTestCase {
     }
 
     func testColorAdjustBrighterAndLutNoir() {
-        let source = render([])
+        // Mid-gray so CIExposureAdjust has headroom. The default red/blue bars are
+        // already channel-saturated (255,0,0); brighter cannot raise that RGB sum.
+        let gray = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5))
+            .cropped(to: CGRect(x: 0, y: 0, width: 200, height: 100))
+        let source = render([], image: gray)
         let dark = pixel(source, 25, 50)
         let bright = render([.colorAdjust(ColorAdjustOp(
-            adjust: ["brighter"], intensity: 0.8, intensityPerChange: [:], values: ColorAdjustValues()))])
+            adjust: ["brighter"], intensity: 0.8, intensityPerChange: [:], values: ColorAdjustValues()))], image: gray)
         let after = pixel(bright, 25, 50)
         XCTAssertGreaterThan(after.r + after.g + after.b, dark.r + dark.g + dark.b)
 
