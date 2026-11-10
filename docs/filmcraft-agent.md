@@ -83,10 +83,9 @@ Errors: 400 bad input, 413 prompt too long, 429 rate limit, 502 LLM failure, 503
 
 Or from the devtools console on /filmcraft: `await import('/filmcraft-agent.js'); await filmcraftAgent('export as 1080p mp4')`.
 
-## Kill switch / rollback
+## Rollback
 
-Set `FILMCRAFT_AGENT_DISABLED=true` in the server env and restart `finalcut` → the route returns 503;
-nothing else changes. Full rollback: revert the PR (the route and files are self-contained).
+The route is always on (no off switch). Rollback: revert the PR (the route and files are self-contained).
 
 ## Voice (`GET /api/filmcraft/voice/token`)
 
@@ -95,7 +94,7 @@ client tool, `edit_video(instruction)`; the page handles it by running `filmcraf
 returns the explanation for the voice to speak. This route returns `{signedUrl, agentId}` (signed wss URL,
 key stays on the server). Setup: an `ELEVENLABS_API_KEY` with **convai read/write** permission, then
 `node scripts/create-filmcraft-voice-agent.mjs` once and put `FILMCRAFT_VOICE_AGENT_ID=...` in `.env`.
-Until both are set it answers 503. Off switch: `FILMCRAFT_VOICE_DISABLED=true`.
+Until both are set it answers 503.
 
 ## FinalCut chat voice (`GET /api/voice/token`)
 
@@ -103,7 +102,7 @@ The main app's composer has a 🎤 button (`src/VoiceButton.jsx`). It starts a s
 agent (`FINALCUT_VOICE_AGENT_ID`, created by `scripts/create-finalcut-voice-agent.mjs`). Its client tool
 `edit_video(instruction)` calls the same `handleSend` as typing (the request shows in the chat and runs the normal
 edit flow) and returns the last assistant reply, shortened, for the voice to speak. Same router as above with its own
-path/agent var; 503 until configured. Off switch: `FINALCUT_VOICE_DISABLED=true`.
+path/agent var; 503 until configured.
 
 ## Snapshot fields (engine shapes)
 

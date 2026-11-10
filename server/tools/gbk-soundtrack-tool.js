@@ -5,7 +5,7 @@
 // GBK service principal (gbk:compositions.write, gbk:renders.create, gbk:artifacts.read).
 import express from 'express';
 import { createHash, randomUUID } from 'crypto';
-import { soundtrackEnabled, SOUNDTRACK_MIN_SECONDS, SOUNDTRACK_MAX_SECONDS, SOUNDTRACK_STYLES } from '../../src/server/soundtrackTool.js';
+import { SOUNDTRACK_MIN_SECONDS, SOUNDTRACK_MAX_SECONDS, SOUNDTRACK_STYLES } from '../../src/server/soundtrackTool.js';
 import { openProgressStream, wantsProgressStream } from '../../src/server/progressStream.js';
 import { videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess } from '../../src/server/middleware.js';
 
@@ -151,7 +151,6 @@ export const soundtrackRouter = express.Router();
 
 // Same access chain as youtube-audio: a generation counts as one AI edit for free-tier installs.
 soundtrackRouter.post('/api/soundtrack/generate', express.json({ limit: '10kb' }),
-  (req, res, next) => soundtrackEnabled() ? next() : res.status(404).json({ error: 'Soundtrack generation is off', code: 'soundtrack_disabled' }),
   videoProcessLimiter, requireAuthenticatedUser, requireInferenceAccess, async (req, res) => {
     const started = Date.now();
     let parsed;

@@ -210,10 +210,7 @@ export const filmcraftAgentLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 
 
 export function createFilmcraftAgentRouter({ llm = callXai, limiter = filmcraftAgentLimiter, env = process.env, token = () => XAI_API_TOKEN } = {}) {
   const router = express.Router();
-  router.post('/api/filmcraft/agent', (req, res, next) => {
-    if (env.FILMCRAFT_AGENT_DISABLED === 'true') return res.status(503).json({ error: 'filmcraft agent is disabled' });
-    next();
-  }, limiter, express.json({ limit: '256kb' }), async (req, res) => {
+  router.post('/api/filmcraft/agent', limiter, express.json({ limit: '256kb' }), async (req, res) => {
     res.set('Cache-Control', 'no-store');
     const { prompt, state, history } = req.body || {};
     const snapshot = compactSnapshot(req.body?.snapshot);

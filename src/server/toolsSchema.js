@@ -7,7 +7,6 @@ import { IOS_GROUPED_TOOLS, IOS_GROUPED_TOOL_MEDIA_TYPES } from './iosGroupedToo
 import { IOS_TIMELINE_TOOLS, IOS_TIMELINE_TOOL_MEDIA_TYPES } from './iosTimelineTools.js';
 import { filterToolsForUserAgent } from './iosToolAllowlist.js';
 import { ffmpegCliToolDefinition } from '../ffmpegFallback.js';
-import { withSoundtrackSwitch } from './soundtrackTool.js';
 
 export const TOOLS_SCHEMA_VERSION = '1';
 
@@ -56,7 +55,7 @@ function restrictToMediaType(list, mediaType) {
  */
 export function offeredToolsFor({ userAgent, mediaType } = {}) {
   const isIos = parseFinalCapIosUserAgent(userAgent).isFinalCapIos;
-  const shared = withSoundtrackSwitch(tools); // add_soundtrack off when SOUNDTRACK_ENABLED=0
+  const shared = tools;
   const candidates = isIos ? [...shared, ...IOS_GROUPED_TOOLS, ...IOS_TIMELINE_TOOLS, ffmpegCliToolDefinition] : shared;
   return filterToolsForUserAgent(restrictToMediaType(candidates, mediaType), userAgent);
 }
@@ -80,5 +79,5 @@ export function buildToolsSchema({ userAgent } = {}) {
 
 /** Tool definitions applicable to a media type ("video" | "image"); all tools when unknown. */
 export function toolsForMediaType(mediaType) {
-  return restrictToMediaType(withSoundtrackSwitch(tools), mediaType);
+  return restrictToMediaType(tools, mediaType);
 }
