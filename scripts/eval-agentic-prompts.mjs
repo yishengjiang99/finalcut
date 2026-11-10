@@ -4,22 +4,23 @@
 // and reports which tools the model calls. With --ffmpeg it also replays the chosen calls
 // with the native ffmpeg CLI on a generated testsrc clip and checks size / SAR / encode count.
 //
-//   XAI_API_KEY=... npm run eval:agentic -- [--runs 3] [--ffmpeg] [--only bw_instagram]
+//   XAI_API_TOKEN=... npm run eval:agentic -- [--runs 3] [--ffmpeg] [--only bw_instagram]
 //
 // Run it whenever src/tools.js, src/server/chat.js, src/server/v2.js, src/clientTurn.js
-// or the ops builders change. The key is read from XAI_API_KEY (or XAI_API_TOKEN) and never printed.
+// or the ops builders change. The key is read from XAI_API_TOKEN (or XAI_API_KEY) and never printed.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { xaiToken } from '../src/server/xaiToken.js';
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(`--${n}`);
 const opt = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 ? argv[i + 1] : d; };
 const RUNS = Number(opt('runs', 3));
 const ONLY = opt('only', null);
-const KEY = process.env.XAI_API_KEY || process.env.XAI_API_TOKEN;
-if (!KEY) { console.error('Set XAI_API_KEY to run the live eval.'); process.exit(2); }
+const KEY = xaiToken();
+if (!KEY) { console.error('Set XAI_API_TOKEN to run the live eval.'); process.exit(2); }
 // The server modules check these at import time; the eval itself never uses them.
 process.env.XAI_API_TOKEN ||= 'eval-unused';
 process.env.SESSION_SECRET ||= 'eval-only-session-secret-not-used-0000';
