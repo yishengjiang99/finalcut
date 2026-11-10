@@ -2,7 +2,6 @@ import { randomBytes } from 'crypto';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import {
-  ALLOW_UNAUTH_SAMPLE_MODE,
   SAMPLE_TOKEN_TTL_MS,
   APP_BASE_URL,
   IOS_FREE_DAILY_INFERENCE_LIMIT,
@@ -33,7 +32,6 @@ export function validateSampleAccessToken(token) {
 }
 
 export function isValidSampleModeRequest(req) {
-  if (!ALLOW_UNAUTH_SAMPLE_MODE) return false;
   return validateSampleAccessToken(req.headers['sample-access-token']);
 }
 
