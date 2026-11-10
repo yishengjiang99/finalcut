@@ -73,8 +73,6 @@ final class APIClient {
     var translateCaptionsURL: URL { url(for: APIEndpoints.translateCaptions) }
     var streamingCaptionsTokenURL: URL { url(for: APIEndpoints.streamingCaptionsToken) }
     var streamingCaptionsTranslateURL: URL { url(for: APIEndpoints.streamingCaptionsTranslate) }
-    var createCheckoutSessionURL: URL { url(for: APIEndpoints.createCheckoutSession) }
-    var verifyCheckoutSessionURL: URL { url(for: APIEndpoints.verifyCheckoutSession) }
     var youtubeAudioFetchURL: URL { url(for: APIEndpoints.youtubeAudioFetch) }
     var soundtrackGenerateURL: URL { url(for: APIEndpoints.soundtrackGenerate) }
     var ffmpegCliURL: URL { url(for: APIEndpoints.ffmpegCli) }
@@ -821,17 +819,6 @@ final class APIClient {
         append(crlf)
         append("--\(boundary)--\(crlf)")
         return (body, boundary)
-    }
-
-    /// Server Stripe helper — unused by iOS Paywall (StoreKit only). Kept for API path completeness.
-    func createCheckoutSession(body: Data = Data("{}".utf8)) async throws -> CreateCheckoutSessionResponse {
-        let data = try await postAuthorized(url: createCheckoutSessionURL, body: body)
-        return try decoder.decode(CreateCheckoutSessionResponse.self, from: data)
-    }
-
-    func verifyCheckoutSession(body: Data) async throws -> VerifyCheckoutSessionResponse {
-        let data = try await postAuthorized(url: verifyCheckoutSessionURL, body: body)
-        return try decoder.decode(VerifyCheckoutSessionResponse.self, from: data)
     }
 
     private func postAuthorized(url: URL, body: Data, contentType: String = "application/json") async throws -> Data {

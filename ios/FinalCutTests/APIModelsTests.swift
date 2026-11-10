@@ -24,8 +24,6 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(client.generateCaptionsURL.absoluteString, "https://grepawk.com/api/generate-captions")
         XCTAssertEqual(client.generateCaptionsDiarizedURL.absoluteString, "https://grepawk.com/api/generate-captions-diarized")
         XCTAssertEqual(client.translateCaptionsURL.absoluteString, "https://grepawk.com/api/translate-captions")
-        XCTAssertEqual(client.createCheckoutSessionURL.absoluteString, "https://grepawk.com/api/create-checkout-session")
-        XCTAssertEqual(client.verifyCheckoutSessionURL.absoluteString, "https://grepawk.com/api/verify-checkout-session")
         XCTAssertEqual(client.sampleAccessTokenURL.absoluteString, "https://grepawk.com/api/sample-access-token")
         XCTAssertEqual(client.mobileGoogleAuthURL.absoluteString, "https://grepawk.com/api/auth/mobile/google")
         XCTAssertEqual(client.authGoogleURL.absoluteString, "https://grepawk.com/auth/google")
