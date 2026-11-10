@@ -1,6 +1,7 @@
 # iOS unit tests — gate for ios/** PRs (FinalCutTests).
 # Default runs execute only a smoke set (~10%: pure-logic suites, no UI tests);
-# dispatch manually with suite=full to run the entire suite.
+# dispatch manually with suite=full to run all FinalCutTests then FinalCutUITests
+# as separate xcodebuild steps (unit first) so a UI hang cannot block unit tests.
 name: iOS Unit Tests
 
 on:
@@ -86,7 +87,8 @@ jobs:
         # UI tests check that the on-screen keyboard hides; a connected hardware keyboard hides it anyway.
         run: defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
 
-      - name: Run tests (smoke set by default; full suite on dispatch with suite=full)
+      - name: Run unit tests (smoke set by default; all FinalCutTests on dispatch with suite=full)
+        timeout-minutes: 25
         working-directory: ios
         env:
           SUITE: ${{ inputs.suite }}
@@ -96,7 +98,6 @@ jobs:
           if [[ "$SUITE" == "full" ]]; then
             ONLY_TESTING=(
               -only-testing:FinalCutTests
-              -only-testing:FinalCutUITests
             )
           else
             # Smoke set (~10%): pure-logic suites only — no media rendering,
@@ -115,21 +116,55 @@ jobs:
             -scheme FinalCut \
             -destination "${{ steps.sim.outputs.destination }}" \
             "${ONLY_TESTING[@]}" \
-            -resultBundlePath TestResults.xcresult \
+            -test-timeouts-enabled YES \
+            -maximum-test-execution-time-allowance 300 \
+            -resultBundlePath TestResults-unit.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      # Separate xcodebuild so a stuck UI test runner cannot block FinalCutTests.
+      # Run 42772026875 used one invocation for both targets: UI finished at 07:03:30Z
+      # then xcodebuild sat idle until the 45-min job timeout; unit tests never ran.
+      - name: Run UI tests
+        if: ${{ inputs.suite == 'full' }}
+        timeout-minutes: 15
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          echo "Suite: full -> -only-testing:FinalCutUITests"
+          xcodebuild \
+            -project FinalCut.xcodeproj \
+            -scheme FinalCut \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -only-testing:FinalCutUITests \
+            -test-timeouts-enabled YES \
+            -maximum-test-execution-time-allowance 300 \
+            -resultBundlePath TestResults-ui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             test
 
       - name: Print test failure details
         if: failure()
         working-directory: ios
-        run: xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json
+        run: |
+          set -euo pipefail
+          for b in TestResults-unit.xcresult TestResults-ui.xcresult; do
+            if [[ -d "$b" ]]; then
+              echo "::group::$b"
+              xcrun xcresulttool get test-results summary --path "$b" --format json || true
+              echo "::endgroup::"
+            fi
+          done
 
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ios-test-results
-          path: ios/TestResults.xcresult
+          path: |
+            ios/TestResults-unit.xcresult
+            ios/TestResults-ui.xcresult
           if-no-files-found: ignore
 
   build-xcode26:
