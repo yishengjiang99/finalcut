@@ -27,3 +27,6 @@ playwright-report/
 .cache/ffmpeg-source/
 v2/public/vendor/
 .cache
+# Python bytecode
+__pycache__/
+*.pyc
