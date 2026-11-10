@@ -18,6 +18,7 @@ import { lyricCaptionsRouter } from './src/server/lyricCaptions.js';
 import { streamingCaptionsRouter } from './src/server/streamingCaptions.js';
 import { clientLogRouter } from './src/server/clientLog.js';
 import { createHealthRouter } from './src/server/health.js';
+import { jsonBodyParser } from './src/server/bodyLimits.js';
 import { iosSuggestionsRouter } from './src/server/iosSuggestions.js';
 import { iosSuggestionsAdminRouter } from './src/server/iosSuggestionsAdmin.js';
 import { filmcraftAgentRouter } from './src/server/filmcraftAgent.js';
@@ -78,7 +79,8 @@ app.use(stripeWebhookRouter);
 // Client debug events: its own 16 KB JSON parser, mounted before the large global one.
 app.use(clientLogRouter);
 
-app.use(express.json({ limit: '950mb' }));
+// 1 MB JSON by default; the few routes that carry big JSON get more (src/server/bodyLimits.js).
+app.use(jsonBodyParser());
 
 app.use(authRouter);
 app.use(stripeRouter);
