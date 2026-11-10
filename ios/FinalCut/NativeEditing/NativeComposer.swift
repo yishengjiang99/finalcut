@@ -82,13 +82,25 @@ enum NativeComposer {
             }
         }
 
-        // Audio: gain > 1 needs an offline render (the audio mix clamps at 1.0).
+        // Audio: gain > 1 and `audio_effect` need an offline render (the audio mix clamps at 1.0
+        // and cannot host AVAudioEngine units). Soundtrack is added after so it is never baked in.
         let gain = stack.ops.reduce(1.0) { acc, op in
             if case .volume(let v) = op { return acc * v }
             return acc
         }
-        if gain > 1.0001, let track = audioTrack {
-            let rendered = try await AudioRenderer.renderGain(composition: composition, track: track, gain: Float(gain))
+        let audioEffects: [AudioEffectOp] = stack.ops.compactMap {
+            if case .audioEffect(let e) = $0 { return e }
+            return nil
+        }
+        if (!audioEffects.isEmpty || gain > 1.0001), let track = audioTrack {
+            let rendered: URL
+            if audioEffects.isEmpty {
+                rendered = try await AudioRenderer.renderGain(composition: composition, track: track, gain: Float(gain))
+            } else {
+                rendered = try await GroupedAudioRenderer.render(
+                    composition: composition, track: track, effects: audioEffects, gain: Float(max(gain, 1))
+                )
+            }
             let renderedAsset = AVURLAsset(url: rendered)
             if let renderedTrack = try await renderedAsset.loadTracks(withMediaType: .audio).first {
                 let renderedRange = try await renderedTrack.load(.timeRange)
@@ -121,7 +133,8 @@ enum NativeComposer {
             }
         }
 
-        let mixVolume = Float(min(gain, 1))
+        // Gain above 1 was baked into the offline render (alone or with audio_effect).
+        let mixVolume = Float((!audioEffects.isEmpty && gain > 1.0001) ? 1 : min(gain, 1))
         let audioMix = makeAudioMix(
             track: audioTrack, volume: mixVolume,
             soundtrackTrack: soundtrackTrack,

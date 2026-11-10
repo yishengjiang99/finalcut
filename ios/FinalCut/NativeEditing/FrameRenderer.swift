@@ -17,6 +17,8 @@ struct FrameRenderer: @unchecked Sendable {
     /// Lyric / translated captions (cloud transcription), pre-rendered per line.
     let lyric: LyricCaptionTrack?
     private let lyricImages: [Int: LyricCaptionImage]
+    /// Reused Vision requests for `segment` (temporal smoothing on video).
+    private let segmentSession: SegmentSession
 
     init(ops: [NativeOp], sourceSize: CGSize, captions: [CaptionCue] = [], lyric: LyricCaptionTrack? = nil) {
         let frameOps = ops.filter(\.isFrame)
@@ -46,6 +48,7 @@ struct FrameRenderer: @unchecked Sendable {
             }
         }
         lyricImages = lyricLines
+        segmentSession = SegmentSession()
     }
 
     /// Canvas size after all frame ops (even-rounded for H.264).
@@ -77,20 +80,27 @@ struct FrameRenderer: @unchecked Sendable {
 
     /// Runs the chain. `image` must have its extent at the origin with size `sourceSize`.
     func apply(to input: CIImage) -> CIImage {
+        applyOps(to: input, time: 0)
+    }
+
+    func applyOps(to input: CIImage, time: Double) -> CIImage {
         var image = input.transformed(by: CGAffineTransform(translationX: -input.extent.origin.x, y: -input.extent.origin.y))
         var size = sourceSize
         for (index, op) in ops.enumerated() {
-            image = Self.apply(op, to: image, size: size, text: textImages[index])
+            image = Self.apply(op, to: image, size: size, text: textImages[index], time: time, session: segmentSession)
             size = Self.size(after: op, from: size)
             image = image.cropped(to: CGRect(origin: .zero, size: size))
         }
+        // Don't flatten alpha when the last visual op is background removal (photos export with transparency).
+        let removedBackground = ops.contains { if case .segment(let s) = $0, s.action == "remove_background" { return true }; return false }
+        if removedBackground { return image }
         let black = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: size))
         return image.composited(over: black)
     }
 
     /// The chain plus the caption active at `time` (seconds on the final timeline).
     func apply(to input: CIImage, time: Double) -> CIImage {
-        let image = apply(to: input)
+        let image = applyOps(to: input, time: time)
         if let lyric {
             guard let index = lyric.lineIndex(at: time), let rendered = lyricImages[index] else { return image }
             return rendered.image
@@ -135,7 +145,7 @@ struct FrameRenderer: @unchecked Sendable {
         return CIImage(cgImage: cg)
     }
 
-    private static func apply(_ op: NativeOp, to image: CIImage, size: CGSize, text: CIImage?) -> CIImage {
+    private static func apply(_ op: NativeOp, to image: CIImage, size: CGSize, text: CIImage?, time: Double, session: SegmentSession) -> CIImage {
         let w = size.width, h = size.height
         switch op {
         case .crop(let x, let y, let cw, let ch):
@@ -192,6 +202,9 @@ struct FrameRenderer: @unchecked Sendable {
             guard let text else { return image }
             let ciY = h - CGFloat(y) - text.extent.height
             return text.transformed(by: CGAffineTransform(translationX: CGFloat(x), y: ciY)).composited(over: image)
+
+        case .channelMixer, .colorAdjust, .applyFilter, .stylize, .blurSharpen, .lut, .vignetteGrain, .segment:
+            return GroupedEffectRenderer.apply(op, to: image, size: size, time: time, session: session)
 
         default:
             return image
@@ -254,7 +267,7 @@ struct FrameRenderer: @unchecked Sendable {
         }
     }
 
-    private static func blend(_ top: CIImage, over bottom: CIImage, amount: Double) -> CIImage {
+    static func blend(_ top: CIImage, over bottom: CIImage, amount: Double) -> CIImage {
         let faded = top.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: amount)])
         return faded.composited(over: bottom)
     }

@@ -19,6 +19,15 @@ enum NativeOp: Equatable, Sendable {
     case hue(degrees: Double)
     case colorFilter(filter: String, intensity: Double)
     case text(String, x: Int, y: Int, fontSize: Int, color: RGBAColor)
+    // Grouped effect tools (docs/ios/ON_DEVICE_TOOLS.md §9; src/server/iosGroupedTools.js).
+    case channelMixer(ChannelMixerOp)
+    case colorAdjust(ColorAdjustOp)
+    case applyFilter(ApplyFilterOp)
+    case stylize(StylizeOp)
+    case blurSharpen(BlurSharpenOp)
+    case lut(LutOp)
+    case vignetteGrain(VignetteGrainOp)
+    case segment(SegmentOp)
     // Audio (video only)
     case volume(Double)
     case fade(isIn: Bool, duration: Double, start: Double?)
@@ -26,6 +35,7 @@ enum NativeOp: Equatable, Sendable {
     /// played from `startOffset` and trimmed to the video's length by the composer;
     /// the original audio is scaled to `originalVolume` (0 = replaced by the song).
     case soundtrack(file: URL, startOffset: Double, originalVolume: Double)
+    case audioEffect(AudioEffectOp)
     // Output settings (applied on export)
     case outputFormat(String)
     /// Burned-in captions (on-device `generate_captions`), timed on the timeline at the
@@ -41,7 +51,8 @@ enum NativeOp: Equatable, Sendable {
 
     var isFrame: Bool {
         switch self {
-        case .crop, .rotate, .flipHorizontal, .flipVertical, .resize, .pad, .colorControls, .hue, .colorFilter, .text:
+        case .crop, .rotate, .flipHorizontal, .flipVertical, .resize, .pad, .colorControls, .hue, .colorFilter, .text,
+             .channelMixer, .colorAdjust, .applyFilter, .stylize, .blurSharpen, .lut, .vignetteGrain, .segment:
             return true
         default:
             return false
@@ -49,7 +60,7 @@ enum NativeOp: Equatable, Sendable {
     }
 
     var isAudio: Bool {
-        switch self { case .volume, .fade, .soundtrack: return true; default: return false }
+        switch self { case .volume, .fade, .soundtrack, .audioEffect: return true; default: return false }
     }
 }
 
@@ -177,12 +188,16 @@ enum NativeToolParser {
         "adjust_audio_volume", "audio_fade", "get_video_dimensions", "get_supported_formats",
         "convert_video_format", "convert_image_format", "generate_captions", "lyric_captions",
         "youtube_soundtrack", "add_soundtrack",
+        "channel_mixer", "color_adjust", "apply_filter", "stylize", "blur_sharpen",
+        "lut", "vignette_grain", "segment", "audio_effect",
     ]
 
     static let photoTools: Set<String> = [
         "crop_video", "rotate_video", "flip_video_horizontal", "flip_video_vertical", "resize_video",
         "resize_video_preset", "adjust_brightness", "adjust_contrast", "adjust_saturation", "adjust_hue",
         "apply_color_filter", "add_text", "convert_image_format", "get_video_dimensions", "get_supported_formats",
+        "channel_mixer", "color_adjust", "apply_filter", "stylize", "blur_sharpen",
+        "lut", "vignette_grain", "segment",
     ]
 
     static let colorFilters: Set<String> = [
@@ -382,6 +397,10 @@ enum NativeToolParser {
             if f == "jpeg" { f = "jpg" }
             guard f == "jpg" || f == "png" else { return .failure(.unsupportedOnDevice) }
             return op(.outputFormat(f))
+
+        case "channel_mixer", "color_adjust", "apply_filter", "stylize", "blur_sharpen",
+             "lut", "vignette_grain", "segment", "audio_effect":
+            return GroupedToolParser.plan(tool: tool, arguments: a, canvas: canvas)
 
         default:
             return .failure(.unsupportedOnDevice)
