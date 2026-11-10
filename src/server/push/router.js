@@ -16,7 +16,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { attachBearerUser } from '../middleware.js';
 import { createMysqlPushStore } from './store.js';
-import { runLifecycleTick, lifecycleReport, effectiveMode, MODES } from './lifecycle.js';
+import { runLifecycleTick, lifecycleReport, effectiveMode } from './lifecycle.js';
 import { generateCopy } from './copy.js';
 import { SEGMENTS } from './segments.js';
 
@@ -107,13 +107,9 @@ router.post('/api/push/lifecycle/tick', admin, wrap(async (req, res) => {
 
 router.post('/api/push/lifecycle/ops', admin, wrap(async (req, res) => {
   const store = getPushStore();
-  const { killSwitch, mode } = req.body || {};
+  const { killSwitch } = req.body || {};
+  // Safety breaker only (the auto guard sets it too); there is no mode switch.
   if (killSwitch === 'on' || killSwitch === 'off') await store.setOp('kill_switch', killSwitch === 'on' ? 'on' : null);
-  if (mode === null) await store.setOp('mode', null);
-  else if (typeof mode === 'string') {
-    if (!MODES.includes(mode)) return res.status(400).json({ error: 'invalid mode' });
-    await store.setOp('mode', mode); // effectiveMode() only lets this downgrade the env mode
-  }
   res.json(await effectiveMode(store));
 }));
 

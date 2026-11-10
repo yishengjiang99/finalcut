@@ -1,7 +1,6 @@
-// FinalCap push lifecycle engine. Safe by default:
-//   PUSH_LIFECYCLE_MODE = off | dry_run (default) | sandbox | allowlist | live
-//   PUSH_KILL_SWITCH=true (env) or ops kill_switch=on (runtime) → nothing at all is evaluated or sent
-//   runtime ops "mode" can only DOWNGRADE the env mode (never upgrade to live)
+// FinalCap push lifecycle engine. Always live (no mode / allowlist / env kill switch). Safety:
+//   the auto guard below (and the admin ops route) can set ops kill_switch=on → nothing is evaluated
+//   or sent until it is cleared; previews and the admin tick run with modeOverride 'dry_run'
 //   caps: 1 real push per 24 h, 3 per rolling 7 days per user; send window 10:00–20:00 in the
 //   device's own time zone; dedupe per (user, dedupe key); promotional segments need the in-app
 //   "Tips & offers" opt-in (App Store Guideline 4.5.4); dead tokens (410 / Unregistered /
@@ -11,31 +10,18 @@ import { featuresFrom, matchSegments, copyFactsFor } from './segments.js';
 import { generateCopy } from './copy.js';
 import { sendApns, isApnsConfigured, isDeadTokenResult } from './apns.js';
 
-export const MODES = ['off', 'dry_run', 'sandbox', 'allowlist', 'live'];
-const RANK = { off: 0, dry_run: 1, sandbox: 2, allowlist: 3, live: 4 };
+export const MODES = ['off', 'dry_run', 'live'];
 export const CAPS = Object.freeze({ perDay: 1, perWeek: 3 });
 export const SEND_WINDOW = Object.freeze({ startHour: 10, endHour: 20 });
 const MAX_REAL_SENDS_PER_TICK = 200;
 const H = 3600_000;
 
-export function envMode(env = process.env) {
-  const m = String(env.PUSH_LIFECYCLE_MODE || 'dry_run').trim().toLowerCase();
-  return MODES.includes(m) ? m : 'dry_run';
-}
-export function envKillSwitch(env = process.env) {
-  return /^(1|true|on|yes)$/i.test(String(env.PUSH_KILL_SWITCH || '').trim());
-}
-export function allowlist(env = process.env) {
-  return new Set(String(env.PUSH_LIFECYCLE_ALLOWLIST || '').split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean));
-}
-export async function effectiveMode(store, env = process.env) {
-  if (envKillSwitch(env)) return { mode: 'off', killSwitch: 'env' };
+// Live unless the safety breaker (ops kill_switch, set by autoGuard or an admin) is on.
+export async function effectiveMode(store) {
   let ops = {};
   try { ops = await store.getOps(); } catch { /* DB down → be conservative */ return { mode: 'off', killSwitch: 'ops_unreadable' }; }
   if (ops.kill_switch === 'on') return { mode: 'off', killSwitch: 'ops' };
-  const e = envMode(env);
-  const o = MODES.includes(ops.mode) ? ops.mode : null;
-  return { mode: o && RANK[o] < RANK[e] ? o : e, killSwitch: null, envMode: e, opsMode: o };
+  return { mode: 'live', killSwitch: null };
 }
 
 export function localHour(tz, now = new Date()) {
@@ -72,7 +58,6 @@ export async function runLifecycleTick({ store, send = sendApns, copy = generate
     if (!ops.live_since) await store.setOp('live_since', now.toISOString());
   }
   const skip = (r) => { summary.skipped[r] = (summary.skipped[r] || 0) + 1; };
-  const allow = allowlist(env);
   const apnsReady = isApnsConfigured(env);
   const paywallEnabled = String(env.FREE_EDITS_IOS || '').trim().toLowerCase() !== 'unlimited';
 
@@ -102,12 +87,7 @@ export async function runLifecycleTick({ store, send = sendApns, copy = generate
     const facts = copyFactsFor(f, m);
     const text = await copy(m.segment.id, m.announcement ? `${m.segment.goal} Feature: ${m.announcement.fact}` : m.segment.goal, facts, { now });
 
-    // Who actually receives a real push in this mode?
-    const inAllow = allow.has(String(c.userId)) || (c.installId && allow.has(String(c.installId).toLowerCase()));
-    let targets = [];
-    if (mode === 'live') targets = c.devices;
-    else if (mode === 'allowlist' && inAllow) targets = c.devices;
-    else if (mode === 'sandbox') targets = c.devices.filter((d) => d.environment === 'sandbox');
+    const targets = mode === 'live' ? c.devices : [];
     const real = targets.length > 0 && apnsReady && realSends < MAX_REAL_SENDS_PER_TICK;
 
     const sendId = crypto.randomUUID();
@@ -208,7 +188,7 @@ export async function lifecycleReport(store, { days = 7, now = new Date(), env =
 let timer = null;
 /** In-process scheduler (every 10 min, unref'd). Only real work when mode != off; dedupe key is the cross-process lock. */
 export function scheduleLifecycle(storeFactory, { intervalMs = 10 * 60_000 } = {}) {
-  if (timer || process.env.NODE_ENV === 'test' || String(process.env.PUSH_LIFECYCLE_SCHEDULER || 'true').toLowerCase() === 'false') return;
+  if (timer || process.env.NODE_ENV === 'test') return;
   let running = false;
   let lastPurge = 0;
   const tick = async () => {

@@ -89,24 +89,34 @@ describe('lifecycle engine', () => {
   const sendSpy = () => vi.fn(async () => ({ ok: true, status: 200 }));
   const apnsEnv = { APNS_KEY_ID: 'K', APNS_TEAM_ID: 'T', APNS_P8_CONTENTS: 'x' };
 
-  it('defaults to dry_run: logs would_send, never calls APNs, dedupes the next tick', async () => {
+  it('dry_run override (previews / admin tick): logs would_send, never calls APNs, dedupes the next dry tick', async () => {
     const store = world(); const send = sendSpy();
-    const s = await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv } });
+    const s = await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv }, modeOverride: 'dry_run' });
     expect(s.mode).toBe('dry_run');
     expect(s.wouldSend).toBe(1); expect(s.sent).toBe(0); expect(send).not.toHaveBeenCalled();
-    const s2 = await runLifecycleTick({ store, send, copy: template, now: new Date(+NOW + 2 * D), env: {} });
+    const s2 = await runLifecycleTick({ store, send, copy: template, now: new Date(+NOW + 2 * D), env: {}, modeOverride: 'dry_run' });
     expect(s2.bySegment.onboarding_d1).toBeUndefined();
   });
-  it('kill switch (env or ops) stops everything; ops can only downgrade', async () => {
+  it('always live: the old env switches are ignored', async () => {
+    for (const env of [{}, { PUSH_LIFECYCLE_MODE: 'off' }, { PUSH_LIFECYCLE_MODE: 'dry_run' }, { PUSH_KILL_SWITCH: 'true' }, { PUSH_LIFECYCLE_MODE: 'allowlist', PUSH_LIFECYCLE_ALLOWLIST: 'someone-else' }]) {
+      const store = world(); const send = sendSpy();
+      const s = await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv, ...env } });
+      expect(s.mode).toBe('live'); expect(s.sent).toBe(1); expect(send).toHaveBeenCalledTimes(1);
+    }
+  });
+  it('without APNs configured nothing real is sent (logged as would_send)', async () => {
+    const store = world(); const send = sendSpy();
+    const s = await runLifecycleTick({ store, send, copy: template, now: NOW, env: {} });
+    expect(s.mode).toBe('live'); expect(s.sent).toBe(0); expect(s.wouldSend).toBe(1); expect(send).not.toHaveBeenCalled();
+  });
+  it('safety breaker (ops kill_switch) stops everything; ops mode is ignored', async () => {
     const store = world();
-    expect((await runLifecycleTick({ store, copy: template, now: NOW, env: { PUSH_KILL_SWITCH: 'true' } })).evaluated).toBe(0);
     await store.setOp('kill_switch', 'on');
-    expect((await runLifecycleTick({ store, copy: template, now: NOW, env: { PUSH_LIFECYCLE_MODE: 'live' } })).mode).toBe('off');
+    const s = await runLifecycleTick({ store, copy: template, now: NOW, env: {} });
+    expect(s.mode).toBe('off'); expect(s.evaluated).toBe(0);
     await store.setOp('kill_switch', null);
-    await store.setOp('mode', 'live');
-    expect((await effectiveMode(store, { PUSH_LIFECYCLE_MODE: 'dry_run' })).mode).toBe('dry_run');
     await store.setOp('mode', 'dry_run');
-    expect((await effectiveMode(store, { PUSH_LIFECYCLE_MODE: 'live' })).mode).toBe('dry_run');
+    expect((await effectiveMode(store)).mode).toBe('live');
   });
   it('quiet hours in the device time zone', async () => {
     const s = await runLifecycleTick({ store: world({ tz: 'Asia/Tokyo' }), copy: template, now: NOW, env: {} }); // 03:00 in Tokyo
@@ -117,22 +127,20 @@ describe('lifecycle engine', () => {
     expect((await runLifecycleTick({ store: world({ ageDays: 60, edits }), copy: template, now: NOW, env: {} })).skipped.no_segment).toBe(1);
     expect((await runLifecycleTick({ store: world({ ageDays: 60, edits, marketing: true }), copy: template, now: NOW, env: {} })).bySegment).toEqual({ inactive_7: 1 });
   });
-  it('allowlist mode sends only to allowlisted installs, caps at 1/day, prunes dead tokens', async () => {
+  it('sends live, caps at 1/day, prunes dead tokens', async () => {
     const store = world(); const send = sendSpy();
-    const off = await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv, PUSH_LIFECYCLE_MODE: 'allowlist', PUSH_LIFECYCLE_ALLOWLIST: 'someone-else' } });
-    expect(off.sent).toBe(0); expect(send).not.toHaveBeenCalled();
-    const on = await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv, PUSH_LIFECYCLE_MODE: 'allowlist', PUSH_LIFECYCLE_ALLOWLIST: 'inst-1' } });
+    const on = await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv } });
     expect(on.sent).toBe(1);
     const payload = send.mock.calls[0][1];
     expect(payload).toMatchObject({ type: 'lifecycle', segment: 'onboarding_d1', destination: 'editor' });
     expect(payload.aps.alert.title.length).toBeLessThanOrEqual(40);
     // cap: an hour later nothing else goes out
     await store.recordEvent(1, 'paywall_view', null, new Date(+NOW - 30 * 3600_000));
-    const again = await runLifecycleTick({ store, send, copy: template, now: new Date(+NOW + 3600_000), env: { ...apnsEnv, PUSH_LIFECYCLE_MODE: 'live' } });
+    const again = await runLifecycleTick({ store, send, copy: template, now: new Date(+NOW + 3600_000), env: { ...apnsEnv } });
     expect(again.sent).toBe(0);
     // dead token
     const dead = world();
-    const s = await runLifecycleTick({ store: dead, send: async () => ({ ok: false, status: 410, reason: 'Unregistered' }), copy: template, now: NOW, env: { ...apnsEnv, PUSH_LIFECYCLE_MODE: 'live' } });
+    const s = await runLifecycleTick({ store: dead, send: async () => ({ ok: false, status: 410, reason: 'Unregistered' }), copy: template, now: NOW, env: { ...apnsEnv } });
     expect(s.pruned).toBe(1); expect(s.failed).toBe(1);
     expect((await dead.listCandidates()).length).toBe(0);
   });
@@ -154,7 +162,7 @@ describe('lifecycle engine', () => {
       g = await autoGuard(store, { now: new Date(), env: {} });
     } finally { vi.useRealTimers(); }
     expect(g.optOuts).toBe(2); expect(g.tripped).toBe(true);
-    expect((await effectiveMode(store, { PUSH_LIFECYCLE_MODE: 'live' })).mode).toBe('off');
+    expect((await effectiveMode(store)).mode).toBe('off');
     expect((await store.getOps()).auto_kill).toMatch(/opt_out_rate/);
   });
   it('auto guard trips on APNs errors >20% of 10+ real sends; uninstalled tokens do not count', async () => {
@@ -170,7 +178,7 @@ describe('lifecycle engine', () => {
   });
   it('report computes open rate and return-within-24h from real sends', async () => {
     const store = world(); const send = sendSpy();
-    await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv, PUSH_LIFECYCLE_MODE: 'live' } });
+    await runLifecycleTick({ store, send, copy: template, now: NOW, env: { ...apnsEnv } });
     const sid = send.mock.calls[0][1].send_id;
     await store.recordEvent(1, 'push_opened', sid, new Date(+NOW + 60_000));
     await store.recordEvent(1, 'app_open', null, new Date(+NOW + 120_000));
@@ -204,13 +212,15 @@ describe('push routes', () => {
     expect((await post(`${base}/api/push/events`, { event: 'export_done' }, { authorization: 'Bearer u7' })).status).toBe(202);
     expect(store._events.map((e) => e.event)).toEqual(['marketing_opt_in', 'export_done']);
   });
-  it('admin routes are 404 without the secret; tick via HTTP is forced dry-run', async () => {
+  it('admin routes are 404 without the secret; report shows live; tick via HTTP is forced dry-run', async () => {
     const store = world();
     const base = await serve(store);
     expect((await fetch(`${base}/api/push/lifecycle/report`)).status).toBe(404);
     process.env.PUSH_ADMIN_SECRET = 's'.repeat(32);
     expect((await fetch(`${base}/api/push/lifecycle/report`, { headers: { 'x-push-admin-secret': 'wrong'.padEnd(32, 'x') } })).status).toBe(404);
     const rep = await fetch(`${base}/api/push/lifecycle/report`, { headers: { 'x-push-admin-secret': 's'.repeat(32) } });
-    expect((await rep.json()).mode).toBe('dry_run');
+    expect((await rep.json()).mode).toBe('live');
+    const tick = await fetch(`${base}/api/push/lifecycle/tick`, { method: 'POST', headers: { 'x-push-admin-secret': 's'.repeat(32), 'content-type': 'application/json' }, body: '{}' });
+    expect((await tick.json()).mode).toBe('dry_run');
   });
 });

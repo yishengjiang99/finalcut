@@ -7,7 +7,6 @@
 #                    /etc/finalcut/AuthKey_<id>.p8 (root:finalcut 0640), sets APNS_KEY_ID /
 #                    APNS_TEAM_ID / APNS_P8_PATH / FINALCAP_APNS_TOPIC in the app .env (backup
 #                    kept), restarts finalcut, then runs apns_check as the service user
-#   set_mode       — sets PUSH_LIFECYCLE_MODE in the app .env (backup kept) and restarts finalcut
 #   kill_switch_on | kill_switch_off
 name: Push lifecycle (FinalCap)
 
@@ -19,13 +18,8 @@ on:
       action:
         description: 'what to run'
         type: choice
-        options: [report, monitor, dry_run_tick, live_tick, guard, apns_check, samples, configure_apns, set_mode, kill_switch_on, kill_switch_off]
+        options: [report, monitor, dry_run_tick, live_tick, guard, apns_check, samples, configure_apns, kill_switch_on, kill_switch_off]
         default: report
-      mode:
-        description: 'set_mode only: PUSH_LIFECYCLE_MODE'
-        type: choice
-        options: [dry_run, off, allowlist, live]
-        default: dry_run
       days:
         description: 'report window (days)'
         default: '7'
@@ -59,12 +53,10 @@ jobs:
       - name: Run ${{ inputs.action || 'monitor' }}
         env:
           ACTION: ${{ inputs.action || 'monitor' }}
-          MODE: ${{ inputs.mode || 'dry_run' }}
           DAYS: ${{ inputs.days || '7' }}
         run: |
           set -euo pipefail
-          [[ "$ACTION" =~ ^(report|monitor|dry_run_tick|live_tick|guard|apns_check|samples|configure_apns|set_mode|kill_switch_on|kill_switch_off)$ ]] || exit 2
-          [[ "$MODE" =~ ^(dry_run|off|allowlist|live)$ ]] || exit 2
+          [[ "$ACTION" =~ ^(report|monitor|dry_run_tick|live_tick|guard|apns_check|samples|configure_apns|kill_switch_on|kill_switch_off)$ ]] || exit 2
           [[ "$DAYS" =~ ^[0-9]{1,2}$ ]] || DAYS=7
           cat > remote.sh <<'REMOTE'
           set -euo pipefail
@@ -97,15 +89,12 @@ jobs:
               echo "env keys set: APNS_KEY_ID APNS_TEAM_ID APNS_P8_PATH FINALCAP_APNS_TOPIC"
               restart
               run apns_check ;;
-            set_mode)
-              backup; setkv PUSH_LIFECYCLE_MODE "$MODE"; echo "PUSH_LIFECYCLE_MODE=$MODE"; restart
-              run report 1 | head -c 400; echo ;;
             monitor) echo '{"guard":'; run guard; echo ',"report":'; run report "$DAYS"; echo '}' ;;
             report) run report "$DAYS" ;;
             *) run "$ACTION" ;;
           esac
           REMOTE
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TARGET" "APP_DIR='$APP_DIR' ACTION='$ACTION' MODE='$MODE' DAYS='$DAYS' bash -s" < remote.sh | tee out.txt
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TARGET" "APP_DIR='$APP_DIR' ACTION='$ACTION' DAYS='$DAYS' bash -s" < remote.sh | tee out.txt
           if [[ "$ACTION" == monitor ]] && jq -e . out.txt >/dev/null 2>&1; then
             { echo '### Push lifecycle (FinalCap)'; echo '```json'; jq '{mode: .report.mode, killSwitch: .report.killSwitch, ops: .report.ops, kpis: .report.kpis, guard: .guard, bySegment: .report.bySegment}' out.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             if jq -e '.report.killSwitch != null or .guard.tripped == true' out.txt >/dev/null; then

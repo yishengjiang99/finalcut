@@ -1,8 +1,8 @@
 // GBK Composer Pro billing lifecycle (#121, #122): signed portal links, the two lifecycle emails,
 // and the funnel events the GBK report reads (GET /api/compose/events).
 //
-// Emails go through Resend's HTTP API (no SDK). They are OFF unless COMPOSE_LIFECYCLE_EMAILS=1,
-// and also need RESEND_API_KEY + COMPOSE_EMAIL_FROM. Events are recorded either way.
+// Emails go through Resend's HTTP API (no SDK). They are sent whenever RESEND_API_KEY and
+// COMPOSE_EMAIL_FROM are configured (no on/off flag). Events are recorded either way.
 import { createHmac, timingSafeEqual } from 'crypto';
 import { COMPOSE_PRODUCT } from './products.js';
 import { renderEmail } from './emailTemplate.js';
@@ -50,7 +50,7 @@ export function verifyUnsubscribeLink({ email, sig: got } = {}, env = process.en
 }
 export const unsubscribeRef = (email) => `unsub:${String(email).toLowerCase()}`;
 
-// ---- email copy (Yisheng approves before COMPOSE_LIFECYCLE_EMAILS=1) ----
+// ---- email copy ----
 const fmtDate = (unix) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 
 // Marketing-type (sent only with promotional consent): carries an unsubscribe link + headers.
@@ -114,7 +114,7 @@ export function welcomeEmail({ planLabel, trialEnd = null, manageUrl }) {
 const PLAN_LABELS = { pro_monthly: 'monthly ($5.99/month)', pro_yearly: 'yearly ($47.99/year)', lifetime: 'lifetime' };
 
 export function emailsEnabled(env = process.env) {
-  return env.COMPOSE_LIFECYCLE_EMAILS === '1' && Boolean(env.RESEND_API_KEY) && Boolean(env.COMPOSE_EMAIL_FROM);
+  return Boolean(env.RESEND_API_KEY) && Boolean(env.COMPOSE_EMAIL_FROM);
 }
 
 export async function sendResendEmail({ to, subject, text, html, headers }, { env = process.env, fetchImpl = fetch } = {}) {
@@ -200,7 +200,7 @@ export async function recordCheckoutCompleted(session, db, { stripe, env = proce
   await db.recordProductEvent({
     product: COMPOSE_PRODUCT, type: isTrial ? 'trial_start' : 'purchase', ref: session.id, email, plan,
     amountCents: session.amount_total || 0, currency: session.currency || null, subscriptionRef: subId || null, occurredAt: at(session.created),
-  });  // Welcome/confirmation email: once per Checkout Session, off unless COMPOSE_LIFECYCLE_EMAILS=1.
+  });  // Welcome/confirmation email: once per Checkout Session.
   const manageUrl = email && signPortalLink(email, env);
   if (manageUrl) {
     const trialEnd = isTrial ? (sub?.trial_end ?? null) : null;
