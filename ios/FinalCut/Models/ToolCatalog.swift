@@ -101,6 +101,15 @@ enum ToolCatalog {
         "adjust_contrast": ["contrast"],
         "flip_video_vertical": [],
         "convert_image_format": ["format"],
+        "channel_mixer": ["preset"],
+        "color_adjust": ["adjust"],
+        "apply_filter": ["name"],
+        "stylize": ["preset"],
+        "blur_sharpen": ["mode"],
+        "lut": ["preset"],
+        "vignette_grain": ["effect"],
+        "segment": ["action"],
+        "audio_effect": ["effect"],
     ]
 
     /// Legacy web `toolFunctions` names → schema names.
@@ -144,6 +153,8 @@ enum ToolCatalog {
         "resize_video", "crop_video", "rotate_video", "flip_video_horizontal", "flip_video_vertical",
         "add_text", "adjust_brightness", "adjust_contrast", "adjust_hue", "adjust_saturation",
         "apply_color_filter", "convert_image_format",
+        "channel_mixer", "color_adjust", "apply_filter", "stylize",
+        "blur_sharpen", "lut", "vignette_grain", "segment",
     ]
 
     static func canonicalName(_ name: String) -> String {

@@ -618,22 +618,12 @@ extension EditorViewModel {
         switch call.name {
         case "crop_video", "rotate_video", "flip_video_horizontal", "flip_video_vertical",
              "adjust_brightness", "adjust_contrast", "adjust_saturation", "adjust_hue",
-             "apply_color_filter", "add_text":
+             "apply_color_filter", "add_text",
+             "channel_mixer", "color_adjust", "apply_filter", "stylize",
+             "blur_sharpen", "lut", "vignette_grain", "segment":
             switch NativeToolParser.plan(tool: call.name, arguments: args, canvas: projectCanvasForParser(project)) {
             case .success(.apply(let op)):
-                let effect: ClipEffect?
-                switch op {
-                case .crop(let x, let y, let w, let h): effect = .crop(x: x, y: y, width: w, height: h)
-                case .rotate(let d): effect = .rotate(degrees: d)
-                case .flipHorizontal: effect = .flipHorizontal
-                case .flipVertical: effect = .flipVertical
-                case .colorControls(let b, let c, let s): effect = .colorControls(brightness: b, contrast: c, saturation: s)
-                case .hue(let d): effect = .hue(degrees: d)
-                case .colorFilter(let f, let i): effect = .colorFilter(filter: f, intensity: i)
-                case .text(let text, let x, let y, let size, _): effect = .text(text: text, x: x, y: y, fontSize: size, color: "white")
-                default: effect = nil
-                }
-                guard let target = selected, let effect else { return nil }
+                guard let target = selected, let effect = ClipEffect(nativeOp: op) else { return nil }
                 return await done(.applyClipEffect(clipID: target.id, effect: effect))
             default:
                 return nil
@@ -677,6 +667,14 @@ extension EditorViewModel {
         case "adjust_audio_volume":
             guard let clip = selected, let volume = args["volume"]?.doubleValue else { return nil }
             return await done(.setVideoClipOriginalAudio(clipID: clip.id, enabled: volume > 0, gain: volume))
+        case "audio_effect":
+            switch NativeToolParser.plan(tool: call.name, arguments: args, canvas: projectCanvasForParser(project)) {
+            case .success(.apply(let op)):
+                guard let target = selected, case .audioEffect(let effect) = op else { return nil }
+                return await done(.applyAudioEffect(clipID: target.id, effect: effect))
+            default:
+                return nil
+            }
         case "audio_fade":
             guard let clip = selected,
                   let fadeIn = args["fade_in"]?.doubleValue, let fadeOut = args["fade_out"]?.doubleValue else { return nil }

@@ -109,6 +109,10 @@
 		FC5A0B1C2D3E4F5061728302 /* PushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728301 /* PushManager.swift */; };
 		FC5A0B1C2D3E4F5061728304 /* PushManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728303 /* PushManagerTests.swift */; };
 		FC5A0B1C2D3E4F5061728312 /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */; };
+		FC43A1000000000000000011 /* GroupedEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC43A1000000000000000012 /* GroupedEffects.swift */; };
+		FC43A1000000000000000021 /* GroupedEffectRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC43A1000000000000000022 /* GroupedEffectRenderer.swift */; };
+		FC43A1000000000000000031 /* GroupedAudioRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC43A1000000000000000032 /* GroupedAudioRenderer.swift */; };
+		FC43A1000000000000000041 /* GroupedToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC43A1000000000000000042 /* GroupedToolsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -237,6 +241,10 @@
 		FC5A0B1C2D3E4F5061728311 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		FDF99BBA1B92461D91BDB465 /* FinalCutApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalCutApp.swift; sourceTree = "<group>"; };
 		FE21E8673CABC1B000231B1F /* AudioDucking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDucking.swift; sourceTree = "<group>"; };
+		FC43A1000000000000000012 /* GroupedEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedEffects.swift; sourceTree = "<group>"; };
+		FC43A1000000000000000022 /* GroupedEffectRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedEffectRenderer.swift; sourceTree = "<group>"; };
+		FC43A1000000000000000032 /* GroupedAudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedAudioRenderer.swift; sourceTree = "<group>"; };
+		FC43A1000000000000000042 /* GroupedToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedToolsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -327,6 +335,7 @@
 				697C9B433CDD481962E9C53A /* NoUploadAndHeadersTests.swift */,
 				F3F70B4C1048A11E132B7D1E /* NativeToolTests.swift */,
 				4E8C3EA03F6E7577F5BC9738 /* NativeToolParserTests.swift */,
+				FC43A1000000000000000042 /* GroupedToolsTests.swift */,
 				5A1D3B0C0000000000000004 /* SlideshowBuilderTests.swift */,
 				789DFE9E7D256BE002F331A6 /* DictationEndpointerTests.swift */,
 				D8F556E1C2A830B96A1C5F84 /* TopBarLayoutTests.swift */,
@@ -358,6 +367,9 @@
 				70760B1919EAF7E6F1ACA373 /* NativeComposer.swift */,
 				196ECF937E05ECB8FD599582 /* EditStack.swift */,
 				4D9C0D66EA78A564B0C2401F /* FrameRenderer.swift */,
+				FC43A1000000000000000012 /* GroupedEffects.swift */,
+				FC43A1000000000000000022 /* GroupedEffectRenderer.swift */,
+				FC43A1000000000000000032 /* GroupedAudioRenderer.swift */,
 				66D9D1D0EED2C72DF5A85C11 /* NativeOp.swift */,
 				5A1D3B0C0000000000000002 /* SlideshowBuilder.swift */,
 			);
@@ -670,6 +682,9 @@
 				27A13F25654FE765C15EEAD9 /* NativeComposer.swift in Sources */,
 				7CE16CB5EE1B5149089E2480 /* EditStack.swift in Sources */,
 				9DE0038DAD46289881269755 /* FrameRenderer.swift in Sources */,
+				FC43A1000000000000000011 /* GroupedEffects.swift in Sources */,
+				FC43A1000000000000000021 /* GroupedEffectRenderer.swift in Sources */,
+				FC43A1000000000000000031 /* GroupedAudioRenderer.swift in Sources */,
 				E3D6DB142C872E3F67F81CD9 /* NativeOp.swift in Sources */,
 				5A1D3B0C0000000000000001 /* SlideshowBuilder.swift in Sources */,
 				EAF7481D7F6387F416A288A6 /* PhotoLibrarySaver.swift in Sources */,
@@ -724,6 +739,7 @@
 				F3AEEBB2787D7FACC1822FF8 /* NoUploadAndHeadersTests.swift in Sources */,
 				C3E3CC33FE21D6291D0C91E1 /* NativeToolTests.swift in Sources */,
 				4F96A17ADA941170D4D4E555 /* NativeToolParserTests.swift in Sources */,
+				FC43A1000000000000000041 /* GroupedToolsTests.swift in Sources */,
 				5A1D3B0C0000000000000003 /* SlideshowBuilderTests.swift in Sources */,
 				44AB0C1BEE785D20EA104041 /* DictationEndpointerTests.swift in Sources */,
 				C20B004DB7D14DD01FB6F475 /* TopBarLayoutTests.swift in Sources */,

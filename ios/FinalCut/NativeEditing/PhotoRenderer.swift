@@ -24,7 +24,7 @@ enum PhotoRenderer {
     static func render(_ stack: EditStack) throws -> CIImage {
         let source = try sourceImage(stack.base)
         let renderer = FrameRenderer(ops: stack.ops, sourceSize: source.extent.size)
-        return renderer.apply(to: source)
+        return renderer.apply(to: source, time: 0)
     }
 
     /// Preview bitmap (longest side ≤ `maxDimension`).
@@ -41,6 +41,11 @@ enum PhotoRenderer {
 
     /// Output format for export: an explicit `convert_image_format`, else the original.
     static func outputType(for stack: EditStack) -> UTType {
+        let removedBackground = stack.ops.contains {
+            if case .segment(let s) = $0, s.action == "remove_background" { return true }
+            return false
+        }
+        if removedBackground, stack.outputFormat != "jpg" { return .png }
         switch stack.outputFormat {
         case "png": return .png
         case "jpg": return .jpeg

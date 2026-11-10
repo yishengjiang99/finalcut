@@ -126,7 +126,16 @@ extension NativeComposer {
                let sourceAudio = try await source.loadTracks(withMediaType: .audio).first {
                 let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
                 if let audioTrack {
-                    try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: entry.start)
+                    let effects = clip.audioEffects ?? []
+                    if effects.isEmpty {
+                        try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: entry.start)
+                    } else if let baked = try await renderOriginalAudioEffects(
+                        sourceAudio: sourceAudio, sourceRange: sourceRange, effects: effects
+                    ) {
+                        try audioTrack.insertTimeRange(baked.range, of: baked.track, at: entry.start)
+                    } else {
+                        try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: entry.start)
+                    }
                     if abs(clip.speed - 1) > 0.0001 {
                         audioTrack.scaleTimeRange(CMTimeRange(start: entry.start, duration: clip.sourceDuration), toDuration: entry.duration)
                     }
@@ -267,7 +276,7 @@ extension NativeComposer {
                         image = image.transformed(by: visual.transform)
                     }
                     image = image.transformed(by: CGAffineTransform(translationX: -image.extent.origin.x, y: -image.extent.origin.y))
-                    image = visual.renderer.apply(to: image)
+                    image = visual.renderer.apply(to: image, time: CMTimeGetSeconds(t))
                     let frameSize = image.extent.size
                     if frameSize.width > 0, frameSize.height > 0 {
                         let scaleX = renderSize.width / frameSize.width
@@ -377,6 +386,28 @@ extension NativeComposer {
               naturalSize: visual.naturalSize, transform: visual.transform,
               orientedSize: visual.orientedSize,
               opacityStart: max(0, min(1, opacityStart)), opacityEnd: max(0, min(1, opacityEnd)))
+    }
+
+    /// Offline-render stacked `audio_effect` ops on a clip's original audio (same path as NativeComposer).
+    /// The returned asset is kept alive by the caller until `insertTimeRange` completes.
+    private static func renderOriginalAudioEffects(
+        sourceAudio: AVAssetTrack,
+        sourceRange: CMTimeRange,
+        effects: [AudioEffectOp]
+    ) async throws -> (asset: AVURLAsset, track: AVAssetTrack, range: CMTimeRange)? {
+        let offline = AVMutableComposition()
+        guard let offlineTrack = offline.addMutableTrack(
+            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else { return nil }
+        try offlineTrack.insertTimeRange(sourceRange, of: sourceAudio, at: .zero)
+        let url = try await GroupedAudioRenderer.render(
+            composition: offline, track: offlineTrack, effects: effects, gain: 1)
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else { return nil }
+        let renderedRange = try await track.load(.timeRange)
+        let usable = renderedRange.intersection(CMTimeRange(start: .zero, duration: sourceRange.duration))
+        guard usable.duration > .zero else { return nil }
+        return (asset, track, usable)
     }
 }
 

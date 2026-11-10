@@ -16,6 +16,7 @@ import {
   MAX_BODY_BYTES,
 } from '../server/iosSuggestionsAdmin.js';
 import { createIosSuggestionsRouter, createSuggestionsStore, DEFAULT_SUGGESTIONS_PATH } from '../server/iosSuggestions.js';
+import { GROUPED_EFFECTS_MIN_BUILD } from '../server/iosToolAllowlist.js';
 
 const TOKEN = 'test-admin-token-0123456789abcdef-not-real';
 const BASE = '/api/admin/ios-suggestions';
@@ -384,7 +385,8 @@ describe('minBuild per pill (public endpoint and preview)', () => {
     expect(await pub(10)).toEqual(['v-old', 'v-max11']);
     expect(await pub(14)).toEqual(['v-old']);
     expect(await pub(15)).toEqual(['v-old', 'v-min15']);
-    expect(await pub(99)).toEqual(['v-old', 'v-min15']);
+    expect(await pub(GROUPED_EFFECTS_MIN_BUILD - 1)).toEqual(['v-old', 'v-min15']);
+    expect(await pub(GROUPED_EFFECTS_MIN_BUILD)).toEqual(['v-old', 'v-min15', 'v-grouped']);
   });
 
   it('preview shows exactly the public response, plus why each other pill is hidden', async () => {

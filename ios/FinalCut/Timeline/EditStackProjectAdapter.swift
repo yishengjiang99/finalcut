@@ -72,10 +72,15 @@ extension EditStack {
                 clip.effects.append(.colorControls(brightness: b, contrast: c, saturation: s))
             case .hue(let degrees):
                 clip.effects.append(.hue(degrees: degrees))
-            case .colorFilter(let filter, let intensity):
-                clip.effects.append(.colorFilter(filter: filter, intensity: intensity))
+            case .colorFilter, .channelMixer, .colorAdjust, .applyFilter,
+                 .stylize, .blurSharpen, .lut, .vignetteGrain, .segment:
+                if let effect = ClipEffect(nativeOp: op) { clip.effects.append(effect) }
             case .text(let text, let x, let y, let fontSize, _):
                 clip.effects.append(.text(text: text, x: x, y: y, fontSize: fontSize, color: "white"))
+            case .audioEffect(let effect):
+                var list = clip.audioEffects ?? []
+                list.append(effect)
+                clip.audioEffects = list
             case .outputFormat, .captions, .lyricCaptions:
                 break
             }
