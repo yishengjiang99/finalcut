@@ -3,6 +3,7 @@
 // exported yes/no). Never ids, tokens, timestamps, prompts, captions or media.
 import crypto from 'crypto';
 import { getPool } from '../../db.js';
+import { xaiToken } from '../xaiToken.js';
 
 const XAI_URL = 'https://api.x.ai/v1/chat/completions';
 export const COPY_MODELS = () => [process.env.PUSH_COPY_MODEL?.trim() || 'grok-4.20-0309-non-reasoning', 'grok-4.3'];
@@ -110,7 +111,7 @@ let fetchImpl = (...a) => fetch(...a);
 export function setCopyFetchForTests(f) { fetchImpl = f || ((...a) => fetch(...a)); }
 
 async function callGrok(model, prompt) {
-  const key = (process.env.XAI_API_TOKEN || process.env.XAI_API_KEY || '').trim();
+  const key = xaiToken();
   if (!key) throw new Error('no_xai_key');
   const res = await fetchImpl(XAI_URL, {
     method: 'POST',
@@ -139,7 +140,7 @@ export async function generateCopy(segment, goal, facts, { useGrok, cache = mysq
     } catch { /* cache optional */ }
   }
   const rejected = [];
-  if (grokOn && (process.env.XAI_API_TOKEN || process.env.XAI_API_KEY)) {
+  if (grokOn && xaiToken()) {
     const prompt = buildPrompt(goal, facts);
     for (const model of COPY_MODELS()) {
       for (let i = 0; i < 2; i++) {

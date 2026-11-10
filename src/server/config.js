@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import os from 'os';
 import Stripe from 'stripe';
+import { xaiToken } from './xaiToken.js';
 
 dotenv.config();
 
@@ -18,7 +19,7 @@ export function nodeEnvWarning(env = process.env) {
   return 'WARNING: NODE_ENV is not set; running with development defaults (non-secure session cookie, ' +
     'no trust proxy). In production set Environment=NODE_ENV=production in finalcut.service.';
 }
-export const XAI_API_TOKEN = process.env.XAI_API_TOKEN;
+export const XAI_API_TOKEN = xaiToken() || undefined;
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 // Streaming captions: the server only mints single-use realtime tokens with this key; it never reaches the browser.
 export const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -66,7 +67,7 @@ export const APPLE_IAP_ROOT_CERTS_BASE64 = process.env.APPLE_IAP_ROOT_CERTS_BASE
 const isTestRuntime = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
 if (!XAI_API_TOKEN) {
-  console.error('ERROR: XAI_API_TOKEN environment variable is not set');
+  console.error('ERROR: XAI_API_TOKEN environment variable is not set (XAI_API_KEY is also accepted)');
   console.error('Please create a .env file with XAI_API_TOKEN=your_token_here');
   if (!isTestRuntime) process.exit(1);
 }
