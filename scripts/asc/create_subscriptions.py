@@ -29,12 +29,17 @@ ROOT = Path(__file__).resolve().parents[2]
 REVIEW_SHOT = Path(os.environ.get("REVIEW_SCREENSHOT", ROOT / "docs/asc/review/subscription-paywall.png"))
 GROUP_REF = "FinalCap Pro"
 GROUP_DISPLAY = "FinalCap Pro"
+# App Review contact comes from repo secrets (ASC_REVIEW_CONTACT_EMAIL / ASC_REVIEW_CONTACT_PHONE), not the repo.
+CONTACT_EMAIL = os.environ.get("ASC_REVIEW_CONTACT_EMAIL", "").strip()
+CONTACT_PHONE = os.environ.get("ASC_REVIEW_CONTACT_PHONE", "").strip()
+if not (CONTACT_EMAIL and CONTACT_PHONE):
+    sys.exit("ASC_REVIEW_CONTACT_EMAIL and ASC_REVIEW_CONTACT_PHONE must be set (repo secrets)")
 REVIEW_NOTE = ("FinalCap Pro Monthly is an auto-renewable subscription ($9.99/month in the US) that unlocks "
                "unlimited AI edits, captions and translations. To reach the paywall: launch FinalCap and tap the "
                "crown 'Upgrade' button at the top right of the editor. The paywall shows the price and period from "
                "StoreKit, Restore Purchases, Terms of Use (Apple standard EULA) and the Privacy Policy. "
-               "Sandbox purchases work with any sandbox Apple ID. Contact: Yisheng Jiang, yisheng.jiang@gmail.com, "
-               "+1 669 251 7789.")
+               "Sandbox purchases work with any sandbox Apple ID. Contact: Yisheng Jiang, "
+               f"{CONTACT_EMAIL}, {CONTACT_PHONE}.")
 PRODUCTS = [
     {"productId": "com.ragnus.w2.subscription.monthly", "name": "FinalCap Pro Monthly", "level": 1,
      "period": "ONE_MONTH", "usd": "9.99", "desc": "Unlimited AI edits, captions and translations"},

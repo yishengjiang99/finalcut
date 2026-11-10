@@ -34,8 +34,13 @@ DRAFT_STATES = ("PREPARE_FOR_SUBMISSION", "READY_FOR_REVIEW", "DEVELOPER_REJECTE
 EDITABLE = ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "READY_FOR_REVIEW")
 OPEN_SUBMISSION = ("WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES", "CANCELING")
 
-CONTACT = {"contactFirstName": "Yisheng", "contactLastName": "Jiang", "contactPhone": "+1 669 251 7789",
-           "contactEmail": "yisheng.jiang@gmail.com", "demoAccountRequired": False}
+# App Review contact comes from repo secrets (ASC_REVIEW_CONTACT_EMAIL / ASC_REVIEW_CONTACT_PHONE), not the repo.
+CONTACT_EMAIL = os.environ.get("ASC_REVIEW_CONTACT_EMAIL", "").strip()
+CONTACT_PHONE = os.environ.get("ASC_REVIEW_CONTACT_PHONE", "").strip()
+if not (CONTACT_EMAIL and CONTACT_PHONE):
+    sys.exit("ASC_REVIEW_CONTACT_EMAIL and ASC_REVIEW_CONTACT_PHONE must be set (repo secrets)")
+CONTACT = {"contactFirstName": "Yisheng", "contactLastName": "Jiang", "contactPhone": CONTACT_PHONE,
+           "contactEmail": CONTACT_EMAIL, "demoAccountRequired": False}
 REVIEW_NOTES = """FinalCap is a chat-driven video editor. No sign-in or demo account is needed: the app opens straight into the editor.
 
 HOW TO TRY IT
@@ -52,7 +57,7 @@ UPDATE FOR SUBMISSION 9cace8d1
 Added a functional Terms of Use (EULA) link and Privacy Policy link to the App Store description, per 3.1.2.
 
 CONTACT
-Yisheng Jiang, yisheng.jiang@gmail.com, +1 669 251 7789"""
+Yisheng Jiang, {email}, {phone}""".format(email=CONTACT_EMAIL, phone=CONTACT_PHONE)
 
 
 def token():
