@@ -12,7 +12,7 @@ Finds existing objects and creates only what is missing:
   WAITING_FOR_REVIEW / IN_REVIEW / APPROVED.
 
 Never submits anything for review. VERIFY_ONLY=true does read-only verification.
-Product IDs must match ios/FinalCut/Features/Paywall/StoreKitPurchaseStub.swift and ios/FinalCut/StoreKit/FinalCut.storekit.
+Product IDs must match ios/FinalCut/Features/Paywall/StoreKitPurchase.swift and ios/FinalCut/StoreKit/FinalCut.storekit.
 Env: APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_API_KEY_P8,
      BUNDLE_ID (com.ragnus.w2), VERIFY_ONLY (true/false)
 """

@@ -18,7 +18,7 @@ final class PaywallTests: XCTestCase {
         XCTAssertEqual(PaywallCopy.termsOfUseURL.absoluteString,
                        "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
         XCTAssertEqual(PaywallCopy.privacyPolicyURL.absoluteString, "https://grepawk.com/legal/privacy.html")
-        XCTAssertEqual(StoreKitPurchaseStub.monthlyProductID, "com.ragnus.w2.subscription.monthly")
+        XCTAssertEqual(StoreKitPurchase.monthlyProductID, "com.ragnus.w2.subscription.monthly")
         XCTAssertFalse(PaywallCopy.unavailableMessage.isEmpty)
     }
 
@@ -45,7 +45,7 @@ final class PaywallTests: XCTestCase {
         let subs = try XCTUnwrap(groups[0]["subscriptions"] as? [[String: Any]])
         XCTAssertEqual(subs.count, 1)
         let sub = subs[0]
-        XCTAssertEqual(sub["productID"] as? String, StoreKitPurchaseStub.monthlyProductID)
+        XCTAssertEqual(sub["productID"] as? String, StoreKitPurchase.monthlyProductID)
         XCTAssertEqual(sub["referenceName"] as? String, "FinalCap Pro Monthly")
         XCTAssertEqual(sub["displayPrice"] as? String, "9.99")
         XCTAssertEqual(sub["recurringSubscriptionPeriod"] as? String, "P1M")
@@ -83,7 +83,7 @@ final class PaywallTests: XCTestCase {
         let store = PaywallStore(retryDelaysNanos: [1_000_000_000, 1_000_000_000, 2_000_000_000, 2_000_000_000])
         await store.load()
         let product = try XCTUnwrap(store.product, "product not loaded from FinalCut.storekit")
-        XCTAssertEqual(product.id, StoreKitPurchaseStub.monthlyProductID)
+        XCTAssertEqual(product.id, StoreKitPurchase.monthlyProductID)
         XCTAssertEqual(product.displayName, "FinalCap Pro Monthly")
         XCTAssertEqual(product.displayPrice, "$9.99")
         let period = try XCTUnwrap(product.subscription?.subscriptionPeriod)

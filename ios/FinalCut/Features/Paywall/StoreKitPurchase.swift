@@ -4,7 +4,7 @@ import StoreKit
 /// StoreKit 2 purchase helpers for the FinalCap Pro subscription (not Stripe).
 /// Product, group and price must match App Store Connect (scripts/asc/create_subscriptions.py)
 /// and the local `StoreKit/FinalCut.storekit` configuration.
-enum StoreKitPurchaseStub {
+enum StoreKitPurchase {
     /// Auto-renewable, 1 month, group "FinalCap Pro".
     static let monthlyProductID = "com.ragnus.w2.subscription.monthly"
 
@@ -170,7 +170,7 @@ final class PaywallStore: ObservableObject {
     /// - Parameters:
     ///   - loader: product fetch (StoreKit by default; injectable for tests).
     ///   - retryDelaysNanos: automatic retries after an empty result before showing the unavailable state.
-    nonisolated init(loader: @escaping () async -> [Product] = StoreKitPurchaseStub.loadProducts,
+    nonisolated init(loader: @escaping () async -> [Product] = StoreKitPurchase.loadProducts,
          retryDelaysNanos: [UInt64] = [1_000_000_000, 2_000_000_000]) {
         self.loader = loader
         self.retryDelays = retryDelaysNanos
@@ -189,7 +189,7 @@ final class PaywallStore: ObservableObject {
         while true {
             loadAttempts += 1
             let products = await loader()
-            if let p = products.first(where: { $0.id == StoreKitPurchaseStub.monthlyProductID }) ?? products.first {
+            if let p = products.first(where: { $0.id == StoreKitPurchase.monthlyProductID }) ?? products.first {
                 state = .loaded(p)
                 return
             }
