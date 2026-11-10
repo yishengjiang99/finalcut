@@ -126,7 +126,7 @@ jobs:
       # Run 42772026875 used one invocation for both targets: UI finished at 07:03:30Z
       # then xcodebuild sat idle until the 45-min job timeout; unit tests never ran.
       - name: Run UI tests
-        if: ${{ inputs.suite == 'full' }}
+        if: ${{ always() && inputs.suite == 'full' }}
         timeout-minutes: 15
         working-directory: ios
         run: |
