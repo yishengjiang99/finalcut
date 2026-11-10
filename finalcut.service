@@ -20,7 +20,7 @@
 
 [Unit]
 Description=FinalCut Video Editor Application
-Documentation=https://github.com/yishengjiang99/pages
+Documentation=https://github.com/yishengjiang99/finalcut
 After=network.target
 
 [Service]
