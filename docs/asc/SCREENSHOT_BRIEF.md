@@ -46,9 +46,7 @@ Craft-forward, short. Use **FinalCap** on frames. No “Grok”, no “Final Cut
 
 ## File naming
 
-`asc/iphone67-01-landing.png` … `iphone67-07-export.png` (and `iphone65-…` mirrors).
-
-Store under `assets/app-store/screenshots/` once Design exports (create folder on that PR). Persist creatives in git per house rule.
+`docs/asc/screenshots/en-US/iphone-69-NN-<slug>.png` and `ipad-13-NN-<slug>.png` (the folder `asc-finalcap-upload.yml` uploads). Persist creatives in git per house rule.
 
 ## Owner
 
