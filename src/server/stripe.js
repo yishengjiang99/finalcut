@@ -43,6 +43,17 @@ export async function grantFinalcutSubscription(session) {
   return null;
 }
 
+// customer.subscription.updated: these statuses lose FinalCut Pro, these keep it. Others (incomplete,
+// paused) leave the flag as it is.
+export const FINALCUT_REVOKE_STATUSES = new Set(['past_due', 'unpaid', 'canceled', 'incomplete_expired']);
+export const FINALCUT_ACTIVE_STATUSES = new Set(['active', 'trialing']);
+
+export function finalcutAccessForStatus(status) {
+  if (FINALCUT_REVOKE_STATUSES.has(status)) return false;
+  if (FINALCUT_ACTIVE_STATUSES.has(status)) return true;
+  return null;
+}
+
 // Stripe webhook router — must be mounted BEFORE express.json() body parsing
 // so Stripe signature verification receives the raw body.
 const webhookRouter = express.Router();
@@ -96,6 +107,17 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
           }
         }
         break;
+
+      case 'customer.subscription.updated': {
+        const updated = event.data.object;
+        const access = finalcutAccessForStatus(updated.status);
+        if (access !== null && updated.id) {
+          const { setSubscriptionActiveBySubscriptionId } = await import('../db.js');
+          const n = await setSubscriptionActiveBySubscriptionId(updated.id, access);
+          console.log(`Subscription ${updated.id} is ${updated.status}: Pro ${access ? 'kept' : 'removed'} (${n} user(s))`);
+        }
+        break;
+      }
 
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object;
