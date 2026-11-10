@@ -2,13 +2,13 @@ import Foundation
 
 // MARK: - Ops (non-destructive edit-stack entries)
 
-struct ChannelMixerOp: Equatable, Sendable {
+struct ChannelMixerOp: Equatable, Codable, Sendable {
     var preset: String
     var intensity: Double
     var matrix: [[Double]]?
 }
 
-struct ColorAdjustValues: Equatable, Sendable {
+struct ColorAdjustValues: Equatable, Codable, Sendable {
     var exposureEV: Double?
     var brightness: Double?
     var contrast: Double?
@@ -22,14 +22,14 @@ struct ColorAdjustValues: Equatable, Sendable {
     var highlights: Double?
 }
 
-struct ColorAdjustOp: Equatable, Sendable {
+struct ColorAdjustOp: Equatable, Codable, Sendable {
     var adjust: [String]
     var intensity: Double
     var intensityPerChange: [String: Double]
     var values: ColorAdjustValues
 }
 
-struct ApplyFilterOp: Equatable, Sendable {
+struct ApplyFilterOp: Equatable, Codable, Sendable {
     var name: String
     var intensity: Double
     var centerX: Double?
@@ -39,13 +39,13 @@ struct ApplyFilterOp: Equatable, Sendable {
     var params: [String: JSONValue]
 }
 
-struct StylizeOp: Equatable, Sendable {
+struct StylizeOp: Equatable, Codable, Sendable {
     var preset: String
     var intensity: Double
     var color: String?
 }
 
-struct BlurSharpenOp: Equatable, Sendable {
+struct BlurSharpenOp: Equatable, Codable, Sendable {
     var mode: String
     var intensity: Double
     var angleDegrees: Double?
@@ -54,26 +54,26 @@ struct BlurSharpenOp: Equatable, Sendable {
     var radiusPx: Double?
 }
 
-struct LutOp: Equatable, Sendable {
+struct LutOp: Equatable, Codable, Sendable {
     var preset: String
     var intensity: Double
 }
 
-struct VignetteGrainOp: Equatable, Sendable {
+struct VignetteGrainOp: Equatable, Codable, Sendable {
     var effect: String
     var intensity: Double
     var vignetteAmount: Double?
     var grainAmount: Double?
 }
 
-struct SegmentOp: Equatable, Sendable {
+struct SegmentOp: Equatable, Codable, Sendable {
     var action: String
     var subject: String
     var backgroundColor: String?
     var intensity: Double
 }
 
-struct AudioEffectOp: Equatable, Sendable {
+struct AudioEffectOp: Equatable, Codable, Sendable {
     var effect: String
     var intensity: Double
     var reverbPreset: String?

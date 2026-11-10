@@ -91,6 +91,14 @@ enum ClipEffect: Codable, Equatable, Sendable {
     case flipHorizontal
     case flipVertical
     case text(text: String, x: Int, y: Int, fontSize: Int, color: String)
+    case channelMixer(ChannelMixerOp)
+    case colorAdjust(ColorAdjustOp)
+    case applyFilter(ApplyFilterOp)
+    case stylize(StylizeOp)
+    case blurSharpen(BlurSharpenOp)
+    case lut(LutOp)
+    case vignetteGrain(VignetteGrainOp)
+    case segment(SegmentOp)
 
     var nativeOp: NativeOp {
         switch self {
@@ -103,6 +111,38 @@ enum ClipEffect: Codable, Equatable, Sendable {
         case .flipVertical: return .flipVertical
         case .text(let t, let x, let y, let size, let color):
             return .text(t, x: x, y: y, fontSize: size, color: RGBAColor.parse(color) ?? .white)
+        case .channelMixer(let o): return .channelMixer(o)
+        case .colorAdjust(let o): return .colorAdjust(o)
+        case .applyFilter(let o): return .applyFilter(o)
+        case .stylize(let o): return .stylize(o)
+        case .blurSharpen(let o): return .blurSharpen(o)
+        case .lut(let o): return .lut(o)
+        case .vignetteGrain(let o): return .vignetteGrain(o)
+        case .segment(let o): return .segment(o)
+        }
+    }
+
+    /// Maps a frame `NativeOp` onto a per-clip effect. Audio and project-level ops return nil.
+    init?(nativeOp: NativeOp) {
+        switch nativeOp {
+        case .colorControls(let b, let c, let s): self = .colorControls(brightness: b, contrast: c, saturation: s)
+        case .hue(let d): self = .hue(degrees: d)
+        case .colorFilter(let f, let i): self = .colorFilter(filter: f, intensity: i)
+        case .crop(let x, let y, let w, let h): self = .crop(x: x, y: y, width: w, height: h)
+        case .rotate(let d): self = .rotate(degrees: d)
+        case .flipHorizontal: self = .flipHorizontal
+        case .flipVertical: self = .flipVertical
+        case .text(let t, let x, let y, let size, _):
+            self = .text(text: t, x: x, y: y, fontSize: size, color: "white")
+        case .channelMixer(let o): self = .channelMixer(o)
+        case .colorAdjust(let o): self = .colorAdjust(o)
+        case .applyFilter(let o): self = .applyFilter(o)
+        case .stylize(let o): self = .stylize(o)
+        case .blurSharpen(let o): self = .blurSharpen(o)
+        case .lut(let o): self = .lut(o)
+        case .vignetteGrain(let o): self = .vignetteGrain(o)
+        case .segment(let o): self = .segment(o)
+        default: return nil
         }
     }
 }
@@ -138,6 +178,9 @@ struct VideoClip: Codable, Equatable, Sendable, Identifiable {
     var audioFadeIn: Double = 0
     var audioFadeOut: Double = 0
     var effects: [ClipEffect] = []
+    /// Stacked `audio_effect` ops on this clip's original audio. Optional so older
+    /// project.json files (no key) still decode.
+    var audioEffects: [AudioEffectOp]? = nil
     var transitionOut: TransitionSpec = .cut
     /// Captions in SOURCE time, attached to the asset range (they follow trim/split/speed
     /// through the explicit mapping in `EditorProject.projectCaptions()`).

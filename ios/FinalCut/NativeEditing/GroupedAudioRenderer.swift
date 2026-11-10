@@ -51,16 +51,11 @@ enum GroupedAudioRenderer {
         to url: URL
     ) throws {
         let sampleRate = AudioRenderer.sampleRate
-        let pcm = try readPCM(composition: composition, track: track, channels: channels, sampleRate: sampleRate)
+        var pcm = try readPCM(composition: composition, track: track, channels: channels, sampleRate: sampleRate)
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
                                    channels: AVAudioChannelCount(channels), interleaved: false)!
         let durationFrames = pcm.frames
         let tailFrames = AVAudioFrameCount(sampleRate * 2)
-        let input = buffer(from: pcm, format: format)
-
-        let engine = AVAudioEngine()
-        let player = AVAudioPlayerNode()
-        engine.attach(player)
 
         var eqBands: [(type: AVAudioUnitEQFilterType, freq: Float, gain: Float, bandwidth: Float)] = []
         var pitchCents: Float = 0
@@ -91,7 +86,12 @@ enum GroupedAudioRenderer {
             case "muffle":
                 muffleCutoff = Float(e.frequencyHz ?? (8000 / (1 + 6 * i)))
             case "telephone":
-                break
+                // HP 300 Hz + LP 3400 Hz, mixed with the original (ON_DEVICE_TOOLS.md §9.9).
+                // Applied on PCM so it does not dilute later wet effects (reverb, echo, ...).
+                let mix = Self.telephoneMixAmount(intensity: i, mixPercent: e.mixPercent)
+                if mix > 0 {
+                    pcm = try applyTelephone(pcm, mix: mix, format: format)
+                }
             case "reverb":
                 let wet = Float(e.mixPercent ?? GroupedIntensity.lerp(i, 0, 30, 45, 63, 75))
                 reverbs.append((reverbPreset(e.reverbPreset), wet))
@@ -121,10 +121,10 @@ enum GroupedAudioRenderer {
         if let cutoff = muffleCutoff {
             eqBands.append((.lowPass, cutoff, 0, 0.7))
         }
-        if telephoneMix != nil {
-            eqBands.append((.highPass, 300, 0, 0.7))
-            eqBands.append((.lowPass, 3400, 0, 0.7))
-        }
+        let input = buffer(from: pcm, format: format)
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
 
         var units: [AVAudioNode] = []
         if !eqBands.isEmpty {
@@ -214,6 +214,77 @@ enum GroupedAudioRenderer {
             if status == .insufficientDataFromInputNode { break }
         }
         engine.stop()
+    }
+
+
+    /// Band-limited share: 50% at 0.25, 100% at the 0.5 default (`mix_percent` overrides).
+    static func telephoneMixAmount(intensity: Double, mixPercent: Double?) -> Double {
+        GroupedIntensity.clamp01(mixPercent.map { $0 / 100 } ?? GroupedIntensity.mixAmount(intensity))
+    }
+
+    /// Butterworth-style high-pass 300 Hz + low-pass 3400 Hz, mixed with the dry signal.
+    private static func applyTelephone(_ pcm: PCM, mix: Double, format: AVAudioFormat) throws -> PCM {
+        if mix <= 0 { return pcm }
+        let wet = try renderThroughEQ(pcm, format: format, bands: [
+            (.highPass, 300, 0, 0.7),
+            (.lowPass, 3400, 0, 0.7),
+        ])
+        if mix >= 1 { return wet }
+        let k = Float(mix)
+        var channels = pcm.channels
+        for c in 0..<min(channels.count, wet.channels.count) {
+            let n = min(channels[c].count, wet.channels[c].count)
+            for i in 0..<n {
+                channels[c][i] = channels[c][i] * (1 - k) + wet.channels[c][i] * k
+            }
+        }
+        return PCM(frames: pcm.frames, channels: channels)
+    }
+
+    private static func renderThroughEQ(
+        _ pcm: PCM,
+        format: AVAudioFormat,
+        bands: [(type: AVAudioUnitEQFilterType, freq: Float, gain: Float, bandwidth: Float)]
+    ) throws -> PCM {
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        let eq = AVAudioUnitEQ(numberOfBands: bands.count)
+        for (idx, band) in bands.enumerated() {
+            let p = eq.bands[idx]
+            p.filterType = band.type
+            p.frequency = band.freq
+            p.gain = band.gain
+            p.bandwidth = band.bandwidth
+            p.bypass = false
+        }
+        engine.attach(player)
+        engine.attach(eq)
+        engine.connect(player, to: eq, format: format)
+        engine.connect(eq, to: engine.mainMixerNode, format: format)
+        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
+        try engine.start()
+        let input = buffer(from: pcm, format: format)
+        player.scheduleBuffer(input, at: nil, options: [])
+        player.play()
+        var out = Array(repeating: [Float](), count: Int(format.channelCount))
+        let work = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096)!
+        var collected: AVAudioFrameCount = 0
+        while collected < pcm.frames {
+            let status = try engine.renderOffline(work.frameCapacity, to: work)
+            if status != .success && work.frameLength == 0 { break }
+            let n = Int(work.frameLength)
+            if n == 0 { break }
+            if let data = work.floatChannelData {
+                for c in 0..<out.count {
+                    out[c].append(contentsOf: UnsafeBufferPointer(start: data[c], count: n))
+                }
+            }
+            collected += work.frameLength
+            if status == .insufficientDataFromInputNode { break }
+        }
+        engine.stop()
+        let frames = out.first.map { AVAudioFrameCount($0.count) } ?? 0
+        return PCM(frames: frames, channels: out)
     }
 
     private static func applyGainAndGate(_ buffer: AVAudioPCMBuffer, channels: Int, gain: Float, gateThreshold: Float?) {
