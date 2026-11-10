@@ -9,7 +9,7 @@ const app = (env, fetchImpl) => express().use(createFilmcraftVoiceRouter({ env, 
 describe('GET /api/filmcraft/voice/token', () => {
   it('503 when not configured', async () => {
     expect((await request(app({})).get('/api/filmcraft/voice/token')).status).toBe(503);
-    expect((await request(app({ ELEVENLABS_API_KEY: 'k', FILMCRAFT_VOICE_AGENT_ID: 'a', FILMCRAFT_VOICE_DISABLED: 'true' })).get('/api/filmcraft/voice/token')).status).toBe(503);
+    expect((await request(app({ ELEVENLABS_API_KEY: 'k' })).get('/api/filmcraft/voice/token')).status).toBe(503);
   });
   it('returns the signed url, never the key', async () => {
     let seen;
@@ -26,11 +26,11 @@ describe('GET /api/filmcraft/voice/token', () => {
 import { finalcutVoiceRouter as _unused, createFilmcraftVoiceRouter as mk } from '../server/filmcraftVoice.js';
 import { summarize } from '../VoiceButton.jsx';
 describe('GET /api/voice/token (FinalCut chat voice)', () => {
-  const fc = (env, f) => express().use(mk({ env, fetchImpl: f, path: '/api/voice/token', agentVar: 'FINALCUT_VOICE_AGENT_ID', disabledVar: 'FINALCUT_VOICE_DISABLED' }));
-  it('uses its own agent id and off switch', async () => {
+  const fc = (env, f) => express().use(mk({ env, fetchImpl: f, path: '/api/voice/token', agentVar: 'FINALCUT_VOICE_AGENT_ID' }));
+  it('uses its own agent id; no off switch', async () => {
     let u; const f = async (url) => { u = url; return { ok: true, json: async () => ({ signed_url: 'wss://s' }) }; };
     expect((await request(fc({ ELEVENLABS_API_KEY: 'k', FILMCRAFT_VOICE_AGENT_ID: 'x' }, f)).get('/api/voice/token')).status).toBe(503);
-    expect((await request(fc({ ELEVENLABS_API_KEY: 'k', FINALCUT_VOICE_AGENT_ID: 'fc1', FINALCUT_VOICE_DISABLED: 'true' }, f)).get('/api/voice/token')).status).toBe(503);
+    expect((await request(fc({ ELEVENLABS_API_KEY: 'k', FINALCUT_VOICE_AGENT_ID: 'fc1', FINALCUT_VOICE_DISABLED: 'true' }, f)).get('/api/voice/token')).status).toBe(200);
     const r = await request(fc({ ELEVENLABS_API_KEY: 'k', FINALCUT_VOICE_AGENT_ID: 'fc1' }, f)).get('/api/voice/token');
     expect(r.status).toBe(200); expect(u).toContain('agent_id=fc1');
   });

@@ -79,9 +79,9 @@ describe('POST /api/filmcraft/agent', () => {
     expect((await post(srv.base, { prompt: 'x'.repeat(2001) })).status).toBe(413);
     expect((await post(srv.base, { prompt: 'hi', history: 'no' })).status).toBe(400);
   });
-  it('kill switch returns 503 and leaves other routes alone', async () => {
-    srv = await serve({ env: { FILMCRAFT_AGENT_DISABLED: 'true' }, llm: async () => { throw new Error('should not run'); } });
-    expect((await post(srv.base, { prompt: 'hi' })).status).toBe(503);
+  it('has no off switch: FILMCRAFT_AGENT_DISABLED is ignored', async () => {
+    srv = await serve({ env: { FILMCRAFT_AGENT_DISABLED: 'true' }, llm: async () => { throw new Error('ran'); } });
+    expect((await post(srv.base, { prompt: 'hi' })).status).toBe(502);
     expect(await (await post(srv.base, { a: 1 }, '/api/other')).json()).toEqual({ ok: true });
   });
   it('503 without an LLM key, 502 when the LLM fails', async () => {

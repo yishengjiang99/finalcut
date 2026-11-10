@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   generateSoundtrack, parseSoundtrackRequest, SoundtrackError, _clearSoundtrackCache,
 } from '../../server/tools/gbk-soundtrack-tool.js';
-import { soundtrackEnabled } from '../server/soundtrackTool.js';
 import { offeredToolsFor } from '../server/toolsSchema.js';
 import { soundtrackPrompt } from '../soundtrackPrompt.js';
 
@@ -88,22 +87,17 @@ describe('add_soundtrack (GBK MCP)', () => {
   });
 });
 
-describe('add_soundtrack off switch and gating', () => {
+describe('add_soundtrack gating (always on; no off switch)', () => {
   const names = (opts) => offeredToolsFor(opts).map(t => t.function.name);
-  it('SOUNDTRACK_ENABLED is on by default, off only for 0/false/off', () => {
-    expect(soundtrackEnabled({})).toBe(true);
-    expect(soundtrackEnabled({ SOUNDTRACK_ENABLED: '1' })).toBe(true);
-    for (const v of ['0', 'false', 'OFF']) expect(soundtrackEnabled({ SOUNDTRACK_ENABLED: v })).toBe(false);
-  });
-  it('offered to web and iOS build >= 39, removed when switched off', () => {
+  it('offered to web and iOS build >= 39; SOUNDTRACK_ENABLED=0 no longer removes it', () => {
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'video' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'image' })).not.toContain('add_soundtrack');
     expect(names({ userAgent: 'FinalCap-iOS/39' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'FinalCap-iOS/38' })).not.toContain('add_soundtrack');
     vi.stubEnv('SOUNDTRACK_ENABLED', '0');
     try {
-      expect(names({ userAgent: 'Mozilla/5.0' })).not.toContain('add_soundtrack');
-      expect(names({ userAgent: 'FinalCap-iOS/39' })).not.toContain('add_soundtrack');
+      expect(names({ userAgent: 'Mozilla/5.0' })).toContain('add_soundtrack');
+      expect(names({ userAgent: 'FinalCap-iOS/39' })).toContain('add_soundtrack');
     } finally { vi.unstubAllEnvs(); }
   });
 });
