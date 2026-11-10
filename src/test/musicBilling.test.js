@@ -44,7 +44,7 @@ describe('Stripe webhook: product-scoped entitlements', () => {
   afterAll(async () => srv.close());
 
   it('FinalCut checkout (no metadata.product) still sets the global subscription, unchanged', async () => {
-    const r = await postWebhook(srv.base, { id: 'evt_1', type: 'checkout.session.completed', data: { object: { id: 'cs_fc', customer_email: 'fc@example.com', subscription: 'sub_fc', metadata: {} } } });
+    const r = await postWebhook(srv.base, { id: 'evt_1', type: 'checkout.session.completed', data: { object: { id: 'cs_fc', payment_status: 'paid', status: 'complete', customer_email: 'fc@example.com', subscription: 'sub_fc', metadata: {} } } });
     expect(r.status).toBe(200);
     expect(db.updateUserSubscription).toHaveBeenCalledWith('fc@example.com', true, 'sub_fc');
     expect(db.setProductEntitlement).not.toHaveBeenCalled();
