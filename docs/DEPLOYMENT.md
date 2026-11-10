@@ -508,31 +508,9 @@ Visit `https://yourdomain.com` to verify SSL is working.
 
 ## Automated Deployment
 
-### Step 10: Create Deployment Script
+### Step 10: Deploys
 
-Create a deployment script for easy updates:
-
-```bash
-cd /home/finalcut/apps/pages/finalcut
-nano deploy.sh
-```
-
-Add the deployment script content (see `deploy.sh` file in the repository).
-
-Make it executable:
-
-```bash
-chmod +x deploy.sh
-```
-
-### Step 11: Update the Application
-
-When you need to deploy updates:
-
-```bash
-cd /home/finalcut/apps/pages/finalcut
-./deploy.sh
-```
+Every push to `main` deploys through `.github/workflows/deploy-grepawk.yml` (`scripts/deploy-grepawk.sh`: rsync, `npm ci && npm run build` on the server, systemd restart, smoke test). There is no manual deploy script.
 
 ---
 

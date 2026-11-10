@@ -52,13 +52,7 @@ sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
 
 ## Update Deployment
 
-```bash
-# Use the deployment script
-cd /home/finalcut/apps/pages/finalcut
-./deploy.sh
-```
-
-Or manually:
+Pushes to `main` deploy automatically (`.github/workflows/deploy-grepawk.yml`). To deploy by hand:
 
 ```bash
 cd /home/finalcut/apps/pages/finalcut
