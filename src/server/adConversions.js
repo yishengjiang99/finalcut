@@ -1,9 +1,17 @@
-// Server-side ad conversion forwarding (X Conversions API + Reddit Conversions API).
-// No client pixels: the site serves COEP require-corp for ffmpeg wasm, so third-party pixel
-// scripts are avoided and conversions are forwarded from POST /api/telemetry instead.
-// Everything reads from env. With the env unset this is a strict no-op: no network calls, no logs.
-// Fire-and-forget: forwardConversion() never throws and never awaits on the request path.
-// Docs: docs/marketing/ad-conversions.md
+// Server-side ad conversions (X Conversions API + Reddit Conversions API v3). One module, two callers:
+//  1. forwardConversion(): FinalCut web telemetry events, from POST /api/telemetry. No client pixels: the
+//     site serves COEP require-corp for ffmpeg wasm, so third-party pixel scripts are avoided.
+//     Env: X_ADS_PIXEL_ID, X_ADS_EVENT_IDS, REDDIT_ADS_PIXEL_ID, REDDIT_ADS_EVENTS, REDDIT_ADS_TEST_ID.
+//     Fire-and-forget: never throws and never awaits on the request path.
+//  2. sendConversion(): Stripe purchases / trial starts (music, compose), from the Stripe webhook, so they
+//     count even when an ad blocker stops the browser pixel. Dedupe: the landing page makes an event_id
+//     before checkout; it rides in Checkout metadata and is sent as conversion_id (the thanks-page pixel
+//     uses the same value). Pixels are per product: <PREFIX>_X_PIXEL_ID, <PREFIX>_X_EVENT_ID_PURCHASE,
+//     <PREFIX>_X_EVENT_ID_START_TRIAL, <PREFIX>_REDDIT_PIXEL_ID (PREFIX = MUSIC | COMPOSE).
+// Shared credentials: X_ADS_CONSUMER_KEY, X_ADS_CONSUMER_SECRET, X_ADS_ACCESS_TOKEN, X_ADS_ACCESS_TOKEN_SECRET;
+// Reddit token REDDIT_ADS_ACCESS_TOKEN or REDDIT_CAPI_TOKEN (both names are read, by either caller).
+// Always on: each platform sends whenever its credentials are set; with nothing set this is a no-op.
+// Docs: docs/marketing/ad-conversions.md, docs/STRIPE.md
 import crypto from 'crypto';
 
 const X_API = 'https://ads-api.x.com/12/measurement/conversions/';
@@ -42,9 +50,14 @@ export function xConfig() {
   return c.pixelId && c.eventIds && c.consumerKey && c.consumerSecret && c.token && c.tokenSecret ? c : null;
 }
 
+// Reddit conversion token: either env name works (telemetry used REDDIT_ADS_ACCESS_TOKEN, purchases REDDIT_CAPI_TOKEN).
+export function redditToken(e = process.env) {
+  return String(e.REDDIT_ADS_ACCESS_TOKEN || e.REDDIT_CAPI_TOKEN || '').trim();
+}
+
 export function redditConfig() {
   const pixelId = env('REDDIT_ADS_PIXEL_ID');
-  const token = env('REDDIT_ADS_ACCESS_TOKEN');
+  const token = redditToken();
   if (!pixelId || !token) return null;
   return { pixelId, token, events: parseJson('REDDIT_ADS_EVENTS') || DEFAULT_REDDIT_EVENTS, testId: env('REDDIT_ADS_TEST_ID') };
 }
@@ -177,4 +190,77 @@ export function forwardConversion(row, ctx = {}) {
     logFailure('internal', err?.message || String(err));
     return Promise.resolve([]);
   }
+}
+
+// ---- Stripe purchases (music, compose) ----
+// conv: { kind: 'purchase'|'start_trial', eventId, value, currency, email, twclid, rdtCid, at: Date, sourceUrl }
+export function buildPurchaseXRequest(conv, env = process.env) {
+  const px = conv.adsPrefix || 'MUSIC';
+  const pixelId = env[`${px}_X_PIXEL_ID`];
+  const eventId = conv.kind === 'start_trial' ? env[`${px}_X_EVENT_ID_START_TRIAL`] : env[`${px}_X_EVENT_ID_PURCHASE`];
+  const creds = {
+    consumerKey: env.X_ADS_CONSUMER_KEY, consumerSecret: env.X_ADS_CONSUMER_SECRET,
+    token: env.X_ADS_ACCESS_TOKEN, tokenSecret: env.X_ADS_ACCESS_TOKEN_SECRET,
+  };
+  if (!pixelId || !eventId || Object.values(creds).some((v) => !v)) return null;
+  const identifiers = [];
+  if (conv.twclid) identifiers.push({ twclid: conv.twclid });
+  const h = hashEmail(conv.email);
+  if (h) identifiers.push({ hashed_email: h });
+  if (!identifiers.length) return null; // X needs at least one identifier
+  const c = {
+    conversion_time: conv.at.toISOString(),
+    event_id: eventId,
+    identifiers,
+    conversion_id: conv.eventId,
+    description: conv.kind,
+  };
+  if (conv.value > 0) { c.value = Number(conv.value.toFixed(2)); c.price_currency = conv.currency || 'USD'; }
+  const url = `https://ads-api.x.com/12/measurement/conversions/${encodeURIComponent(pixelId)}`;
+  return { url, body: { conversions: [c] }, creds };
+}
+
+export function buildPurchaseRedditRequest(conv, env = process.env) {
+  const pixelId = env[`${conv.adsPrefix || 'MUSIC'}_REDDIT_PIXEL_ID`];
+  const token = redditToken(env);
+  if (!pixelId || !token) return null;
+  const ev = {
+    event_at: conv.at.getTime(),
+    action_source: 'WEBSITE',
+    type: conv.kind === 'start_trial' ? { tracking_type: 'CUSTOM', custom_event_name: 'StartTrial' } : { tracking_type: 'PURCHASE' },
+    metadata: { conversion_id: conv.eventId, currency: conv.currency || 'USD', value: conv.value > 0 ? Number(conv.value.toFixed(2)) : 0 },
+    user: {},
+  };
+  if (conv.rdtCid) ev.click_id = conv.rdtCid;
+  if (conv.sourceUrl) ev.event_source_url = conv.sourceUrl;
+  const h = hashEmail(conv.email);
+  if (h) ev.user.email = h;
+  return {
+    url: `https://ads-api.reddit.com/api/v3/pixels/${encodeURIComponent(pixelId)}/conversion_events`,
+    body: { data: { events: [ev] } },
+    token,
+  };
+}
+
+// Never throws: ad reporting must not break the webhook. Returns per-platform results for logs/tests.
+export async function sendConversion(conv, { env = process.env, fetchImpl = globalThis.fetch, log = console } = {}) {
+  if (!conv?.eventId) return { skipped: true };
+  const out = {};
+  const x = buildPurchaseXRequest(conv, env);
+  if (x) {
+    try {
+      const r = await fetchImpl(x.url, { method: 'POST', headers: { Authorization: oauth1Header({ method: 'POST', url: x.url, ...x.creds }), 'Content-Type': 'application/json' }, body: JSON.stringify(x.body) });
+      out.x = r.status;
+      if (!r.ok) log.warn?.(`[ads] X CAPI ${r.status}: ${(await r.text().catch(() => '')).slice(0, 300)}`);
+    } catch (e) { out.x = 'error'; log.warn?.(`[ads] X CAPI error: ${e.message}`); }
+  }
+  const rd = buildPurchaseRedditRequest(conv, env);
+  if (rd) {
+    try {
+      const r = await fetchImpl(rd.url, { method: 'POST', headers: { Authorization: `Bearer ${rd.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(rd.body) });
+      out.reddit = r.status;
+      if (!r.ok) log.warn?.(`[ads] Reddit CAPI ${r.status}: ${(await r.text().catch(() => '')).slice(0, 300)}`);
+    } catch (e) { out.reddit = 'error'; log.warn?.(`[ads] Reddit CAPI error: ${e.message}`); }
+  }
+  return out;
 }

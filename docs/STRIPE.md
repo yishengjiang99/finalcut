@@ -187,12 +187,12 @@ Webhook events to enable on the endpoint (in addition to FinalCut's): `checkout.
 
 ### Ad conversions (X + Reddit Conversions API)
 
-`src/server/adsConversions.js`, called from the music webhook handler:
+`src/server/adConversions.js` (`sendConversion`), called from the music webhook handler:
 - `checkout.session.completed`: `start_trial` (Pro trial, value 0) or `purchase` (Lifetime, value), with
   `conversion_id = metadata.event_id`, the same id the landing page's thanks page passes to the X / Reddit pixel, so each platform dedupes.
 - `invoice.paid` with an amount (trial converted, renewals): server-only `purchase`, id `inv_<invoice id>`.
 - Identifiers: `twclid` / `rdt_cid` from metadata, SHA-256 of the lowercased email.
-- Off switch: `ADS_TRACKING_ENABLED=0`. Each platform also stays off until its env vars are set (see `.env.example`).
+- No off switch: each platform sends whenever its env vars are set (see `.env.example`). The Reddit token may be named `REDDIT_CAPI_TOKEN` or `REDDIT_ADS_ACCESS_TOKEN`.
 
 ## GBK Composer Pro (`compose`)
 
@@ -211,8 +211,7 @@ Create in Stripe (one product, "GBK Composer Pro", three prices) and set:
 Entitlement lookup for the GBK server: `GET /api/compose/entitlement?email=…` with
 `Authorization: Bearer $COMPOSE_ENTITLEMENT_TOKEN` returns `{ product: 'compose', pro: true|false }`. With the
 token unset the route 404s. Ad conversions use `COMPOSE_X_PIXEL_ID`, `COMPOSE_X_EVENT_ID_PURCHASE`,
-`COMPOSE_X_EVENT_ID_START_TRIAL`, `COMPOSE_REDDIT_PIXEL_ID` (shared X/Reddit API creds, same
-`ADS_TRACKING_ENABLED` off switch).
+`COMPOSE_X_EVENT_ID_START_TRIAL`, `COMPOSE_REDDIT_PIXEL_ID` (shared X/Reddit API creds).
 
 ## Stripe catalog
 

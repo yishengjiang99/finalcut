@@ -102,3 +102,14 @@ describe('ad conversions', () => {
     expect(extractClickIds(sanitizeTelemetryEvent({ ...row, props: { twclid: 'a' } }).row)).toEqual({ twclid: 'a' });
   });
 });
+
+describe('merged module: both Reddit token names work for both callers', () => {
+  it('purchase path reads REDDIT_ADS_ACCESS_TOKEN when REDDIT_CAPI_TOKEN is unset, and vice versa', async () => {
+    const ads = await import('../server/adConversions.js');
+    const conv = { kind: 'purchase', eventId: 'mr-1', value: 4.99, at: new Date('2026-11-01T00:00:00Z') };
+    expect(ads.buildPurchaseRedditRequest(conv, { MUSIC_REDDIT_PIXEL_ID: 'p', REDDIT_ADS_ACCESS_TOKEN: 'a' }).token).toBe('a');
+    expect(ads.buildPurchaseRedditRequest(conv, { MUSIC_REDDIT_PIXEL_ID: 'p', REDDIT_CAPI_TOKEN: 'c' }).token).toBe('c');
+    expect(ads.redditToken({ REDDIT_CAPI_TOKEN: 'c' })).toBe('c');
+    expect(ads.redditToken({ REDDIT_ADS_ACCESS_TOKEN: 'a', REDDIT_CAPI_TOKEN: 'c' })).toBe('a');
+  });
+});

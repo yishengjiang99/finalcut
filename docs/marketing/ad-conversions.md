@@ -19,7 +19,7 @@ grepawk.com does **not** load the X or Reddit pixel scripts (the app serves `Cro
 | `X_ADS_ACCESS_TOKEN` | X | User access token (user must be AD_MANAGER or ACCOUNT_ADMIN on the ad account) |
 | `X_ADS_ACCESS_TOKEN_SECRET` | X | User access token secret |
 | `REDDIT_ADS_PIXEL_ID` | Reddit | Reddit Pixel ID from Events Manager (e.g. `t2_abc123` / `a2_…`) |
-| `REDDIT_ADS_ACCESS_TOKEN` | Reddit | Conversion access token |
+| `REDDIT_ADS_ACCESS_TOKEN` | Reddit | Conversion access token (`REDDIT_CAPI_TOKEN` also accepted; same token the Stripe purchase conversions use) |
 | `REDDIT_ADS_TEST_ID` | optional | Test ID from Reddit Event Testing; when set, events are validated but **not** counted. Remove after testing. |
 | `REDDIT_ADS_EVENTS` | optional | JSON map event → tracking type, overrides the default mapping below |
 
