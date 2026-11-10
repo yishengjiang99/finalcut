@@ -2,8 +2,7 @@
 # AVAudioUnit parameter trees and Vision request revisions from real iOS Simulator runtimes. Source: docs/ios/data/dump_cifilters.swift.
 # Output artifacts are committed as docs/ios/data/*.json and feed docs/ios/ON_DEVICE_TOOLS.md.
 #
-# Manual only (workflow_dispatch). The push trigger is limited to throwaway ci/dump-cifilters*
-# branches so the workflow can be exercised before it exists on main; it never runs on main.
+# Manual only (workflow_dispatch).
 name: Dump CIFilters (iOS Simulator)
 
 on:
@@ -13,12 +12,6 @@ on:
         description: 'iOS 17 simulator runtime to download if the image lacks one'
         default: '17.5'
         required: false
-  push:
-    branches:
-      - 'ci/dump-cifilters*'
-    paths:
-      - '.github/workflows/dump-cifilters.yml'
-      - 'docs/ios/data/dump_cifilters.swift'
 
 permissions:
   contents: read
