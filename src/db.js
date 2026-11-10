@@ -392,6 +392,16 @@ export async function updateUserSubscription(email, hasSubscription, subscriptio
   );
 }
 
+// FinalCut web Stripe: grant/revoke by user id (checkout client_reference_id).
+export async function updateUserSubscriptionById(userId, hasSubscription, subscriptionId = null) {
+  const pool = getPool();
+  const [result] = await pool.query(
+    'UPDATE users SET has_subscription = ?, subscription_id = ? WHERE id = ?',
+    [hasSubscription, subscriptionId, userId]
+  );
+  return Number(result?.affectedRows || 0);
+}
+
 export async function setProductEntitlement({ email, product, plan = null, source, ref, customerId = null, active = true }) {
   const pool = getPool();
   await pool.query(

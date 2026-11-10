@@ -463,7 +463,7 @@ export default function App({ skipLanding = false, startWithSample = false } = {
 
           if (response.ok) {
             const data = await response.json();
-            if (data.verified && data.paymentStatus === 'paid') {
+            if (data.verified) {
               track('upgrade', { step: 'paid', method: 'stripe' });
               // Hide landing page and show editor after verified payment
               setShowLanding(false);

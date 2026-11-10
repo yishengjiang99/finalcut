@@ -145,7 +145,7 @@ export default function Root() {
         });
         if (!response.ok) return;
         const data = await response.json();
-        if (data.verified && data.paymentStatus === 'paid') {
+        if (data.verified) {
           track('upgrade', { step: 'paid', method: 'stripe' });
           window.history.replaceState({}, '', '/');
           setMode('editor');

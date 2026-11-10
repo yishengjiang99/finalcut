@@ -9,6 +9,40 @@ import { apiLimiter, getBaseUrlFromRequest } from './middleware.js';
 import { handleProductWebhookEvent } from './musicBilling.js';
 import { FINALCUT_PRODUCT, productOf } from './products.js';
 
+// The FinalCut user a checkout session belongs to: client_reference_id (the signed-in user's id, set at
+// checkout creation), else the email Stripe collected (customer_details.email) or prefilled (customer_email).
+export function finalcutSessionOwner(session) {
+  const ref = String(session?.client_reference_id || '').trim();
+  const userId = /^[1-9][0-9]*$/.test(ref) ? Number(ref) : null;
+  const email = session?.customer_details?.email || session?.customer_email || null;
+  return { userId, email };
+}
+
+// Paid, or completed with nothing to pay yet (a subscription that starts with a free trial).
+export function isFinalcutSessionPaid(session) {
+  if (!session) return false;
+  if (session.payment_status === 'paid') return true;
+  return session.status === 'complete' && session.payment_status === 'no_payment_required';
+}
+
+// Grants FinalCut Pro for a paid FinalCut checkout session. Returns the owner it granted to, or null.
+export async function grantFinalcutSubscription(session) {
+  const db = await import('../db.js');
+  const { userId, email } = finalcutSessionOwner(session);
+  const subscriptionId = session.subscription || session.id;
+  if (userId && (await db.updateUserSubscriptionById(userId, true, subscriptionId)) > 0) {
+    console.log(`Updated subscription for user ${userId}`);
+    return { userId, email };
+  }
+  if (email) {
+    await db.updateUserSubscription(email, true, subscriptionId);
+    console.log(`Updated subscription for ${email}`);
+    return { userId: null, email };
+  }
+  console.warn(`Checkout ${session.id} has no client_reference_id user or email; subscription not granted`);
+  return null;
+}
+
 // Stripe webhook router — must be mounted BEFORE express.json() body parsing
 // so Stripe signature verification receives the raw body.
 const webhookRouter = express.Router();
@@ -42,20 +76,12 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
     }
 
     switch (event.type) {
-      case 'checkout.session.completed':
+      case 'checkout.session.completed': {
         const session = event.data.object;
         console.log('Payment successful:', session.id);
-
-        if (session.customer_email) {
-          const { updateUserSubscription } = await import('../db.js');
-          await updateUserSubscription(
-            session.customer_email,
-            true,
-            session.subscription || session.id
-          );
-          console.log(`Updated subscription for ${session.customer_email}`);
-        }
+        if (isFinalcutSessionPaid(session)) await grantFinalcutSubscription(session);
         break;
+      }
 
       case 'customer.subscription.deleted':
         const subscription = event.data.object;
@@ -114,7 +140,7 @@ router.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
     const successUrl = `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${baseUrl}/`;
 
-    const session = await stripe.checkout.sessions.create({
+    const params = {
       payment_method_types: ['card'],
       line_items: [
         {
@@ -125,7 +151,16 @@ router.post('/api/create-checkout-session', apiLimiter, async (req, res) => {
       mode: 'subscription',
       success_url: successUrl,
       cancel_url: cancelUrl,
-    });
+    };
+    // Tie the purchase to the signed-in user so the webhook and verify grant Pro to this account.
+    const user = typeof req.isAuthenticated === 'function' && req.isAuthenticated() ? req.user : null;
+    if (user?.id) {
+      params.client_reference_id = String(user.id);
+      params.subscription_data = { metadata: { finalcut_user_id: String(user.id) } };
+    }
+    if (user?.email) params.customer_email = user.email;
+
+    const session = await stripe.checkout.sessions.create(params);
 
     res.json({ sessionId: session.id, url: session.url });
   } catch (error) {
@@ -156,34 +191,26 @@ router.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
       return res.json({ verified: false, paymentStatus: session.payment_status, product: productOf(session) });
     }
 
-    if (session && session.payment_status === 'paid') {
-      if (session.customer_email) {
-        try {
-          const { updateUserSubscription } = await import('../db.js');
-          await updateUserSubscription(
-            session.customer_email,
-            true,
-            session.subscription || session.id
-          );
-          console.log(`Updated subscription for ${session.customer_email} via payment verification`);
+    if (isFinalcutSessionPaid(session)) {
+      let owner = null;
+      try {
+        owner = await grantFinalcutSubscription(session);
+      } catch (dbError) {
+        console.error('Error updating subscription in database:', dbError);
+        // Continue anyway - webhook will handle it as fallback
+      }
 
-          // Update current session for immediate consistency
-          // Note: This only affects the current request. On subsequent requests,
-          // Passport will deserialize the user from the database with the updated subscription status.
-          if (req.isAuthenticated() && req.user && req.user.email === session.customer_email) {
-            req.user.has_subscription = true;
-            req.user.subscription_id = session.subscription || session.id;
-          }
-        } catch (dbError) {
-          console.error('Error updating subscription in database:', dbError);
-          // Continue anyway - webhook will handle it as fallback
-        }
+      // Update the current session for immediate consistency; later requests read the database.
+      const signedIn = typeof req.isAuthenticated === 'function' && req.isAuthenticated() ? req.user : null;
+      if (owner && signedIn && ((owner.userId && signedIn.id === owner.userId) || (!owner.userId && owner.email && signedIn.email === owner.email))) {
+        signedIn.has_subscription = true;
+        signedIn.subscription_id = session.subscription || session.id;
       }
 
       res.json({
         verified: true,
         paymentStatus: session.payment_status,
-        customerEmail: session.customer_email
+        customerEmail: finalcutSessionOwner(session).email
       });
     } else {
       res.json({
