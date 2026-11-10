@@ -107,6 +107,38 @@ enum AudioRenderer {
         if reader.status == .failed { throw reader.error ?? RenderError.readerFailed }
     }
 
+    /// Interleaved Float32 PCM from `track` as placed in `composition`.
+    static func readInterleaved(composition: AVComposition, track: AVCompositionTrack, channels: Int) throws -> [Float] {
+        let reader = try AVAssetReader(asset: composition)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channels,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let output = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: settings)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw RenderError.readerFailed }
+        reader.add(output)
+        guard reader.startReading() else { throw reader.error ?? RenderError.readerFailed }
+        var samples: [Float] = []
+        while let sample = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let byteCount = CMBlockBufferGetDataLength(block)
+            var chunk = [Float](repeating: 0, count: byteCount / MemoryLayout<Float>.size)
+            let status = chunk.withUnsafeMutableBytes { raw in
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: byteCount, destination: raw.baseAddress!)
+            }
+            guard status == kCMBlockBufferNoErr else { continue }
+            samples.append(contentsOf: chunk)
+        }
+        if reader.status == .failed { throw reader.error ?? RenderError.readerFailed }
+        return samples
+    }
+
     /// RMS of a composed asset's audio (tests and levels UI).
     static func rms(asset: AVAsset, audioMix: AVAudioMix?, from start: Double = 0, to end: Double? = nil) async throws -> Double {
         guard let track = try await asset.loadTracks(withMediaType: .audio).first else { return 0 }
