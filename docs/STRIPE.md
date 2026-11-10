@@ -204,9 +204,9 @@ Create in Stripe (one product, "GBK Composer Pro", three prices) and set:
 
 | Env | Price |
 | --- | --- |
-| `COMPOSE_STRIPE_PRICE_PRO_MONTHLY` | recurring $6/month (7-day trial is added by Checkout) |
-| `COMPOSE_STRIPE_PRICE_PRO_YEARLY` | recurring $48/year |
-| `COMPOSE_STRIPE_PRICE_LIFETIME` | one-time $99 |
+| `COMPOSE_STRIPE_PRICE_PRO_MONTHLY` | recurring $5.99/month (7-day trial is added by Checkout) |
+| `COMPOSE_STRIPE_PRICE_PRO_YEARLY` | recurring $47.99/year |
+| `COMPOSE_STRIPE_PRICE_LIFETIME` | one-time $99.99 |
 
 Entitlement lookup for the GBK server: `GET /api/compose/entitlement?email=…` with
 `Authorization: Bearer $COMPOSE_ENTITLEMENT_TOKEN` returns `{ product: 'compose', pro: true|false }`. With the

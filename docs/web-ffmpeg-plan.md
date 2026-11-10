@@ -438,7 +438,7 @@ Recipe ideas: gif export (palettegen/paletteuse), vignette, film grain (`noise`)
 
 ### 7.3 Generation (CI, from the same build that runs in the browser)
 
-`scripts/catalog/generate.mjs` runs in a GitHub Action job and locally:
+(Planned as `scripts/catalog/generate.mjs` in CI. Shipped as `scripts/generate-wasm-capabilities.mjs`, run locally, writing `server/ffmpeg/wasm-capabilities.json`; there is no CI job.)
 
 1. Start headless Chromium (Playwright), serve the copied `/ffmpeg-core/st/0.12.10`, `load()` the core.
 2. For each listing, run `ffmpeg.exec([...args])` and capture the `log` events: `-hide_banner -filters`, `-codecs`, `-encoders`, `-decoders`, `-muxers`, `-demuxers`, `-pix_fmts`, `-sample_fmts`, `-layouts`, `-buildconf`, `-version`.
