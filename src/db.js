@@ -306,6 +306,17 @@ export async function updateUserAppleSubscription(userId, hasSubscription, subsc
   );
 }
 
+// FinalCut web Stripe: follow a subscription's status (customer.subscription.updated). Only touches the
+// user whose subscription_id is this Stripe subscription.
+export async function setSubscriptionActiveBySubscriptionId(subscriptionId, active) {
+  const pool = getPool();
+  const [result] = await pool.query(
+    'UPDATE users SET has_subscription = ? WHERE subscription_id = ?',
+    [active, subscriptionId]
+  );
+  return Number(result?.affectedRows || 0);
+}
+
 export async function getDailyInferenceUsage(userId, dailyLimit, { pool = getPool() } = {}) {
   const [rows] = await pool.query(
     `SELECT inference_count AS used,
