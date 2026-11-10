@@ -100,9 +100,7 @@ enum GroupedAudioRenderer {
                 let wet = Float(e.mixPercent ?? GroupedIntensity.lerp(i, 0, 30, 40, 52, 60))
                 delay = (e.delaySeconds ?? 0.35, feedback, wet)
             case "pitch_up", "pitch_down":
-                let sign: Double = e.effect == "pitch_up" ? 1 : -1
-                let semi = e.pitchSemitones ?? (Double((12 * i).rounded()) * sign)
-                pitchCents += Float(semi * 100)
+                pitchCents += Float(Self.signedPitchSemitones(effect: e.effect, intensity: i, pitchSemitones: e.pitchSemitones) * 100)
             case "robot":
                 distortions.append((.speechAlienChatter, Float((e.mixPercent ?? GroupedIntensity.mixAmount(i) * 100))))
             case "radio":
@@ -216,6 +214,13 @@ enum GroupedAudioRenderer {
         engine.stop()
     }
 
+
+    /// Signed semitone shift. `pitch_down` always lowers and `pitch_up` always raises,
+    /// even when an explicit `pitchSemitones` has the opposite sign.
+    static func signedPitchSemitones(effect: String, intensity: Double, pitchSemitones: Double?) -> Double {
+        let magnitude = abs(pitchSemitones ?? Double((12 * intensity).rounded()))
+        return effect == "pitch_down" ? -magnitude : magnitude
+    }
 
     /// Band-limited share: 50% at 0.25, 100% at the 0.5 default (`mix_percent` overrides).
     static func telephoneMixAmount(intensity: Double, mixPercent: Double?) -> Double {

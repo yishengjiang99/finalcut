@@ -279,4 +279,39 @@ final class GroupedToolsTests: XCTestCase {
         XCTAssertNil(loaded.videoClips[0].audioEffects)
         XCTAssertEqual(loaded.videoClips[0].effects, [])
     }
+
+    func testPitchDownAlwaysLowersAndPitchUpAlwaysRaises() {
+        // Default at intensity 0.5 is 6 semitones; sign follows the effect name.
+        XCTAssertEqual(GroupedAudioRenderer.signedPitchSemitones(effect: "pitch_up", intensity: 0.5, pitchSemitones: nil), 6)
+        XCTAssertEqual(GroupedAudioRenderer.signedPitchSemitones(effect: "pitch_down", intensity: 0.5, pitchSemitones: nil), -6)
+        // Explicit values keep their magnitude, but pitch_down cannot pitch up.
+        XCTAssertEqual(GroupedAudioRenderer.signedPitchSemitones(effect: "pitch_up", intensity: 0.5, pitchSemitones: 3), 3)
+        XCTAssertEqual(GroupedAudioRenderer.signedPitchSemitones(effect: "pitch_down", intensity: 0.5, pitchSemitones: 3), -3)
+        XCTAssertEqual(GroupedAudioRenderer.signedPitchSemitones(effect: "pitch_up", intensity: 0.5, pitchSemitones: -4), 4)
+        XCTAssertEqual(GroupedAudioRenderer.signedPitchSemitones(effect: "pitch_down", intensity: 0.5, pitchSemitones: -4), -4)
+    }
+
+    func testGrainPatternChangesWithTime() {
+        let ops: [NativeOp] = [.vignetteGrain(VignetteGrainOp(effect: "grain", intensity: 1, vignetteAmount: nil, grainAmount: nil))]
+        let atZero = render(ops, time: 0)
+        let later = render(ops, time: 1)
+        XCTAssertNotEqual(checksum(atZero), checksum(later), "grain must be reseeded for later frames")
+        // The untimed apply() overload is time 0 — composers must pass composition time.
+        let source = bars()
+        let renderer = FrameRenderer(ops: ops, sourceSize: source.extent.size)
+        let untimedImage = renderer.apply(to: source)
+        let untimed = context.createCGImage(untimedImage, from: untimedImage.extent)!
+        XCTAssertEqual(checksum(untimed), checksum(atZero))
+    }
+
+    private func checksum(_ image: CGImage) -> Int {
+        var total = 0
+        for y in stride(from: 0, to: image.height, by: 5) {
+            for x in stride(from: 0, to: image.width, by: 5) {
+                let p = pixel(image, x, y)
+                total = total &+ p.r &* 3 &+ p.g &* 5 &+ p.b &* 7 &+ x &+ y &* 13
+            }
+        }
+        return total
+    }
 }
