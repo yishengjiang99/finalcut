@@ -256,7 +256,7 @@ struct PaywallView: View {
         // and the purchase start.
         Telemetry.shared.track("plan_select", props: ["product_id": product.id])
         Telemetry.shared.track("purchase_start", props: ["product_id": product.id])
-        let outcome = await StoreKitPurchaseStub.purchase(product)
+        let outcome = await StoreKitPurchase.purchase(product)
         switch outcome {
         case .success(let jws):
             // StoreKit purchase completed; fires at the same point as the
@@ -286,7 +286,7 @@ struct PaywallView: View {
         Telemetry.shared.track("restore_tap")
         isBusy = true
         defer { isBusy = false }
-        guard let jws = await StoreKitPurchaseStub.restoreEntitlementJWS(syncWithAppStore: true) else {
+        guard let jws = await StoreKitPurchase.restoreEntitlementJWS(syncWithAppStore: true) else {
             statusMessage = PaywallCopy.restoreNothingFound
             return
         }
