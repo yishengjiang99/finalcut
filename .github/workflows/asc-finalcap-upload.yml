@@ -60,6 +60,8 @@ jobs:
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_REVIEW_CONTACT_EMAIL: ${{ secrets.ASC_REVIEW_CONTACT_EMAIL }}
+          ASC_REVIEW_CONTACT_PHONE: ${{ secrets.ASC_REVIEW_CONTACT_PHONE }}
           APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           BUNDLE_ID: com.ragnus.w2
         run: |
@@ -89,7 +91,7 @@ jobs:
           info=next((i for i in infos if (i['attributes'].get('state') or i['attributes'].get('appStoreState')) not in ('READY_FOR_DISTRIBUTION','READY_FOR_SALE')), infos[0])
           api('PATCH',f'/v1/appInfos/{info["id"]}',{'data':{'type':'appInfos','id':info['id'],'relationships':{'primaryCategory':{'data':{'type':'appCategories','id':'PHOTO_AND_VIDEO'}},'secondaryCategory':{'data':{'type':'appCategories','id':'PRODUCTIVITY'}}}}})
           print('categories set')
-          rattrs={'contactFirstName':'Yisheng','contactLastName':'Jiang','contactPhone':'+1 669 251 7789','contactEmail':'yisheng.jiang@gmail.com','demoAccountRequired':False}
+          rattrs={'contactFirstName':'Yisheng','contactLastName':'Jiang','contactPhone':os.environ['ASC_REVIEW_CONTACT_PHONE'],'contactEmail':os.environ['ASC_REVIEW_CONTACT_EMAIL'],'demoAccountRequired':False}
           rd=api('GET',f'/v1/appStoreVersions/{vid}/appStoreReviewDetail')
           if rd.get('data'):
             api('PATCH',f'/v1/appStoreReviewDetails/{rd["data"]["id"]}',{'data':{'type':'appStoreReviewDetails','id':rd['data']['id'],'attributes':rattrs}})
