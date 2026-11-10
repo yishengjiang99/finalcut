@@ -667,6 +667,14 @@ extension EditorViewModel {
         case "adjust_audio_volume":
             guard let clip = selected, let volume = args["volume"]?.doubleValue else { return nil }
             return await done(.setVideoClipOriginalAudio(clipID: clip.id, enabled: volume > 0, gain: volume))
+        case "audio_effect":
+            switch NativeToolParser.plan(tool: call.name, arguments: args, canvas: projectCanvasForParser(project)) {
+            case .success(.apply(let op)):
+                guard let target = selected, case .audioEffect(let effect) = op else { return nil }
+                return await done(.applyAudioEffect(clipID: target.id, effect: effect))
+            default:
+                return nil
+            }
         case "audio_fade":
             guard let clip = selected,
                   let fadeIn = args["fade_in"]?.doubleValue, let fadeOut = args["fade_out"]?.doubleValue else { return nil }

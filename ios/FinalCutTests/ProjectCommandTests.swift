@@ -376,4 +376,50 @@ final class ProjectCommandTests: XCTestCase {
         XCTAssertEqual(EditFailureKind.from(deviceCode: "no_media"), .generic)
         XCTAssertEqual(EditFailureKind.from(deviceCode: nil), .generic)
     }
+
+    func testApplyAudioEffectStaysOnTheClip() throws {
+        var f = makeFixture()
+        _ = try f.session.perform(.appendVideoClip(assetID: f.beach.id, sourceStart: nil, sourceEnd: nil))
+        _ = try f.session.perform(.appendVideoClip(assetID: f.hotel.id, sourceStart: nil, sourceEnd: nil))
+        let effect = AudioEffectOp(effect: "reverb", intensity: 0.5, reverbPreset: "cathedral",
+                                   pitchSemitones: nil, delaySeconds: nil, mixPercent: 40,
+                                   gainDb: nil, frequencyHz: nil)
+        let clipID = f.project.videoClips[0].id
+        let result = try f.session.perform(.applyAudioEffect(clipID: clipID, effect: effect))
+        XCTAssertEqual(result.affectedIDs, [clipID])
+        XCTAssertEqual(f.project.videoClips[0].audioEffects, [effect])
+        XCTAssertNil(f.project.videoClips[1].audioEffects)
+        // A second effect stacks; a missing clip is refused and leaves the project untouched.
+        let echo = AudioEffectOp(effect: "echo", intensity: 0.5, reverbPreset: nil,
+                                 pitchSemitones: nil, delaySeconds: 0.3, mixPercent: nil,
+                                 gainDb: nil, frequencyHz: nil)
+        _ = try f.session.perform(.applyAudioEffect(clipID: clipID, effect: echo))
+        XCTAssertEqual(f.project.videoClips[0].audioEffects, [effect, echo])
+        XCTAssertThrowsError(try f.session.perform(.applyAudioEffect(clipID: UUID(), effect: effect))) { error in
+            XCTAssertEqual(error as? ProjectCommandError, .invalid("clip_not_found"))
+        }
+        XCTAssertEqual(f.project.videoClips[0].audioEffects, [effect, echo])
+    }
+
+    @MainActor
+    func testAudioEffectToolOnTimelineProjectLandsOnTheComposedClip() async throws {
+        let (model, project) = try await makeTimelineModel()
+        let clipID = try XCTUnwrap(project.videoClips.first?.id)
+        // A trim turns the one-clip session into a timeline project, where preview/export
+        // compose from stack.project — the path that previously dropped audio_effect.
+        let trim = await model.performTimelineCommand(.trimVideoClip(clipID: clipID, sourceStart: 0, sourceEnd: 3))
+        XCTAssertNotNil(trim)
+        XCTAssertTrue(try XCTUnwrap(model.editStack).isTimelineProject)
+
+        let result = await model.executeToolCall(ClientToolCall(
+            id: "ae1", name: "audio_effect",
+            arguments: ["effect": .string("reverb"), "reverb_preset": .string("cathedral")]))
+        XCTAssertTrue(result.ok, result.error ?? "ok")
+        let updated = try XCTUnwrap(model.timelineProject?.videoClips.first)
+        XCTAssertEqual(updated.id, clipID)
+        XCTAssertEqual(updated.audioEffects?.map(\.effect), ["reverb"])
+        XCTAssertEqual(updated.audioEffects?.first?.reverbPreset, "cathedral")
+        // Compose reads clip.audioEffects; the effect must still be on the project it uses.
+        XCTAssertEqual(try XCTUnwrap(model.editStack?.project).videoClips.first?.audioEffects, updated.audioEffects)
+    }
 }

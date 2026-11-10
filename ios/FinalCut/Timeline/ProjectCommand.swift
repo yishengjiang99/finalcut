@@ -21,6 +21,7 @@ enum ProjectCommand: Equatable, Sendable {
     case setVideoClipSpeed(clipID: UUID, speed: Double)
     case setVideoClipOriginalAudio(clipID: UUID, enabled: Bool, gain: Double?)
     case applyClipEffect(clipID: UUID?, effect: ClipEffect) // nil clipID = every clip
+    case applyAudioEffect(clipID: UUID, effect: AudioEffectOp)
     case setVideoClipTransition(clipID: UUID, transition: TransitionSpec)
     case setVideoClipFades(clipID: UUID, fadeIn: Double?, fadeOut: Double?)
     // Audio lanes
@@ -252,6 +253,14 @@ enum ProjectCommandExecutor {
                 result.affectedIDs = p.videoClips.map(\.id)
             }
             result.message = "effect applied"
+
+        case .applyAudioEffect(let clipID, let effect):
+            guard let index = p.clipIndex(clipID) else { throw bad("clip_not_found") }
+            var list = p.videoClips[index].audioEffects ?? []
+            list.append(effect)
+            p.videoClips[index].audioEffects = list
+            result.affectedIDs = [clipID]
+            result.message = "audio effect applied"
 
         case .setVideoClipTransition(let clipID, let transition):
             guard let index = p.clipIndex(clipID) else { throw bad("clip_not_found") }
