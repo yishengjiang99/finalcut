@@ -30,7 +30,6 @@ export const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://lo
 export const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID || '';
 export const SESSION_SECRET = process.env.SESSION_SECRET;
 export const APP_BASE_URL = process.env.APP_BASE_URL;
-export const ALLOW_UNAUTH_SAMPLE_MODE = process.env.ALLOW_UNAUTH_SAMPLE_MODE !== 'false';
 export const SAMPLE_TOKEN_TTL_MS = Math.max(60_000, Number(process.env.SAMPLE_TOKEN_TTL_MS || 10 * 60 * 1000));
 // Mobile Bearer access token TTL (default 30 days)
 export const MOBILE_ACCESS_TOKEN_TTL_MS = Math.max(

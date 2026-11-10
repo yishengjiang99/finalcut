@@ -19,7 +19,6 @@ import {
   GOOGLE_IOS_CLIENT_ID,
   SESSION_SECRET,
   stripe,
-  ALLOW_UNAUTH_SAMPLE_MODE,
   SAMPLE_TOKEN_TTL_MS,
   MOBILE_ACCESS_TOKEN_TTL_MS,
   IOS_DEVICE_SESSION_TTL_MS,
@@ -375,10 +374,6 @@ router.post('/api/auth/mobile/google', apiLimiter, async (req, res) => {
 });
 
 router.get('/api/sample-access-token', apiLimiter, (req, res) => {
-
-  if (!ALLOW_UNAUTH_SAMPLE_MODE) {
-    return res.status(403).json({ error: 'Sample mode is disabled' });
-  }
   const token = issueSampleAccessToken();
   res.json({ token, expiresInMs: SAMPLE_TOKEN_TTL_MS });
 });

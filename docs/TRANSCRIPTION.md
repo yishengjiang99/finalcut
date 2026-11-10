@@ -497,8 +497,7 @@ OPENAI_API_KEY=<your OpenAI API key>
 # Required for session management
 SESSION_SECRET=<random secret>
 
-# Optional — enable public demo/sample mode
-ALLOW_UNAUTH_SAMPLE_MODE=true
+# Optional — sample-mode token lifetime (sample mode is always on)
 SAMPLE_TOKEN_TTL_MS=600000   # 10 minutes
 ```
 
