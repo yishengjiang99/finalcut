@@ -224,4 +224,59 @@ final class GroupedToolsTests: XCTestCase {
         XCTAssertTrue(stack.redo())
         XCTAssertEqual(stack.entries.count, 2)
     }
+
+    func testTelephoneMixAmountFollowsIntensityCurveAndOverride() {
+        XCTAssertEqual(GroupedAudioRenderer.telephoneMixAmount(intensity: 0.25, mixPercent: nil), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(GroupedAudioRenderer.telephoneMixAmount(intensity: 0.5, mixPercent: nil), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(GroupedAudioRenderer.telephoneMixAmount(intensity: 1, mixPercent: nil), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(GroupedAudioRenderer.telephoneMixAmount(intensity: 0.5, mixPercent: 40), 0.4, accuracy: 0.0001)
+        XCTAssertEqual(GroupedAudioRenderer.telephoneMixAmount(intensity: 0.5, mixPercent: 200), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(GroupedAudioRenderer.telephoneMixAmount(intensity: 0.5, mixPercent: -10), 0.0, accuracy: 0.0001)
+    }
+
+    func testMakeProjectKeepsGroupedVisualAndAudioOps() {
+        let url = URL(fileURLWithPath: "/tmp/base.mov")
+        var stack = EditStack(base: url, baseCanvas: video)
+        let color = ColorAdjustOp(adjust: ["brighter"], intensity: 0.5, intensityPerChange: [:], values: ColorAdjustValues())
+        let lut = LutOp(preset: "noir", intensity: 0.5)
+        let mixer = ChannelMixerOp(preset: "remove_red", intensity: 0.5, matrix: nil)
+        let filter = ApplyFilterOp(name: "twirl", intensity: 0.5, centerX: 0.5, centerY: 0.5, color: nil, color2: nil, params: [:])
+        let stylize = StylizeOp(preset: "posterize", intensity: 0.5, color: nil)
+        let blur = BlurSharpenOp(mode: "blur", intensity: 1, angleDegrees: nil, centerX: nil, centerY: nil, radiusPx: 8)
+        let vignette = VignetteGrainOp(effect: "vignette", intensity: 1, vignetteAmount: nil, grainAmount: nil)
+        let segment = SegmentOp(action: "color_pop", subject: "person", backgroundColor: nil, intensity: 0.5)
+        let telephone = AudioEffectOp(effect: "telephone", intensity: 0.5, reverbPreset: nil, pitchSemitones: nil,
+                                      delaySeconds: nil, mixPercent: nil, gainDb: nil, frequencyHz: nil)
+        stack.push(EditEntry(tool: "color_adjust", op: .colorAdjust(color)))
+        stack.push(EditEntry(tool: "lut", op: .lut(lut)))
+        stack.push(EditEntry(tool: "channel_mixer", op: .channelMixer(mixer)))
+        stack.push(EditEntry(tool: "apply_filter", op: .applyFilter(filter)))
+        stack.push(EditEntry(tool: "stylize", op: .stylize(stylize)))
+        stack.push(EditEntry(tool: "blur_sharpen", op: .blurSharpen(blur)))
+        stack.push(EditEntry(tool: "vignette_grain", op: .vignetteGrain(vignette)))
+        stack.push(EditEntry(tool: "segment", op: .segment(segment)))
+        stack.push(EditEntry(tool: "audio_effect", op: .audioEffect(telephone)))
+        let clip = stack.makeProject().videoClips[0]
+        XCTAssertEqual(clip.effects.map(\.nativeOp), [
+            .colorAdjust(color), .lut(lut), .channelMixer(mixer), .applyFilter(filter),
+            .stylize(stylize), .blurSharpen(blur), .vignetteGrain(vignette), .segment(segment),
+        ])
+        XCTAssertEqual(clip.audioEffects, [telephone])
+    }
+
+    func testVideoClipDecodesWhenAudioEffectsKeyIsMissing() throws {
+        var project = EditorProject(name: "Legacy", canvas: ProjectCanvas(width: 1280, height: 720))
+        let asset = MediaAsset(id: UUID(), relativePath: "placeholder", name: "clip.mov", mediaType: .video,
+                               duration: .seconds(6), naturalSize: CodableSize(width: 1280, height: 720),
+                               preferredTransform: .identity, nominalFrameRate: 30, hasAudio: true)
+        project.assets = [asset]
+        project.videoClips = [VideoClip(id: UUID(), assetID: asset.id, sourceStart: .zero, sourceEnd: .seconds(6))]
+        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(project)) as? [String: Any])
+        var clips = try XCTUnwrap(root["videoClips"] as? [[String: Any]])
+        clips[0].removeValue(forKey: "audioEffects")
+        root["videoClips"] = clips
+        let loaded = try JSONDecoder().decode(EditorProject.self, from: JSONSerialization.data(withJSONObject: root))
+        XCTAssertNil(loaded.videoClips[0].audioEffects)
+        XCTAssertEqual(loaded.videoClips[0].effects, [])
+    }
 }
