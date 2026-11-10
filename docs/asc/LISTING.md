@@ -1,7 +1,7 @@
 # App Store listing — FinalCap - AI Video Editor (en-US)
 
-Source of truth for the ASC listing. `scripts/asc/upload_finalcut_listing.py` reads the
-fastlane-layout files under `docs/asc/metadata/` and pushes them to App Store Connect
+Source of truth for the ASC listing. `.github/scripts/upload_finalcap_asc.py` (workflow
+`asc-finalcap-upload.yml`) reads `docs/asc/listing.en-US.json` and pushes it to App Store Connect
 (bundle `com.ragnus.w2`, Apple ID `6815060815`). Limits are Apple's. Never use the word
 "Grok" or "Final Cut" anywhere in the upload-ready listing.
 
