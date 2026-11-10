@@ -1,4 +1,4 @@
-# iOS grouped effect tools (build-gated, currently off)
+# iOS grouped effect tools (gated on TestFlight build 43)
 
 Nine iOS-only tools run by the FinalCap iOS on-device executor: `channel_mixer`, `color_adjust`,
 `apply_filter`, `stylize`, `blur_sharpen`, `lut`, `vignette_grain`, `segment`, `audio_effect`.
@@ -12,8 +12,9 @@ Explicit values override `intensity`.
 - Definitions and media types: `src/server/iosGroupedTools.js`. They are not in `src/tools.js`.
   So the web tool list (46 tools) and `docs/api/tools-schema.v1.json` never contain them.
   `audio_effect` is video-only. The other eight take `["video", "image"]`.
-- Gate: `GROUPED_EFFECTS_MIN_BUILD` in `src/server/iosToolAllowlist.js`. It is currently a
-  placeholder (`1_000_000_000`) that no real build reaches.
+- Gate: `GROUPED_EFFECTS_MIN_BUILD` in `src/server/iosToolAllowlist.js`, set to **43** (the next
+  ios-testflight `run_number` after the latest successful run, which was 42). That build must be
+  the first TestFlight build that contains the on-device executor.
 - Test guard: `src/test/ios-grouped-tools.test.js` checks that iOS/10 (21 tools), web (46) and
   `FinalCap/11 CFNetwork/1.0` (46) are byte-identical to snapshots taken before this change
   (`src/test/fixtures/tools-snapshots/`).
@@ -32,11 +33,10 @@ For `FinalCap-iOS/<build>` with `build >= GROUPED_EFFECTS_MIN_BUILD`:
 
 Builds below the cutoff, including 10, keep exactly their current 21 tools.
 
-## Enabling (one line)
+## Enabling
 
-When FinalCut iOS posts the first valid TestFlight build with the grouped-tool executor, set
-`export const GROUPED_EFFECTS_MIN_BUILD = <that build>;` in `src/server/iosToolAllowlist.js`,
-then run `npm test`, push, and deploy. No test needs editing.
+`GROUPED_EFFECTS_MIN_BUILD` is 43. If a TestFlight build ships before this code lands, bump the
+constant to that first build that actually contains the executor and re-run `npm test`.
 
 ## Server runs
 

@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Build-gated iOS grouped effect tools (channel_mixer, color_adjust, ...), switched off for every
-// real build until FinalCut iOS posts the first executor build (GROUPED_EFFECTS_MIN_BUILD).
+// Gate is GROUPED_EFFECTS_MIN_BUILD (43: first TestFlight build that will contain the executor).
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import path from 'path';

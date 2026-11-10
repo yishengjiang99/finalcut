@@ -22,11 +22,11 @@ import { APPLY_COLOR_FILTER_GROUPED_DESCRIPTION } from './iosGroupedTools.js';
 
 /**
  * First FinalCap-iOS build that runs the grouped effect tools (channel_mixer, color_adjust, ...).
- * Set to first VALID TestFlight build with the grouped-tool executor, posted by FinalCut iOS.
- * Until then this is a placeholder no real build reaches: every real build keeps its tools.
- * Enabling is this one line: replace the placeholder with that build number.
+ * Must equal the first TestFlight build that contains the executor (ios-testflight run_number).
+ * Latest successful ios-testflight run on main was 42 (2026-11-10); this PR's first TestFlight
+ * build will be 43.
  */
-export const GROUPED_EFFECTS_MIN_BUILD = 1_000_000_000;
+export const GROUPED_EFFECTS_MIN_BUILD = 43;
 
 /**
  * First FinalCap-iOS build with the server-side ffmpeg_cli fallback executor: when no
