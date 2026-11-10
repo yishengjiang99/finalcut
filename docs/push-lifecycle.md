@@ -1,6 +1,6 @@
 # FinalCap push notification lifecycle
 
-Status (2026-10-10 18:30 PT): **LIVE** (`PUSH_LIFECYCLE_MODE=live`) with APNs configured
+Status (2026-10-10 18:30 PT): **LIVE** with APNs configured (always live since 2026-11; no mode switch)
 (team key GAPGVZ7K2D at `/etc/finalcut/AuthKey_GAPGVZ7K2D.p8`, root:finalcut 0640; auth check
 accepted in sandbox and production for `com.ragnus.w2`). Devices appear once users run 1.0.1+
 (first push-capable build); 1.0 (build 16, in App Store review) has no push client.
@@ -55,8 +55,8 @@ feature is in the live App Store build.
 
 ## 4. Safety
 
-* `PUSH_LIFECYCLE_MODE` = `off | dry_run (default) | sandbox | allowlist | live`. Runtime ops (`push_ops`) can only **downgrade**.
-* Kill switch: env `PUSH_KILL_SWITCH=true`, or the workflow *Push lifecycle (FinalCap)* → `kill_switch_on`.
+* Always live (no `PUSH_LIFECYCLE_MODE` / allowlist / env kill switch). Previews and `dry_run_tick` evaluate without sending.
+* Safety breaker: the auto guard (§8) or the workflow *Push lifecycle (FinalCap)* → `kill_switch_on` sets `push_ops.kill_switch`; nothing is evaluated or sent until `kill_switch_off`.
 * Caps: 1 per 24 h, 3 per rolling 7 days per user. Send window 10:00–20:00 in the device's time zone (no time zone → skipped).
 * Dedupe: unique `(user_id, dedupe_key, dry_run)` in `push_sends`; the row is written **before** the send, so it is also the lock across processes.
 * Dead tokens: 410 / `Unregistered` / `BadDeviceToken` → device disabled immediately. `DELETE /api/push/register` when the user turns notifications off.
@@ -122,5 +122,4 @@ turned Tips & offers off or turned notifications off (app unregisters) exceed **
 
 1. Put the APNs key on grepawk.com for FinalCap: `APNS_KEY_ID=GAPGVZ7K2D`, `APNS_TEAM_ID=83D36RPMUM`, `APNS_P8_PATH=<file>` (same team key as ProTune). Restart via a normal deploy.
 2. Update the App Store privacy label (see `docs/asc/PRIVACY_NUTRITION.md`) and ship the iOS build with push support (after 1.0 is approved; never touch the build in review).
-3. `PUSH_LIFECYCLE_MODE=allowlist` + `PUSH_LIFECYCLE_ALLOWLIST=<your TestFlight device_install_id>`; confirm delivery, tap → editor/paywall, `push_opened` in `report`.
-4. `PUSH_LIFECYCLE_MODE=live`. Watch `report` daily for a week; `kill_switch_on` if opt-outs exceed 2 %/week.
+3. Pushes are live as soon as the APNs key is set. Watch `report` daily for a week; `kill_switch_on` if opt-outs exceed 2 %/week.

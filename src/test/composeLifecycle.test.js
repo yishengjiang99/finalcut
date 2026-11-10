@@ -31,7 +31,7 @@ vi.mock('../db.js', () => db);
 
 const TOKEN = 'tok_secret_123';
 const ENV = { COMPOSE_ENTITLEMENT_TOKEN: TOKEN, COMPOSE_STRIPE_PRICE_PRO_MONTHLY: 'price_cm' };
-const ON = { ...ENV, COMPOSE_LIFECYCLE_EMAILS: '1', RESEND_API_KEY: 're_x', COMPOSE_EMAIL_FROM: 'GBK <hi@grepawk.com>' };
+const ON = { ...ENV, RESEND_API_KEY: 're_x', COMPOSE_EMAIL_FROM: 'GBK <hi@grepawk.com>' };
 
 let compose, music, life;
 beforeAll(async () => {
@@ -103,10 +103,10 @@ describe('#122 checkout + webhooks', () => {
 
   const expired = (consent) => ({ type: 'checkout.session.expired', data: { object: { id: `cs_${consent}`, customer_details: { email: 'a@b.co' }, consent: { promotions: consent }, after_expiration: { recovery: { url: 'https://buy.stripe.com/r/abc' } }, metadata: { product: 'compose' } } } });
 
-  it('recovery email: off by default, needs consent, sent once', async () => {
+  it('recovery email: needs Resend configured and consent, sent once', async () => {
     const sendEmail = vi.fn(async () => {});
     expect(await handle(expired('opt_in'), { sendEmail })).toBe(true);
-    expect(sendEmail).not.toHaveBeenCalled(); // switch off
+    expect(sendEmail).not.toHaveBeenCalled(); // Resend not configured
     await handle(expired('opt_out'), { sendEmail, env: ON });
     expect(sendEmail).not.toHaveBeenCalled(); // no consent
     await handle(expired('opt_in'), { sendEmail, env: ON });
@@ -114,6 +114,12 @@ describe('#122 checkout + webhooks', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(sendEmail.mock.calls[0][0]).toMatchObject({ to: 'a@b.co', subject: 'Your GBK Composer Pro checkout is saved' });
     expect(sendEmail.mock.calls[0][0].text).toContain('https://buy.stripe.com/r/abc');
+  });
+
+  it('no on/off flag: sending depends only on Resend config (COMPOSE_LIFECYCLE_EMAILS ignored)', () => {
+    expect(life.emailsEnabled(ON)).toBe(true);
+    expect(life.emailsEnabled({ ...ON, COMPOSE_LIFECYCLE_EMAILS: '0' })).toBe(true);
+    expect(life.emailsEnabled({ ...ENV, COMPOSE_LIFECYCLE_EMAILS: '1' })).toBe(false);
   });
 
   it('music/FinalCut expired sessions are not handled here', async () => {
@@ -269,7 +275,7 @@ describe('compose welcome email', () => {
   const stripe = { subscriptions: { retrieve: vi.fn(async () => sub) } };
   const trial = { type: 'checkout.session.completed', data: { object: { id: 'cs_w', mode: 'subscription', amount_total: 0, subscription: 'sub_w', customer: 'cus_1', customer_details: { email: 'pro@example.com' }, metadata: { product: 'compose', plan: 'pro_yearly' } } } };
 
-  it('off by default; when on, sent once per session with plan, trial end, Pro perks, studio + signed portal link', async () => {
+  it('not sent without Resend config; when configured, sent once per session with plan, trial end, Pro perks, studio + signed portal link', async () => {
     const sendEmail = vi.fn(async () => {});
     await handle(trial, { sendEmail, stripe });
     expect(sendEmail).not.toHaveBeenCalled();
