@@ -21,7 +21,7 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
   const sig = req.headers['stripe-signature'];
 
   if (!STRIPE_WEBHOOK_SECRET) {
-    console.warn('WARNING: STRIPE_WEBHOOK_SECRET is not set, skipping signature verification');
+    console.warn('WARNING: STRIPE_WEBHOOK_SECRET is not set; rejecting webhook (signature cannot be verified)');
     return res.status(400).json({ error: 'Webhook secret not configured' });
   }
 

@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       full:
@@ -54,8 +57,8 @@ jobs:
           key: blog-img-v1-${{ hashFiles('blog/**/*.png', 'blog/**/*.jpg', 'blog/**/*.jpeg', 'blog/**/*.webp', 'scripts/blog/media.mjs') }}
           restore-keys: blog-img-v1-
 
-      - name: Run tests (smoke subset on merge — full suite via `npm test` locally or workflow_dispatch)
-        run: ${{ inputs.full && 'npm test' || 'npm run test:smoke' }}
+      - name: Run tests (full suite on PRs and workflow_dispatch full; smoke subset on merge)
+        run: ${{ (github.event_name == 'pull_request' || inputs.full) && 'npm test' || 'npm run test:smoke' }}
         env:
           QUOTA_DB_TEST_HOST: 127.0.0.1
           QUOTA_DB_TEST_USER: quota_test
