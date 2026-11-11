@@ -7,6 +7,11 @@ on:
         description: "Upload the committed store screenshots (text-only when false)"
         type: boolean
         default: true
+      version_string:
+        description: App Store versionString to create or update
+        required: true
+        type: string
+        default: "1.3"
 
 jobs:
   upload:
@@ -44,7 +49,7 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           APP_APPLE_ID: "6815060815"
-          VERSION_STRING: "1.1"
+          VERSION_STRING: "${{ inputs.version_string }}"
           LISTING_JSON: docs/asc/listing.en-US.json
           SHOT_DIR: docs/asc/screenshots/en-US
           UPLOAD_SCREENSHOTS: ${{ inputs.screenshots }}
@@ -64,6 +69,7 @@ jobs:
           ASC_REVIEW_CONTACT_PHONE: ${{ secrets.ASC_REVIEW_CONTACT_PHONE }}
           APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           BUNDLE_ID: com.ragnus.w2
+          VERSION_STRING: "${{ inputs.version_string }}"
         run: |
           set -euo pipefail
           pip install -q PyJWT cryptography requests
@@ -83,7 +89,7 @@ jobs:
             return r.json() if r.text else {}
           app=api('GET','/v1/apps?filter[bundleId]=com.ragnus.w2')['data'][0]
           aid=app['id']
-          ver=api('GET',f'/v1/apps/{aid}/appStoreVersions?filter[platform]=IOS&filter[versionString]=1.1')['data'][0]
+          ver=api('GET',f'/v1/apps/{aid}/appStoreVersions?filter[platform]=IOS&filter[versionString]={os.environ["VERSION_STRING"]}')['data'][0]
           vid=ver['id']
           api('PATCH',f'/v1/appStoreVersions/{vid}',{'data':{'type':'appStoreVersions','id':vid,'attributes':{'copyright':'2026 Yisheng Jiang'}}})
           print('copyright set')
