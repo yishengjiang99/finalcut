@@ -11,8 +11,15 @@ cd "$(dirname "$0")/../.."
 REPO="$PWD"
 if [[ "${1:-}" == "--docker" ]]; then
   # Ubuntu 22.04 ships nginx 1.18.0, the same version as production.
+  # apt output is left unquiet so the CI "Installer tests" step shows the install.
   exec docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$REPO:/repo:ro" -w /repo ubuntu:22.04 \
-    bash -c 'apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends nginx curl openssl ca-certificates >/dev/null && bash /repo/tests/nginx/finalcut-site-nginx.test.sh'
+    bash -c 'set -eux
+      echo "::group::Install nginx in ubuntu:22.04"
+      apt-get update
+      apt-get install -y --no-install-recommends nginx curl openssl ca-certificates
+      nginx -v
+      echo "::endgroup::"
+      bash /repo/tests/nginx/finalcut-site-nginx.test.sh'
 fi
 [[ $(id -u) -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }
 [[ -f dist/index.html && -f dist/404.html ]] || { echo "build dist/ first" >&2; exit 1; }

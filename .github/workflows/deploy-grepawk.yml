@@ -50,13 +50,27 @@ on:
   repository_dispatch:
     types: [blog-updated]
   workflow_dispatch:
+    inputs:
+      installer_tests_only:
+        description: 'Run only installer tests (no deploy)'
+        type: boolean
+        default: false
+  # PR runs only the installer-tests-only job (deploy job is gated off below).
+  pull_request:
+    paths:
+      - 'tests/nginx/**'
+      - 'scripts/nginx/**'
+      - 'nginx/**'
+      - '.github/workflows/deploy-grepawk.yml'
 
 concurrency:
-  group: deploy-grepawk
+  # PR and installer-only runs get their own group so they never queue behind or cancel a prod deploy.
+  group: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.installer_tests_only)) && format('installer-tests-{0}', github.ref) || 'deploy-grepawk' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
+    if: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.installer_tests_only != true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -262,3 +276,54 @@ jobs:
           name: deploy-gate-${{ github.run_id }}
           path: deploy-gate/
           if-no-files-found: ignore
+
+  # Safe subset: same "Installer tests" step as deploy, no SSH / prod. Used on PRs
+  # and workflow_dispatch with installer_tests_only, so nginx install output can be
+  # inspected without shipping.
+  installer-tests-only:
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.installer_tests_only == true) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Cache GPL source archives (keyed on pinned checksums)
+        uses: actions/cache@v4
+        with:
+          path: .cache/ffmpeg-source
+          key: ffmpeg-source-${{ hashFiles('vendor/ffmpeg-source.lock.json') }}
+
+      - name: Cache encoded blog images (content-addressed; see scripts/blog/media.mjs IMG_CACHE)
+        uses: actions/cache@v4
+        with:
+          path: .cache/blog-media/img-v1
+          key: blog-img-v1-${{ hashFiles('blog/**/*.png', 'blog/**/*.jpg', 'blog/**/*.jpeg', 'blog/**/*.webp', 'scripts/blog/media.mjs') }}
+          restore-keys: blog-img-v1-
+
+      - name: Build (npm run build, then npm run build:v2)
+        run: |
+          set -euo pipefail
+          npm run build
+          npm run build:v2
+          npm run source:verify
+          for f in dist/index.html dist/legal/licenses.html dist/v2/index.html \
+                   dist/v2/ffmpeg-core/mt/0.13.0-finalcut.3/ffmpeg-core.wasm dist/v2/ffmpeg-core/st/0.13.0-finalcut.3/ffmpeg-core.wasm dist/v2/ffmpeg-core/st/0.12.10/ffmpeg-core.wasm \
+                   dist/v2/vendor/ffmpeg/source/SHA256SUMS dist/v2/vendor/ffmpeg/source/index.html; do
+            test -s "$f" || { echo "missing build output: $f" >&2; exit 1; }
+          done
+          (cd dist/v2/vendor/ffmpeg/source && sha256sum -c --quiet SHA256SUMS)
+          du -sh dist dist/v2
+
+      - name: Installer tests (stubbed harness + real nginx 1.18)
+        run: |
+          set -euo pipefail
+          bash tests/nginx/finalcut-v2-nginx.test.sh
+          bash tests/nginx/finalcut-site-nginx.test.sh --docker
