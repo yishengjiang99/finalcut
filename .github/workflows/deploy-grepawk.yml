@@ -64,7 +64,8 @@ on:
       - '.github/workflows/deploy-grepawk.yml'
 
 concurrency:
-  group: deploy-grepawk
+  # PR and installer-only runs get their own group so they never queue behind or cancel a prod deploy.
+  group: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.installer_tests_only)) && format('installer-tests-{0}', github.ref) || 'deploy-grepawk' }}
   cancel-in-progress: false
 
 jobs:
