@@ -27,6 +27,21 @@ final class SlideshowBuilderTests: XCTestCase {
         XCTAssertEqual(timing.layer(at: timing.totalFrames - 1).index, 2)
     }
 
+    func testIdenticalHoldFramesAreNotAllEncoded() {
+        let still = SlideshowBuilder.Timing(photoCount: 1, secondsPerPhoto: 10, fadeSeconds: 0)
+        XCTAssertEqual(still.totalFrames, 300)
+        let stillEncoded = (0..<still.totalFrames).filter { still.shouldEncode($0) }
+        XCTAssertEqual(stillEncoded, [0, still.totalFrames - 1])
+
+        let two = SlideshowBuilder.Timing(photoCount: 2)
+        let twoEncoded = (0..<two.totalFrames).filter { two.shouldEncode($0) }
+        XCTAssertTrue(twoEncoded.contains(0))
+        XCTAssertTrue(twoEncoded.contains(two.totalFrames - 1))
+        // Hold frames of the same photo are skipped; only fades and shot changes are encoded.
+        XCTAssertLessThan(twoEncoded.count, two.totalFrames / 2)
+        XCTAssertGreaterThanOrEqual(twoEncoded.count, two.fadeFrames)
+    }
+
     func testOutputSizeFollowsFirstPhotoAspect() {
         XCTAssertEqual(SlideshowBuilder.outputSize(forFirstPhoto: CGSize(width: 4032, height: 3024)), CGSize(width: 1440, height: 1080))
         XCTAssertEqual(SlideshowBuilder.outputSize(forFirstPhoto: CGSize(width: 3024, height: 4032)), CGSize(width: 1080, height: 1440))
