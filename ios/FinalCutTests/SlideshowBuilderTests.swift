@@ -109,7 +109,7 @@ final class SlideshowBuilderTests: XCTestCase {
         XCTAssertEqual(model.localVideoURL, original)
     }
 
-        static func jpeg(width: Int, height: Int, orientation: Int) throws -> URL {
+    static func jpeg(width: Int, height: Int, orientation: Int) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("slide-\(UUID().uuidString).jpg")
         let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height),
                                             format: { let f = UIGraphicsImageRendererFormat(); f.scale = 1; return f }())

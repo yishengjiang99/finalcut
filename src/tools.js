@@ -80,7 +80,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'trim_video',
-      description: 'Trim the video to keep only the portion between the start and end times. Times can be in seconds or HH:MM:SS format. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Trim the video to keep only the portion between the start and end times. Times can be in seconds or HH:MM:SS format. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -95,7 +95,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'adjust_speed',
-      description: 'Change the playback speed of the video and audio. A factor >1 speeds up, <1 slows down. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Change the playback speed of the video and audio. A factor >1 speeds up, <1 slows down. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -109,7 +109,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'add_audio_track',
-      description: 'Add or replace the audio track in a video with a new audio file. This can be used to add background music, voiceovers, or replace the existing audio entirely. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Add or replace the audio track in a video with a new audio file. This can be used to add background music, voiceovers, or replace the existing audio entirely. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -863,7 +863,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'extract_audio',
-      description: 'Extract audio track from a video file and save it as an audio file. Useful for getting just the audio from a video. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Extract audio track from a video file and save it as an audio file. Useful for getting just the audio from a video. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -899,7 +899,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'generate_captions',
-      description: 'Generate same-language subtitles from the video audio via speech-to-text (OpenAI transcription on the server). For captions in another language ("add captions in Chinese", "translate the video into Spanish") call lyric_captions instead, which shows the original plus the translation as live captions and burns them into the video when the user exports; use translate_language here only to also save a translated soft SRT/VTT file (burn_in false). Use ISO language codes when possible (en, es, fr, de, ja, zh) — full names like "Spanish" are also accepted. Creates SRT/VTT. When burn_in is true (default), the captions are shown live on the preview and burned into the video frames when the user exports, in the browser (original line, then the translation if translating). When burn_in is false, returns soft subtitle tracks only (SRT/VTT, no re-encode). Use for accessibility, social, or international content. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Generate same-language subtitles from the video audio via speech-to-text (OpenAI transcription on the server). For captions in another language ("add captions in Chinese", "translate the video into Spanish") call lyric_captions instead, which shows the original plus the translation as live captions and burns them into the video when the user exports; use translate_language here only to also save a translated soft SRT/VTT file (burn_in false). Use ISO language codes when possible (en, es, fr, de, ja, zh) — full names like "Spanish" are also accepted. Creates SRT/VTT. When burn_in is true (default), the captions are shown live on the preview and burned into the video frames when the user exports, in the browser (original line, then the translation if translating). When burn_in is false, returns soft subtitle tracks only (SRT/VTT, no re-encode). Use for accessibility, social, or international content. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -938,7 +938,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'lyric_captions',
-      description: 'Translated captions: shows the original line plus a translation as live captions on the preview, and burns them into the video frames when the user exports (in the browser). This is THE tool whenever the user wants captions or subtitles in another language, for speech and for songs. Use it for "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the video into Chinese and burn the captions", "translate the speech to Spanish", and for songs: "add lyrics captions", "subtitle the song in Chinese", "subtitle the song in German and Chinese", "translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: fixes only obvious recognition errors, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the audio with word timestamps (only the audio track is sent to the server, never the video), translates each line into target_language, and builds two-line captions (original on top, translation below, about 20% up from the bottom; Chinese and other scripts render correctly). In lyrics mode it also identifies the song and corrects misheard lyrics against the published lyrics. Captions appear as a live overlay on the preview; font, size and position style that overlay. When the user exports, the captions are burned into the video frames in the browser, so they show in Photos and every player; the video never leaves the browser. Calling it again replaces the earlier captions, not doubles them. Use generate_captions only for same-language subtitles, soft SRT/VTT files, or style/position options. Never ask about font, size or position first: call this tool straight away; pass font, size and position only when the user already stated them, otherwise omit them (the defaults apply). To change the look of captions that already exist, call style_captions, not this tool again. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Translated captions: shows the original line plus a translation as live captions on the preview, and burns them into the video frames when the user exports (in the browser). This is THE tool whenever the user wants captions or subtitles in another language, for speech and for songs. Use it for "add captions in Chinese", "add Chinese captions", "Chinese subtitles", "translate the video into Chinese and burn the captions", "translate the speech to Spanish", and for songs: "add lyrics captions", "subtitle the song in Chinese", "subtitle the song in German and Chinese", "translate the lyrics on the video to Spanish". Set mode "speech" for ordinary talking (interviews, vlogs, dialogue: fixes only obvious recognition errors, no song lookup), mode "lyrics" for a song or music video, and leave mode "auto" if unsure. Fill target_language from the language the user wants the translation in (Chinese is "zh-Hans" unless they ask for Traditional, then "zh-Hant"); the spoken or sung language is detected automatically, so set source_language only if they name it. If they name two languages ("in German and Chinese"), the sung language is the source and the other is target_language. If they name no translation language, ask which one they want. Transcribes the audio with word timestamps (only the audio track is sent to the server, never the video), translates each line into target_language, and builds two-line captions (original on top, translation below, about 20% up from the bottom; Chinese and other scripts render correctly). In lyrics mode it also identifies the song and corrects misheard lyrics against the published lyrics. Captions appear as a live overlay on the preview; font, size and position style that overlay. When the user exports, the captions are burned into the video frames in the browser, so they show in Photos and every player; the video never leaves the browser. Calling it again replaces the earlier captions, not doubles them. Use generate_captions only for same-language subtitles, soft SRT/VTT files, or style/position options. Never ask about font, size or position first: call this tool straight away; pass font, size and position only when the user already stated them, otherwise omit them (the defaults apply). To change the look of captions that already exist, call style_captions, not this tool again. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -1030,7 +1030,7 @@ export const tools = [
       name: 'add_soundtrack',
       description: 'Generate an ORIGINAL music track (no copyrighted songs) and add it as the soundtrack. Use when the user asks to add music, a soundtrack or background music without giving a YouTube link. ' +
         'Fill style and mood from their wording and duration_seconds from the video length (or what they ask for). Generation takes up to a couple of minutes. ' +
-        'By default the original audio is kept at 30% under the music; set original_volume (0 mutes it, 1 keeps it full). If the result says a limit was hit, tell the user and do not retry this turn. Works on videos and on photos (the client turns the photo into a still video of duration_seconds first).',
+        'By default the original audio is kept at 30% under the music; set original_volume (0 mutes it, 1 keeps it full). If the result says a limit was hit, tell the user and do not retry this turn. Videos only.',
       parameters: {
         type: 'object',
         properties: {
@@ -1050,7 +1050,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'style_captions',
-      description: 'Change how the existing captions look (font, size, position) without transcribing or translating again: instant, nothing is uploaded and no new edit is used. Use it after lyric_captions or generate_captions when the user asks for a different font, a bigger or smaller size, higher or lower captions, or the top or middle of the picture. Send only the parts that change; everything else keeps its current value (the previous tool result states the current style). Do NOT call lyric_captions again for a style change. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Change how the existing captions look (font, size, position) without transcribing or translating again: instant, nothing is uploaded and no new edit is used. Use it after lyric_captions or generate_captions when the user asks for a different font, a bigger or smaller size, higher or lower captions, or the top or middle of the picture. Send only the parts that change; everything else keeps its current value (the previous tool result states the current style). Do NOT call lyric_captions again for a style change. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -1090,7 +1090,7 @@ export const tools = [
     type: 'function',
     function: {
       name: 'add_video_transition',
-      description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.',
+      description: 'Add professional transitions between multiple video clips that the user has uploaded. This creates smooth scene transitions in vlogs, professional-looking montages, and educational content with multiple segments. Supports fade, crossfade, wipe (horizontal/vertical), slide, and dissolve transitions. IMPORTANT: The user must upload multiple videos first before this tool can be used. The system will automatically use all uploaded videos. Videos only — not supported for photos.',
       parameters: {
         type: 'object',
         properties: {
@@ -1181,4 +1181,4 @@ export const tools = [
   }
 ];
 
-export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic), frame edits apply directly. For captions, soundtrack, trim, speed, or other timeline edits, call the tool: the client first turns the photo into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video. For any request to caption or subtitle in a different language ("add captions in Chinese", "translate the video into Chinese"), or for songs, music videos, or the original line plus a translation, call lyric_captions with target_language (mode speech for ordinary talking, lyrics for songs) instead; generate_captions is for same-language captions. ' + CAPTION_STYLE_GUIDANCE;
+export const systemPrompt = 'You are a helpful video, photo, and audio editing assistant. Use the provided tools to apply filters and edits to the uploaded video, photo, or audio. For photos (jpg/png/webp/heic) only use frame edits: apply_color_filter, adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation, crop_video, resize_video, rotate_video, flip_video_horizontal, flip_video_vertical, add_text, convert_image_format — never trim, speed, audio, captions, or transitions on a photo. Respond with descriptions of actions and call tools when appropriate to perform the edits. For subtitles/captions, call generate_captions with ISO language codes (en, es, fr, …) or auto; use translate_language only when the user wants a second language; set burn_in false only if they ask for subtitle files without burning into the video. For any request to caption or subtitle in a different language ("add captions in Chinese", "translate the video into Chinese"), or for songs, music videos, or the original line plus a translation, call lyric_captions with target_language (mode speech for ordinary talking, lyrics for songs) instead; generate_captions is for same-language captions. ' + CAPTION_STYLE_GUIDANCE;

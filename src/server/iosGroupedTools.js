@@ -611,7 +611,7 @@ export const IOS_GROUPED_TOOLS = deepFreeze([
     "type": "function",
     "function": {
       "name": "audio_effect",
-      "description": "Audio effects rendered on the device: bass or treble boost/cut, voice boost (clearer speech), remove low rumble, muffle, telephone, reverb, echo, pitch up/down, robot voice, radio voice, distortion, noise gate (silence background hiss between words). Use for 'add reverb', 'more bass', 'make my voice deeper', 'chipmunk voice', 'sound like a phone call', 'remove the hum'. Works on videos, and on photos after the client turns the photo into a still video. Volume and fades are adjust_audio_volume and audio_fade. Out-of-range values are clamped. Rendering takes a few seconds on long clips. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
+      "description": "Audio effects rendered on the device: bass or treble boost/cut, voice boost (clearer speech), remove low rumble, muffle, telephone, reverb, echo, pitch up/down, robot voice, radio voice, distortion, noise gate (silence background hiss between words). Use for 'add reverb', 'more bass', 'make my voice deeper', 'chipmunk voice', 'sound like a phone call', 'remove the hum'. Videos only (not photos). Volume and fades are adjust_audio_volume and audio_fade. Out-of-range values are clamped. Rendering takes a few seconds on long clips. Strength: intensity 0.25 for 'a bit'/'slightly', 0.5 when no strength is given, 0.8 for 'a lot'/'very'; explicit values override it.",
       "parameters": {
         "type": "object",
         "properties": {

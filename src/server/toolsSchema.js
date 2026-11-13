@@ -5,7 +5,7 @@ import { tools } from '../tools.js';
 import { parseFinalCapIosUserAgent } from './clientInfo.js';
 import { IOS_GROUPED_TOOLS, IOS_GROUPED_TOOL_MEDIA_TYPES } from './iosGroupedTools.js';
 import { IOS_TIMELINE_TOOLS, IOS_TIMELINE_TOOL_MEDIA_TYPES } from './iosTimelineTools.js';
-import { filterToolsForUserAgent } from './iosToolAllowlist.js';
+import { filterToolsForUserAgent, supportsStillVideoFromPhotos } from './iosToolAllowlist.js';
 import { ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 export const TOOLS_SCHEMA_VERSION = '1';
@@ -52,25 +52,60 @@ function restrictToMediaType(list, mediaType) {
  * server-side ffmpeg_cli fallback is appended last for iOS so the
  * model treats it as the last resort; the allowlist (FFMPEG_CLI_MIN_BUILD) keeps it away from
  * builds that can't execute it.
+ *
+ * From STILL_VIDEO_PHOTOS_MIN_BUILD, FinalCap-iOS can turn a photo into a still
+ * video, so timeline-capable tools are also offered for image media (not the
+ * FFmpeg fallback or the multi-clip timeline tools). Older iOS builds and web
+ * keep the frame-only photo list.
  */
+export const STILL_VIDEO_PHOTO_CLAUSE =
+  ' Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.';
+
+const VIDEOS_ONLY_SUFFIX = /(?: Videos only — not supported for photos\.| Videos only\.| Videos only \(not photos\)\.)$/;
+
+function isStillVideoAnnotatable(name) {
+  if (!name || PHOTO_AND_VIDEO_TOOLS.has(name) || PHOTO_ONLY_TOOLS.has(name)) return false;
+  if (name === FFMPEG_CLI_TOOL_NAME) return false;
+  if (Object.prototype.hasOwnProperty.call(IOS_TIMELINE_TOOL_MEDIA_TYPES, name)) return false;
+  return true;
+}
+
+/** Append the still-video photo clause to a tool description (idempotent). */
+export function withStillVideoPhotoDescription(tool) {
+  const desc = tool?.function?.description;
+  if (typeof desc !== 'string') return tool;
+  if (desc.includes('turns the photo into a still video') || desc.includes('turns it into a still video')) return tool;
+  const copy = JSON.parse(JSON.stringify(tool));
+  copy.function.description = desc.replace(VIDEOS_ONLY_SUFFIX, '') + STILL_VIDEO_PHOTO_CLAUSE;
+  return copy;
+}
+
+function annotateStillVideoPhotoDescriptions(list, userAgent) {
+  if (!supportsStillVideoFromPhotos(userAgent) || !Array.isArray(list)) return list;
+  return list.map(t => (isStillVideoAnnotatable(t?.function?.name) ? withStillVideoPhotoDescription(t) : t));
+}
+
 export function offeredToolsFor({ userAgent, mediaType } = {}) {
   const isIos = parseFinalCapIosUserAgent(userAgent).isFinalCapIos;
   const shared = tools;
   const candidates = isIos ? [...shared, ...IOS_GROUPED_TOOLS, ...IOS_TIMELINE_TOOLS, ffmpegCliToolDefinition] : shared;
-  // iOS turns a photo into a still video before running timeline edits, so
-  // those tools are offered for image media too. The FFmpeg fallback and the
-  // multi-clip timeline tools stay off photos.
-  if (isIos && mediaType === 'image') {
+  if (supportsStillVideoFromPhotos(userAgent) && mediaType === 'image') {
     const timeline = new Set(IOS_TIMELINE_TOOLS.map(t => t.function.name));
-    return filterToolsForUserAgent(
-      candidates.filter(t => {
-        const n = t?.function?.name;
-        return n && n !== FFMPEG_CLI_TOOL_NAME && !timeline.has(n);
-      }),
+    return annotateStillVideoPhotoDescriptions(
+      filterToolsForUserAgent(
+        candidates.filter(t => {
+          const n = t?.function?.name;
+          return n && n !== FFMPEG_CLI_TOOL_NAME && !timeline.has(n);
+        }),
+        userAgent,
+      ),
       userAgent,
     );
   }
-  return filterToolsForUserAgent(restrictToMediaType(candidates, mediaType), userAgent);
+  return annotateStillVideoPhotoDescriptions(
+    filterToolsForUserAgent(restrictToMediaType(candidates, mediaType), userAgent),
+    userAgent,
+  );
 }
 
 /**

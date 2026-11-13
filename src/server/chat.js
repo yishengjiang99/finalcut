@@ -44,7 +44,7 @@ import {
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { CAPTION_STYLE_GUIDANCE } from '../lyricShared.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
-import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD } from './iosToolAllowlist.js';
+import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD, STILL_VIDEO_PHOTOS_MIN_BUILD, supportsStillVideoFromPhotos } from './iosToolAllowlist.js';
 import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, FFMPEG_CLI_STRING_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 const router = express.Router();
@@ -409,11 +409,14 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
 
   // FinalCap-iOS UA → only allowlisted on-device tools (incl. iOS-only grouped tools); any other UA → unchanged.
-  const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent: req.get('user-agent'), mediaType: media?.type })
+  const userAgent = req.get('user-agent');
+  const iosInfo = parseFinalCapIosUserAgent(userAgent);
+  const stillVideoFromPhotos = supportsStillVideoFromPhotos(userAgent);
+  const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent, mediaType: media?.type })
     .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
   const contextLines = [
     profile?.instructions || CLIENT_EXECUTION_INSTRUCTIONS,
-    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
+    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages, stillVideoFromPhotos }),
     ...(profile?.guidance || []),
   ];
   // The server-side ffmpeg_cli fallback is offered to iOS builds that ship its executor
@@ -445,7 +448,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   if (roundCapReached) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
   }
-  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null, captionStyle: !parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos, stillVideoFromPhotos: parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
+  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null, captionStyle: !iosInfo.isFinalCapIos, stillVideoFromPhotos });
   const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
 
   const modelMessages = [systemMessage];
@@ -692,7 +695,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const { media: clientMedia, ...clientBody } = req.body;
     const hasTools = Array.isArray(clientBody.tools) && clientBody.tools.length > 0;
     const mediaType = hasTools ? streamingMediaType(clientMedia) : 'none';
-    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType, captionStyle: !iosInfo.isFinalCapIos, stillVideoFromPhotos: iosInfo.isFinalCapIos });
+    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType, captionStyle: !iosInfo.isFinalCapIos, stillVideoFromPhotos: iosInfo.isFinalCapIos && iosInfo.build >= STILL_VIDEO_PHOTOS_MIN_BUILD });
 
     debugChat('request', JSON.stringify({
       userId,

@@ -35,6 +35,9 @@ import {
   restrictStreamingToolsToMedia,
   streamingMediaType,
 } from '../server/chat.js';
+import { mediaContextText } from '../server/clientExecution.js';
+import { offeredToolsFor } from '../server/toolsSchema.js';
+import { systemPrompt, tools } from '../tools.js';
 
 describe('buildSystemMessage', () => {
   it('always includes the role and the output contract', () => {
@@ -75,6 +78,23 @@ describe('buildSystemMessage', () => {
     expect(iosPhoto).toContain('convert it to a still video first');
     expect(iosPhoto).toContain('Do not say captions or soundtracks are unavailable for photos');
     expect(iosPhoto).not.toContain('do not exist for a photo');
+
+    const webCtx = mediaContextText({ type: 'image' });
+    expect(webCtx).toContain('only frame edits apply (no trim, speed, audio, captions, or transitions)');
+    expect(webCtx).not.toContain('still video');
+    const iosCtx = mediaContextText({ type: 'image' }, { stillVideoFromPhotos: true });
+    expect(iosCtx).toContain('turns the photo into a still video');
+    expect(iosCtx).not.toContain('only frame edits apply (no trim');
+
+    expect(systemPrompt).toContain('only use frame edits:');
+    expect(systemPrompt).toContain('never trim, speed, audio, captions, or transitions on a photo');
+    expect(systemPrompt).not.toContain('still video');
+
+    const webTrim = tools.find(t => t.function.name === 'trim_video').function.description;
+    expect(webTrim).toMatch(/Videos only — not supported for photos/);
+    expect(webTrim).not.toMatch(/still video/);
+    expect(offeredToolsFor({ userAgent: 'Mozilla/5.0', mediaType: 'image' }).map(t => t.function.name)).not.toContain('trim_video');
+    expect(offeredToolsFor({ mediaType: 'image' }).find(t => t.function.name === 'trim_video')).toBeUndefined();
   });
 
   it('lists every photo-capable tool when the client did not say what the media is', () => {

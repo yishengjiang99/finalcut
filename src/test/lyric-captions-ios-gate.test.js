@@ -39,6 +39,7 @@ import {
   IOS_TOOL_ALLOWLIST,
   GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION,
   LYRIC_CAPTIONS_IOS_DESCRIPTION,
+  STILL_VIDEO_PHOTOS_MIN_BUILD,
   isToolAllowedForIosBuild,
 } from '../server/iosToolAllowlist.js';
 import { assertOperationSupported } from '../server/ffmpegOps.js';
@@ -172,15 +173,22 @@ describe('every iOS build', () => {
     }
   });
 
-  it('photo: offered on iOS (the client converts to a still video first)', () => {
-    expect(names(at(12, 'image'))).toContain('lyric_captions');
+  it('photo: not offered below STILL_VIDEO_PHOTOS_MIN_BUILD; offered at the gate', () => {
+    expect(names(at(12, 'image'))).not.toContain('lyric_captions');
+    expect(names(at(STILL_VIDEO_PHOTOS_MIN_BUILD - 1, 'image'))).not.toContain('lyric_captions');
+    expect(names(at(STILL_VIDEO_PHOTOS_MIN_BUILD, 'image'))).toContain('lyric_captions');
     expect(buildToolsSchema({ userAgent: ios(12) }).mediaTypes.lyric_captions).toEqual(['video']);
+    const atGate = at(STILL_VIDEO_PHOTOS_MIN_BUILD).find(t => t.function.name === 'lyric_captions');
+    expect(atGate.function.description).toMatch(/still video/);
+    expect(atGate.function.description).not.toBe(LYRIC_CAPTIONS_IOS_DESCRIPTION);
+    expect(LYRIC_CAPTIONS_IOS_DESCRIPTION).toMatch(/Videos only/);
+    expect(LYRIC_CAPTIONS_IOS_DESCRIPTION).not.toMatch(/still video/);
   });
 
   it('the iOS description covers the flow: consent, audio only, drawn on device, skip when declined, no lyrics back', () => {
     for (const phrase of ['add lyrics captions', 'subtitle the song in Chinese', 'translate the lyrics on the video',
       'asks the user before uploading', 'only this video\'s audio (never the picture)', 'the app then draws',
-      'nothing is uploaded and the step is skipped', 'never the lyrics', 'still video']) {
+      'nothing is uploaded and the step is skipped', 'never the lyrics', 'Videos only']) {
       expect(LYRIC_CAPTIONS_IOS_DESCRIPTION).toContain(phrase);
     }
   });
@@ -194,7 +202,7 @@ describe('every iOS build', () => {
     }
   });
 
-  it('POST /api/chat execution:"client": offered for a video and for a photo (still-video conversion) on every build', async () => {
+  it('POST /api/chat execution:"client": offered for a video on every build, not for a photo below the gate, offered for a photo at the gate', async () => {
     const chat = (ua, type) => realFetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'sample-access-token': token, 'User-Agent': ua },
@@ -203,11 +211,17 @@ describe('every iOS build', () => {
     await chat(ios(12), 'video');
     await chat(ios(12), 'image');
     await chat(ios(10), 'video');
+    await chat(ios(STILL_VIDEO_PHOTOS_MIN_BUILD - 1), 'image');
+    await chat(ios(STILL_VIDEO_PHOTOS_MIN_BUILD), 'image');
     const offered = xaiCalls.map(c => c.tools || []);
     const video = offered[0].find(t => t.function.name === 'lyric_captions');
     expect(video.function.description).toBe(LYRIC_CAPTIONS_IOS_DESCRIPTION);
-    expect(names(offered[1])).toContain('lyric_captions');
+    expect(names(offered[1])).not.toContain('lyric_captions');
     expect(names(offered[2])).toContain('lyric_captions');
+    expect(names(offered[3])).not.toContain('lyric_captions');
+    expect(names(offered[4])).toContain('lyric_captions');
+    const photoTool = offered[4].find(t => t.function.name === 'lyric_captions');
+    expect(photoTool.function.description).toMatch(/still video/);
   });
 });
 
