@@ -77,7 +77,16 @@ enum SlideshowBuilder {
     }
 
     /// Writes the slideshow to a new .mp4. `progress` gets 0…1 as frames are written.
+    /// The writer loop always runs off the main actor: AVAssetWriter needs the
+    /// main run loop to flip `isReadyForMoreMediaData`, and sleeping on the main
+    /// actor can stall until the 5-minute test allowance (or hang the UI).
     static func build(photos: [URL], secondsPerPhoto: Double? = nil, fadeSeconds: Double? = nil, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            try await write(photos: photos, secondsPerPhoto: secondsPerPhoto, fadeSeconds: fadeSeconds, progress: progress)
+        }.value
+    }
+
+    private static func write(photos: [URL], secondsPerPhoto: Double?, fadeSeconds: Double?, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         guard let first = photos.first else { throw BuildError.noPhotos }
         let firstSize = PhotoTranscoder.orientedPixelSize(of: first).map { CGSize(width: $0.width, height: $0.height) }
         let size = outputSize(forFirstPhoto: firstSize)

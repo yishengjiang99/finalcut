@@ -2296,7 +2296,13 @@ final class EditorViewModel: ObservableObject {
     /// a still video of `duration` seconds with a silent audio track. Undo of
     /// this rebase returns to the photo.
     func promotePhotoToStillVideo(duration: Double) async throws {
-        guard var stack = editStack, stack.isPhoto else { return }
+        // `startEditing` creates the stack in a detached Task, so `editStack`
+        // can still be nil right after import even though `isPhoto` is true.
+        guard let ready = await ensureStack() else {
+            throw SlideshowBuilder.BuildError.writer("no media")
+        }
+        guard ready.isPhoto else { return }
+        var stack = ready
         let source: URL
         if stack.entries.isEmpty {
             source = stack.base
