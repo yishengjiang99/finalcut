@@ -127,8 +127,10 @@ final class LyricCaptionsTests: XCTestCase {
                                              canvas: video),
                        .success(.lyricCaptions(LyricCaptionRequest(targetLanguage: "es", sourceLanguage: nil, mode: .auto,
                                                                    positionFromBottomPct: nil, fontSize: nil))))
+        // Photos are planned successfully; the client converts to a still video first.
         XCTAssertEqual(NativeToolParser.plan(tool: "lyric_captions", arguments: ["target_language": .string("es")], canvas: photo),
-                       .failure(.unsupportedForPhoto))
+                       .success(.lyricCaptions(LyricCaptionRequest(targetLanguage: "es", sourceLanguage: nil, mode: .auto,
+                                                                   positionFromBottomPct: nil, fontSize: nil))))
         XCTAssertEqual(NativeToolParser.plan(tool: "lyric_captions", arguments: ["target_language": .string("es")], canvas: silent),
                        .failure(.invalidArguments("no audio track")))
         for bad: [String: JSONValue] in [

@@ -3,6 +3,14 @@ import UniformTypeIdentifiers
 import XCTest
 @testable import FinalCut
 
+/// Avoids on-device Speech in these tests (recognizer can hang on silent audio in CI).
+private struct StubCaptioner: CaptionTranscribing {
+    var words: [TimedWord] = []
+    func transcribe(_ composed: ComposedVideo, language: String?) async throws -> CaptionTranscript {
+        CaptionTranscript(words: words, language: language ?? "en-US")
+    }
+}
+
 /// Photo mode (NATIVE_EDIT_UX.md §7) + server error-code UX (§8, Backend #88 / Design #90).
 final class PhotoModeTests: XCTestCase {
 
@@ -233,6 +241,7 @@ final class PhotoModeTests: XCTestCase {
     func testCaptionsOnPhotoAreNoLongerRefused() async throws {
         let jpg = try XCTUnwrap(writeImage("r.jpg", type: .jpeg, orientation: 1))
         let model = EditorViewModel()
+        model.captioner = StubCaptioner(words: [])
         await model.handleImport(.success([jpg]))
         model.state = .ready
         let result = await model.executeToolCall(ClientToolCall(id: "c1", name: "generate_captions", arguments: [:]))
@@ -240,6 +249,7 @@ final class PhotoModeTests: XCTestCase {
         XCTAssertNotEqual(model.messages.last?.failureCard?.kind, .photoUnsupported)
         // Conversion happens before transcription (the still has no speech).
         XCTAssertFalse(model.isPhoto)
+        XCTAssertEqual(result.error, "no_speech")
     }
 
     @MainActor
