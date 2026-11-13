@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import { tools } from '../tools.js';
-import { GROUPED_EFFECTS_MIN_BUILD } from '../server/iosToolAllowlist.js';
+import { GROUPED_EFFECTS_MIN_BUILD, STILL_VIDEO_PHOTOS_MIN_BUILD } from '../server/iosToolAllowlist.js';
 import {
   DEFAULT_SUGGESTIONS_PATH,
   FALLBACK_BUILD,
@@ -184,8 +184,15 @@ describe('filtering with a test-only config (grouped tools, build bounds, media)
 
   it('video-only tools never show for photos, even when the build has them', () => {
     expect(at(CUTOFF, 'photo')).not.toContain('t-reverb-photo');
+    expect(at(STILL_VIDEO_PHOTOS_MIN_BUILD - 1, 'photo')).not.toContain('t-reverb-photo');
     expect(at(CUTOFF, 'video')).toContain('t-reverb');
     expect(at(12, 'video')).not.toContain('t-reverb');
+  });
+
+  it('at STILL_VIDEO_PHOTOS_MIN_BUILD a video-only pill can show for a photo (still-video conversion)', () => {
+    expect(at(STILL_VIDEO_PHOTOS_MIN_BUILD - 1, 'photo')).not.toContain('t-reverb-photo');
+    expect(at(STILL_VIDEO_PHOTOS_MIN_BUILD, 'photo')).toContain('t-reverb-photo');
+    expect(at(STILL_VIDEO_PHOTOS_MIN_BUILD, 'photo')).toContain('t-grade');
   });
 
   it('minBuild / maxBuild are inclusive; a missing build is treated as 10', async () => {

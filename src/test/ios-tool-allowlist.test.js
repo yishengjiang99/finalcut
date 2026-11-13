@@ -47,6 +47,7 @@ import {
 import { toolsForMediaType } from '../server/toolsSchema.js';
 import {
   IOS_TOOL_ALLOWLIST,
+  STILL_VIDEO_PHOTOS_MIN_BUILD,
   filterToolsForUserAgent,
   iosBuildRange,
   isToolAllowedForIosBuild,
@@ -233,6 +234,30 @@ describe('POST /api/chat execution:"client" with a FinalCap-iOS UA', () => {
     expect(offered).not.toContain('trim_video');
     expect(offered).toContain('convert_image_format');
     expect(xaiCalls[0].tools.find(t => t.function.name === 'convert_image_format').function.parameters.properties.format.enum).toEqual(['jpg', 'png']);
+  });
+
+  it('photo: timeline tools stay hidden below STILL_VIDEO_PHOTOS_MIN_BUILD and are offered at the gate', async () => {
+    xaiResponder = finalAnswer;
+    await chatAs(ios(STILL_VIDEO_PHOTOS_MIN_BUILD - 1), { execution: 'client', media: { type: 'image' }, messages: [{ role: 'user', content: 'x' }] });
+    expect(names(xaiCalls[0].tools)).not.toContain('trim_video');
+    expect(names(xaiCalls[0].tools)).not.toContain('generate_captions');
+    expect(names(xaiCalls[0].tools)).not.toContain('add_soundtrack');
+    const belowSys = xaiCalls[0].messages.find(m => m.role === 'system').content;
+    expect(belowSys).toMatch(/do not exist for a photo/);
+    expect(belowSys).not.toMatch(/still video/);
+    expect(belowSys).toMatch(/only frame edits apply \(no trim, speed, audio, captions, or transitions\)/);
+
+    await chatAs(ios(STILL_VIDEO_PHOTOS_MIN_BUILD), { execution: 'client', media: { type: 'image' }, messages: [{ role: 'user', content: 'x' }] });
+    expect(names(xaiCalls[1].tools)).toContain('trim_video');
+    expect(names(xaiCalls[1].tools)).toContain('generate_captions');
+    expect(names(xaiCalls[1].tools)).toContain('add_soundtrack');
+    expect(names(xaiCalls[1].tools)).toContain('apply_color_filter');
+    const trim = xaiCalls[1].tools.find(t => t.function.name === 'trim_video');
+    expect(trim.function.description).toMatch(/still video/);
+    const atSys = xaiCalls[1].messages.find(m => m.role === 'system').content;
+    expect(atSys).toMatch(/still video/);
+    expect(atSys).toMatch(/turns the photo into a still video/);
+    expect(atSys).not.toMatch(/do not exist for a photo/);
   });
 
   for (const ua of [ios(9), ios(1), 'FinalCap-iOS', 'FinalCap-iOS/abc']) {

@@ -203,14 +203,12 @@ enum ToolCatalog {
         let plan = basePlan(tool: rawName, arguments: arguments, mediaDuration: mediaDuration)
         guard isPhoto else { return plan }
         switch plan {
-        case .serverJob(let operation, _) where !photoSupportedOperations.contains(operation):
-            return .reject(error: ServerErrorCode.unsupportedForPhoto)
-        case .captions:
-            return .reject(error: ServerErrorCode.unsupportedForPhoto)
         case .ffmpegCli:
-            // Video-only for now: photos never upload for server processing.
+            // Photos never take the FFmpeg fallback; native tools convert to a still video first.
             return .reject(error: ServerErrorCode.unsupportedForPhoto)
         default:
+            // Captions, soundtrack, trim, and other timeline tools are planned
+            // as usual; the executor turns the photo into a still video first.
             return plan
         }
     }

@@ -33,6 +33,7 @@ import { buildToolsSchema, offeredToolsFor, toolsForMediaType } from '../server/
 import { tools } from '../tools.js';
 import {
   GROUPED_EFFECTS_MIN_BUILD,
+  STILL_VIDEO_PHOTOS_MIN_BUILD,
   IOS_TOOL_ALLOWLIST,
   YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION,
   filterToolsForUserAgent,
@@ -169,10 +170,30 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
     expect(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) }))).toEqual(offered);
   });
 
-  it('media types: photos get the 8 photo-capable grouped tools, not audio_effect', () => {
-    const photo = names(offeredToolsFor({ userAgent: ios(CUTOFF), mediaType: 'image' }));
-    const photo10 = names(offeredToolsFor({ userAgent: ios(10), mediaType: 'image' }));
-    expect(photo).toEqual([...photo10.filter(n => !RETIRED.includes(n)), ...GROUPED.filter(g => g !== 'audio_effect')]);
+  it('media types: photos stay frame-only below STILL_VIDEO_PHOTOS_MIN_BUILD; at the gate they get timeline tools (not ffmpeg_cli or multi-clip timeline tools)', () => {
+    const below = names(offeredToolsFor({ userAgent: ios(STILL_VIDEO_PHOTOS_MIN_BUILD - 1), mediaType: 'image' }));
+    expect(below).not.toContain('trim_video');
+    expect(below).not.toContain('generate_captions');
+    expect(below).not.toContain('add_soundtrack');
+    expect(below).not.toContain('audio_effect');
+    expect(below).not.toContain('ffmpeg_cli');
+    expect(below).toContain('segment');
+
+    const photo = names(offeredToolsFor({ userAgent: ios(STILL_VIDEO_PHOTOS_MIN_BUILD), mediaType: 'image' }));
+    expect(photo).not.toContain('ffmpeg_cli');
+    for (const n of IOS_TIMELINE_TOOL_NAMES) expect(photo).not.toContain(n);
+    for (const g of GROUPED) expect(photo).toContain(g);
+    expect(photo).toContain('add_soundtrack');
+    expect(photo).toContain('generate_captions');
+    expect(photo).toContain('trim_video');
+    const trim = offeredToolsFor({ userAgent: ios(STILL_VIDEO_PHOTOS_MIN_BUILD), mediaType: 'image' })
+      .find(t => t.function.name === 'trim_video');
+    expect(trim.function.description).toMatch(/still video/);
+    const trimBelow = offeredToolsFor({ userAgent: ios(STILL_VIDEO_PHOTOS_MIN_BUILD - 1) })
+      .find(t => t.function.name === 'trim_video');
+    expect(trimBelow.function.description).toMatch(/Videos only — not supported for photos/);
+    expect(trimBelow.function.description).not.toMatch(/still video/);
+
     const video = names(offeredToolsFor({ userAgent: ios(CUTOFF), mediaType: 'video' }));
     for (const g of GROUPED) expect(video).toContain(g);
     for (const r of RETIRED) expect(video).not.toContain(r);
@@ -249,6 +270,17 @@ describe('POST /api/chat execution:"client" offers the grouped tools only from t
     expect(names(xaiCalls[1].tools)).toContain('segment');
     await chat(ios(10), 'video');
     expect(JSON.stringify(xaiCalls[2].tools)).toBe(JSON.stringify(JSON.parse(snapshotFile('ios-build10')).offered.video));
+  });
+
+  it('photo at STILL_VIDEO_PHOTOS_MIN_BUILD includes audio_effect and add_soundtrack; the build below does not', async () => {
+    await chat(ios(STILL_VIDEO_PHOTOS_MIN_BUILD - 1), 'image');
+    expect(names(xaiCalls[0].tools)).not.toContain('audio_effect');
+    expect(names(xaiCalls[0].tools)).not.toContain('add_soundtrack');
+    expect(names(xaiCalls[0].tools)).toContain('segment');
+    await chat(ios(STILL_VIDEO_PHOTOS_MIN_BUILD), 'image');
+    expect(names(xaiCalls[1].tools)).toContain('audio_effect');
+    expect(names(xaiCalls[1].tools)).toContain('add_soundtrack');
+    expect(names(xaiCalls[1].tools)).toContain('segment');
   });
 });
 
@@ -436,7 +468,6 @@ describe('grouped tool definitions', () => {
     expect(d('segment')).toContain("'blur the background'");
     expect(d('blur_sharpen')).toContain('To blur only the background behind a person use segment');
     expect(d('audio_effect')).toContain("'add reverb'");
-    expect(d('audio_effect')).toMatch(/Videos only \(not photos\)/);
     expect(d('lut')).toMatch(/'sepia'.*apply_color_filter, not this tool/);
     expect(d('stylize')).toMatch(/noir, chrome, fade, instant, cinematic\) use lut/);
   });

@@ -17,10 +17,11 @@ enum SlideshowBuilder {
         var totalFrames: Int { framesPerPhoto * photoCount }
         var duration: Double { Double(totalFrames) / Double(SlideshowBuilder.fps) }
 
-        init(photoCount: Int) {
+        init(photoCount: Int, secondsPerPhoto: Double = SlideshowBuilder.secondsPerPhoto, fadeSeconds: Double? = nil) {
             self.photoCount = photoCount
-            framesPerPhoto = Int((SlideshowBuilder.secondsPerPhoto * Double(SlideshowBuilder.fps)).rounded())
-            fadeFrames = Int((SlideshowBuilder.crossfadeSeconds * Double(SlideshowBuilder.fps)).rounded())
+            framesPerPhoto = max(1, Int((secondsPerPhoto * Double(SlideshowBuilder.fps)).rounded()))
+            let fade = fadeSeconds ?? (photoCount > 1 ? SlideshowBuilder.crossfadeSeconds : 0)
+            fadeFrames = photoCount > 1 ? max(0, Int((fade * Double(SlideshowBuilder.fps)).rounded())) : 0
         }
 
         /// Photo shown at `frame`, plus the next photo and its blend (0…1) during the
@@ -68,8 +69,15 @@ enum SlideshowBuilder {
 
     enum BuildError: Error { case noPhotos, unreadable, writer(String) }
 
+    /// One photo, held for `duration` seconds, with a silent audio track (EXIF
+    /// orientation applied). Used when a timeline edit is applied to a photo.
+    static func buildStill(photo: URL, duration: Double, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
+        let seconds = max(duration, 1.0 / Double(fps))
+        return try await build(photos: [photo], secondsPerPhoto: seconds, fadeSeconds: 0, progress: progress)
+    }
+
     /// Writes the slideshow to a new .mp4. `progress` gets 0…1 as frames are written.
-    static func build(photos: [URL], progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
+    static func build(photos: [URL], secondsPerPhoto: Double? = nil, fadeSeconds: Double? = nil, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         guard let first = photos.first else { throw BuildError.noPhotos }
         let firstSize = PhotoTranscoder.orientedPixelSize(of: first).map { CGSize(width: $0.width, height: $0.height) }
         let size = outputSize(forFirstPhoto: firstSize)
@@ -82,7 +90,7 @@ enum SlideshowBuilder {
             cache[i] = fitted
             return fitted
         }
-        let timing = Timing(photoCount: photos.count)
+        let timing = Timing(photoCount: photos.count, secondsPerPhoto: secondsPerPhoto ?? SlideshowBuilder.secondsPerPhoto, fadeSeconds: fadeSeconds)
 
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ImportedVideos", isDirectory: true)

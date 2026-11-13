@@ -4,6 +4,7 @@ import {
   generateSoundtrack, parseSoundtrackRequest, SoundtrackError, _clearSoundtrackCache,
 } from '../../server/tools/gbk-soundtrack-tool.js';
 import { offeredToolsFor } from '../server/toolsSchema.js';
+import { STILL_VIDEO_PHOTOS_MIN_BUILD } from '../server/iosToolAllowlist.js';
 import { soundtrackPrompt } from '../soundtrackPrompt.js';
 
 const WAV = new Uint8Array([82, 73, 70, 70]);
@@ -92,6 +93,9 @@ describe('add_soundtrack gating (always on; no off switch)', () => {
   it('offered to web and iOS build >= 39; SOUNDTRACK_ENABLED=0 no longer removes it', () => {
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'video' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'image' })).not.toContain('add_soundtrack');
+    expect(names({ userAgent: 'FinalCap-iOS/39', mediaType: 'image' })).not.toContain('add_soundtrack');
+    expect(names({ userAgent: `FinalCap-iOS/${STILL_VIDEO_PHOTOS_MIN_BUILD - 1}`, mediaType: 'image' })).not.toContain('add_soundtrack');
+    expect(names({ userAgent: `FinalCap-iOS/${STILL_VIDEO_PHOTOS_MIN_BUILD}`, mediaType: 'image' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'FinalCap-iOS/39' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'FinalCap-iOS/38' })).not.toContain('add_soundtrack');
     vi.stubEnv('SOUNDTRACK_ENABLED', '0');

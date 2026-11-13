@@ -81,7 +81,7 @@ final class NativeToolParserTests: XCTestCase {
         XCTAssertEqual(plan("audio_chorus", [:]), .failure(.unsupportedOnDevice))
         XCTAssertEqual(plan("convert_video_format", ["format": .string("webm")]), .failure(.unsupportedOnDevice))
         XCTAssertEqual(op("convert_video_format", ["format": .string("mov")]), .outputFormat("mov"))
-        XCTAssertEqual(plan("trim_video", ["start": .number(0), "end": .number(1)], photo), .failure(.unsupportedForPhoto))
+        XCTAssertTrue(StillVideoPromotion.needsStillVideo(tool: "trim_video"))
         XCTAssertEqual(op("convert_image_format", ["format": .string("jpeg")], photo), .outputFormat("jpg"))
         XCTAssertEqual(plan("convert_image_format", ["format": .string("webp")], photo), .failure(.unsupportedOnDevice))
         XCTAssertEqual(op("adjust_brightness", ["brightness": .number(0.2)], photo), .colorControls(brightness: 0.2, contrast: 1, saturation: 1))
@@ -96,7 +96,7 @@ final class NativeToolParserTests: XCTestCase {
         var silent = video
         silent.hasAudio = false
         XCTAssertTrue(isInvalid(plan("generate_captions", [:], silent)))
-        XCTAssertEqual(plan("generate_captions", [:], photo), .failure(.unsupportedForPhoto))
+        XCTAssertEqual(plan("generate_captions", [:], photo), .success(.captions(language: nil, burnIn: true)))
     }
 
     func testAddSoundtrackPlans() {
@@ -108,7 +108,7 @@ final class NativeToolParserTests: XCTestCase {
         XCTAssertTrue(isInvalid(plan("add_soundtrack", ["prompt": .string("x")])))
         XCTAssertTrue(isInvalid(plan("add_soundtrack", ["prompt": .string(" "), "duration_seconds": .number(20)])))
         XCTAssertTrue(isInvalid(plan("add_soundtrack", ["prompt": .string("x"), "duration_seconds": .number(20), "original_volume": .number(2)])))
-        XCTAssertEqual(plan("add_soundtrack", args, photo), .failure(.unsupportedForPhoto))
+        XCTAssertEqual(plan("add_soundtrack", args, photo), .success(.generatedSoundtrack(arguments: args, originalVolume: 0.3)))
     }
 
     func testSoundtrackPromptPrefill() {
@@ -129,7 +129,7 @@ final class NativeToolParserTests: XCTestCase {
         XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("x"), "start_offset": .number(-1)])))
         XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("x"), "start_offset": .number(601)])))
         XCTAssertTrue(isInvalid(plan("youtube_soundtrack", ["url": .string("x"), "original_volume": .number(1.5)])))
-        XCTAssertEqual(plan("youtube_soundtrack", ["url": .string("x")], photo), .failure(.unsupportedForPhoto))
+        XCTAssertEqual(plan("youtube_soundtrack", ["url": .string("x")], photo), .success(.youtubeSoundtrack(url: "x", startOffset: 0, originalVolume: 0)))
     }
 
     func testCanvasTracksEdits() {

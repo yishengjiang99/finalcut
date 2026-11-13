@@ -184,15 +184,18 @@ final class PhotoModeTests: XCTestCase {
         XCTAssertEqual(EditorRoute.chips(isPhoto: false), EditorRoute.sampleChips)
     }
 
-    func testVideoOnlyToolsAreRejectedLocallyForPhotos() {
-        XCTAssertEqual(
+    func testVideoOnlyToolsArePlannedOnPhotosAndFrameEditsStayPhotos() {
+        XCTAssertNotEqual(
             ToolCatalog.plan(tool: "trim_video", arguments: ["start": .number(0), "end": .number(2)], isPhoto: true),
             .reject(error: "unsupported_for_photo")
         )
-        XCTAssertEqual(ToolCatalog.plan(tool: "adjust_speed", arguments: ["speed": .number(2)], isPhoto: true),
-                       .reject(error: "unsupported_for_photo"))
-        XCTAssertEqual(ToolCatalog.plan(tool: "generate_captions", arguments: [:], isPhoto: true),
-                       .reject(error: "unsupported_for_photo"))
+        XCTAssertNotEqual(ToolCatalog.plan(tool: "adjust_speed", arguments: ["speed": .number(2)], isPhoto: true),
+                          .reject(error: "unsupported_for_photo"))
+        XCTAssertNotEqual(ToolCatalog.plan(tool: "generate_captions", arguments: [:], isPhoto: true),
+                          .reject(error: "unsupported_for_photo"))
+        let soundtrack: [String: JSONValue] = ["prompt": .string("piano"), "duration_seconds": .number(20)]
+        XCTAssertNotEqual(ToolCatalog.plan(tool: "add_soundtrack", arguments: soundtrack, isPhoto: true),
+                          .reject(error: "unsupported_for_photo"))
         XCTAssertEqual(ToolCatalog.plan(tool: "apply_color_filter", arguments: ["filter": .string("warm")], isPhoto: true),
                        .serverJob(operation: "apply_color_filter", args: ["filter": .string("warm")]))
         XCTAssertEqual(ToolCatalog.plan(tool: "flip_video_vertical", arguments: [:], isPhoto: true),
@@ -207,31 +210,36 @@ final class PhotoModeTests: XCTestCase {
     }
 
     @MainActor
-    func testVideoToolOnPhotoShowsCardWithoutRetryOrNetwork() async throws {
+    func testTrimOnAPhotoConvertsToAStillVideoOfTheRequestedDuration() async throws {
         let jpg = try XCTUnwrap(writeImage("q.jpg", type: .jpeg, orientation: 1))
         let model = EditorViewModel()
-        model.localVideoURL = jpg
+        await model.handleImport(.success([jpg]))
+        XCTAssertTrue(model.isPhoto)
         let result = await model.executeToolCall(
             ClientToolCall(id: "c1", name: "trim_video", arguments: ["start": .number(0), "end": .number(1)])
         )
-        XCTAssertFalse(result.ok)
-        XCTAssertEqual(result.error, "unsupported_for_photo")
-        XCTAssertEqual(result.executedOn, .device)
-        let card = try XCTUnwrap(model.messages.last?.failureCard)
-        XCTAssertEqual(card.kind, .photoUnsupported)
-        XCTAssertEqual(model.messages.last?.content, "That works on videos, not photos.")
-        XCTAssertFalse(card.showsRetry)
+        XCTAssertTrue(result.ok, "trim on a photo should convert then apply, got \(result.error ?? "nil")")
+        XCTAssertFalse(model.isPhoto)
+        let canvas = try XCTUnwrap(model.editStack?.canvas)
+        XCTAssertEqual(canvas.duration, 1, accuracy: 0.2)
+        XCTAssertFalse(canvas.isPhoto)
+        // Undo returns to the photo (conversion rebase, then the trim entry).
+        model.undoLastEdit(registering: false)
+        if !model.isPhoto { model.undoLastEdit(registering: false) }
+        XCTAssertTrue(model.isPhoto)
     }
 
     @MainActor
-    func testCaptionsOnPhotoShowsPhotoUnsupportedCard() async throws {
+    func testCaptionsOnPhotoAreNoLongerRefused() async throws {
         let jpg = try XCTUnwrap(writeImage("r.jpg", type: .jpeg, orientation: 1))
         let model = EditorViewModel()
-        model.localVideoURL = jpg
+        await model.handleImport(.success([jpg]))
         model.state = .ready
         let result = await model.executeToolCall(ClientToolCall(id: "c1", name: "generate_captions", arguments: [:]))
-        XCTAssertEqual(result.error, "unsupported_for_photo")
-        XCTAssertEqual(model.messages.last?.failureCard?.kind, .photoUnsupported)
+        XCTAssertNotEqual(result.error, "unsupported_for_photo")
+        XCTAssertNotEqual(model.messages.last?.failureCard?.kind, .photoUnsupported)
+        // Conversion happens before transcription (the still has no speech).
+        XCTAssertFalse(model.isPhoto)
     }
 
     @MainActor

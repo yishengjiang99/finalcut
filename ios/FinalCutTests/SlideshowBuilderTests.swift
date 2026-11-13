@@ -77,6 +77,40 @@ final class SlideshowBuilderTests: XCTestCase {
                           .reject(error: ServerErrorCode.unsupportedForPhoto))
     }
 
+    func testBuildStillHonorsRequestedDuration() async throws {
+        let photo = try Self.jpeg(width: 64, height: 48, orientation: 1)
+        let url = try await SlideshowBuilder.buildStill(photo: photo, duration: 2)
+        let asset = AVURLAsset(url: url)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertFalse(audioTracks.isEmpty)
+        let duration = try await asset.load(.duration).seconds
+        XCTAssertEqual(duration, 2, accuracy: 0.15)
+        let canvas = await EditorViewModel.loadCanvas(url)
+        XCTAssertEqual(canvas?.isPhoto, false)
+        XCTAssertEqual(canvas?.hasAudio, true)
+        XCTAssertEqual(canvas?.duration ?? 0, 2, accuracy: 0.15)
+    }
+
+    @MainActor
+    func testPromotingAPhotoIsUndoableBackToThePhoto() async throws {
+        let jpg = try Self.jpeg(width: 64, height: 48, orientation: 1)
+        let model = EditorViewModel()
+        await model.handleImport(.success([jpg]))
+        XCTAssertTrue(model.isPhoto)
+        let original = try XCTUnwrap(model.localVideoURL)
+        try await model.promotePhotoToStillVideo(duration: 2)
+        XCTAssertFalse(model.isPhoto)
+        let promoted = try XCTUnwrap(model.localVideoURL)
+        XCTAssertNotEqual(promoted, original)
+        let loaded = await EditorViewModel.loadCanvas(promoted)
+        let canvas = try XCTUnwrap(loaded)
+        XCTAssertEqual(canvas.duration, 2, accuracy: 0.15)
+        XCTAssertTrue(model.canUndo)
+        model.undoLastEdit(registering: false)
+        XCTAssertTrue(model.isPhoto)
+        XCTAssertEqual(model.localVideoURL, original)
+    }
+
     static func jpeg(width: Int, height: Int, orientation: Int) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("slide-\(UUID().uuidString).jpg")
         let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height),

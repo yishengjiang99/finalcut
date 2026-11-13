@@ -69,6 +69,22 @@ export const TIMELINE_TOOLS_MIN_BUILD = 14;
 /** First FinalCap-iOS build with the add_soundtrack executor (GBK-generated music, next TestFlight build after run 38). */
 export const ADD_SOUNDTRACK_MIN_BUILD = 39;
 
+/**
+ * First FinalCap-iOS build that turns a photo into a still video so captions,
+ * soundtrack, trim, and other timeline edits can run. Must equal the first
+ * TestFlight build that contains the client (ios-testflight run_number).
+ * Latest successful ios-testflight run on main was 44 (2026-11-10); this PR's
+ * first TestFlight build will be 45. Older builds keep the frame-only photo
+ * tool list and the "unavailable for photos" prompt.
+ */
+export const STILL_VIDEO_PHOTOS_MIN_BUILD = 45;
+
+/** True when this UA is FinalCap-iOS at or after STILL_VIDEO_PHOTOS_MIN_BUILD. */
+export function supportsStillVideoFromPhotos(userAgent) {
+  const { isFinalCapIos, build } = parseFinalCapIosUserAgent(userAgent);
+  return isFinalCapIos && Number.isSafeInteger(build) && build >= STILL_VIDEO_PHOTOS_MIN_BUILD;
+}
+
 /** adjust_* are replaced by color_adjust from GROUPED_EFFECTS_MIN_BUILD on. */
 const retiredAtGroupedEffects = () => Object.freeze({ minBuild: 10, maxBuild: GROUPED_EFFECTS_MIN_BUILD - 1 });
 

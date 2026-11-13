@@ -44,7 +44,7 @@ import {
 import { isIosClient, parseFinalCapIosUserAgent } from './clientInfo.js';
 import { CAPTION_STYLE_GUIDANCE } from '../lyricShared.js';
 import { issueTurnToken, turnIdFor } from './turnToken.js';
-import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD } from './iosToolAllowlist.js';
+import { filterToolsForUserAgent, FFMPEG_CLI_MIN_BUILD, STILL_VIDEO_PHOTOS_MIN_BUILD, supportsStillVideoFromPhotos } from './iosToolAllowlist.js';
 import { FFMPEG_FALLBACK_GUIDANCE, FFMPEG_FALLBACK_GUIDANCE_IOS, FFMPEG_CLI_STRING_GUIDANCE, ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 const router = express.Router();
@@ -156,7 +156,16 @@ const ROLE =
 const PHOTO_TOOL_HINTS =
   'Tools with "video" in their name, such as crop_video and rotate_video, edit a photo the same way. ' +
   'Color looks such as "red filter", "sepia" or "black and white" use apply_color_filter. ' +
-  `To change the file format of a photo use convert_image_format (${PHOTO_OUTPUT_FORMATS.join(', ')}), never convert_video_format. ` +
+  `To change the file format of a photo use convert_image_format (${PHOTO_OUTPUT_FORMATS.join(', ')}), never convert_video_format.`;
+
+const PHOTO_STILL_VIDEO_HINTS =
+  PHOTO_TOOL_HINTS + ' ' +
+  'If the user asks for a caption (text overlay or lyric captions), a soundtrack, a trim, a speed change, or any other edit that needs a timeline, call that tool: ' +
+  'the client first turns the photo into a still video. Duration is what they asked for, else the soundtrack length, else 10 seconds, and export is a video. ' +
+  'Do not say captions or soundtracks are unavailable for photos.';
+
+const PHOTO_REFUSE_TIMELINE_HINTS =
+  PHOTO_TOOL_HINTS + ' ' +
   'Trimming, speed changes, audio edits, captions and transitions need a timeline or a soundtrack, so they do not exist for a photo: ' +
   'say so briefly instead of calling a tool or looking for a workaround.';
 
@@ -170,21 +179,25 @@ export function streamingMediaType(media) {
  * What the model is told about the current media. `mediaType` is "video" | "image" | "audio",
  * "none" when nothing is attached, or null when the client did not say (older clients).
  */
-function mediaGuidance(mediaType, { ffmpegFallback = false } = {}) {
+function mediaGuidance(mediaType, { ffmpegFallback = false, stillVideoFromPhotos = false } = {}) {
+  const photoHints = stillVideoFromPhotos ? PHOTO_STILL_VIDEO_HINTS : PHOTO_REFUSE_TIMELINE_HINTS;
   if (mediaType === 'none') return '';
   if (mediaType === 'video') return 'Current media: a video.';
   if (mediaType === 'audio') return 'Current media: an audio file.';
   if (mediaType === 'image') {
-    return 'Current media: a photo (still image). Only tools that work on a single frame are offered. ' + PHOTO_TOOL_HINTS;
+    return stillVideoFromPhotos
+      ? 'Current media: a photo (still image). Frame edits apply directly. Timeline edits (captions, soundtrack, trim, speed, audio) convert it to a still video first, then apply. ' + photoHints
+      : 'Current media: a photo (still image). Only tools that work on a single frame are offered. ' + photoHints;
   }
   return 'The current media may be a video or a photo (jpg, png, webp, heic); work out which from the conversation. ' +
-    `On a photo, call only these tools: ${toolsForMediaType('image').map(t => t.function.name).join(', ')}. ` +
-    PHOTO_TOOL_HINTS +
+    (stillVideoFromPhotos
+      ? ('On a photo, frame edits apply directly; for captions, soundtrack, trim, or other timeline edits, call the tool — the client converts the photo to a still video first. ' + photoHints)
+      : (`On a photo, call only these tools: ${toolsForMediaType('image').map(t => t.function.name).join(', ')}. ` + photoHints)) +
     (ffmpegFallback === 'cli_string' ? ' These photo limits take priority over the routing rule below: FFmpeg is never used on a photo.'
       : ffmpegFallback ? ` These photo limits take priority over the routing rule below: never call ${FFMPEG_CLI_TOOL_NAME} on a photo.` : '');
 }
 
-export function buildSystemMessage({ ffmpegFallback = false, mediaType = null, captionStyle = false } = {}) {
+export function buildSystemMessage({ ffmpegFallback = false, mediaType = null, captionStyle = false, stillVideoFromPhotos = false } = {}) {
   // The FFmpeg fallback handles videos and audio only, so it is never described for a photo.
   const fallbackGuidance = mediaType === 'image' || mediaType === 'none' ? ''
     : ffmpegFallback === 'ios' ? FFMPEG_FALLBACK_GUIDANCE_IOS
@@ -192,7 +205,7 @@ export function buildSystemMessage({ ffmpegFallback = false, mediaType = null, c
     : ffmpegFallback ? FFMPEG_FALLBACK_GUIDANCE : '';
   const sections = [
     ROLE,
-    mediaGuidance(mediaType, { ffmpegFallback: fallbackGuidance ? ffmpegFallback : false }),
+    mediaGuidance(mediaType, { ffmpegFallback: fallbackGuidance ? ffmpegFallback : false, stillVideoFromPhotos }),
     fallbackGuidance,
     'When a request needs several edits, emit one tool call per edit, in the order they should be applied. ' +
     'The calls run sequentially and each one operates on the output of the one before it, so work out the arguments of later calls ' +
@@ -396,11 +409,14 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   const roundCapReached = rounds >= MAX_TOOL_ROUNDS;
 
   // FinalCap-iOS UA → only allowlisted on-device tools (incl. iOS-only grouped tools); any other UA → unchanged.
-  const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent: req.get('user-agent'), mediaType: media?.type })
+  const userAgent = req.get('user-agent');
+  const iosInfo = parseFinalCapIosUserAgent(userAgent);
+  const stillVideoFromPhotos = supportsStillVideoFromPhotos(userAgent);
+  const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent, mediaType: media?.type })
     .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
   const contextLines = [
     profile?.instructions || CLIENT_EXECUTION_INSTRUCTIONS,
-    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages }),
+    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages, stillVideoFromPhotos }),
     ...(profile?.guidance || []),
   ];
   // The server-side ffmpeg_cli fallback is offered to iOS builds that ship its executor
@@ -432,7 +448,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   if (roundCapReached) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
   }
-  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null, captionStyle: !parseFinalCapIosUserAgent(req.get('user-agent')).isFinalCapIos });
+  const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null, captionStyle: !iosInfo.isFinalCapIos, stillVideoFromPhotos });
   const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
 
   const modelMessages = [systemMessage];
@@ -679,7 +695,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const { media: clientMedia, ...clientBody } = req.body;
     const hasTools = Array.isArray(clientBody.tools) && clientBody.tools.length > 0;
     const mediaType = hasTools ? streamingMediaType(clientMedia) : 'none';
-    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType, captionStyle: !iosInfo.isFinalCapIos });
+    const systemMessage = buildSystemMessage({ ffmpegFallback: fallbackMode, mediaType, captionStyle: !iosInfo.isFinalCapIos, stillVideoFromPhotos: iosInfo.isFinalCapIos && iosInfo.build >= STILL_VIDEO_PHOTOS_MIN_BUILD });
 
     debugChat('request', JSON.stringify({
       userId,
