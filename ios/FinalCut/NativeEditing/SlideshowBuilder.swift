@@ -33,6 +33,18 @@ enum SlideshowBuilder {
             guard index < photoCount - 1, local >= fadeStart else { return (index, nil, 0) }
             return (index, index + 1, Double(local - fadeStart + 1) / Double(fadeFrames + 1))
         }
+
+        /// Encode when the picture changes, plus the first and last frames so
+        /// duration stays exact. Identical hold frames are repeated by the decoder
+        /// — re-encoding every 30 fps frame of a still made CI + H.264 take ~3s/frame
+        /// on CI and hit the 5-minute test allowance for a 10s still or 2-photo slideshow.
+        func shouldEncode(_ frame: Int) -> Bool {
+            if frame <= 0 || frame >= totalFrames - 1 { return true }
+            let layer = layer(at: frame)
+            if layer.next != nil { return true }
+            let previous = self.layer(at: frame - 1)
+            return previous.next != nil || previous.index != layer.index
+        }
     }
 
     /// 1080p canvas with the first photo's aspect, clamped between 9:16 and 16:9 (even sides).
@@ -138,6 +150,10 @@ enum SlideshowBuilder {
             try Task.checkCancellation()
             // Interleave: keep silent audio up to this frame's time so the writer never stalls.
             try silence.feed(audio, upTo: Double(frame + 1) / Double(fps))
+            guard timing.shouldEncode(frame) else {
+                if frame % 15 == 0 { progress(Double(frame + 1) / Double(timing.totalFrames)) }
+                continue
+            }
             while !video.isReadyForMoreMediaData {
                 try silence.feed(audio, upTo: Double(frame + 1) / Double(fps))
                 try await Task.sleep(nanoseconds: 2_000_000)
