@@ -938,13 +938,6 @@ final class EditorViewModel: ObservableObject {
         let route = resolved
         turnOutcome = EditTurnOutcome()
         turnPrompt = text
-        if case .captions = route, isPhoto {
-            // Captions/translate/burn-in never apply to photos: no upload, no Retry.
-            messages.append(.failure(EditFailureCard(kind: .photoUnsupported)))
-            return
-        }
-        // A turn actually begins here (the photo-captions early return above
-        // never starts inference, so it stays out of the funnel).
         let editSource: String
         switch route {
         case .chat: editSource = "chat"
@@ -1516,6 +1509,23 @@ final class EditorViewModel: ObservableObject {
         }
         guard var stack = await ensureStack() else {
             return record(.failure("no_media", on: .device), kind: .generic)
+        }
+        if stack.isPhoto, StillVideoPromotion.needsStillVideo(tool: tool) {
+            // Soundtrack tools without a requested duration wait until the
+            // audio file is in hand so the still video can match its length.
+            let requested = StillVideoPromotion.requestedDuration(tool: tool, arguments: call.arguments)
+            let delayForSoundtrack = requested == nil && (tool == "add_soundtrack" || tool == "youtube_soundtrack")
+            if !delayForSoundtrack {
+                do {
+                    try await promotePhotoToStillVideo(duration: StillVideoPromotion.duration(requested: requested))
+                } catch {
+                    return record(.failure("still_video_failed", on: .device), kind: .generic)
+                }
+                guard let promoted = await ensureStack() else {
+                    return record(.failure("no_media", on: .device), kind: .generic)
+                }
+                stack = promoted
+            }
         }
         // Multi-clip timeline tools dispatch to the shared ProjectCommand layer.
         if TimelineTools.names.contains(tool) {
@@ -2148,6 +2158,24 @@ final class EditorViewModel: ObservableObject {
         guard var current = editStack else {
             return record(.failure("no_media", on: .device), kind: .generic)
         }
+        if current.isPhoto {
+            let requested = StillVideoPromotion.requestedDuration(tool: tool, arguments: call.arguments)
+            var songDuration = extra["audioDuration"]?.doubleValue.flatMap { $0 > 0 ? $0 : nil }
+            if songDuration == nil {
+                songDuration = await (try? AVURLAsset(url: file).load(.duration)).map(CMTimeGetSeconds)
+            }
+            do {
+                try await promotePhotoToStillVideo(
+                    duration: StillVideoPromotion.duration(requested: requested, soundtrackLength: songDuration)
+                )
+            } catch {
+                return record(.failure("still_video_failed", on: .device), kind: .generic)
+            }
+            guard let promoted = editStack else {
+                return record(.failure("no_media", on: .device), kind: .generic)
+            }
+            current = promoted
+        }
         if current.project != nil {
             // Timeline mode: the song becomes a normal audio clip on a Soundtrack
             // lane (movable/trimmable/removable like any other audio clip).
@@ -2262,6 +2290,28 @@ final class EditorViewModel: ObservableObject {
         }
         guard let composed = try? await NativeComposer.compose(stack) else { return nil }
         return try? await NativeExporter().export(composed, format: stack.outputFormat, progress: { _ in })
+    }
+
+    /// Turns the current photo (plus any frame edits already on the stack) into
+    /// a still video of `duration` seconds with a silent audio track. Undo of
+    /// this rebase returns to the photo.
+    func promotePhotoToStillVideo(duration: Double) async throws {
+        guard var stack = editStack, stack.isPhoto else { return }
+        let source: URL
+        if stack.entries.isEmpty {
+            source = stack.base
+        } else {
+            source = try await Task.detached(priority: .userInitiated) { try PhotoRenderer.exportFile(stack) }.value
+        }
+        let video = try await SlideshowBuilder.buildStill(photo: source, duration: duration)
+        guard let canvas = await Self.loadCanvas(video) else {
+            throw SlideshowBuilder.BuildError.writer("still video canvas")
+        }
+        stack.rebase(onto: video, canvas: canvas)
+        editStack = stack
+        localVideoURL = video
+        registerUndo(redo: false)
+        await refreshPreview()
     }
 
     /// Cloud result → new stack base (previous state kept for Undo).

@@ -6,7 +6,7 @@ import { parseFinalCapIosUserAgent } from './clientInfo.js';
 import { IOS_GROUPED_TOOLS, IOS_GROUPED_TOOL_MEDIA_TYPES } from './iosGroupedTools.js';
 import { IOS_TIMELINE_TOOLS, IOS_TIMELINE_TOOL_MEDIA_TYPES } from './iosTimelineTools.js';
 import { filterToolsForUserAgent } from './iosToolAllowlist.js';
-import { ffmpegCliToolDefinition } from '../ffmpegFallback.js';
+import { ffmpegCliToolDefinition, FFMPEG_CLI_TOOL_NAME } from '../ffmpegFallback.js';
 
 export const TOOLS_SCHEMA_VERSION = '1';
 
@@ -57,6 +57,19 @@ export function offeredToolsFor({ userAgent, mediaType } = {}) {
   const isIos = parseFinalCapIosUserAgent(userAgent).isFinalCapIos;
   const shared = tools;
   const candidates = isIos ? [...shared, ...IOS_GROUPED_TOOLS, ...IOS_TIMELINE_TOOLS, ffmpegCliToolDefinition] : shared;
+  // iOS turns a photo into a still video before running timeline edits, so
+  // those tools are offered for image media too. The FFmpeg fallback and the
+  // multi-clip timeline tools stay off photos.
+  if (isIos && mediaType === 'image') {
+    const timeline = new Set(IOS_TIMELINE_TOOLS.map(t => t.function.name));
+    return filterToolsForUserAgent(
+      candidates.filter(t => {
+        const n = t?.function?.name;
+        return n && n !== FFMPEG_CLI_TOOL_NAME && !timeline.has(n);
+      }),
+      userAgent,
+    );
+  }
   return filterToolsForUserAgent(restrictToMediaType(candidates, mediaType), userAgent);
 }
 

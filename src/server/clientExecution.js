@@ -150,7 +150,7 @@ export function mediaContextText(media, { thumbnailCount = 0, thumbnailsAsImages
       : ` ${thumbnailCount} thumbnail frame(s) were provided but this model has no image input; rely on the metadata.`;
   }
   if (media.type === 'image') {
-    text += ' The media is a PHOTO: only frame edits apply (no trim, speed, audio, captions, or transitions).';
+    text += ' The media is a PHOTO. Frame edits apply directly. For captions, soundtrack, trim, speed, or other timeline edits, call the tool: the client first turns the photo into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.';
   }
   return text;
 }

@@ -130,9 +130,17 @@ describe('snapshots: existing clients are byte-identical to main before the chan
     expect(schema.mediaTypes.add_soundtrack).toEqual(['video']);
     for (const g of GROUPED) expect(names(schema.tools)).not.toContain(g);
     for (const mt of ['any', 'video', 'image']) {
-      const expected = names(at10.offered[mt === 'any' ? 'any' : mt]);
-      expect(names(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt === 'any' ? undefined : mt })))
-        .toEqual(mt === 'image' ? expected : [...withYouTube(expected), ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
+      const offered = names(offeredToolsFor({ userAgent: ios(CUTOFF - 1), mediaType: mt === 'any' ? undefined : mt }));
+      if (mt === 'image') {
+        expect(offered).not.toContain('ffmpeg_cli');
+        for (const n of IOS_TIMELINE_TOOL_NAMES) expect(offered).not.toContain(n);
+        for (const g of GROUPED) expect(offered).not.toContain(g);
+        expect(offered).toContain('trim_video');
+        expect(offered).toContain('generate_captions');
+      } else {
+        const expected = names(at10.offered[mt === 'any' ? 'any' : mt]);
+        expect(offered).toEqual([...withYouTube(expected), ...IOS_TIMELINE_TOOL_NAMES, 'ffmpeg_cli']);
+      }
     }
   });
 
@@ -169,10 +177,14 @@ describe('the cutoff build (computed from GROUPED_EFFECTS_MIN_BUILD)', () => {
     expect(names(offeredToolsFor({ userAgent: ios(CUTOFF + 5) }))).toEqual(offered);
   });
 
-  it('media types: photos get the 8 photo-capable grouped tools, not audio_effect', () => {
+  it('media types: iOS photos get timeline-capable tools (client converts to a still video), not ffmpeg_cli or multi-clip timeline tools', () => {
     const photo = names(offeredToolsFor({ userAgent: ios(CUTOFF), mediaType: 'image' }));
-    const photo10 = names(offeredToolsFor({ userAgent: ios(10), mediaType: 'image' }));
-    expect(photo).toEqual([...photo10.filter(n => !RETIRED.includes(n)), ...GROUPED.filter(g => g !== 'audio_effect')]);
+    expect(photo).not.toContain('ffmpeg_cli');
+    for (const n of IOS_TIMELINE_TOOL_NAMES) expect(photo).not.toContain(n);
+    for (const g of GROUPED) expect(photo).toContain(g);
+    expect(photo).toContain('add_soundtrack');
+    expect(photo).toContain('generate_captions');
+    expect(photo).toContain('trim_video');
     const video = names(offeredToolsFor({ userAgent: ios(CUTOFF), mediaType: 'video' }));
     for (const g of GROUPED) expect(video).toContain(g);
     for (const r of RETIRED) expect(video).not.toContain(r);
@@ -239,14 +251,15 @@ describe('POST /api/chat execution:"client" offers the grouped tools only from t
     body: JSON.stringify({ execution: 'client', media: { type: media }, messages: [{ role: 'user', content: 'make it warmer' }] }),
   });
 
-  it('video at cutoff: 9 grouped, no adjust_*; photo: no audio_effect; build 10: unchanged', async () => {
+  it('video at cutoff: 9 grouped, no adjust_*; photo includes audio_effect (still-video conversion); build 10: unchanged', async () => {
     await chat(ios(CUTOFF), 'video');
     expect(names(xaiCalls[0].tools)).toEqual(names(offeredToolsFor({ userAgent: ios(CUTOFF), mediaType: 'video' })));
     for (const g of GROUPED) expect(names(xaiCalls[0].tools)).toContain(g);
     for (const r of RETIRED) expect(names(xaiCalls[0].tools)).not.toContain(r);
     await chat(ios(CUTOFF), 'image');
-    expect(names(xaiCalls[1].tools)).not.toContain('audio_effect');
+    expect(names(xaiCalls[1].tools)).toContain('audio_effect');
     expect(names(xaiCalls[1].tools)).toContain('segment');
+    expect(names(xaiCalls[1].tools)).toContain('add_soundtrack');
     await chat(ios(10), 'video');
     expect(JSON.stringify(xaiCalls[2].tools)).toBe(JSON.stringify(JSON.parse(snapshotFile('ios-build10')).offered.video));
   });
@@ -373,8 +386,11 @@ describe('grouped tool definitions', () => {
       const ours = byName[p.function.name];
       expect(JSON.parse(JSON.stringify(ours.parameters)), p.function.name).toEqual(p.function.parameters);
       // Descriptions: the proposal's text (+ "cartoon" for stylize), then the intensity sentence.
-      const base = ours.description.replace(' (cartoon)', '').replace(" or 'cartoon'", '');
-      expect(base.startsWith(p.function.description), p.function.name).toBe(true);
+      const stripPhotoClause = (s) => s
+        .replace(' Videos only (not photos).', '')
+        .replace(' Works on videos, and on photos after the client turns the photo into a still video.', '');
+      const base = stripPhotoClause(ours.description.replace(' (cartoon)', '').replace(" or 'cartoon'", ''));
+      expect(base.startsWith(stripPhotoClause(p.function.description)), p.function.name).toBe(true);
     }
     expect(JSON.parse(JSON.stringify(IOS_GROUPED_TOOL_MEDIA_TYPES))).toEqual(proposal.mediaTypes);
     expect(APPLY_COLOR_FILTER_GROUPED_DESCRIPTION).toBe(proposal.iosOverrides.apply_color_filter.description);
@@ -436,7 +452,7 @@ describe('grouped tool definitions', () => {
     expect(d('segment')).toContain("'blur the background'");
     expect(d('blur_sharpen')).toContain('To blur only the background behind a person use segment');
     expect(d('audio_effect')).toContain("'add reverb'");
-    expect(d('audio_effect')).toMatch(/Videos only \(not photos\)/);
+    expect(d('audio_effect')).toMatch(/still video/);
     expect(d('lut')).toMatch(/'sepia'.*apply_color_filter, not this tool/);
     expect(d('stylize')).toMatch(/noir, chrome, fade, instant, cinematic\) use lut/);
   });

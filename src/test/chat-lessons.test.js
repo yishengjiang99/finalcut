@@ -69,6 +69,12 @@ describe('buildSystemMessage', () => {
     expect(photo).toContain('Current media: a photo');
     expect(photo).toContain('convert_image_format');
     expect(photo).toContain('do not exist for a photo');
+
+    const iosPhoto = buildSystemMessage({ mediaType: 'image', stillVideoFromPhotos: true }).content;
+    expect(iosPhoto).toContain('Current media: a photo');
+    expect(iosPhoto).toContain('convert it to a still video first');
+    expect(iosPhoto).toContain('Do not say captions or soundtracks are unavailable for photos');
+    expect(iosPhoto).not.toContain('do not exist for a photo');
   });
 
   it('lists every photo-capable tool when the client did not say what the media is', () => {

@@ -167,7 +167,7 @@ export const YOUTUBE_SOUNDTRACK_IOS_DESCRIPTION = 'Give the video a soundtrack t
   'the video\'s length, and by default the video\'s own audio is muted; set original_volume (0-1) when the user wants their audio kept under the music, and start_offset when they name a ' +
   'point in the song ("start at 1:12" — convert mm:ss to seconds). The soundtrack card in chat lets the user adjust both afterwards. This needs Cloud processing on: if it is off, the ' +
   'app shows a "Not available on iPhone yet" card and nothing is fetched — do not call it again this turn. If the user pastes a YouTube link without saying what to do with it, ask whether ' +
-  'they want its audio as the soundtrack. Videos only — not supported for photos.';
+  'they want its audio as the soundtrack. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.';
 
 /** iOS description of lyric_captions: same routing rules as the web one, plus the on-device flow. */
 export const LYRIC_CAPTIONS_IOS_DESCRIPTION = 'Translated captions, run by the app: the original line plus a translation, for speech and for songs. ' +
@@ -185,7 +185,7 @@ export const LYRIC_CAPTIONS_IOS_DESCRIPTION = 'Translated captions, run by the a
   'captions on the video (original on top, translation below, about 20% up from the bottom). If Cloud processing is off or the ' +
   'user says Not now, nothing is uploaded and the step is skipped: do not call it again this turn. The result names the ' +
   'language(s) and, for songs, the song, never the lyrics or the speech text; do not quote lines back. Use generate_captions only for same-language ' +
-  'subtitles without translation. Videos only — not supported for photos.';
+  'subtitles without translation. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.';
 
 /**
  * generate_captions description for iOS: it is same-language only and translation goes to lyric_captions.
@@ -194,7 +194,7 @@ export const GENERATE_CAPTIONS_WITH_LYRIC_DESCRIPTION = 'Generate same-language 
   'recognition (SRT/VTT). Use ISO language codes when possible (en, es, fr, de, ja, zh). When burn_in is true (default), burns the ' +
   'captions into the video; when false, adds a soft subtitle track only. This tool never translates: for captions in another ' +
   'language ("add Chinese captions", "translate the video into Chinese") call lyric_captions instead. ' +
-  'Use for accessibility or social content in the spoken language. Videos only — not supported for photos.';
+  'Use for accessibility or social content in the spoken language. Works on videos. On a photo, the client first turns it into a still video (requested duration, else soundtrack length, else 10 seconds) and export is a video.';
 
 /**
  * Definition narrowing for the FinalCap-iOS schema (device limits from native-tools.md).

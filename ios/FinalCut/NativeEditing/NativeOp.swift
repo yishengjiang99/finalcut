@@ -217,11 +217,10 @@ enum NativeToolParser {
         let tool = ToolCatalog.canonicalName(rawName)
         guard ToolCatalog.isKnown(tool) else { return .failure(.invalidArguments("unknown_tool")) }
         guard supportedTools.contains(tool) else {
-            // Video-only tools on a photo are a clearer error than "not on device".
-            if canvas.isPhoto, !photoTools.contains(tool) { return .failure(.unsupportedForPhoto) }
             return .failure(.unsupportedOnDevice)
         }
-        if canvas.isPhoto, !photoTools.contains(tool) { return .failure(.unsupportedForPhoto) }
+        // Timeline tools on a photo are planned here; the executor promotes the
+        // photo to a still video (with a silent audio track) before running them.
         let missing = ToolCatalog.missingRequiredArgs(tool: tool, arguments: a)
         if !missing.isEmpty { return .failure(.invalidArguments("missing: \(missing.joined(separator: ", "))")) }
 
@@ -239,14 +238,14 @@ enum NativeToolParser {
             return .success(.query(tool))
 
         case "generate_captions":
-            guard canvas.hasAudio else { return bad("no audio track") }
+            guard canvas.hasAudio || canvas.isPhoto else { return bad("no audio track") }
             let language = a["language"]?.stringValue?.trimmingCharacters(in: .whitespaces)
             let burnIn = a["burn_in"]?.boolValue ?? (a["burn_in"]?.stringValue).map { $0.lowercased() != "false" } ?? true
             return .success(.captions(language: (language?.isEmpty ?? true) || language?.lowercased() == "auto" ? nil : language,
                                       burnIn: burnIn))
 
         case "lyric_captions":
-            guard canvas.hasAudio else { return bad("no audio track") }
+            guard canvas.hasAudio || canvas.isPhoto else { return bad("no audio track") }
             guard let target = a["target_language"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !target.isEmpty, target.count <= 64 else { return bad("target_language") }
             var source: String?

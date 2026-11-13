@@ -92,6 +92,7 @@ describe('add_soundtrack gating (always on; no off switch)', () => {
   it('offered to web and iOS build >= 39; SOUNDTRACK_ENABLED=0 no longer removes it', () => {
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'video' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'Mozilla/5.0', mediaType: 'image' })).not.toContain('add_soundtrack');
+    expect(names({ userAgent: 'FinalCap-iOS/39', mediaType: 'image' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'FinalCap-iOS/39' })).toContain('add_soundtrack');
     expect(names({ userAgent: 'FinalCap-iOS/38' })).not.toContain('add_soundtrack');
     vi.stubEnv('SOUNDTRACK_ENABLED', '0');

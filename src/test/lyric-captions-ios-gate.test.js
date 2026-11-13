@@ -172,15 +172,15 @@ describe('every iOS build', () => {
     }
   });
 
-  it('photo: not offered', () => {
-    expect(names(at(12, 'image'))).not.toContain('lyric_captions');
+  it('photo: offered on iOS (the client converts to a still video first)', () => {
+    expect(names(at(12, 'image'))).toContain('lyric_captions');
     expect(buildToolsSchema({ userAgent: ios(12) }).mediaTypes.lyric_captions).toEqual(['video']);
   });
 
   it('the iOS description covers the flow: consent, audio only, drawn on device, skip when declined, no lyrics back', () => {
     for (const phrase of ['add lyrics captions', 'subtitle the song in Chinese', 'translate the lyrics on the video',
       'asks the user before uploading', 'only this video\'s audio (never the picture)', 'the app then draws',
-      'nothing is uploaded and the step is skipped', 'never the lyrics', 'Videos only']) {
+      'nothing is uploaded and the step is skipped', 'never the lyrics', 'still video']) {
       expect(LYRIC_CAPTIONS_IOS_DESCRIPTION).toContain(phrase);
     }
   });
@@ -194,7 +194,7 @@ describe('every iOS build', () => {
     }
   });
 
-  it('POST /api/chat execution:"client": offered for a video on every build, not for a photo', async () => {
+  it('POST /api/chat execution:"client": offered for a video and for a photo (still-video conversion) on every build', async () => {
     const chat = (ua, type) => realFetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'sample-access-token': token, 'User-Agent': ua },
@@ -206,7 +206,7 @@ describe('every iOS build', () => {
     const offered = xaiCalls.map(c => c.tools || []);
     const video = offered[0].find(t => t.function.name === 'lyric_captions');
     expect(video.function.description).toBe(LYRIC_CAPTIONS_IOS_DESCRIPTION);
-    expect(names(offered[1])).not.toContain('lyric_captions');
+    expect(names(offered[1])).toContain('lyric_captions');
     expect(names(offered[2])).toContain('lyric_captions');
   });
 });
