@@ -6,6 +6,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { COMPOSE_PRODUCT } from './products.js';
 import { renderEmail } from './emailTemplate.js';
+import { forwardBillingEvent } from './gbkBillingHop.js';
 
 export const PORTAL_LINK_TTL_S = 14 * 24 * 3600;
 
@@ -163,6 +164,13 @@ async function sendOnce(db, { type, ref, email, message, marketing = false }, { 
   }
 }
 
+// Money events: record once, then forward the new row to gbk (fire and forget, never awaited).
+async function recordMoneyEvent(db, evt, { env = process.env, forward = forwardBillingEvent } = {}) {
+  const fresh = await db.recordProductEvent(evt);
+  if (fresh) void forward(evt, { env });
+  return fresh;
+}
+
 export async function onCheckoutExpired(session, db, { env, sendEmail }) {
   const email = session.customer_details?.email || session.customer_email || null;
   const recoveryUrl = session.after_expiration?.recovery?.url;
@@ -183,7 +191,7 @@ export async function onTrialWillEnd(sub, db, { env, sendEmail, stripe }) {
   return sendOnce(db, { type: 'email_trial_ending', ref: `${sub.id}:${sub.trial_end}`, email, message }, { env, sendEmail });
 }
 
-export async function recordCheckoutCompleted(session, db, { stripe, env = process.env, sendEmail = sendResendEmail } = {}) {
+export async function recordCheckoutCompleted(session, db, { stripe, env = process.env, sendEmail = sendResendEmail, forward } = {}) {
   const email = session.customer_details?.email || session.customer_email || null;
   const plan = session.metadata?.plan || null;
   const isTrial = session.mode === 'subscription' && (session.amount_total || 0) === 0;
@@ -197,10 +205,10 @@ export async function recordCheckoutCompleted(session, db, { stripe, env = proce
       currentPeriodEnd: periodEndOf(sub), cancelAtPeriodEnd: Boolean(sub?.cancel_at_period_end),
     });
   } else await db.setProductSubscriptionState({ product: COMPOSE_PRODUCT, ref, status: 'active' });
-  await db.recordProductEvent({
+  await recordMoneyEvent(db, {
     product: COMPOSE_PRODUCT, type: isTrial ? 'trial_start' : 'purchase', ref: session.id, email, plan,
     amountCents: session.amount_total || 0, currency: session.currency || null, subscriptionRef: subId || null, occurredAt: at(session.created),
-  });  // Welcome/confirmation email: once per Checkout Session.
+  }, { env, forward });  // Welcome/confirmation email: once per Checkout Session.
   const manageUrl = email && signPortalLink(email, env);
   if (manageUrl) {
     const trialEnd = isTrial ? (sub?.trial_end ?? null) : null;
@@ -209,7 +217,7 @@ export async function recordCheckoutCompleted(session, db, { stripe, env = proce
   }
 }
 
-export async function recordSubscriptionChange(event, db) {
+export async function recordSubscriptionChange(event, db, hop = {}) {
   const sub = event.data.object;
   const deleted = event.type === 'customer.subscription.deleted';
   await db.setProductSubscriptionState({
@@ -217,12 +225,12 @@ export async function recordSubscriptionChange(event, db) {
     currentPeriodEnd: periodEndOf(sub), cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
   });
   if (deleted) {
-    await db.recordProductEvent({ product: COMPOSE_PRODUCT, type: 'cancel', ref: sub.id, plan: sub.metadata?.plan || null, subscriptionRef: sub.id, occurredAt: at(sub.canceled_at || sub.ended_at) });
+    await recordMoneyEvent(db, { product: COMPOSE_PRODUCT, type: 'cancel', ref: sub.id, plan: sub.metadata?.plan || null, subscriptionRef: sub.id, occurredAt: at(sub.canceled_at || sub.ended_at) }, hop);
   }
 }
 
 // First paid invoice on a subscription that started with a trial = trial_convert; later ones = renewal.
-export async function recordInvoicePaid(inv, db) {
+export async function recordInvoicePaid(inv, db, hop = {}) {
   if ((inv.amount_paid || 0) <= 0) return;
   const subId = inv.parent?.subscription_details?.subscription || inv.subscription || null;
   const meta = inv.parent?.subscription_details?.metadata || inv.subscription_details?.metadata || {};
@@ -230,22 +238,22 @@ export async function recordInvoicePaid(inv, db) {
   if (subId && !(await db.hasProductEvent({ subscriptionRef: subId, types: ['trial_convert', 'renewal'] }))) {
     type = (await db.hasProductEvent({ subscriptionRef: subId, types: ['trial_start'] })) ? 'trial_convert' : 'renewal';
   }
-  await db.recordProductEvent({
+  await recordMoneyEvent(db, {
     product: COMPOSE_PRODUCT, type, ref: inv.id, email: inv.customer_email || null, plan: meta.plan || null,
     amountCents: inv.amount_paid, currency: inv.currency || null, subscriptionRef: subId, occurredAt: at(inv.status_transitions?.paid_at || inv.created),
-  });
+  }, hop);
 }
 
 // charge.refunded: Charges carry no product metadata for subscriptions, so match by customer.
 // Returns true only when the charge belongs to a compose customer (FinalCut/music refunds fall through).
-export async function recordRefund(charge, db) {
+export async function recordRefund(charge, db, hop = {}) {
   const isCompose = charge.metadata?.product === COMPOSE_PRODUCT;
   const row = await db.findProductEntitlementByCustomer(COMPOSE_PRODUCT, charge.customer);
   if (!isCompose && !row) return false;
-  await db.recordProductEvent({
+  await recordMoneyEvent(db, {
     product: COMPOSE_PRODUCT, type: 'refund', ref: charge.id, email: charge.billing_details?.email || row?.email || null, plan: row?.plan || charge.metadata?.plan || null,
     amountCents: charge.amount_refunded || 0, currency: charge.currency || null, subscriptionRef: row?.ref?.startsWith('sub_') ? row.ref : null, occurredAt: at(charge.created),
-  });
+  }, hop);
   return true;
 }
 
