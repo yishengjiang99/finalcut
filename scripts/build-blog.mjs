@@ -336,7 +336,7 @@ function renderPost(p, all) {
     ...(p.keyword || p.tags?.length ? { keywords: [p.keyword, ...(p.tags || [])].filter(Boolean).join(', ') } : {}),
     ...(prod.url ? { about: { '@type': 'SoftwareApplication', name: prod.name, url: prod.site || prod.url, applicationCategory: { finalcap: 'MultimediaApplication', protune: 'PhotographyApplication' }[p.product] || 'MusicApplication', operatingSystem: p.product === 'finalcap' ? 'Web' : 'iOS' } } : {}),
   };
-  if (p.media.videos.length) posting.video = p.media.videos.map((v) => ({ '@type': 'VideoObject', name: v.title, description: v.caption || p.description, thumbnailUrl: abs(v.poster), uploadDate: p.date, contentUrl: abs(v.url), ...(v.duration ? { duration: v.duration } : {}) }));
+  if (p.media.videos.length) posting.video = p.media.videos.map((v) => ({ '@type': 'VideoObject', name: v.title, description: v.caption || p.description, thumbnailUrl: abs(v.poster), uploadDate: `${p.date}T16:00:00Z`, contentUrl: abs(v.url), ...(v.duration ? { duration: v.duration } : {}) }));
   const ld = [posting, { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
     { '@type': 'ListItem', position: 1, name: 'Blog', item: BLOG_URL },
     { '@type': 'ListItem', position: 2, name: p.title, item: url },
