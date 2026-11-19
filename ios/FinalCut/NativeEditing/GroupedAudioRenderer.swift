@@ -19,10 +19,11 @@ enum GroupedAudioRenderer {
             return cached
         }
         let channels = try await AudioRenderer.channelCount(of: track)
+        let sampleRate = await AudioRenderer.sampleRate(of: track)
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("grouped-audio-\(UUID().uuidString).caf")
         try await Task.detached(priority: .userInitiated) {
-            try renderOffline(composition: composition, track: track, channels: channels, effects: effects, gain: gain, to: url)
+            try renderOffline(composition: composition, track: track, channels: channels, sampleRate: sampleRate, effects: effects, gain: gain, to: url)
         }.value
         await cache.store(url, for: key)
         return url
@@ -46,11 +47,11 @@ enum GroupedAudioRenderer {
         composition: AVComposition,
         track: AVCompositionTrack,
         channels: Int,
+        sampleRate: Double,
         effects: [AudioEffectOp],
         gain: Float,
         to url: URL
     ) throws {
-        let sampleRate = AudioRenderer.sampleRate
         var pcm = try readPCM(composition: composition, track: track, channels: channels, sampleRate: sampleRate)
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
                                    channels: AVAudioChannelCount(channels), interleaved: false)!
@@ -354,8 +355,7 @@ enum GroupedAudioRenderer {
     }
 
     private static func readPCM(composition: AVComposition, track: AVCompositionTrack, channels: Int, sampleRate: Double) throws -> PCM {
-        _ = sampleRate
-        let interleaved = try AudioRenderer.readInterleaved(composition: composition, track: track, channels: channels)
+        let interleaved = try AudioRenderer.readInterleaved(composition: composition, track: track, channels: channels, sampleRate: sampleRate)
         let frames = interleaved.count / max(channels, 1)
         var chans = Array(repeating: [Float](repeating: 0, count: frames), count: channels)
         for f in 0..<frames {

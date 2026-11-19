@@ -9,7 +9,10 @@ enum AudioRenderer {
         case readerFailed
     }
 
-    static let sampleRate: Double = 44_100
+    /// Rate for an offline render whose source rate can't be read (48 kHz is
+    /// the camera standard). Renders prefer the source's own rate — see
+    /// `sampleRate(of:)` — so processing never resamples the audio.
+    static let fallbackSampleRate: Double = 48_000
     private static let cache = RenderCache()
 
     static func renderGain(composition: AVComposition, track: AVCompositionTrack, gain: Float) async throws -> URL {
@@ -18,10 +21,11 @@ enum AudioRenderer {
             return cached
         }
         let channels = try await channelCount(of: track)
+        let rate = await sampleRate(of: track)
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("native-audio-\(UUID().uuidString).caf")
         try await Task.detached(priority: .userInitiated) {
-            try render(composition: composition, track: track, channels: channels, to: url) { samples in
+            try render(composition: composition, track: track, channels: channels, sampleRate: rate, to: url) { samples in
                 for i in samples.indices {
                     samples[i] = max(-1, min(1, samples[i] * gain))
                 }
@@ -53,12 +57,27 @@ enum AudioRenderer {
         return 2
     }
 
+    /// The source track's own sample rate when it has one (48 kHz from the
+    /// camera), so offline processing never resamples — the old fixed
+    /// 44.1 kHz downsampled the camera's audio on every gain/effects render.
+    static func sampleRate(of track: AVAssetTrack) async -> Double {
+        guard let descriptions = try? await track.load(.formatDescriptions) else { return fallbackSampleRate }
+        for description in descriptions {
+            if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
+               asbd.mSampleRate > 0 {
+                return asbd.mSampleRate
+            }
+        }
+        return fallbackSampleRate
+    }
+
     /// Reads interleaved float PCM from `track` (as placed in `composition`), lets
     /// `process` modify each chunk in place, and writes a float CAF.
     static func render(
         composition: AVComposition,
         track: AVCompositionTrack,
         channels: Int,
+        sampleRate: Double,
         to url: URL,
         process: (inout [Float]) -> Void
     ) throws {
@@ -108,7 +127,7 @@ enum AudioRenderer {
     }
 
     /// Interleaved Float32 PCM from `track` as placed in `composition`.
-    static func readInterleaved(composition: AVComposition, track: AVCompositionTrack, channels: Int) throws -> [Float] {
+    static func readInterleaved(composition: AVComposition, track: AVCompositionTrack, channels: Int, sampleRate: Double) throws -> [Float] {
         let reader = try AVAssetReader(asset: composition)
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -142,6 +161,7 @@ enum AudioRenderer {
     /// RMS of a composed asset's audio (tests and levels UI).
     static func rms(asset: AVAsset, audioMix: AVAudioMix?, from start: Double = 0, to end: Double? = nil) async throws -> Double {
         guard let track = try await asset.loadTracks(withMediaType: .audio).first else { return 0 }
+        let rate = await sampleRate(of: track)
         let reader = try AVAssetReader(asset: asset)
         if let end {
             reader.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
@@ -151,7 +171,7 @@ enum AudioRenderer {
         }
         let output = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: sampleRate,
+            AVSampleRateKey: rate,
             AVNumberOfChannelsKey: 1,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,

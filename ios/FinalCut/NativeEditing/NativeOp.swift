@@ -205,9 +205,25 @@ enum NativeToolParser {
         "black_and_white", "invert", "warm", "cool", "vintage",
     ]
 
+    /// Reference sizes for each preset aspect (1080-class). The size actually
+    /// applied is scaled to the canvas being edited — see `scaledPreset`.
     static let presets: [String: (Int, Int)] = [
         "9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080), "2:3": (1080, 1620), "3:2": (1620, 1080),
     ]
+
+    /// Scales a preset's aspect to `canvas`: the result's long edge equals the
+    /// canvas's long edge, so a preset never caps the source's resolution (a
+    /// 4K portrait source gets a 2160×3840 canvas for 9:16, not 1080×1920)
+    /// and a 1080p source reproduces the reference sizes. Dimensions are
+    /// rounded to even, minimum 2.
+    static func scaledPreset(_ size: (Int, Int), to canvas: NativeCanvas) -> (Int, Int) {
+        let reference = Double(max(size.0, size.1))
+        let target = Double(max(canvas.width, canvas.height))
+        guard reference > 0, target > 0 else { return size }
+        let scale = target / reference
+        func even(_ v: Double) -> Int { max(2, Int((v / 2).rounded()) * 2) }
+        return (even(Double(size.0) * scale), even(Double(size.1) * scale))
+    }
 
     static func isSupported(_ tool: String) -> Bool {
         supportedTools.contains(ToolCatalog.canonicalName(tool))
@@ -310,7 +326,8 @@ enum NativeToolParser {
 
         case "resize_video_preset":
             guard let preset = a["preset"]?.stringValue, let size = presets[preset] else { return bad("preset") }
-            return op(.pad(width: size.0, height: size.1))
+            let scaled = scaledPreset(size, to: canvas)
+            return op(.pad(width: scaled.0, height: scaled.1))
 
         case "adjust_brightness":
             guard let v = num("brightness"), v >= -1, v <= 1 else { return bad("brightness -1..1") }

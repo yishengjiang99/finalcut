@@ -55,7 +55,14 @@ final class NativeToolParserTests: XCTestCase {
     func testResizeKeepsAspectWithMinusOne() {
         XCTAssertEqual(op("resize_video", ["width": .number(640), "height": .number(-1)]), .resize(width: 640, height: 360))
         XCTAssertTrue(isInvalid(plan("resize_video", ["width": .number(-1), "height": .number(-1)])))
-        XCTAssertEqual(op("resize_video_preset", ["preset": .string("9:16")]), .pad(width: 1080, height: 1920))
+        // Presets scale to the canvas being edited: the 720p canvas gets a
+        // 720×1280 pad, a 1080p canvas reproduces the reference size, and a
+        // 4K portrait canvas keeps its full resolution.
+        XCTAssertEqual(op("resize_video_preset", ["preset": .string("9:16")]), .pad(width: 720, height: 1280))
+        let hd = NativeCanvas(width: 1920, height: 1080, duration: 6, isPhoto: false, hasAudio: true)
+        XCTAssertEqual(op("resize_video_preset", ["preset": .string("9:16")], hd), .pad(width: 1080, height: 1920))
+        let uhd = NativeCanvas(width: 2160, height: 3840, duration: 6, isPhoto: false, hasAudio: true)
+        XCTAssertEqual(op("resize_video_preset", ["preset": .string("9:16")], uhd), .pad(width: 2160, height: 3840))
     }
 
     func testColorFilterAliasesAndValidation() {

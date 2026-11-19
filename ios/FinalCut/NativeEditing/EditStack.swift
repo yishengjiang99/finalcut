@@ -114,6 +114,29 @@ struct EditStack: Equatable, Sendable {
         return nil
     }
 
+    /// Source-time window when the stack is trims and nothing else: export can
+    /// then pass the source media through without re-encoding (lossless, HDR
+    /// intact). Each trim is expressed on the timeline as it stood when it was
+    /// applied; with no speed op in an all-trim stack the accumulated speed is
+    /// 1, so each window just shifts by the trim's start. nil when the stack is
+    /// empty (the base is returned as-is), holds any other op, or the folded
+    /// window is inconsistent.
+    var passthroughTrimRange: (start: Double, end: Double)? {
+        guard !entries.isEmpty, baseCanvas.duration > 0 else { return nil }
+        var start = 0.0
+        var end = baseCanvas.duration
+        for entry in entries {
+            guard case .trim(let a, let b) = entry.op else { return nil }
+            let shiftedStart = start + a
+            let shiftedEnd = start + b
+            guard a >= 0, b > a, shiftedEnd <= end + 1e-6 else { return nil }
+            start = shiftedStart
+            end = shiftedEnd
+        }
+        guard end > start else { return nil }
+        return (start, end)
+    }
+
     /// A new edit. Clears Redo.
     mutating func push(_ entry: EditEntry) {
         entries.append(entry)

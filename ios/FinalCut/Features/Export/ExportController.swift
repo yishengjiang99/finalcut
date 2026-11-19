@@ -178,10 +178,28 @@ final class ExportController: ObservableObject {
                 url = try await Task.detached(priority: .userInitiated) { try PhotoRenderer.exportFile(stack) }.value
             } else {
                 phase = .rendering(0)
-                let composed = try await NativeComposer.compose(stack)
-                url = try await exporter.export(composed, format: stack.outputFormat) { [weak self] value in
+                let reportProgress: @MainActor (Double) -> Void = { [weak self] value in
                     guard let self, case .rendering = self.phase else { return }
                     self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
+                }
+                // Trim-only stacks pass the source media through untouched
+                // (lossless, HDR intact); a passthrough refusal (container or
+                // codec the preset won't copy) falls back to the composed render.
+                var passthrough: URL?
+                if let range = stack.passthroughTrimRange {
+                    do {
+                        passthrough = try await exporter.exportPassthrough(base: stack.base, range: range, progress: reportProgress)
+                    } catch NativeExporter.ExportError.cancelled {
+                        throw NativeExporter.ExportError.cancelled
+                    } catch {
+                        passthrough = nil
+                    }
+                }
+                if let passthrough {
+                    url = passthrough
+                } else {
+                    let composed = try await NativeComposer.compose(stack)
+                    url = try await exporter.export(composed, format: stack.outputFormat, progress: reportProgress)
                 }
             }
             try Task.checkCancellation()

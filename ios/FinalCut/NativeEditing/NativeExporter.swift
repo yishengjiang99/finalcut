@@ -30,6 +30,44 @@ final class NativeExporter: @unchecked Sendable {
         session.audioMix = composed.audioMix
         session.audioTimePitchAlgorithm = .spectral
         session.shouldOptimizeForNetworkUse = true
+        return try await run(session, to: url, progress: progress)
+    }
+
+    /// Lossless export of a trim-only stack: copies the source media inside
+    /// `range` without re-encoding, so quality and HDR survive untouched.
+    /// Passthrough must keep the source's own container — mirror its extension.
+    func exportPassthrough(
+        base: URL,
+        range: (start: Double, end: Double),
+        progress: @escaping @MainActor (Double) -> Void
+    ) async throws -> URL {
+        let asset = AVURLAsset(url: base)
+        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
+            throw ExportError.cannotCreateSession
+        }
+        let fileType: AVFileType
+        let ext: String
+        switch base.pathExtension.lowercased() {
+        case "mov": fileType = .mov; ext = "mov"
+        case "m4v": fileType = .m4v; ext = "m4v"
+        default: fileType = .mp4; ext = "mp4"
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FinalCap-\(UUID().uuidString.prefix(8)).\(ext)")
+        session.outputURL = url
+        session.outputFileType = fileType
+        session.timeRange = CMTimeRange(
+            start: CMTime(seconds: range.start, preferredTimescale: 600),
+            end: CMTime(seconds: range.end, preferredTimescale: 600))
+        return try await run(session, to: url, progress: progress)
+    }
+
+    /// Runs a configured session to completion, ticking `progress` as it goes.
+    private func run(
+        _ session: AVAssetExportSession,
+        to url: URL,
+        progress: @escaping @MainActor (Double) -> Void
+    ) async throws -> URL {
         self.session = session
 
         let ticker = Task {

@@ -47,6 +47,35 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(again, out)
     }
 
+    func testPassthroughTrimRangeFoldsSequentialTrims() {
+        var stack = EditStack(base: URL(fileURLWithPath: "/tmp/clip.mp4"), baseCanvas: canvas)
+        XCTAssertNil(stack.passthroughTrimRange, "empty stack returns the base as-is")
+        stack.push(EditEntry(tool: "trim_video", op: .trim(start: 1, end: 5)))
+        XCTAssertEqual(stack.passthroughTrimRange?.start, 1)
+        XCTAssertEqual(stack.passthroughTrimRange?.end, 5)
+        // The second trim is expressed on the already-trimmed timeline.
+        stack.push(EditEntry(tool: "trim_video", op: .trim(start: 1, end: 3)))
+        XCTAssertEqual(stack.passthroughTrimRange?.start, 2)
+        XCTAssertEqual(stack.passthroughTrimRange?.end, 4)
+        stack.push(EditEntry(tool: "apply_color_filter", op: .colorFilter(filter: "red", intensity: 1)))
+        XCTAssertNil(stack.passthroughTrimRange, "any non-trim op forces the composed render")
+    }
+
+    func testTrimOnlyExportPassesThrough() async throws {
+        let url = try clip()
+        var stack = EditStack(base: url, baseCanvas: canvas)
+        stack.push(EditEntry(tool: "trim_video", op: .trim(start: 1, end: 3)))
+        let controller = ExportController(defaults: UserDefaults(suiteName: "ExportTests-\(UUID())")!)
+        let out = try await controller.render(stack: stack, fallbackURL: url)
+        defer { try? FileManager.default.removeItem(at: out) }
+        XCTAssertNotEqual(out, url)
+        let asset = AVURLAsset(url: out)
+        let playable = try await asset.load(.isPlayable)
+        XCTAssertTrue(playable)
+        let duration = try await asset.load(.duration).seconds
+        XCTAssertEqual(duration, 2, accuracy: 0.15)
+    }
+
     func testEditedPhotoExportKeepsFormat() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -239,7 +239,7 @@ extension NativeComposer {
         // MARK: Video composition
         let renderSize = FrameRenderer.evenSize(project.canvas.cgSize)
         let fps = project.assets.map(\.nominalFrameRate).filter { $0 > 0 }.max() ?? 30
-        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(min(60, max(15, fps.rounded()))))
+        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(min(120, max(15, fps.rounded()))))
         let videoComposition: AVMutableVideoComposition
         if hasTransitions {
             // Overlapping clips live on two composition tracks and need the
