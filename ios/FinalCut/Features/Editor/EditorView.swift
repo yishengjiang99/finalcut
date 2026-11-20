@@ -1203,6 +1203,30 @@ final class EditorViewModel: ObservableObject {
     /// Usage limit hit → keep the current clip, present the Paywall sheet (not the failed state).
     /// Returns true when the error was a paywall signal and has been handled.
     @discardableResult
+    /// Whether a bare HTTP 429 is the free-quota gate rather than a transient
+    /// rate limit, judged from the account standing in `GET /api/auth/status`:
+    /// authenticated, no subscription, not in an unlimited period, and today's
+    /// free quota fully used. Pure decision — unit-tested.
+    static func isQuotaExhausted429(statusCode: Int?, status: AuthStatus) -> Bool {
+        guard statusCode == 429, status.authenticated else { return false }
+        guard status.user?.hasSubscription != true, !status.isUnlimited else { return false }
+        return status.dailyRemaining == 0
+    }
+
+    /// `APIClient.error(forStatus:)` maps a 429 to `.paywallRequired` only when
+    /// the body carries the JSON code; a plain-text 429 (the rate limiter's
+    /// response) lands in `.httpStatus` and would otherwise surface as a
+    /// generic failure whose Retry can never succeed. When the account
+    /// standing says the free quota is what ran out, present the upgrade path
+    /// instead of the failure card.
+    private func presentUpgradeForQuota429IfNeeded(_ error: Error) async -> Bool {
+        guard let apiError = error as? APIError, !apiError.isPaywall,
+              apiError.httpStatusCode == 429, let client = apiClient,
+              let status = try? await client.fetchAuthStatus() else { return false }
+        guard Self.isQuotaExhausted429(statusCode: apiError.httpStatusCode, status: status) else { return false }
+        return handlePaywallIfNeeded(APIError.paywallRequired(nil))
+    }
+
     func handlePaywallIfNeeded(_ error: Error) -> Bool {
         guard let apiError = error as? APIError, apiError.isPaywall else { return false }
         processingOverlay = .editing
@@ -1325,6 +1349,7 @@ final class EditorViewModel: ObservableObject {
             // User sent another message or view torn down.
         } catch {
             if Task.isCancelled { return }
+            if await presentUpgradeForQuota429IfNeeded(error) { return }
             finishChatFailure(error)
         }
     }

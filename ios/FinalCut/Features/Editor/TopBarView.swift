@@ -72,6 +72,9 @@ struct TopBarView: View {
             }
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("Settings")
+            // Yields first under crowding: ViewThatFits collapses the title to
+            // the gear before the Upgrade capsule is pushed off the row.
+            .layoutPriority(-1)
 
             if FeatureFlags.projectLibraryEnabled {
                 Button(action: onShowHistory) {
@@ -158,6 +161,10 @@ struct TopBarView: View {
                     UpgradeCapsuleButton(action: onUpgrade)
                         .layoutPriority(1)
                 }
+                // Measured ahead of the title and the text buttons so a
+                // non-subscriber always sees the way to upgrade (Design §7:
+                // the capsule never wraps and never leaves the row).
+                .layoutPriority(2)
             }
         }
         .padding(.horizontal, Self.horizontalPadding)

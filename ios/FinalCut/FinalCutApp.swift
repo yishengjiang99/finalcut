@@ -78,8 +78,22 @@ final class AppModel: ObservableObject {
             // Offline or server unavailable: the Editor stays usable; requests will retry auth.
             return
         }
+        await syncAppleEntitlement()
         await refreshQuota()
         presentLaunchPaywallIfNeeded()
+    }
+
+    /// Launch re-verification (the paywall's Restore flow without the prompt):
+    /// an existing App Store subscription is synced to this install's device
+    /// identity, so a reinstall or a fresh device session never strands a
+    /// subscriber behind the free meter. Reads only on-device entitlements —
+    /// never an App Store sign-in prompt. Silent when there is no entitlement
+    /// or the sync fails; the next launch, or a manual Restore, retries.
+    private func syncAppleEntitlement() async {
+        guard let jws = await StoreKitPurchase.restoreEntitlementJWS() else { return }
+        if let status = try? await apiClient.syncAppleTransaction(jwsRepresentation: jws) {
+            apply(status)
+        }
     }
 
     /// v1.1: present the paywall once per cold launch to non-subscribers.

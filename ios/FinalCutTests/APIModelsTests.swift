@@ -290,6 +290,38 @@ final class APIModelsTests: XCTestCase {
     }
 
     @MainActor
+    func testQuotaExhausted429Determination() {
+        // No subscription + today's free quota used up: the 429 was the
+        // subscription gate, so the user is prompted to upgrade.
+        let quotaUsedUp = AuthStatus(authenticated: true,
+                                     user: AuthUser(id: "831", hasSubscription: false),
+                                     dailyLimit: 3, dailyUsed: 3, dailyRemaining: 0)
+        XCTAssertTrue(EditorViewModel.isQuotaExhausted429(statusCode: 429, status: quotaUsedUp))
+
+        // A subscriber is never told to upgrade over a 429.
+        let subscribed = AuthStatus(authenticated: true,
+                                    user: AuthUser(id: "1", hasSubscription: true))
+        XCTAssertFalse(EditorViewModel.isQuotaExhausted429(statusCode: 429, status: subscribed))
+
+        // Quota still left: a plain rate limit stays a plain failure.
+        let quotaLeft = AuthStatus(authenticated: true,
+                                   user: AuthUser(id: "831", hasSubscription: false),
+                                   dailyLimit: 3, dailyUsed: 1, dailyRemaining: 2)
+        XCTAssertFalse(EditorViewModel.isQuotaExhausted429(statusCode: 429, status: quotaLeft))
+
+        // Unlimited period: not a subscription problem.
+        let unlimited = AuthStatus(authenticated: true,
+                                   user: AuthUser(id: "831", hasSubscription: false),
+                                   dailyRemaining: 0, unlimited: true)
+        XCTAssertFalse(EditorViewModel.isQuotaExhausted429(statusCode: 429, status: unlimited))
+
+        // Not a 429, or no authenticated account standing to judge from.
+        XCTAssertFalse(EditorViewModel.isQuotaExhausted429(statusCode: 500, status: quotaUsedUp))
+        XCTAssertFalse(EditorViewModel.isQuotaExhausted429(statusCode: nil, status: quotaUsedUp))
+        XCTAssertFalse(EditorViewModel.isQuotaExhausted429(statusCode: 429, status: AuthStatus(authenticated: false)))
+    }
+
+    @MainActor
     func testEditorPaywallErrorPresentsPaywallInsteadOfFailing() {
         let model = EditorViewModel()
         var paywallCount = 0
