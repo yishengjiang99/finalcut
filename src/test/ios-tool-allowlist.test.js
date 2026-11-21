@@ -242,7 +242,9 @@ describe('POST /api/chat execution:"client" with a FinalCap-iOS UA', () => {
     expect(names(xaiCalls[0].tools)).not.toContain('trim_video');
     expect(names(xaiCalls[0].tools)).not.toContain('generate_captions');
     expect(names(xaiCalls[0].tools)).not.toContain('add_soundtrack');
-    const belowSys = xaiCalls[0].messages.find(m => m.role === 'system').content;
+    // The prompt = stable system message + trailing dynamic-context system message;
+    // assertions cover the joined text the model actually receives.
+    const belowSys = xaiCalls[0].messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
     expect(belowSys).toMatch(/do not exist for a photo/);
     expect(belowSys).not.toMatch(/still video/);
     expect(belowSys).toMatch(/only frame edits apply \(no trim, speed, audio, captions, or transitions\)/);
@@ -254,7 +256,7 @@ describe('POST /api/chat execution:"client" with a FinalCap-iOS UA', () => {
     expect(names(xaiCalls[1].tools)).toContain('apply_color_filter');
     const trim = xaiCalls[1].tools.find(t => t.function.name === 'trim_video');
     expect(trim.function.description).toMatch(/still video/);
-    const atSys = xaiCalls[1].messages.find(m => m.role === 'system').content;
+    const atSys = xaiCalls[1].messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
     expect(atSys).toMatch(/still video/);
     expect(atSys).toMatch(/turns the photo into a still video/);
     expect(atSys).not.toMatch(/do not exist for a photo/);
@@ -332,7 +334,7 @@ describe('POST /api/chat streaming mode with a FinalCap-iOS UA', () => {
     xaiResponder = sse;
     const res = await chatAs(WEB_UA, reqBody);
     await res.text();
-    expect(Object.keys(xaiCalls[0])).toEqual(['messages', 'tools', 'tool_choice', 'temperature', 'model', 'stream']);
+    expect(Object.keys(xaiCalls[0])).toEqual(['messages', 'tools', 'tool_choice', 'temperature', 'model', 'stream', 'stream_options']);
     expect(xaiCalls[0].tools).toEqual([chorus, trim]);
   });
 });
@@ -385,7 +387,8 @@ describe('unsupported_on_device tool results (safety net)', () => {
     expect(annotated).toMatchObject({ ok: false, code: 'unsupported_on_device', unsupportedOnDevice: true });
     expect(annotated.note).toContain('not available on the phone yet');
     expect(annotated.note).toContain('Do not call audio_reverse again');
-    expect(sent.messages[0].content).toContain('not available on the phone yet: audio_reverse');
+    // The unsupported-tools note is dynamic context: it rides in the trailing system message.
+    expect(sent.messages.at(-1).content).toContain('not available on the phone yet: audio_reverse');
     expect(names(sent.tools)).not.toContain('audio_reverse');
     expect(names(sent.tools)).toContain('adjust_brightness');
   });

@@ -50,6 +50,7 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const realFetch = globalThis.fetch;
 const xaiCalls = [];
+const xaiCallHeaders = [];
 let xaiResponder = null;
 
 function jsonResponse(body, status = 200) {
@@ -69,6 +70,7 @@ beforeAll(async () => {
     if (String(url).startsWith('https://api.x.ai/')) {
       const body = JSON.parse(init.body);
       xaiCalls.push(body);
+      xaiCallHeaders.push(init.headers || {});
       return xaiResponder(body);
     }
     return realFetch(url, init);
@@ -87,6 +89,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   xaiCalls.length = 0;
+  xaiCallHeaders.length = 0;
   xaiResponder = null;
   ffmpegSpy.mockClear();
   db.consumeDailyInference.mockReset();
@@ -131,7 +134,12 @@ describe('client execution mode', () => {
     expect(sent.stream).toBe(false);
     expect(sent.model).toBe('grok-4.3');
     expect(sent.messages[0].role).toBe('system');
-    expect(sent.messages[0].content).toContain('type=image, resolution=4032x3024');
+    // Prompt-cache shape: the system message holds only stable lines (the media
+    // context is dynamic and rides in a trailing system message instead).
+    expect(sent.messages[0].content).toContain('executed on the user');
+    expect(sent.messages[0].content).not.toContain('type=image, resolution=4032x3024');
+    expect(sent.messages.at(-1).role).toBe('system');
+    expect(sent.messages.at(-1).content).toContain('type=image, resolution=4032x3024');
     // Photo → only photo-capable tools are offered.
     const offered = sent.tools.map(t => t.function.name);
     expect(offered).toContain('apply_color_filter');
@@ -155,7 +163,11 @@ describe('client execution mode', () => {
       const imageParts = xaiCalls[0].messages.flatMap(m => (Array.isArray(m.content) ? m.content : [])).filter(p => p.type === 'image_url');
       expect(imageParts).toHaveLength(2);
       expect(imageParts[0].image_url.url).toMatch(/^data:image\/jpeg;base64,/);
-      expect(xaiCalls[0].messages.at(-1)).toEqual({ role: 'user', content: 'What is in this video?' });
+      // The conversation's user message is present verbatim; the dynamic media
+      // context now rides in a trailing system message after it.
+      expect(xaiCalls[0].messages).toContainEqual({ role: 'user', content: 'What is in this video?' });
+      expect(xaiCalls[0].messages.at(-1).role).toBe('system');
+      expect(xaiCalls[0].messages.at(-1).content).toContain('type=video');
     } finally {
       delete process.env.XAI_CLIENT_MODEL;
     }
@@ -202,7 +214,8 @@ describe('client execution mode', () => {
     expect(parsed).toMatchObject({ ok: false, error: 'skipped_by_user', skipped: true });
     expect(parsed.note).toContain('NOT a failure');
     expect(parsed.note).toContain('Do not call apply_color_filter again');
-    expect(sent.messages[0].content).toContain('declined these steps this turn (not failures): apply_color_filter');
+    expect(sent.messages[0].content).not.toContain('declined these steps this turn');
+    expect(sent.messages.at(-1).content).toContain('declined these steps this turn (not failures): apply_color_filter');
     expect(sent.tools.map(t => t.function.name)).not.toContain('apply_color_filter');
   });
 
@@ -238,7 +251,7 @@ describe('client execution mode', () => {
     const body = await res.json();
     expect(body.status).toBe('final');
     expect(xaiCalls[0].tools).toBeUndefined();
-    expect(xaiCalls[0].messages[0].content).toContain(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached`);
+    expect(xaiCalls[0].messages.at(-1).content).toContain(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached`);
   });
 
   it('enforces thumbnail limits (count → 400, size → 413) before calling xAI', async () => {
@@ -273,6 +286,41 @@ describe('client execution mode', () => {
     const anon = await postChat({ execution: 'client', messages: [{ role: 'user', content: 'hi' }] }, {});
     expect(anon.status).toBe(401);
   });
+
+  it('pins one x-grok-conv-id per conversation (stable across rounds and turns)', async () => {
+    xaiResponder = () => jsonResponse(completion({ content: 'Answer:\nDone' }));
+    await postChat({ execution: 'client', media: { type: 'image' }, messages: [{ role: 'user', content: 'Apply red filter' }] });
+    // A later round/turn of the same conversation resends the same first user message.
+    await postChat({
+      execution: 'client',
+      media: { type: 'image' },
+      messages: [
+        { role: 'user', content: 'Apply red filter' },
+        { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'apply_color_filter', arguments: '{"filter":"red"}' } }] },
+        { role: 'tool', tool_call_id: 'call_1', content: { ok: true, executedOn: 'device' } },
+        { role: 'user', content: 'Now brighten it' },
+      ],
+    });
+    await postChat({ execution: 'client', media: { type: 'image' }, messages: [{ role: 'user', content: 'A different conversation' }] });
+    const ids = xaiCallHeaders.map(h => h['x-grok-conv-id']);
+    expect(ids).toHaveLength(3);
+    for (const id of ids) expect(id).toMatch(/^fc-[0-9a-f]{32}$/);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
+  it('records xAI usage (incl. cached tokens) in the final interaction metadata', async () => {
+    db.enqueueChatInteraction.mockClear();
+    xaiResponder = () => jsonResponse({
+      ...completion({ content: 'Answer:\nDone' }),
+      usage: { prompt_tokens: 1200, completion_tokens: 30, prompt_tokens_details: { cached_tokens: 900 } },
+    });
+    const res = await postChat({ execution: 'client', media: { type: 'image' }, messages: [{ role: 'user', content: 'Apply red filter' }] });
+    expect(res.status).toBe(200);
+    const aiCall = db.enqueueChatInteraction.mock.calls.map(c => c[0]).find(i => i.interactionType === 'ai2human');
+    expect(aiCall).toBeDefined();
+    expect(aiCall.metadata).toMatchObject({ promptTokens: 1200, completionTokens: 30, cachedTokens: 900 });
+  });
 });
 
 describe('server (default) mode is unchanged', () => {
@@ -292,8 +340,10 @@ describe('server (default) mode is unchanged', () => {
       + 'data: [DONE]\n\n'
     );
     const sent = xaiCalls[0];
-    expect(Object.keys(sent)).toEqual(['messages', 'tools', 'temperature', 'model', 'stream']);
+    expect(Object.keys(sent)).toEqual(['messages', 'tools', 'temperature', 'model', 'stream', 'stream_options']);
     expect(sent).toMatchObject({ model: 'grok-4.3', stream: true, temperature: 0.2 });
+    expect(sent.stream_options).toEqual({ include_usage: true });
+    expect(xaiCallHeaders[0]['x-grok-conv-id']).toMatch(/^fc-[0-9a-f]{32}$/);
     // The web tools array is forwarded as sent: the FFmpeg fallback is not a tool there.
     expect(sent.tools).toEqual([tools[0]]);
     expect(sent.messages[0].role).toBe('system');

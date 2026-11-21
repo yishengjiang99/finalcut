@@ -283,7 +283,9 @@ function projectSnapshot(device) {
 
 /** The project-context JSON the server put into the system prompt. */
 function promptProject(body) {
-  const system = body.messages.find(m => m.role === 'system')?.content || '';
+  // The project snapshot line rides in the trailing dynamic-context system message
+  // (prompt-cache shape); search every system message for it.
+  const system = body.messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
   const line = system.split('\n').find(l => l.startsWith('{"projectId"'));
   return line ? JSON.parse(line) : null;
 }
@@ -406,11 +408,13 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     const voice = device.audioTracks.find(t => t.id === 'track-voice');
     expect(voice.clips).toHaveLength(1);
     expect(voice.clips[0]).toMatchObject({ assetId: 'asset-narration', timelineStart: 12 });
-    // The model was given the timeline instructions and the project context.
-    const system = xaiCalls[0].messages[0].content;
+    // The model was given the timeline instructions and the project context
+    // (in the trailing dynamic-context system message, not the stable system one).
+    const system = xaiCalls[0].messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
     expect(system).toContain('multi-clip PROJECT');
     expect(system).toContain('project-vacation');
     expect(system).toContain('SOURCE-media seconds');
+    expect(xaiCalls[0].messages[0].content).not.toContain('multi-clip PROJECT');
   });
 
   it('§16 follow-up: moves the hotel clip first and mutes ONLY its original audio', async () => {
@@ -603,7 +607,10 @@ describe('agentic timeline editing (mocked Grok + device)', () => {
     expect(offered).not.toContain('trim_video_clip');
     expect(offered).not.toContain('batch_timeline_edits');
     expect(sent.messages[0].content).not.toContain('multi-clip PROJECT');
-    expect(sent.messages[0].content).toContain('no timeline editing tools');
+    expect(sent.messages[0].content).not.toContain('no timeline editing tools');
+    // The no-timeline-tools note is dynamic context: trailing system message.
+    expect(sent.messages.at(-1).content).toContain('no timeline editing tools');
+    expect(sent.messages.at(-1).content).not.toContain('multi-clip PROJECT');
     expect(device.videoClips[1].sourceEnd).toBe(8); // untouched
   });
 });

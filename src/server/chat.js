@@ -1,4 +1,5 @@
 import express from 'express';
+import { createHash } from 'crypto';
 import { XAI_API_TOKEN } from './config.js';
 import { XAI_CHAT_MODEL, XAI_CHAT_COMPLETIONS_URL } from './xai.js';
 import {
@@ -263,6 +264,41 @@ function enqueueChatError({ userId, message, source, requestMessageCount, metada
   });
 }
 
+/**
+ * xAI prompt-cache routing id. xAI caches prompt prefixes per server, so every
+ * request of one conversation should carry the same `x-grok-conv-id` header to
+ * land on the server holding its cache. Derived from the user id + the first
+ * user message of the conversation — stable across the rounds of a turn and
+ * across the turns of a project conversation, whose resent history always
+ * starts with the same message — and hashed, so no message content is exposed.
+ */
+export function grokConversationId(userId, messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  const first = list.find(m => m?.role === 'user') || list[0];
+  const text = first ? messageContentToText(first.content) : '';
+  return `fc-${createHash('sha256').update(`${userId ?? 'anon'}\n${text}`).digest('hex').slice(0, 32)}`;
+}
+
+/** Flatten an xAI `usage` object into token counts for logging (null when absent). */
+export function xaiUsageFields(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  return {
+    promptTokens: usage.prompt_tokens ?? null,
+    completionTokens: usage.completion_tokens ?? null,
+    cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? null,
+  };
+}
+
+/** Add one call's usage fields into running totals (same shape as xaiUsageFields). */
+function addUsageFields(totals, fields) {
+  if (!fields) return totals;
+  const next = totals || { promptTokens: 0, completionTokens: 0, cachedTokens: 0 };
+  for (const key of Object.keys(next)) {
+    if (typeof fields[key] === 'number') next[key] += fields[key];
+  }
+  return next;
+}
+
 // ─── FinalCap-iOS tool allowlist (streaming mode) ────────────────────────────
 
 /**
@@ -414,10 +450,18 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   const stillVideoFromPhotos = supportsStillVideoFromPhotos(userAgent);
   const offeredTools = (profile?.tools || offeredToolsFor)({ userAgent, mediaType: media?.type })
     .filter(t => !skippedTools.includes(t.function.name) && !unsupportedTools.includes(t.function.name));
-  const contextLines = [
+  // Prompt-cache shape: the system message (below) carries only lines that are stable
+  // for the whole conversation, so the [system, ...history] prefix stays byte-identical
+  // as the history grows and xAI can serve it from its prompt cache. Everything derived
+  // from the current request state (media, project snapshot, this turn's skipped /
+  // unsupported tools, the round cap) goes into `contextLines`, delivered as a trailing
+  // system message after the conversation — same information, cache-friendly position.
+  const stableLines = [
     profile?.instructions || CLIENT_EXECUTION_INSTRUCTIONS,
-    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages, stillVideoFromPhotos }),
     ...(profile?.guidance || []),
+  ];
+  const contextLines = [
+    mediaContextText(media, { thumbnailCount: thumbnails.length, thumbnailsAsImages, stillVideoFromPhotos }),
   ];
   // The server-side ffmpeg_cli fallback is offered to iOS builds that ship its executor
   // (see FFMPEG_CLI_MIN_BUILD): last resort when no on-device tool can handle the request.
@@ -449,7 +493,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
     contextLines.push(`Tool-call limit (${MAX_TOOL_ROUNDS} rounds) reached for this turn: do not call tools; give the final answer now.`);
   }
   const baseSystem = buildSystemMessage({ mediaType: media?.type ?? null, captionStyle: !iosInfo.isFinalCapIos, stillVideoFromPhotos });
-  const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${contextLines.join('\n')}` };
+  const systemMessage = { role: 'system', content: `${baseSystem.content}\n\n${stableLines.join('\n')}` };
 
   const modelMessages = [systemMessage];
   if (thumbnailsAsImages) {
@@ -462,6 +506,9 @@ export async function handleClientExecution(req, res, userId, profile = null) {
     });
   }
   modelMessages.push(...conversation);
+  // Dynamic per-request context rides at the end (see the prompt-cache note above);
+  // mediaContextText always returns a line, so this message is never empty.
+  modelMessages.push({ role: 'system', content: contextLines.join('\n') });
 
   const requestBody = {
     model,
@@ -479,6 +526,8 @@ export async function handleClientExecution(req, res, userId, profile = null) {
   let choice = {};
   let servedModel = null;
   let modelToolCalls = [];
+  const convId = grokConversationId(userId, conversation);
+  let usageTotals = null;
   for (let lookups = 0; ; lookups += 1) {
     requestBody.messages = modelMessages;
     let response;
@@ -488,7 +537,8 @@ export async function handleClientExecution(req, res, userId, profile = null) {
         signal: AbortSignal.timeout(XAI_REQUEST_TIMEOUT_MS),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${XAI_API_TOKEN}`
+          'Authorization': `Bearer ${XAI_API_TOKEN}`,
+          'x-grok-conv-id': convId,
         },
         body: JSON.stringify(requestBody),
       });
@@ -523,6 +573,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
     }
 
     const data = await response.json();
+    usageTotals = addUsageFields(usageTotals, xaiUsageFields(data?.usage));
     servedModel = data?.model || null;
     choice = data?.choices?.[0]?.message || {};
     const allowedNames = new Set(offeredTools.map(t => t.function.name));
@@ -606,6 +657,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
         metadata: { source: 'timeline_tool_validation', execution: 'client', invalidTimelineCalls },
       });
     }
+    if (usageTotals) console.log('[xai-usage]', JSON.stringify({ path: 'client', model: servedModel || model, ...usageTotals }));
     return res.json({
       schemaVersion: CLIENT_SCHEMA_VERSION,
       status: 'tool_calls',
@@ -634,6 +686,7 @@ export async function handleClientExecution(req, res, userId, profile = null) {
       model: servedModel || model,
       streamed: false,
       execution: 'client',
+      ...(usageTotals || {}),
       toolRounds: rounds,
       okToolResults: countOkToolResultsInTurn(conversation),
       editTurnCompleted: countOkToolResultsInTurn(conversation) > 0,
@@ -708,18 +761,21 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     const upstream = new AbortController();
     res.on('close', () => upstream.abort());
 
+    const convId = grokConversationId(userId, req.body.messages);
     const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
       method: 'POST',
       signal: upstream.signal,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${XAI_API_TOKEN}`
+        'Authorization': `Bearer ${XAI_API_TOKEN}`,
+        'x-grok-conv-id': convId,
       },
       body: JSON.stringify(restrictStreamingBodyForIos(restrictStreamingToolsToMedia(addFfmpegFallbackTool({
         messages: [systemMessage, ...req.body.messages],
         ...forwardedChatFields(clientBody),
         model: XAI_CHAT_MODEL,
-        stream: true // Enable streaming
+        stream: true, // Enable streaming
+        stream_options: { include_usage: true } // Final chunk carries usage (incl. cached tokens)
       }, req.get('user-agent')), mediaType), req.get('user-agent')))
     });
 
@@ -756,6 +812,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
     let lineBuffer = '';
     let assistantText = '';
     let servedModel = null; // the model xAI reports, which can differ from the one requested
+    let streamUsage = null; // usage object from the final chunk (stream_options.include_usage)
     const filter = createStreamFilter();
     let doneFlushed = false;
     let lastParsed = null; // keep reference for flush emit
@@ -815,6 +872,14 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
             continue;
           }
 
+          if (parsed.usage) {
+            streamUsage = parsed.usage;
+            // The usage-only final chunk is recorded for the interaction metadata
+            // below and not forwarded: clients never asked for it and it carries
+            // no choices to render.
+            if (!Array.isArray(parsed.choices) || parsed.choices.length === 0) continue;
+          }
+
           const delta = parsed.choices?.[0]?.delta;
           if (parsed.model) servedModel = parsed.model;
 
@@ -867,6 +932,7 @@ router.post('/api/chat', apiLimiter, requireAuthenticatedUser, requireInferenceA
       metadata: {
         model: servedModel || XAI_CHAT_MODEL,
         streamed: true,
+        ...(xaiUsageFields(streamUsage) || {}),
       },
     });
   } catch (error) {

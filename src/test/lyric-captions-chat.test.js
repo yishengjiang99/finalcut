@@ -127,7 +127,9 @@ describe('lyric_captions in /api/chat', () => {
       const body = await res.json();
       expect(body).toMatchObject({ status: 'tool_calls', toolCalls: [{ id: 'lc1', name: 'lyric_captions', arguments: args }] });
       expect(offeredNames(xaiCalls[0])).toContain('lyric_captions');
-      expect(xaiCalls[0].messages.at(-1)).toMatchObject({ role: 'user', content: text });
+      expect(xaiCalls[0].messages).toContainEqual({ role: 'user', content: text });
+      // Dynamic media context rides in a trailing system message (prompt-cache shape).
+      expect(xaiCalls[0].messages.at(-1)).toMatchObject({ role: 'system', content: expect.stringContaining('type=video') });
     });
   }
 
