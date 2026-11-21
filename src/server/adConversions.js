@@ -8,6 +8,9 @@
 //     before checkout; it rides in Checkout metadata and is sent as conversion_id (the thanks-page pixel
 //     uses the same value). Pixels are per product: <PREFIX>_X_PIXEL_ID, <PREFIX>_X_EVENT_ID_PURCHASE,
 //     <PREFIX>_X_EVENT_ID_START_TRIAL, <PREFIX>_REDDIT_PIXEL_ID (PREFIX = MUSIC | COMPOSE).
+//  3. sendXPixelConversion(): FinalCap purchases, from the Stripe webhook / verify path in stripe.js.
+//     The FinalCap website pixel authenticates with the X-Pixel-Token header instead of OAuth 1.0a:
+//     X_PIXEL_TOKEN, X_PIXEL_ID (default rjnyi), X_PIXEL_EVENT_ID_PURCHASE (default tw-rjnyi-rjo03).
 // Shared credentials: X_ADS_CONSUMER_KEY, X_ADS_CONSUMER_SECRET, X_ADS_ACCESS_TOKEN, X_ADS_ACCESS_TOKEN_SECRET;
 // Reddit token REDDIT_ADS_ACCESS_TOKEN or REDDIT_CAPI_TOKEN (both names are read, by either caller).
 // Always on: each platform sends whenever its credentials are set; with nothing set this is a no-op.
@@ -263,4 +266,60 @@ export async function sendConversion(conv, { env = process.env, fetchImpl = glob
     } catch (e) { out.reddit = 'error'; log.warn?.(`[ads] Reddit CAPI error: ${e.message}`); }
   }
   return out;
+}
+
+// ---- FinalCap purchase (X pixel-token auth) ----
+// conv: { conversionId, email, twclid, ip, userAgent, value, currency, at: Date, sourceUrl }
+export function xPixelConfig(e = process.env) {
+  const token = String(e.X_PIXEL_TOKEN || '').trim();
+  if (!token) return null;
+  return {
+    token,
+    pixelId: String(e.X_PIXEL_ID || '').trim() || 'rjnyi',
+    eventId: String(e.X_PIXEL_EVENT_ID_PURCHASE || '').trim() || 'tw-rjnyi-rjo03',
+  };
+}
+
+export function buildXPixelRequest(conv, e = process.env) {
+  const cfg = xPixelConfig(e);
+  if (!cfg || !conv?.conversionId) return null;
+  const identifier = {};
+  if (conv.twclid) identifier.twclid = String(conv.twclid);
+  const h = hashEmail(conv.email);
+  if (h) identifier.hashed_email = h;
+  if (conv.ip && conv.userAgent) {
+    identifier.ip_address = conv.ip;
+    identifier.user_agent = String(conv.userAgent).slice(0, 512);
+  }
+  if (!Object.keys(identifier).length) return null; // X needs at least one identifier
+  const c = {
+    conversion_time: (conv.at || new Date()).toISOString(),
+    event_id: cfg.eventId,
+    conversion_id: String(conv.conversionId),
+    identifiers: [identifier],
+  };
+  if (conv.sourceUrl) c.event_source_url = conv.sourceUrl;
+  if (conv.value > 0) { c.value = Number(conv.value.toFixed(2)); c.price_currency = conv.currency || 'USD'; }
+  return {
+    url: `${X_API}${encodeURIComponent(cfg.pixelId)}`,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Pixel-Token': cfg.token },
+      body: JSON.stringify({ conversions: [c] }),
+    },
+  };
+}
+
+// Fire-and-forget like forwardConversion: never throws, never blocks the caller.
+// The webhook and the verify-checkout-session path both call this for the same purchase
+// with conversion_id = the Checkout session id, so X counts it once.
+export function sendXPixelConversion(conv, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
+  try {
+    const req = buildXPixelRequest(conv, env);
+    if (!req) return Promise.resolve(null);
+    return post('x-pixel', req, fetchImpl);
+  } catch (err) {
+    logFailure('x-pixel', err?.message || String(err));
+    return Promise.resolve(null);
+  }
 }

@@ -7,6 +7,7 @@ import {
 } from './config.js';
 import { apiLimiter, getBaseUrlFromRequest } from './middleware.js';
 import { handleProductWebhookEvent } from './musicBilling.js';
+import { sendXPixelConversion } from './adConversions.js';
 import { FINALCUT_PRODUCT, productOf } from './products.js';
 
 // The FinalCut user a checkout session belongs to: client_reference_id (the signed-in user's id, set at
@@ -41,6 +42,20 @@ export async function grantFinalcutSubscription(session) {
   }
   console.warn(`Checkout ${session.id} has no client_reference_id user or email; subscription not granted`);
   return null;
+}
+
+// Reports a granted FinalCut purchase to the X Conversions API (pixel-token auth).
+// Fire-and-forget; conversion_id is the Checkout session id, so the webhook and the
+// verify-checkout-session path reporting the same purchase are deduped by X.
+function sendFinalcapXConversion(session, owner) {
+  sendXPixelConversion({
+    conversionId: session.id,
+    email: owner?.email || finalcutSessionOwner(session).email,
+    twclid: session.metadata?.twclid || null,
+    value: (session.amount_total || 0) / 100,
+    currency: String(session.currency || 'usd').toUpperCase(),
+    at: session.created ? new Date(session.created * 1000) : new Date(),
+  });
 }
 
 // customer.subscription.updated: these statuses lose FinalCut Pro, these keep it. Others (incomplete,
@@ -90,7 +105,10 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
       case 'checkout.session.completed': {
         const session = event.data.object;
         console.log('Payment successful:', session.id);
-        if (isFinalcutSessionPaid(session)) await grantFinalcutSubscription(session);
+        if (isFinalcutSessionPaid(session)) {
+          const owner = await grantFinalcutSubscription(session);
+          if (owner) sendFinalcapXConversion(session, owner);
+        }
         break;
       }
 
@@ -221,6 +239,7 @@ router.post('/api/verify-checkout-session', apiLimiter, async (req, res) => {
         console.error('Error updating subscription in database:', dbError);
         // Continue anyway - webhook will handle it as fallback
       }
+      if (owner) sendFinalcapXConversion(session, owner);
 
       // Update the current session for immediate consistency; later requests read the database.
       const signedIn = typeof req.isAuthenticated === 'function' && req.isAuthenticated() ? req.user : null;

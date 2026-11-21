@@ -301,6 +301,14 @@ function shell({ title, description, url, type, ld, ogAlt, head = '', body, tele
 <meta name="twitter:image:alt" content="${esc(ogAlt || title)}">
 ${head}<style>${CSS}</style>
 ${ld.map((o) => `<script type="application/ld+json">${jsonLd(o)}</script>`).join('\n')}
+<!-- X conversion tracking base code -->
+<script>
+!function(e,t,n,s,u,a){e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments);
+},s.version='1.1',s.queue=[],u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js',
+a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))}(window,document,'script');
+twq('config','rjnyi');
+</script>
+<!-- End X conversion tracking base code -->
 </head>
 <body data-p="${p}">
 <header class="top"><div class="wrap wide"><a class="brand" href="/blog"><span class="dot" aria-hidden="true"></span>GrepAwk <span class="b">Blog</span></a><nav aria-label="Site"><a href="/blog/rss.xml" class="opt">RSS</a><a href="/">FinalCap</a></nav></div></header>

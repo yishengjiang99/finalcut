@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import crypto from 'crypto';
 import express from 'express';
-import { forwardConversion, oauth1Header, hashEmail, stableEventId, _resetLogLimiter, conversionsEnabled } from '../server/adConversions.js';
+import { forwardConversion, oauth1Header, hashEmail, stableEventId, _resetLogLimiter, conversionsEnabled, buildXPixelRequest, sendXPixelConversion, xPixelConfig } from '../server/adConversions.js';
 import { createTelemetryRouter, extractClickIds, sanitizeTelemetryEvent } from '../server/telemetry.js';
 
 const KEYS = ['X_ADS_PIXEL_ID', 'X_ADS_EVENT_IDS', 'X_ADS_CONSUMER_KEY', 'X_ADS_CONSUMER_SECRET', 'X_ADS_ACCESS_TOKEN', 'X_ADS_ACCESS_TOKEN_SECRET', 'REDDIT_ADS_PIXEL_ID', 'REDDIT_ADS_ACCESS_TOKEN', 'REDDIT_ADS_TEST_ID', 'REDDIT_ADS_EVENTS'];
@@ -100,6 +100,46 @@ describe('ad conversions', () => {
     expect(rows[0].props).toEqual({ method: 'google', utm_source: 'x' });
     expect(forwarded[0][1].clickIds).toEqual({ twclid: 'tw123', rdt_cid: 'rd456' });
     expect(extractClickIds(sanitizeTelemetryEvent({ ...row, props: { twclid: 'a' } }).row)).toEqual({ twclid: 'a' });
+  });
+});
+
+describe('FinalCap X pixel-token conversions', () => {
+  const conv = { conversionId: 'cs_test_123', email: '  Buyer@Example.com ', value: 9.99, currency: 'USD', at: new Date('2026-11-20T12:00:00Z') };
+
+  it('is a no-op without X_PIXEL_TOKEN', () => {
+    expect(xPixelConfig({})).toBeNull();
+    expect(buildXPixelRequest(conv, {})).toBeNull();
+  });
+
+  it('builds the pixel-token request with the default pixel and event ids', () => {
+    const req = buildXPixelRequest(conv, { X_PIXEL_TOKEN: 'tok123' });
+    expect(req.url).toBe('https://ads-api.x.com/12/measurement/conversions/rjnyi');
+    expect(req.init.headers['X-Pixel-Token']).toBe('tok123');
+    const body = JSON.parse(req.init.body);
+    expect(body.conversions).toHaveLength(1);
+    const c = body.conversions[0];
+    expect(c.event_id).toBe('tw-rjnyi-rjo03');
+    expect(c.conversion_id).toBe('cs_test_123');
+    expect(c.conversion_time).toBe('2026-11-20T12:00:00.000Z');
+    expect(c.value).toBe(9.99);
+    expect(c.price_currency).toBe('USD');
+    expect(c.identifiers).toEqual([{ hashed_email: crypto.createHash('sha256').update('buyer@example.com').digest('hex') }]);
+  });
+
+  it('prefers twclid when present and requires at least one identifier', () => {
+    const withClick = buildXPixelRequest({ ...conv, twclid: 'abc123' }, { X_PIXEL_TOKEN: 't' });
+    expect(JSON.parse(withClick.init.body).conversions[0].identifiers[0].twclid).toBe('abc123');
+    expect(buildXPixelRequest({ conversionId: 'cs_x' }, { X_PIXEL_TOKEN: 't' })).toBeNull();
+  });
+
+  it('sendXPixelConversion posts once and stays silent without a token', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => { calls.push([url, init]); return { ok: true, status: 200 }; };
+    await sendXPixelConversion(conv, { env: { X_PIXEL_TOKEN: 'tok123' }, fetchImpl });
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1].headers['X-Pixel-Token']).toBe('tok123');
+    await sendXPixelConversion(conv, { env: {}, fetchImpl });
+    expect(calls).toHaveLength(1);
   });
 });
 
