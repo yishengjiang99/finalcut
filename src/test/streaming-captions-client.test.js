@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   planCommitPoints, wavToPcm16k, getStreamPace, offsetWords, runStreamingCaptions, friendlyStreamingError, streamingAvailable,
   mintStreamingToken, StreamingCaptionsError, STREAMING_MESSAGES, SAMPLE_RATE, CHUNK_SAMPLES, GRID_SAMPLES, formatClock,
+  baseLanguageCode, resolveLanguagePair, pairTargetFor,
 } from '../streamingCaptions.js';
 import { encodeWavMono16 } from '../lyricCaptionsClient.js';
 
@@ -507,6 +508,79 @@ describe('runStreamingCaptions', () => {
     expect(error.code).toBe('audio_too_long');
     expect(friendlyStreamingError(error)).toBe(STREAMING_MESSAGES.tooLong);
     expect(sockets).toHaveLength(0);
+  });
+});
+
+describe('bidirectional pair mode', () => {
+  const segLang = (text, words, language_code) => ({ message_type: 'committed_transcript_with_timestamps', text, language_code, words });
+
+  it('baseLanguageCode normalizes codes and names to one comparable base', () => {
+    expect(baseLanguageCode('en')).toBe('en');
+    expect(baseLanguageCode('eng')).toBe('en');
+    expect(baseLanguageCode('spa')).toBe('es');
+    expect(baseLanguageCode('es-ES')).toBe('es');
+    expect(baseLanguageCode('Spanish')).toBe('es');
+    expect(baseLanguageCode('zh-Hans')).toBe('zh');
+    expect(baseLanguageCode('auto')).toBeNull();
+    expect(baseLanguageCode('')).toBeNull();
+    expect(baseLanguageCode(undefined)).toBeNull();
+  });
+
+  it('resolveLanguagePair needs two different, readable languages', () => {
+    expect(resolveLanguagePair({ target_language: 'en', bidirectional_with: 'es' }))
+      .toEqual({ a: 'en', b: 'es', aRaw: 'en', bRaw: 'es' });
+    expect(resolveLanguagePair({ target_language: 'zh-Hans', bidirectional_with: 'English' }))
+      .toEqual({ a: 'zh', b: 'en', aRaw: 'zh-Hans', bRaw: 'English' });
+    expect(resolveLanguagePair({ target_language: 'en' })).toBeNull();
+    expect(resolveLanguagePair({ target_language: 'en', bidirectional_with: 'en' })).toBeNull();
+    expect(resolveLanguagePair({ target_language: 'en', bidirectional_with: 'English' })).toBeNull();
+    expect(resolveLanguagePair({})).toBeNull();
+  });
+
+  it('pairTargetFor routes each line into the other language of the pair', () => {
+    const pair = resolveLanguagePair({ target_language: 'en', bidirectional_with: 'es' });
+    expect(pairTargetFor({ lang: 'es' }, pair)).toBe('en');
+    expect(pairTargetFor({ lang: 'en' }, pair)).toBe('es');
+    expect(pairTargetFor({ lang: 'fr' }, pair)).toBeNull(); // a third language stays as spoken
+    expect(pairTargetFor({ lang: null }, pair)).toBe('en'); // unknown: the primary target
+    expect(pairTargetFor({}, pair)).toBe('en');
+  });
+
+  it('routes each segment by its own language: es→en, en→es, a third language untouched, with faster commits', async () => {
+    const wav = makeWav(26, [[7.7, 8.3], [16.7, 17.3]]);
+    const behavior = ({ commitIndex }) => [
+      segLang('Hola mi amigo', wordsAt(0.5, ['Hola', 'mi', 'amigo']), 'es'),
+      segLang('Hello my friend', wordsAt(9.0, ['Hello', 'my', 'friend']), 'en'),
+      segLang('Bonjour mon ami', wordsAt(18.0, ['Bonjour', 'mon', 'ami']), 'fr'),
+    ][commitIndex];
+    const { FakeSocket, sockets } = socketFactory(behavior);
+    const fetchImpl = vi.fn(async (url, init) => {
+      const body = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ lines: body.segments.map(s => ({ i: s.i, text: s.text, translation: `→${body.target_language}:${s.text}` })) }) };
+    });
+    const out = await runStreamingCaptions({ target_language: 'en', bidirectional_with: 'es' }, wav, baseDeps({ WebSocketImpl: FakeSocket, fetchImpl, pace: 1 }));
+    // Pair mode commits every ~6-10 s: three segments for 26 s of audio (single mode would be one).
+    expect(sockets[0].sent.filter(m => m.commit)).toHaveLength(3);
+    expect(out.lines.map(l => l.text)).toEqual(['Hola mi amigo', 'Hello my friend', 'Bonjour mon ami']);
+    expect(out.lines.map(l => l.translation)).toEqual(['→en:Hola mi amigo', '→es:Hello my friend', '']);
+    expect(out.lines[0]).not.toHaveProperty('lang'); // routing metadata never reaches the caption track
+    expect(out).toMatchObject({ targetLanguage: 'en', bidirectional: 'es', translatedCount: 2 });
+    // Exactly two translate calls, one per direction; the French line is never sent for translation.
+    const bodies = fetchImpl.mock.calls.map(c => JSON.parse(c[1].body));
+    expect(bodies.map(b => b.target_language)).toEqual(['en', 'es']);
+    expect(bodies[0].segments.map(s => s.text)).toEqual(['Hola mi amigo']);
+    expect(bodies[1].segments.map(s => s.text)).toEqual(['Hello my friend']);
+    expect(bodies.flatMap(b => b.segments.map(s => s.text))).not.toContain('Bonjour mon ami');
+  });
+
+  it('a "pair" of one language twice is single mode: one target, normal commits', async () => {
+    const { FakeSocket, sockets } = socketFactory(() => segmentMsg('Hello there', wordsAt(0.5, ['Hello', 'there'])));
+    const fetchImpl = okTranslate();
+    const out = await runStreamingCaptions({ target_language: 'en', bidirectional_with: 'English' }, makeWav(10), baseDeps({ WebSocketImpl: FakeSocket, fetchImpl }));
+    expect(out.bidirectional).toBeNull();
+    expect(sockets[0].sent.filter(m => m.commit)).toHaveLength(1);
+    const bodies = fetchImpl.mock.calls.map(c => JSON.parse(c[1].body));
+    expect(bodies.every(b => b.target_language === 'en')).toBe(true);
   });
 });
 

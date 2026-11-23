@@ -19,7 +19,7 @@ describe('lyric_captions style schema', () => {
     expect(p.size.enum).toEqual(['small', 'default', 'large', 'xl']);
     expect(p.position.enum).toEqual(['bottom', 'middle', 'top']);
     expect(p.position_from_bottom_pct).toMatchObject({ minimum: 0, maximum: 45, default: 20 });
-    expect(Object.keys(p)).toEqual(['target_language', 'source_language', 'mode', 'position_from_bottom_pct', 'font_size', 'font', 'size', 'position']);
+    expect(Object.keys(p)).toEqual(['target_language', 'source_language', 'bidirectional_with', 'translation_only', 'mode', 'position_from_bottom_pct', 'font_size', 'font', 'size', 'position']);
   });
 });
 

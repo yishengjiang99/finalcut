@@ -30,7 +30,7 @@ vi.mock('../lyricCaptionsClient.js', async (importOriginal) => ({
   ...(await importOriginal()),
   runLyricCaptionsWeb: vi.fn(async () => ({ burned: new Uint8Array([5]), audioBytes: 44, summary: { translatedCount: 1 }, result: { lines: [{}], language: 'en', targetLanguage: 'zh-Hans', mode: 'lyrics', song: null } })),
 }));
-import { toolFunctions, setToolStatusListener, canFallBackToUpload, isRetryable, KEEP_OPEN_HINT, PICKING_UP_HINT, muxCaptionTrack, trackLanguageCode, languageLabel } from '../toolFunctions.js';
+import { toolFunctions, setToolStatusListener, canFallBackToUpload, isRetryable, KEEP_OPEN_HINT, PICKING_UP_HINT, muxCaptionTrack, trackLanguageCode, languageLabel, translationOnlyLines } from '../toolFunctions.js';
 import { getTrack, setTrack } from '../captionTrack.js';
 import * as streaming from '../streamingCaptions.js';
 import * as lyricClient from '../lyricCaptionsClient.js';
@@ -96,6 +96,33 @@ describe('streaming lyric_captions on web', () => {
     expect(result).toMatch(/Photos and every player/);
     expect(result).toMatch(/ElevenLabs may keep it, so do not tell the user it was deleted/);
     expect(lyricClient.runLyricCaptionsWeb).not.toHaveBeenCalled();
+  });
+
+  it('bidirectional args reach the streaming flow and the result says "both ways"', async () => {
+    streaming.runStreamingCaptions.mockResolvedValue({ ...streamed, language: 'es', targetLanguage: 'en', bidirectional: 'es' });
+    const { result } = await tool({ target_language: 'en', bidirectional_with: 'es' });
+    expect(streaming.runStreamingCaptions.mock.calls[0][0]).toMatchObject({ target_language: 'en', bidirectional_with: 'es' });
+    expect(result).toMatch(/translated both ways between English and Spanish/);
+  });
+
+  it('translation_only puts the translation on the caption line and drops the original', async () => {
+    const input = new Uint8Array([1, 2, 3]);
+    await tool({ target_language: 'zh-Hans', translation_only: true }, input);
+    const captionTrack = getTrack(input);
+    expect(captionTrack.lines[0]).toEqual({ start: 0.5, end: 2.5, text: '你好，我的朋友', translation: '' });
+    expect(captionTrack.lines[1]).toEqual({ start: 3, end: 5, text: '很快见', translation: '' });
+  });
+
+  it('translationOnlyLines keeps untranslated lines as they are', () => {
+    expect(translationOnlyLines([
+      { start: 0, end: 1, text: 'Hola', translation: 'Hello', words: [{ w: 'Hola', start: 0, end: 1 }] },
+      { start: 1, end: 2, text: 'Bonjour', translation: '' },
+      { start: 2, end: 3, text: 'Same', translation: 'Same' },
+    ])).toEqual([
+      { start: 0, end: 1, text: 'Hello', translation: '' },
+      { start: 1, end: 2, text: 'Bonjour', translation: '' },
+      { start: 2, end: 3, text: 'Same', translation: 'Same' },
+    ]);
   });
 
   it('percent reaches 100 when the lines are ready (there is no burn step in the caption flow)', async () => {

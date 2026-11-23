@@ -471,10 +471,11 @@ async function lyricCaptionsInBrowser(args, videoFileData, replacing, setVideoFi
     size: width && height ? { width, height } : null,
     extract: (bytes) => engine.extractSpeechAudio(bytes, fileMimeType),
   });
-  const lines = result.lines?.length || 0;
+  const displayLines = args?.translation_only ? translationOnlyLines(result.lines || []) : (result.lines || []);
+  const lines = displayLines.length;
   const songText = describeSong(result.song);
-  const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines || [], language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, videoHeight: height });
-  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning).${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).`;
+  const styleSummary = attachCaptionTrack({ source: videoFileData, lines: displayLines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, videoHeight: height });
+  return `lyric_captions done: ${lines} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${summary?.translatedCount ?? lines} translated), mode ${result.mode}. ${songText} The captions are a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning).${replacing ? ' They replace the captions burned earlier.' : ''} Uploaded ${Math.round(audioBytes / 1024)} KB of audio for transcription (no video).${args?.bidirectional_with ? ' Note: both-ways translation is only supported in the streaming flow, so these captions were translated into the target language only.' : ''}`;
 }
 
 // Streaming captions: the video's audio (never the picture) is streamed from this browser straight to
@@ -550,15 +551,30 @@ async function streamingCaptionsSteps(args, videoFileData, replacing, setVideoFi
   // No burn here: the captions are a live overlay on the preview, burned in only when the user exports.
   clog.log('run_done', { lines: result.lines.length, overlay: true });
   toolStatus('Captions ready', 1);
-  const count = result.lines.length;
-  const styleSummary = attachCaptionTrack({ source: videoFileData, lines: result.lines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, clog, videoHeight: height });
-  return `lyric_captions done: ${count} lines, ${result.language || 'auto'} → ${result.targetLanguage} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning). ${replacing ? 'They replace the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
+  const displayLines = args?.translation_only ? translationOnlyLines(result.lines) : result.lines;
+  const count = displayLines.length;
+  const styleSummary = attachCaptionTrack({ source: videoFileData, lines: displayLines, language: result.language, targetLanguage: result.targetLanguage, args, replacing, addMessage, clog, videoHeight: height });
+  const direction = result.bidirectional
+    ? `translated both ways between ${languageLabel(result.targetLanguage)} and ${languageLabel(result.bidirectional)}`
+    : `${result.language || 'auto'} → ${result.targetLanguage}`;
+  return `lyric_captions done: ${count} lines, ${direction} (${result.translatedCount} translated), mode speech, streamed. The captions are shown as a live overlay on the video preview (style: ${styleSummary}). When the user presses Export, the captions are burned into the video frames in the browser, so they show in Photos and every player. End your reply with one short line offering a change, such as "Want a different font or position?"; if they ask, call style_captions (never re-run the captioning). ${replacing ? 'They replace the captions burned earlier. ' : ''}The video's audio (not the picture) was streamed to ElevenLabs for transcription and ElevenLabs may keep it, so do not tell the user it was deleted.`;
 }
 
 const srtSeconds = (stamp) => {
   const [h, m, rest] = String(stamp).split(':');
   return Number(h) * 3600 + Number(m) * 60 + Number(String(rest).replace(',', '.'));
 };
+
+/**
+ * translation_only: the caption shows the translation instead of the original line. Lines with
+ * no translation keep their original text. The word timings belong to the original wording, so
+ * they are dropped along with it.
+ */
+export const translationOnlyLines = (lines) => (lines || []).map((l) => (
+  l?.translation && l.translation !== l.text
+    ? { start: l.start, end: l.end, text: l.translation, translation: '' }
+    : l
+));
 
 /** SRT cues (and an optional translated SRT with the same timing) as caption track lines. */
 export function srtToLines(srt, translatedSrt = '') {

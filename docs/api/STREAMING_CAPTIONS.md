@@ -26,11 +26,26 @@ single-use token reaches the browser. No CSP is set today; if one is added it ne
 
 1. `GET /api/streaming-captions/status` → `{available}`; the tool uses this flow only when true and the mode is not `lyrics`.
 2. No prompt: the browser starts streaming the audio as soon as captions are requested.
-3. The browser extracts the audio (16 kHz mono PCM), plans commit points at the quietest spot 20–30 s apart.
+3. The browser extracts the audio (16 kHz mono PCM), plans commit points at the quietest spot 20–30 s apart (6–10 s in bidirectional pair mode, see below).
 4. `POST /api/streaming-captions/token` just before connecting. Connect to `wsUrl?…&token=…`.
 5. Stream 0.5 s chunks (`input_audio_chunk`, `commit:true` on the chunk that ends a segment) at the pacing constant.
 6. Each `committed_transcript_with_timestamps` becomes caption lines; lines are translated in order in batches of ≤ 20 with `POST /api/streaming-captions/translate`, while later audio is still streaming.
 7. When every range is transcribed and translated the flow **ends**: no burn and no re-encode at this point. The lines become a **caption track** attached to the video (see "Overlay, style and export"); percent reaches 100 and the chat shows the applied card "Captions · English → Chinese".
+
+## Bidirectional pair mode
+
+`lyric_captions` with `bidirectional_with` (speech mode, this flow only): the two languages form a
+pair (`target_language` ⇄ `bidirectional_with`). ElevenLabs reports a `language_code` with every
+committed segment; the browser routes each line by it — a line spoken in one language of the pair is
+translated into the other, a line spoken in any other language is left untranslated (original only),
+and a line whose language is unknown goes to `target_language` (a "translation" that repeats the
+original is dropped server-side, so it still shows as-is). Commits are planned 6–10 s apart so a
+language switch is picked up within seconds; the language is per segment, not per word, so a switch
+in the middle of a segment takes effect at the next segment. Translation still goes through
+`/api/streaming-captions/translate`, one call per run of same-direction lines, and the job is charged
+once as usual. The upload-based fallback flow does not route per line: if streaming is unavailable
+it translates into `target_language` only and the tool result says so. Related arg:
+`translation_only` shows just the translation line (no original above it) in either flow.
 
 ## Overlay, style and export
 

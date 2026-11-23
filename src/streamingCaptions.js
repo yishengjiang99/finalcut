@@ -9,9 +9,14 @@
 // percent = seconds of audio that are transcribed AND translated / total (monotonic, ≤ 99; the UI
 // shows 100 only after the burn). A dropped socket keeps what is finished; the caller may resume
 // from the first unfinished range with a fresh token. See docs/api/STREAMING_CAPTIONS.md.
+//
+// Bidirectional pair mode (args.bidirectional_with): commits come faster (~6-10 s) and each line is
+// translated into the OTHER language of the pair (target_language ⇄ bidirectional_with), routed by
+// the language ElevenLabs reports for its segment. Lines in a third language stay untranslated.
 import { abortableFetch as fetch } from './abortableFetch.js';
 import { buildLines } from './lyricShared.js';
 import { LYRIC_CAPTIONS_MESSAGES } from './lyricCaptionsClient.js';
+import { normalizeLanguageCode } from './server/captionHelpers.js';
 
 export const SAMPLE_RATE = 16000;
 export const MAX_AUDIO_SECONDS = 600;
@@ -23,6 +28,9 @@ export const CHUNK_SAMPLES = 8000; // 0.5 s; documented range is 0.1-1 s
 export const GRID_SAMPLES = 1600; // commit points sit on a 0.1 s grid so no chunk is shorter than 0.1 s
 export const COMMIT_MIN_SEC = 20;
 export const COMMIT_MAX_SEC = 30;
+/** Pair mode commits sooner, so a language switch is picked up within seconds, not half a minute. */
+export const COMMIT_MIN_SEC_PAIR = 6;
+export const COMMIT_MAX_SEC_PAIR = 10;
 export const TRANSLATE_BATCH = 20;
 export const PERCENT_CAP = 99;
 /** Percent once the audio is decoded and the commit points are planned; streaming fills 5..99 (half audio sent, half transcribed and translated). */
@@ -203,6 +211,55 @@ export function planCommitPoints(pcm, { min = COMMIT_MIN_SEC, max = COMMIT_MAX_S
   }
   points.push(total);
   return points;
+}
+
+/** ISO 639-3 → 639-1 for the codes a recognizer is likely to report (ElevenLabs uses 639-1, but be safe). */
+const ISO3_TO_ISO1 = {
+  eng: 'en', spa: 'es', fra: 'fr', fre: 'fr', deu: 'de', ger: 'de', ita: 'it', por: 'pt', rus: 'ru',
+  jpn: 'ja', zho: 'zh', chi: 'zh', kor: 'ko', ara: 'ar', hin: 'hi', nld: 'nl', dut: 'nl', swe: 'sv',
+  nor: 'no', dan: 'da', fin: 'fi', pol: 'pl', tur: 'tr', ukr: 'uk', vie: 'vi', tha: 'th', ind: 'id',
+  msa: 'ms', may: 'ms', ell: 'el', gre: 'el', ces: 'cs', cze: 'cs', hun: 'hu', ron: 'ro', rum: 'ro',
+  bul: 'bg', hrv: 'hr', slk: 'sk', slo: 'sk', slv: 'sl', est: 'et', lav: 'lv', lit: 'lt', heb: 'he',
+  fas: 'fa', per: 'fa', urd: 'ur', ben: 'bn', tam: 'ta', tel: 'te', mar: 'mr', guj: 'gu', kan: 'kn',
+  mal: 'ml', pan: 'pa', tgl: 'tl', fil: 'tl', swa: 'sw', afr: 'af', cat: 'ca', glg: 'gl', eus: 'eu',
+  baq: 'eu', isl: 'is', ice: 'is', gle: 'ga', cym: 'cy', wel: 'cy',
+};
+
+/** One comparable base code ('en', 'es', 'zh') from a code or name in any shape, or null. */
+export function baseLanguageCode(raw) {
+  const normalized = normalizeLanguageCode(raw, { allowAuto: false });
+  if (!normalized) return null;
+  const base = String(normalized).split('-')[0].toLowerCase();
+  return ISO3_TO_ISO1[base] || base;
+}
+
+/**
+ * The bidirectional pair from the tool args, or null when pair mode is off (no second language,
+ * an unreadable language, or the "pair" is one language twice). aRaw/bRaw are the strings as
+ * given, used as the translate endpoint's target; a/b are base codes, used only for routing.
+ */
+export function resolveLanguagePair(args = {}) {
+  const aRaw = args?.target_language;
+  const bRaw = args?.bidirectional_with ?? args?.bidirectionalWith;
+  if (aRaw == null || bRaw == null || !String(bRaw).trim()) return null;
+  const a = baseLanguageCode(aRaw);
+  const b = baseLanguageCode(bRaw);
+  if (!a || !b || a === b) return null;
+  return { a, b, aRaw: String(aRaw), bRaw: String(bRaw) };
+}
+
+/**
+ * The language a pair-mode line must be translated INTO (the raw pair string), or null to leave
+ * the line untranslated (it was spoken in a third language). A line whose language is unknown
+ * goes to the primary target; the translate step drops a "translation" that just repeats the
+ * original, so a line already in that language still ends up shown as-is.
+ */
+export function pairTargetFor(line, pair) {
+  const lang = line?.lang || null;
+  if (!lang) return pair.aRaw;
+  if (lang === pair.a) return pair.bRaw;
+  if (lang === pair.b) return pair.aRaw;
+  return null;
 }
 
 const toBase64 = (int16) => {
@@ -551,6 +608,7 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
   const touch = () => { state.lastProgress = Date.now(); };
   const targetLanguage = args.target_language;
   const sourceLanguage = args.source_language || 'auto';
+  const pair = resolveLanguagePair(args);
   if (!WebSocketImpl) throw new StreamingCaptionsError('This browser cannot stream audio', { code: 'unsupported_in_browser' });
 
   const decodeStart = Date.now();
@@ -560,7 +618,10 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
   if (totalSec > MAX_AUDIO_SECONDS) throw new StreamingCaptionsError(`Audio is longer than ${MAX_AUDIO_SECONDS / 60} minutes`, { code: 'audio_too_long', status: 413 });
   if (!pcm.length) throw new StreamingCaptionsError('The file has no audio track', { code: 'no_audio' });
 
-  const points = planCommitPoints(pcm);
+  const points = pair
+    ? planCommitPoints(pcm, { min: COMMIT_MIN_SEC_PAIR, max: COMMIT_MAX_SEC_PAIR })
+    : planCommitPoints(pcm);
+  if (pair) log('pair', { a: pair.a, b: pair.b });
   const ranges = points.map((end, index) => {
     const startSample = index === 0 ? 0 : points[index - 1];
     return { index, startSample, endSample: end, start: startSample / SAMPLE_RATE, end: end / SAMPLE_RATE, status: 'pending', attempts: 0, lines: [], raw: null, error: null };
@@ -610,19 +671,36 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
     translateChain = translateChain.then(async () => {
       if (signal?.aborted) return;
       try {
-        const out = [];
-        for (let at = 0; at < lines.length; at += TRANSLATE_BATCH) {
-          const batch = lines.slice(at, at + TRANSLATE_BATCH);
-          touch();
-          log('tr_req', { n: batch.length });
-          const t0 = Date.now();
-          const translated = await translateBatch(batch, { targetLanguage, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal, visibility, touch, log, backoffMs: translateBackoffMs });
-          log('tr_res', { ok: true, n: translated.length, ms: Date.now() - t0 });
-          const byIndex = new Map(translated.map(t => [t.i, t]));
-          batch.forEach((l, k) => {
-            const t = byIndex.get(k);
-            out.push({ start: l.start, end: l.end, text: t?.text || l.text, translation: t?.translation || '' });
-          });
+        const out = new Array(lines.length);
+        // One translation target per run of consecutive lines: the single target normally; in
+        // pair mode each line's own target (the other language of the pair), with null for a
+        // line spoken in a third language, which is kept as the original only.
+        const groups = [];
+        lines.forEach((l, idx) => {
+          const into = pair ? pairTargetFor(l, pair) : targetLanguage;
+          const last = groups[groups.length - 1];
+          if (last && last.into === into) last.items.push({ l, idx });
+          else groups.push({ into, items: [{ l, idx }] });
+        });
+        for (const group of groups) {
+          if (group.into == null) {
+            for (const { l, idx } of group.items) out[idx] = { start: l.start, end: l.end, text: l.text, translation: '' };
+            continue;
+          }
+          for (let at = 0; at < group.items.length; at += TRANSLATE_BATCH) {
+            const chunk = group.items.slice(at, at + TRANSLATE_BATCH);
+            const batch = chunk.map(({ l }) => l);
+            touch();
+            log('tr_req', { n: batch.length });
+            const t0 = Date.now();
+            const translated = await translateBatch(batch, { targetLanguage: group.into, sourceLanguage, context: lastTexts.slice(-2), sessionId, headers, fetchImpl, sleep, signal, visibility, touch, log, backoffMs: translateBackoffMs });
+            log('tr_res', { ok: true, n: translated.length, ms: Date.now() - t0 });
+            const byIndex = new Map(translated.map(t => [t.i, t]));
+            chunk.forEach(({ l, idx }, k) => {
+              const t = byIndex.get(k);
+              out[idx] = { start: l.start, end: l.end, text: t?.text || l.text, translation: t?.translation || '' };
+            });
+          }
         }
         range.lines = out;
         range.raw = null;
@@ -653,7 +731,9 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
     } else {
       lines = [];
     }
-    lines = lines.filter(l => l.text).map(l => ({ start: Math.max(0, l.start), end: Math.min(totalSec, Math.max(l.end, l.start + 0.05)), text: l.text }));
+    // The segment's detected language rides along (pair mode routes each line by it); the
+    // translated output objects are rebuilt without it, so it never reaches the caption track.
+    lines = lines.filter(l => l.text).map(l => ({ start: Math.max(0, l.start), end: Math.min(totalSec, Math.max(l.end, l.start + 0.05)), text: l.text, lang: baseLanguageCode(languageCode) }));
     if (!lines.length) { range.status = 'done'; range.lines = []; report(); return; }
     range.status = 'transcribed';
     report();
@@ -803,6 +883,7 @@ async function runStreamingCaptionsCore(args, wav, deps, state) {
     lines,
     language: language.detected,
     targetLanguage,
+    bidirectional: pair ? pair.bRaw : null,
     audioSeconds: totalSec,
     sessionId,
     elapsedMs: Date.now() - startedAt,
