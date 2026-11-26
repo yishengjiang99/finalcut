@@ -40,7 +40,7 @@ const DISCOVER_BEFORE_REFUSING =
   'Only say it cannot be done after discovery or planning shows FFmpeg cannot do it here, and then say what you tried.';
 
 export const FFMPEG_FALLBACK_GUIDANCE =
-  `Routing: always prefer the dedicated editing tools. Only if NONE of them can fulfil the request, use ${FFMPEG_CLI_TOOL_NAME}: ` +
+  `Routing (edit requests only): always prefer the dedicated editing tools. Only if NONE of them can fulfil the edit, use ${FFMPEG_CLI_TOOL_NAME}: ` +
   'discover relevant filters, plan the command, tell the user briefly which approach you chose and why, then run it. ' +
   DISCOVER_BEFORE_REFUSING;
 
@@ -50,7 +50,7 @@ export const FFMPEG_FALLBACK_GUIDANCE =
  * result downloads back as the new clip. Videos only — never call it for photos.
  */
 export const FFMPEG_FALLBACK_GUIDANCE_IOS =
-  `Routing: always prefer the on-device editing tools. Only if NONE of them can fulfil the request, use ${FFMPEG_CLI_TOOL_NAME}: ` +
+  `Routing (edit requests only): always prefer the on-device editing tools. Only if NONE of them can fulfil the edit, use ${FFMPEG_CLI_TOOL_NAME}: ` +
   'it runs on the server (the app uploads the current video and the processed result downloads back as the new clip). ' +
   'First call with action "discover" and a query to find matching FFmpeg filters/codecs, then "plan" to validate the command, ' +
   'tell the user briefly which approach you chose and why, then call with action "run" to execute it. Videos only. ' +

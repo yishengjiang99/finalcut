@@ -247,7 +247,7 @@ export const WEB_EXECUTION_INSTRUCTIONS =
   'Use the output metadata (duration, width, height) from earlier results when planning later edits.';
 
 const WEB_FALLBACK_GUIDANCE =
-  `Routing: always prefer the dedicated editing tools. Only if NONE of them can fulfil the request, call ${SEARCH_CAPABILITIES_TOOL_NAME} to find how FFmpeg can do it: grep its help, read what comes back and grep again until you know the options, ` +
+  `Routing (edit requests only): always prefer the dedicated editing tools. Only if NONE of them can fulfil the edit, call ${SEARCH_CAPABILITIES_TOOL_NAME} to find how FFmpeg can do it: grep its help, read what comes back and grep again until you know the options, ` +
   `then ${RUN_FFMPEG_TOOL_NAME} with the command. One empty search is not an answer: try FFmpeg's own terms before deciding. ` +
   'The help comes from the server\'s FFmpeg, which is a different version and build from the browser\'s 5.1 core: it can name filters, encoders or options the browser cannot run. ' +
   'If the command fails on an unknown filter, encoder or option, use an older or simpler equivalent. ' +

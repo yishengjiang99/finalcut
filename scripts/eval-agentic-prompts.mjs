@@ -45,7 +45,17 @@ const PROMPTS = [
   { id: 'square', text: 'square', expect: ['resize_video_preset'], shape: '1080x1080' },
   { id: 'trim2_sepia', text: 'trim first 2s and make it sepia', expect: ['trim_video', 'apply_color_filter'] },
   { id: 'three_op', text: 'flip it horizontally, boost saturation a bit, and make it square', expect: ['apply_edits'], shape: '1080x1080' },
+  // chat: not an edit. Passes only with no tool call and a reply that answers instead of refusing.
+  { id: 'chat_hello', text: "hey, how's your day going?", expect: [], chat: true },
+  { id: 'chat_trivia', text: 'what is the capital of Australia?', expect: [], chat: true },
+  { id: 'chat_joke', text: 'tell me a joke', expect: [], chat: true },
+  { id: 'chat_code', text: 'how do I reverse a string in python?', expect: [], chat: true },
+  { id: 'chat_advice', text: 'what makes a good hook for a TikTok video?', expect: [], chat: true },
+  { id: 'chat_recipe', text: 'give me a quick pasta recipe for dinner tonight', expect: [], chat: true },
 ].filter(p => !ONLY || p.id === ONLY);
+
+// A reply that turns down a non-editing message instead of answering it.
+const REFUSAL = /\b(only|just) (help|assist)|can(no|')t help with|(not|isn't|is not) (something|what) I|outside (of )?(my|the) |(related|limited) to (video|photo|audio|media|edit)|focus(ed)? on (video|photo|media|edit)|I'm (an?|your) (video )?editing assistant/i;
 
 const system = buildSystemMessage({ mediaType: 'video' }).content + '\n\n' +
   [WEB_PROFILE.instructions, mediaContextText(MEDIA), ...WEB_PROFILE.guidance].join('\n');
@@ -112,7 +122,9 @@ for (const p of PROMPTS) {
   for (const [run, r] of results.entries()) {
     if (r.raw) console.error(p.id, JSON.stringify(r.raw));
     const names = (r.calls || []).map(c => c.name);
-    let pass = !r.error && p.expect.every(n => names.includes(n));
+    let pass = !r.error && (p.chat
+      ? names.length === 0 && r.content.trim().length > 0 && !REFUSAL.test(r.content)
+      : p.expect.every(n => names.includes(n)));
     // Rule: several frame edits in one request -> ONE combined apply_edits call.
     if (p.expect.includes('apply_edits') && names.length !== 1) pass = false;
     const row = { prompt: p.id, run, calls: r.error || (r.calls.length ? r.calls.map(short).join(' -> ') : `(no tools) ${r.content.slice(0, 80)}`), pass };

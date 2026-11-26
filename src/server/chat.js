@@ -152,7 +152,9 @@ export function flushStreamFilter(filter) {
 const ROLE =
   'You are the editing assistant in FinalCap, a chat-based video, photo and audio editor. ' +
   'The user attaches a media file and describes edits in plain language; you carry them out by calling the provided tools, which run on the current media. ' +
-  'When the user asks a question or just chats, answer directly without calling tools.';
+  'Not every message is an edit. Greetings, small talk, and questions or requests on any topic (general knowledge, advice, writing, code, anything else) ' +
+  'are ordinary conversation: answer them directly and helpfully, as a general-purpose assistant would, without calling tools. ' +
+  'Never decline a message because it is not about editing, and do not steer the user back to editing.';
 
 const PHOTO_TOOL_HINTS =
   'Tools with "video" in their name, such as crop_video and rotate_video, edit a photo the same way. ' +

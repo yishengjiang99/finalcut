@@ -48,6 +48,14 @@ describe('buildSystemMessage', () => {
     expect(message.content).toContain('plain text, once, with no heading or label');
   });
 
+  it('answers non-editing messages as ordinary conversation instead of refusing', () => {
+    for (const mediaType of [null, 'none', 'video', 'image', 'audio']) {
+      const { content } = buildSystemMessage({ mediaType, ffmpegFallback: 'ios' });
+      expect(content).toContain('Not every message is an edit');
+      expect(content).toContain('Never decline a message because it is not about editing');
+    }
+  });
+
   it('does not ask for an Answer section (the model repeated its reply inside it)', () => {
     expect(buildSystemMessage().content).not.toContain('Answer:');
   });
