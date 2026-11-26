@@ -26,6 +26,8 @@ import {
   audioFadeNeedsDuration,
   buildAudioFadeFilter,
   probeMediaDuration,
+  withReencodeQuality,
+  X264_QUALITY,
 } from './ffmpegOps.js';
 
 // Helper function to check if a video has audio stream
@@ -339,6 +341,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
               '-map 0:v:0',
               '-map 0:a?',
               '-c:v libx264',
+              ...X264_QUALITY,
               '-pix_fmt yuv420p',
               '-c:a aac',
               '-movflags +faststart'
@@ -901,6 +904,7 @@ router.post('/api/process-video', videoProcessLimiter, requireAuthenticatedUser,
       return res.status(400).json({ error: `Unknown operation: ${operation}` });
   }
 
+  command = withReencodeQuality(command, operation);
   // Set response headers and pipe ffmpeg stdout directly to the response
   res.set('Content-Type', responseContentType);
   if (outputExt === 'mp4') {
@@ -1054,6 +1058,7 @@ router.post('/api/transition-videos', videoProcessLimiter, requireAuthenticatedU
 
       command
         .videoCodec('libx264')
+        .outputOptions(X264_QUALITY)
         .on('end', () => resolve())
         .on('error', (err) => reject(err))
         .run();

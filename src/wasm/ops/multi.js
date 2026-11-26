@@ -2,9 +2,15 @@
 // adding an audio track, burning subtitles, extracting speech audio, and the generic run_ffmpeg
 // command. Isomorphic: no DOM, no Node APIs.
 import { OpArgsError, BROKEN_IN_BROWSER } from './process.js';
+import { X264 } from './encode.js';
 
 const HEAD = ['-hide_banner', '-nostdin', '-y'];
-const X264 = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
+// Joined clips share one frame rate: the fastest clip's (so 60 fps footage stays 60), at most 60,
+// 30 when no clip reports one.
+export function outputFps(clips) {
+  const rates = clips.map(c => Number(c.fps)).filter(f => Number.isFinite(f) && f > 0);
+  return rates.length ? Math.min(60, Math.round(Math.max(...rates) * 100) / 100) : 30;
+}
 const threadCap = (threads) => (Number.isInteger(threads) && threads > 0 ? ['-threads', String(threads)] : []);
 
 export const TRANSITIONS = [
@@ -19,9 +25,9 @@ const XFADE = {
 
 /**
  * Join clips with a transition. Every clip is first brought to the first clip's frame size and
- * 30 fps so clips from different cameras can be joined.
+ * one frame rate (`outputFps`) so clips from different cameras can be joined.
  * @param {{transition:string, duration?:number}} args
- * @param {{path:string, duration:number|null, width:number, height:number, hasAudio:boolean}[]} clips
+ * @param {{path:string, duration:number|null, width:number, height:number, hasAudio:boolean, fps?:number|null}[]} clips
  */
 export function buildTransitionArgs({ transition, duration = 1 } = {}, clips = [], { output, threads } = {}) {
   if (!TRANSITIONS.includes(transition)) throw new OpArgsError(`Unknown transition type: ${transition}`);
@@ -31,11 +37,12 @@ export function buildTransitionArgs({ transition, duration = 1 } = {}, clips = [
   const width = clips[0].width - (clips[0].width % 2);
   const height = clips[0].height - (clips[0].height % 2);
   const anyAudio = clips.some(c => c.hasAudio);
+  const fps = outputFps(clips);
   const filters = [];
 
   clips.forEach((clip, i) => {
     const fade = transition === 'fade' && i > 0 ? `,fade=t=in:st=0:d=${d}` : '';
-    filters.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p${fade}[v${i}]`);
+    filters.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p${fade}[v${i}]`);
     if (!anyAudio) return;
     const afade = transition === 'fade' && i > 0 ? `,afade=t=in:st=0:d=${d}` : '';
     if (clip.hasAudio) {
@@ -77,17 +84,19 @@ export function buildTransitionArgs({ transition, duration = 1 } = {}, clips = [
 
 /**
  * Join clips end to end with hard cuts. Every clip is first brought to the first clip's frame size
- * and 30 fps, and a silent clip gets silence of its own length, so clips from different cameras join cleanly.
- * @param {{path:string, duration:number|null, width:number, height:number, hasAudio:boolean}[]} clips
+ * and one frame rate (`outputFps`), and a silent clip gets silence of its own length, so clips from
+ * different cameras join cleanly.
+ * @param {{path:string, duration:number|null, width:number, height:number, hasAudio:boolean, fps?:number|null}[]} clips
  */
 export function buildConcatArgs(clips = [], { output, threads } = {}) {
   if (clips.length < 2) throw new OpArgsError('At least two video clips are required to join them');
   const width = clips[0].width - (clips[0].width % 2);
   const height = clips[0].height - (clips[0].height % 2);
   const anyAudio = clips.some(c => c.hasAudio);
+  const fps = outputFps(clips);
   const filters = [];
   clips.forEach((clip, i) => {
-    filters.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v${i}]`);
+    filters.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p[v${i}]`);
     if (!anyAudio) return;
     if (clip.hasAudio) filters.push(`[${i}:a]aformat=sample_rates=44100:channel_layouts=stereo[a${i}]`);
     else filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=duration=${clip.duration || 1}[a${i}]`);

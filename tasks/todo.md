@@ -5,6 +5,30 @@
 <!-- Add tasks here using the format below -->
 <!-- - [ ] Task description -->
 
+### Export quality: stop avoidable generation loss (2026-11-25)
+
+Measured (10 s 1080p, Y-PSNR vs source): web edit at x264 veryfast/crf 23 = 38–40 dB per
+edit, compounding to ~35 dB after 5 edits (each edit re-encodes the last output). veryfast/crf 18
+= +3–4 dB per edit at ~same speed. iOS H.264 HighestQuality tone-maps HLG HDR to 8-bit SDR;
+the HEVC preset over the same CI composition keeps 10-bit HLG/BT.2020 (verified with avfoundation on macOS).
+
+Web (ffmpeg.wasm)
+- [x] One shared `X264` constant (veryfast, crf 18, yuv420p) in ops/encode.js; process.js, multi.js, trim.js import it
+- [x] concat/transitions: output at the highest clip fps (cap 60, fallback 30) instead of fixed 30
+- [x] Burned-WebM recorder: bitrate scaled to the canvas instead of the browser's ~2.5 Mbps default
+Server (fallback + iOS cloud steps)
+- [x] `-crf 18` for the 14 filter ops that re-encode at the libx264 default (both switch copies), burn_subtitles, transitions
+iOS
+- [x] NativeExporter: HEVC HighestQuality when a source video track is HEVC (keeps HDR/10-bit); H.264 otherwise
+- [x] ProjectVideoCompositor (transitions): HDR + wide-color source frames, 10-bit buffers
+- [x] Timeline projects: lossless passthrough when the project is one untouched, trimmed clip
+Verify
+- [x] vitest 1297 + 6 new pass; ExportTests + ProjectComposerTests 17/17 (incl. 3 new); web argv run through native ffmpeg (60 fps join kept, crf 18)
+- Review: full iOS suite has 4 failures that reproduce identically on 8289a2a without these changes
+  (PhotoModeTests.testCaptionsOnPhotoAreNoLongerRefused crashes the host: "freed pointer was not the last
+  allocation"; NativeToolTests soundtrack x2; TopBarLayoutTests SE width). Not caused by this change.
+  Web HDR/10-bit sources still become 8-bit H.264 (x265 10-bit is single-threaded in wasm).
+
 ### Timeline view → agent tools (2026-10-27)
 
 Tools array: `IOS_TIMELINE_TOOLS` in src/server/iosTimelineTools.js; device side
