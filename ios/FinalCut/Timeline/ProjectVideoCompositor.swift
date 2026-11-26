@@ -55,12 +55,19 @@ final class ProjectCompositionInstruction: NSObject, AVVideoCompositionInstructi
 /// (orientation-normalise → the clip's Core Image effect chain → fit into the project
 /// canvas), applies the layer opacity, composites over black, then draws the active
 /// project caption. The same code path serves preview and export.
+///
+/// Frames are half-float RGBA and HDR/wide-colour sources are accepted as they are: with
+/// 8-bit BGRA and no HDR support AVFoundation tone-maps HLG to SDR before the compositor
+/// sees it, and the HEVC export then labels those SDR pixels HLG (measured: 21 dB Y-PSNR
+/// against the source, highlights crushed; half-float 41 dB, SDR sources unchanged).
 final class ProjectVideoCompositor: NSObject, AVVideoCompositing {
+    var supportsHDRSourceFrames: Bool { true }
+    var supportsWideColorSourceFrames: Bool { true }
     var sourcePixelBufferAttributes: [String: Any]? = [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_64RGBAHalf,
     ]
     var requiredPixelBufferAttributesForRenderContext: [String: Any] = [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_64RGBAHalf,
     ]
 
     private var renderContext: AVVideoCompositionRenderContext?

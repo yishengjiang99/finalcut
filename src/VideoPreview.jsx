@@ -251,7 +251,10 @@ export default function VideoPreview({ captionTrack = null, videoUrl, title = 'V
       } catch { /* audio capture not supported or CORS issue — proceed without audio */ }
       const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
       const recMimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
-      const recorder = new MediaRecorder(outStream, { mimeType: recMimeType });
+      // Without a bitrate the browser picks ~2.5 Mbps whatever the size, which smears 1080p and up.
+      // ~0.1 bit per pixel per frame at 30 fps: ~6 Mbps for 1080p, ~25 Mbps for 4K.
+      const videoBitsPerSecond = Math.round(Math.min(25e6, Math.max(2.5e6, canvas.width * canvas.height * 30 * 0.1)));
+      const recorder = new MediaRecorder(outStream, { mimeType: recMimeType, videoBitsPerSecond });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
       const handleVideoEnded = () => {

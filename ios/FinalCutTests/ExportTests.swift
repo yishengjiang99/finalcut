@@ -76,6 +76,82 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(duration, 2, accuracy: 0.15)
     }
 
+    /// HEVC sources (every iPhone HDR clip) export with the HEVC preset so HDR / 10-bit
+    /// survive; H.264 sources stay H.264. Checked through a composition, as export sees it.
+    func testExportPresetFollowsSourceCodec() async throws {
+        let url = try clip()
+        let h264Preset = await NativeExporter.presetName(for: AVURLAsset(url: url))
+        XCTAssertEqual(h264Preset, AVAssetExportPresetHighestQuality)
+
+        let hevcURL = FileManager.default.temporaryDirectory.appendingPathComponent("hevc-\(UUID()).mov")
+        defer { try? FileManager.default.removeItem(at: hevcURL) }
+        let session = try XCTUnwrap(AVAssetExportSession(asset: AVURLAsset(url: url), presetName: AVAssetExportPresetHEVCHighestQuality))
+        session.outputURL = hevcURL
+        session.outputFileType = .mov
+        await session.export()
+        XCTAssertEqual(session.status, .completed)
+
+        var stack = EditStack(base: hevcURL, baseCanvas: canvas)
+        stack.push(EditEntry(tool: "apply_color_filter", op: .colorFilter(filter: "red", intensity: 1)))
+        let composed = try await NativeComposer.compose(stack)
+        let hevcPreset = await NativeExporter.presetName(for: composed.asset)
+        XCTAssertEqual(hevcPreset, AVAssetExportPresetHEVCHighestQuality)
+        let out = try await NativeExporter().export(composed, format: "mp4") { _ in }
+        defer { try? FileManager.default.removeItem(at: out) }
+        let outTracks = try await AVURLAsset(url: out).loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(outTracks.first)
+        let codec = try await track.load(.formatDescriptions).first.map(CMFormatDescriptionGetMediaSubType)
+        XCTAssertEqual(codec, kCMVideoCodecType_HEVC)
+    }
+
+    func testTimelineProjectPassthroughOnlyForAnUntouchedTrimmedClip() throws {
+        let url = try clip()
+        var stack = EditStack(base: url, baseCanvas: canvas)
+        stack.project = stack.makeProject()
+        let clipID = try XCTUnwrap(stack.project?.videoClips.first?.id)
+        try stack.performProjectCommand(.trimVideoClip(clipID: clipID, sourceStart: 1, sourceEnd: 3))
+        let trimmed = try XCTUnwrap(stack.project)
+        let range = try XCTUnwrap(trimmed.passthroughClip)
+        XCTAssertEqual(range.start, 1, accuracy: 0.001)
+        XCTAssertEqual(range.end, 3, accuracy: 0.001)
+
+        var sped = trimmed
+        sped.videoClips[0].speed = 2
+        XCTAssertNil(sped.passthroughClip, "a clip setting forces the render")
+        var captioned = trimmed
+        captioned.captions = [CaptionCue(start: 0, end: 1, text: "hi")]
+        XCTAssertNil(captioned.passthroughClip)
+        var resized = trimmed
+        resized.canvas = ProjectCanvas(width: 720, height: 1280)
+        XCTAssertNil(resized.passthroughClip, "a different canvas letterboxes")
+        var split = trimmed
+        split.videoClips.append(split.videoClips[0])
+        XCTAssertNil(split.passthroughClip)
+    }
+
+    func testTimelineTrimExportCopiesTheSource() async throws {
+        let url = try clip()
+        var stack = EditStack(base: url, baseCanvas: canvas)
+        stack.project = stack.makeProject()
+        let clipID = try XCTUnwrap(stack.project?.videoClips.first?.id)
+        try stack.performProjectCommand(.trimVideoClip(clipID: clipID, sourceStart: 1, sourceEnd: 3))
+        XCTAssertTrue(stack.isTimelineProject)
+        let controller = ExportController(defaults: UserDefaults(suiteName: "ExportTests-\(UUID())")!)
+        let out = try await controller.render(stack: stack, fallbackURL: url)
+        defer { try? FileManager.default.removeItem(at: out) }
+        let asset = AVURLAsset(url: out)
+        let duration = try await asset.load(.duration).seconds
+        XCTAssertEqual(duration, 2, accuracy: 0.15)
+        // Copied, not re-encoded: same codec and bitrate class as the source.
+        let srcTracks = try await AVURLAsset(url: url).loadTracks(withMediaType: .video)
+        let outTracks = try await asset.loadTracks(withMediaType: .video)
+        let srcTrack = try XCTUnwrap(srcTracks.first)
+        let outTrack = try XCTUnwrap(outTracks.first)
+        let srcRate = try await srcTrack.load(.estimatedDataRate)
+        let outRate = try await outTrack.load(.estimatedDataRate)
+        XCTAssertEqual(Double(outRate), Double(srcRate), accuracy: Double(srcRate) * 0.25)
+    }
+
     func testEditedPhotoExportKeepsFormat() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

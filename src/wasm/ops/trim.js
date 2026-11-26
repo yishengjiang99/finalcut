@@ -1,6 +1,7 @@
 // Pure argv builder for trim_video. Port of the server's applyTrim (src/server/ffmpegOps.js):
 // `-ss START -i IN -t (END-START) -c copy` (keyframe-aligned, same output as /api/process-video).
 // Isomorphic: no DOM, no Node APIs, so the server/iOS fallback can share it later.
+import { X264 } from './encode.js';
 
 export class TrimArgsError extends Error {
   constructor(message) {
@@ -43,7 +44,7 @@ export function buildTrimArgs({ start, end, precise = false } = {}, { input, out
   // mt core deadlocks (measured: 8 threads hangs, 6 aborts, 4 works). Host caps this at 4.
   if (Number.isInteger(threads) && threads > 0) argv.push('-threads', String(threads));
   if (precise) {
-    argv.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k');
+    argv.push(...X264, '-c:a', 'aac', '-b:a', '192k');
   } else {
     argv.push('-c', 'copy');
   }

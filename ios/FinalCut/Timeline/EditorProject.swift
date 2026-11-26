@@ -595,3 +595,24 @@ struct ProjectSummary: Codable, Equatable, Sendable {
     /// leaves it nil and the editor fills it in for the chat request.
     var playheadSeconds: Double?
 }
+
+// MARK: - Lossless export
+
+extension EditorProject {
+    /// The source window an export can copy without re-encoding (lossless, HDR intact):
+    /// exactly one video clip that is at most trimmed — every other clip setting at its
+    /// default, so a setting added later also forces a render — with no captions or
+    /// audio-track clips, on the canvas the source would get by itself. nil otherwise.
+    var passthroughClip: (asset: MediaAsset, start: Double, end: Double)? {
+        guard videoClips.count == 1, let clip = videoClips.first,
+              let asset = assets.first(where: { $0.id == clip.assetID }), asset.mediaType == .video,
+              captions.isEmpty, audioTracks.allSatisfy({ $0.clips.isEmpty }),
+              canvas.cgSize == MediaProbe.defaultCanvas(for: [asset]).cgSize,
+              clip.sourceEnd.seconds > clip.sourceStart.seconds else { return nil }
+        // A silent source's clip has its (moot) original-audio switch off.
+        let plain = VideoClip(id: clip.id, assetID: clip.assetID, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd,
+                              originalAudioEnabled: asset.hasAudio || clip.originalAudioEnabled)
+        guard clip == plain else { return nil }
+        return (asset, clip.sourceStart.seconds, clip.sourceEnd.seconds)
+    }
+}

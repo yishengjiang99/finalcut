@@ -603,6 +603,21 @@ export function resolveOutputMeta(operation, parsedArgs = {}) {
   return { outputExt, contentType };
 }
 
+// Ops that re-encode the picture through a filter with ffmpeg's default libx264 (crf 23). Edits
+// chain (iOS cloud steps and the web fallback feed each result back in), so loss compounds;
+// crf 18 keeps each step near-transparent (measured in src/wasm/ops/encode.js).
+export const FILTER_REENCODE_OPS = new Set([
+  'resize_video', 'crop_video', 'rotate_video', 'flip_video_horizontal', 'flip_video_vertical', 'add_text',
+  'speed_video', 'adjust_brightness', 'adjust_hue', 'adjust_saturation', 'adjust_contrast', 'fade_transition',
+  'apply_color_filter', 'apply_edits',
+]);
+export const X264_QUALITY = ['-crf', '18'];
+
+/** Adds `X264_QUALITY` when `operation` re-encodes through a filter; other ops keep their own settings. */
+export function withReencodeQuality(command, operation) {
+  return FILTER_REENCODE_OPS.has(operation) ? command.outputOptions(X264_QUALITY) : command;
+}
+
 /**
  * Apply a process-video operation onto a fluent-ffmpeg command.
  * Throws OpValidationError for unknown/invalid ops.
@@ -858,7 +873,7 @@ export async function processVideoToFile({ inputPath, inputMime, operation, args
   return new Promise((resolve, reject) => {
     let command = ffmpeg(inputPath).inputFormat(inputFormat);
     try {
-      command = applyOperation(command, operation, parsedArgs, { mediaDuration });
+      command = withReencodeQuality(applyOperation(command, operation, parsedArgs, { mediaDuration }), operation);
     } catch (err) {
       reject(err);
       return;

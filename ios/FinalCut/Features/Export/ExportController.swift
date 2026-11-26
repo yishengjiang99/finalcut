@@ -162,13 +162,21 @@ final class ExportController: ObservableObject {
         let isPhoto = Self.isPhoto(stack: stack, fallbackURL: fallbackURL)
         guard let base = stack?.base ?? fallbackURL else { throw NativeExporter.ExportError.failed }
         let url: URL
+        let reportProgress: @MainActor (Double) -> Void = { [weak self] value in
+            guard let self, case .rendering = self.phase else { return }
+            self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
+        }
         if let stack, stack.isTimelineProject, let project = stack.project {
             beginBackground()
             phase = .rendering(0)
-            let composed = try await NativeComposer.compose(project: project)
-            url = try await exporter.export(composed, format: stack.outputFormat) { [weak self] value in
-                guard let self, case .rendering = self.phase else { return }
-                self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
+            if stack.outputFormat == nil, let clip = project.passthroughClip,
+               let copied = try await passthrough(
+                   base: NativeComposer.resolveAssetURL(clip.asset, in: project),
+                   range: (clip.start, clip.end), progress: reportProgress) {
+                url = copied
+            } else {
+                let composed = try await NativeComposer.compose(project: project)
+                url = try await exporter.export(composed, format: stack.outputFormat, progress: reportProgress)
             }
             try Task.checkCancellation()
         } else if let stack, !stack.entries.isEmpty {
@@ -178,25 +186,9 @@ final class ExportController: ObservableObject {
                 url = try await Task.detached(priority: .userInitiated) { try PhotoRenderer.exportFile(stack) }.value
             } else {
                 phase = .rendering(0)
-                let reportProgress: @MainActor (Double) -> Void = { [weak self] value in
-                    guard let self, case .rendering = self.phase else { return }
-                    self.phase = .rendering(min(99, max(0, Int((value * 100).rounded(.down)))))
-                }
-                // Trim-only stacks pass the source media through untouched
-                // (lossless, HDR intact); a passthrough refusal (container or
-                // codec the preset won't copy) falls back to the composed render.
-                var passthrough: URL?
-                if let range = stack.passthroughTrimRange {
-                    do {
-                        passthrough = try await exporter.exportPassthrough(base: stack.base, range: range, progress: reportProgress)
-                    } catch NativeExporter.ExportError.cancelled {
-                        throw NativeExporter.ExportError.cancelled
-                    } catch {
-                        passthrough = nil
-                    }
-                }
-                if let passthrough {
-                    url = passthrough
+                if let range = stack.passthroughTrimRange,
+                   let copied = try await passthrough(base: stack.base, range: range, progress: reportProgress) {
+                    url = copied
                 } else {
                     let composed = try await NativeComposer.compose(stack)
                     url = try await exporter.export(composed, format: stack.outputFormat, progress: reportProgress)
@@ -208,6 +200,23 @@ final class ExportController: ObservableObject {
         }
         renderedURL = url
         return url
+    }
+
+    /// Copies `range` of `base` without re-encoding (lossless, HDR intact). nil when the
+    /// preset refuses (a container or codec it won't copy), so the caller renders instead;
+    /// a cancel still propagates.
+    private func passthrough(
+        base: URL,
+        range: (start: Double, end: Double),
+        progress: @escaping @MainActor (Double) -> Void
+    ) async throws -> URL? {
+        do {
+            return try await exporter.exportPassthrough(base: base, range: range, progress: progress)
+        } catch NativeExporter.ExportError.cancelled {
+            throw NativeExporter.ExportError.cancelled
+        } catch {
+            return nil
+        }
     }
 
     static func isPhoto(stack: EditStack?, fallbackURL: URL?) -> Bool {

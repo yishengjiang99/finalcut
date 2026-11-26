@@ -2,6 +2,7 @@
 // from src/server/ffmpegOps.js so the browser core produces the same edits as the server.
 // Isomorphic: no DOM, no Node APIs.
 import { buildTrimArgs } from './trim.js';
+import { X264 } from './encode.js';
 
 export class OpArgsError extends Error {
   constructor(message, code = 'invalid_arguments') {
@@ -51,14 +52,13 @@ export const BROKEN_IN_BROWSER = { 'libvpx-vp9': 'the VP9 encoder crashes in the
 // Only x264 is safe on several threads in the multithreaded core (and only up to the host's cap).
 // Measured on core-mt 0.12.10: libx265 and libtheora hang with more than one thread.
 const VIDEO_ENCODER_ARGS = {
-  libx264: (cap) => [...cap, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'],
+  libx264: (cap) => [...cap, ...X264],
   libx265: () => ['-threads', '1', '-c:v', 'libx265', '-preset', 'veryfast', '-x265-params', 'pools=none:frame-threads=1', '-pix_fmt', 'yuv420p'],
   libvpx: (cap) => [...cap, '-c:v', 'libvpx', '-crf', '20', '-b:v', '1M', '-deadline', 'realtime', '-cpu-used', '5'],
   libtheora: () => ['-threads', '1', '-c:v', 'libtheora', '-q:v', '6'],
 };
 const AUDIO_ENCODERS = { ogg: 'libvorbis', wma: 'wmav2', m4a: 'aac', aac: 'aac', mp3: 'libmp3lame', flac: 'flac', wav: 'pcm_s16le' };
 
-const X264 = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
 
 function num(value, field, { min = -Infinity, max = Infinity } = {}) {
   const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;

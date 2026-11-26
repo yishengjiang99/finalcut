@@ -18,7 +18,9 @@ final class NativeExporter: @unchecked Sendable {
         format: String?,
         progress: @escaping @MainActor (Double) -> Void
     ) async throws -> URL {
-        guard let session = AVAssetExportSession(asset: composed.asset, presetName: AVAssetExportPresetHighestQuality) else {
+        let preset = await Self.presetName(for: composed.asset)
+        guard let session = AVAssetExportSession(asset: composed.asset, presetName: preset)
+            ?? AVAssetExportSession(asset: composed.asset, presetName: AVAssetExportPresetHighestQuality) else {
             throw ExportError.cannotCreateSession
         }
         let fileType: AVFileType = format == "mov" ? .mov : .mp4
@@ -31,6 +33,21 @@ final class NativeExporter: @unchecked Sendable {
         session.audioTimePitchAlgorithm = .spectral
         session.shouldOptimizeForNetworkUse = true
         return try await run(session, to: url, progress: progress)
+    }
+
+    /// HEVC when any source video is HEVC, else H.264. iPhone HDR (10-bit HLG / Dolby
+    /// Vision) is always HEVC, and the H.264 preset converts it to 8-bit SDR; the HEVC
+    /// preset keeps it, at higher quality per bit. H.264 sources stay H.264, so an edit
+    /// plays wherever the original did. Composition tracks report their sources' codecs.
+    static func presetName(for asset: AVAsset) async -> String {
+        let hevc: Set<FourCharCode> = [kCMVideoCodecType_HEVC, kCMVideoCodecType_HEVCWithAlpha, kCMVideoCodecType_DolbyVisionHEVC]
+        for track in (try? await asset.loadTracks(withMediaType: .video)) ?? [] {
+            let formats = (try? await track.load(.formatDescriptions)) ?? []
+            if formats.contains(where: { hevc.contains(CMFormatDescriptionGetMediaSubType($0)) }) {
+                return AVAssetExportPresetHEVCHighestQuality
+            }
+        }
+        return AVAssetExportPresetHighestQuality
     }
 
     /// Lossless export of a trim-only stack: copies the source media inside
