@@ -1,3 +1,4 @@
+import AVFoundation
 import ImageIO
 import UniformTypeIdentifiers
 import XCTest
@@ -235,6 +236,25 @@ final class PhotoModeTests: XCTestCase {
         model.undoLastEdit(registering: false)
         if !model.isPhoto { model.undoLastEdit(registering: false) }
         XCTAssertTrue(model.isPhoto)
+    }
+
+    /// A still video skips identical hold frames, so its nominal rate is well under 1 fps.
+    /// Composing it used to give a zero frameDuration, and AVPlayerItem threw
+    /// NSInvalidArgumentException; inside a main-actor async test that exception unwound
+    /// the task and crashed the host ("freed pointer was not the last allocation").
+    /// Not @MainActor, so a regression fails here instead of taking down the run.
+    func testStillVideoComposesWithAPositiveFrameDuration() async throws {
+        let jpg = try XCTUnwrap(writeImage("r.jpg", type: .jpeg, orientation: 1))
+        let video = try await SlideshowBuilder.buildStill(photo: jpg, duration: 3)
+        let tracks = try await AVURLAsset(url: video).loadTracks(withMediaType: .video)
+        let fps = try await XCTUnwrap(tracks.first).load(.nominalFrameRate)
+        XCTAssertLessThan(fps, 15, "the case this guards: a low nominal rate")
+        let canvas = NativeCanvas(width: 40, height: 20, duration: 3, isPhoto: false, hasAudio: true)
+        let composed = try await NativeComposer.compose(EditStack(base: video, baseCanvas: canvas))
+        let duration = try XCTUnwrap(composed.videoComposition).frameDuration
+        XCTAssertTrue(duration.isValid && duration > .zero)
+        XCTAssertEqual(duration.seconds, 1.0 / 15, accuracy: 1e-6)
+        XCTAssertNotNil(composed.makePlayerItem().videoComposition)
     }
 
     @MainActor
