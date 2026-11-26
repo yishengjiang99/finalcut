@@ -56,6 +56,15 @@ describe('buildSystemMessage', () => {
     }
   });
 
+  it('never claims an undo: there is no undo tool, so the user is sent to the Undo button', () => {
+    for (const mediaType of [null, 'none', 'video', 'image', 'audio']) {
+      const { content } = buildSystemMessage({ mediaType });
+      expect(content).toContain('You cannot undo or redo');
+      expect(content).toContain('tap the Undo button');
+      expect(content).toContain('never describe an action you did not perform with a tool');
+    }
+  });
+
   it('does not ask for an Answer section (the model repeated its reply inside it)', () => {
     expect(buildSystemMessage().content).not.toContain('Answer:');
   });
