@@ -158,8 +158,12 @@ enum NativeComposer {
             request.finish(with: renderer.apply(to: image, time: CMTimeGetSeconds(request.compositionTime)), context: nil)
         }
         videoComposition.renderSize = renderSize
+        // At least 15 fps (the timeline composer's floor). A still video skips identical
+        // hold frames, so it reports well under 1 fps: that rounded to a zero timescale,
+        // and AVPlayerItem.videoComposition throws (NSInvalidArgumentException) on a
+        // non-positive frameDuration. No upper clamp: high-rate sources keep their rate.
         let rate = fps > 0 ? fps : 30
-        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(rate.rounded()))
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(max(15, rate.rounded())))
 
         return ComposedVideo(
             asset: composition,

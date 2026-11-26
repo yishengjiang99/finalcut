@@ -5,6 +5,15 @@
 <!-- Add tasks here using the format below -->
 <!-- - [ ] Task description -->
 
+### Crash: still video → zero frameDuration (2026-11-25)
+- [x] Bisected PhotoModeTests.testCaptionsOnPhotoAreNoLongerRefused host crash ("freed pointer was not the
+  last allocation") to AVPlayerItem.videoComposition throwing NSInvalidArgumentException: a still video
+  (#162 skips hold frames) reports < 1 fps, NativeComposer rounded it to a 0 timescale
+- [x] NativeComposer: 15 fps floor (timeline composer's floor), no new upper clamp
+- [x] Regression test (nonisolated, so a regression fails instead of crashing the host)
+- Review: PhotoMode/NativeTool/ProjectComposer/Export suites 48/50; the 2 failures are NativeToolTests
+  soundtrack tests (rendered audio RMS 0.0), also failing on main — separate bug
+
 ### Timeline view → agent tools (2026-10-27)
 
 Tools array: `IOS_TIMELINE_TOOLS` in src/server/iosTimelineTools.js; device side
