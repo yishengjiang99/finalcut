@@ -5,6 +5,15 @@
 <!-- Add tasks here using the format below -->
 <!-- - [ ] Task description -->
 
+### Crash: still video → zero frameDuration (2026-11-25)
+- [x] Bisected PhotoModeTests.testCaptionsOnPhotoAreNoLongerRefused host crash ("freed pointer was not the
+  last allocation") to AVPlayerItem.videoComposition throwing NSInvalidArgumentException: a still video
+  (#162 skips hold frames) reports < 1 fps, NativeComposer rounded it to a 0 timescale
+- [x] NativeComposer: 15 fps floor (timeline composer's floor), no new upper clamp
+- [x] Regression test (nonisolated, so a regression fails instead of crashing the host)
+- Review: PhotoMode/NativeTool/ProjectComposer/Export suites 48/50; the 2 failures are NativeToolTests
+  soundtrack tests (rendered audio RMS 0.0), also failing on main — separate bug
+
 ### Export quality: stop avoidable generation loss (2026-11-25)
 
 Measured (10 s 1080p, Y-PSNR vs source): web edit at x264 veryfast/crf 23 = 38–40 dB per
